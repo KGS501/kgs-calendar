@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_month_day_root"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_marginTop="1dp"
+    android:layout_marginBottom="1dp"
+    android:layout_weight="1">
+
+    <TextView
+        android:id="@+id/widget_month_day_card_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="1dp"
+        android:layout_marginEnd="1dp"
+        android:text=""
+        android:background="@drawable/widget_item_background" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingTop="1dp"
+        android:paddingBottom="1dp">
+
+        <TextView
+            android:id="@+id/widget_month_day_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textColor="#17202A"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_month_chip_1_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_month_chip_2_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_month_chip_3_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_month_chip_4_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="8.5sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_month_chip_5_text"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="8.5sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_month_overflow_text"
+            android:layout_width="match_parent"
+            android:layout_height="11dp"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textColor="#526173"
+            android:textSize="8sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.KgsCalendar" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/launcher_fg</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowSplashScreenBackground">@color/launcher_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/kgs_splash_icon</item>
+    </style>
+</resources>

@@ -1,0 +1,36 @@
+# Release signing secrets - never commit these
+keystore.properties
+*.jks
+*.keystore
+
+# Build / IDE artifacts
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.android-sdk/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local runtime/tooling caches
+.codex-remote-attachments/
+.device-debug/
+.kotlin/
+ADB/
+tmp/
+
+# Generated release/test artifacts
+artifacts/
+*.apk
+*.aab
+*.apks
+*.hprof
+*.db
+*.db-shm
+*.db-wal
+tools/*.jar
+kgs-debug-base.xml
+kgs-tiny.xml

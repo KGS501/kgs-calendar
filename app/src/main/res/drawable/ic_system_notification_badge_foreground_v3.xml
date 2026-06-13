@@ -1,0 +1,8 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:drawable="@drawable/kgs_logo_vector"
+        android:bottom="47dp"
+        android:left="47dp"
+        android:right="47dp"
+        android:top="47dp" />
+</layer-list>
