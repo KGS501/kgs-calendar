@@ -8,11 +8,12 @@ Create events and tasks, manage reminders, search your schedule, and switch betw
 - Events and tasks in one app
 - Agenda, day, 3-day, month, and task-list views
 - Local calendar support without a server
-- Nextcloud calendar and task sync
+- CalDAV (Nextcloud, mailbox.org, etc.) calendar and task sync
 - Read-only ICS/CalDAV calendar subscriptions
 - Reminders for events and tasks
 - Recurring events and tasks
 - Search across events and tasks
 - Calendar colors, ordering, and visibility controls
 - Light and dark themes
+- Widget support
 - English and German app language support
