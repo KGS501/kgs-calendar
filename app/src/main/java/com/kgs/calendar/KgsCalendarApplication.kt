@@ -3,6 +3,7 @@ package com.kgs.calendar
 import android.app.Application
 import android.database.ContentObserver
 import android.content.Context
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -69,6 +70,11 @@ class KgsCalendarApplication : Application() {
                 appGraph.settingsStore.setParserReparseVersion(PARSER_REPARSE_VERSION)
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        KgsWidgetUpdateScheduler.updateAll(this)
     }
 
     fun registerAndroidCalendarObserverIfPermitted() {

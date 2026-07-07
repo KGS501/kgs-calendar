@@ -1,6 +1,7 @@
 package com.kgs.calendar.data.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -21,6 +22,18 @@ import java.time.LocalDate
 private val Context.dataStore by preferencesDataStore(name = "kgs_settings")
 
 class SettingsStore(private val context: Context) {
+    private fun widgetThemeMode(key: Preferences.Key<String>): Flow<WidgetThemeMode> = context.dataStore.data.map { prefs ->
+        runCatching {
+            WidgetThemeMode.valueOf(prefs[key] ?: WidgetThemeMode.FollowApp.name)
+        }.getOrDefault(WidgetThemeMode.FollowApp)
+    }
+
+    private fun widgetColorMode(key: Preferences.Key<String>): Flow<WidgetColorMode> = context.dataStore.data.map { prefs ->
+        runCatching {
+            WidgetColorMode.valueOf(prefs[key] ?: WidgetColorMode.FollowApp.name)
+        }.getOrDefault(WidgetColorMode.FollowApp)
+    }
+
     val selectedView: Flow<CalendarViewMode> = context.dataStore.data.map { prefs ->
         if (prefs[KEY_VIEW] == "Week") return@map CalendarViewMode.ThreeDay
         runCatching {
@@ -58,6 +71,28 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(WidgetColorMode.FollowApp)
     }
 
+    val agendaWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_AGENDA_WIDGET_THEME)
+
+    val agendaWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_AGENDA_WIDGET_COLOR_MODE)
+
+    val tasksWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_TASKS_WIDGET_THEME)
+
+    val tasksWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_TASKS_WIDGET_COLOR_MODE)
+
+    val dayWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_DAY_WIDGET_THEME)
+
+    val dayWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_DAY_WIDGET_COLOR_MODE)
+
+    val multiWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_MULTI_WIDGET_THEME)
+
+    val multiWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_MULTI_WIDGET_COLOR_MODE)
+
+    val multiWidgetMonthPercent: Flow<Int> = context.dataStore.data.map { prefs ->
+        normalizeMultiWidgetMonthPercent(
+            prefs[KEY_MULTI_WIDGET_MONTH_PERCENT] ?: DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
+        )
+    }
+
     val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> = context.dataStore.data.map { prefs ->
         runCatching {
             WidgetTaskDisplayMode.valueOf(prefs[KEY_TASKS_WIDGET_DISPLAY_MODE] ?: WidgetTaskDisplayMode.Planned.name)
@@ -78,6 +113,30 @@ class SettingsStore(private val context: Context) {
         runCatching {
             WidgetTaskCreateMode.valueOf(prefs[KEY_TASKS_WIDGET_CREATE_MODE] ?: WidgetTaskCreateMode.Today.name)
         }.getOrDefault(WidgetTaskCreateMode.Today)
+    }
+
+    val tasksWidgetSubtaskDefaultMode: Flow<WidgetTaskSubtaskDefaultMode> = context.dataStore.data.map { prefs ->
+        runCatching {
+            WidgetTaskSubtaskDefaultMode.valueOf(
+                prefs[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] ?: WidgetTaskSubtaskDefaultMode.FollowApp.name,
+            )
+        }.getOrDefault(WidgetTaskSubtaskDefaultMode.FollowApp)
+    }
+
+    val dayWidgetScalePercent: Flow<Int> = context.dataStore.data.map { prefs ->
+        normalizeDayWidgetScalePercent(
+            prefs[KEY_DAY_WIDGET_SCALE_PERCENT] ?: DEFAULT_DAY_WIDGET_SCALE_PERCENT,
+        )
+    }
+
+    val dayWidgetStartHour: Flow<Int> = context.dataStore.data.map { prefs ->
+        normalizeDayWidgetStartHour(
+            prefs[KEY_DAY_WIDGET_START_HOUR] ?: DEFAULT_DAY_WIDGET_START_HOUR,
+        )
+    }
+
+    val dayWidgetStartAtCurrentHour: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] ?: DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR
     }
 
     val languageMode: Flow<AppLanguageMode> = context.dataStore.data.map { prefs ->
@@ -192,6 +251,7 @@ class SettingsStore(private val context: Context) {
 
     val hiddenCollectionHrefs: Flow<Set<String>> = context.dataStore.data.map { prefs ->
         prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
+            .toSet()
     }
 
     suspend fun setSelectedView(viewMode: CalendarViewMode) {
@@ -218,6 +278,44 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
     }
 
+    suspend fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
+        context.dataStore.edit { it[KEY_AGENDA_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
+        context.dataStore.edit { it[KEY_AGENDA_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
+        context.dataStore.edit { it[KEY_TASKS_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setTasksWidgetColorMode(mode: WidgetColorMode) {
+        context.dataStore.edit { it[KEY_TASKS_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
+        context.dataStore.edit { it[KEY_DAY_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setDayWidgetColorMode(mode: WidgetColorMode) {
+        context.dataStore.edit { it[KEY_DAY_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
+        context.dataStore.edit { it[KEY_MULTI_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setMultiWidgetColorMode(mode: WidgetColorMode) {
+        context.dataStore.edit { it[KEY_MULTI_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMultiWidgetMonthPercent(monthPercent: Int) {
+        context.dataStore.edit {
+            it[KEY_MULTI_WIDGET_MONTH_PERCENT] = normalizeMultiWidgetMonthPercent(monthPercent)
+        }
+    }
+
     suspend fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
         context.dataStore.edit { it[KEY_TASKS_WIDGET_DISPLAY_MODE] = mode.name }
     }
@@ -232,6 +330,26 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTasksWidgetCreateMode(mode: WidgetTaskCreateMode) {
         context.dataStore.edit { it[KEY_TASKS_WIDGET_CREATE_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetSubtaskDefaultMode(mode: WidgetTaskSubtaskDefaultMode) {
+        context.dataStore.edit { it[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] = mode.name }
+    }
+
+    suspend fun setDayWidgetScalePercent(scalePercent: Int) {
+        context.dataStore.edit {
+            it[KEY_DAY_WIDGET_SCALE_PERCENT] = normalizeDayWidgetScalePercent(scalePercent)
+        }
+    }
+
+    suspend fun setDayWidgetStartHour(startHour: Int) {
+        context.dataStore.edit {
+            it[KEY_DAY_WIDGET_START_HOUR] = normalizeDayWidgetStartHour(startHour)
+        }
+    }
+
+    suspend fun setDayWidgetStartAtCurrentHour(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] = enabled }
     }
 
     suspend fun setLanguageMode(mode: AppLanguageMode) {
@@ -373,10 +491,23 @@ class SettingsStore(private val context: Context) {
         private val KEY_COLOR_MODE = stringPreferencesKey("color_mode")
         private val KEY_MONTH_WIDGET_THEME = stringPreferencesKey("month_widget_theme_mode")
         private val KEY_MONTH_WIDGET_COLOR_MODE = stringPreferencesKey("month_widget_color_mode")
+        private val KEY_AGENDA_WIDGET_THEME = stringPreferencesKey("agenda_widget_theme_mode")
+        private val KEY_AGENDA_WIDGET_COLOR_MODE = stringPreferencesKey("agenda_widget_color_mode")
+        private val KEY_TASKS_WIDGET_THEME = stringPreferencesKey("tasks_widget_theme_mode")
+        private val KEY_TASKS_WIDGET_COLOR_MODE = stringPreferencesKey("tasks_widget_color_mode")
+        private val KEY_DAY_WIDGET_THEME = stringPreferencesKey("day_widget_theme_mode")
+        private val KEY_DAY_WIDGET_COLOR_MODE = stringPreferencesKey("day_widget_color_mode")
+        private val KEY_MULTI_WIDGET_THEME = stringPreferencesKey("multi_widget_theme_mode")
+        private val KEY_MULTI_WIDGET_COLOR_MODE = stringPreferencesKey("multi_widget_color_mode")
+        private val KEY_MULTI_WIDGET_MONTH_PERCENT = intPreferencesKey("multi_widget_month_percent")
         private val KEY_TASKS_WIDGET_DISPLAY_MODE = stringPreferencesKey("tasks_widget_display_mode")
         private val KEY_TASKS_WIDGET_INCLUDE_OVERDUE = booleanPreferencesKey("tasks_widget_include_overdue")
         private val KEY_TASKS_WIDGET_SORT_MODE = stringPreferencesKey("tasks_widget_sort_mode")
         private val KEY_TASKS_WIDGET_CREATE_MODE = stringPreferencesKey("tasks_widget_create_mode")
+        private val KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE = stringPreferencesKey("tasks_widget_subtask_default_mode")
+        private val KEY_DAY_WIDGET_SCALE_PERCENT = intPreferencesKey("day_widget_scale_percent")
+        private val KEY_DAY_WIDGET_START_HOUR = intPreferencesKey("day_widget_start_hour_v2")
+        private val KEY_DAY_WIDGET_START_AT_CURRENT_HOUR = booleanPreferencesKey("day_widget_start_at_current_hour")
         private val KEY_LANGUAGE_MODE = stringPreferencesKey("language_mode")
         private val KEY_TASK_COLOR_MODE = stringPreferencesKey("task_color_mode")
         private val KEY_FOCUS_TITLE_ON_CREATE = booleanPreferencesKey("focus_title_on_create")
@@ -407,6 +538,23 @@ class SettingsStore(private val context: Context) {
         private val KEY_DEFAULT_TASK_COLLECTION = stringPreferencesKey("default_task_collection_href")
         val DEFAULT_EVENT_FIELD_ORDER = listOf("time", "recurrence", "reminders", "location", "notes", "status", "categories", "color", "participants")
         val DEFAULT_TASK_FIELD_ORDER = listOf("status", "time", "recurrence", "reminders", "location", "notes", "url", "priority", "progress", "color", "tags")
+        const val DEFAULT_DAY_WIDGET_SCALE_PERCENT = 100
+        const val MIN_DAY_WIDGET_SCALE_PERCENT = 50
+        const val MAX_DAY_WIDGET_SCALE_PERCENT = 200
+        const val DEFAULT_DAY_WIDGET_START_HOUR = 7
+        const val DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR = false
+        const val DEFAULT_MULTI_WIDGET_MONTH_PERCENT = 50
+        const val MIN_MULTI_WIDGET_MONTH_PERCENT = 30
+        const val MAX_MULTI_WIDGET_MONTH_PERCENT = 70
+
+        fun normalizeDayWidgetScalePercent(scalePercent: Int): Int =
+            scalePercent.coerceIn(MIN_DAY_WIDGET_SCALE_PERCENT, MAX_DAY_WIDGET_SCALE_PERCENT)
+
+        fun normalizeDayWidgetStartHour(startHour: Int): Int =
+            startHour.coerceIn(0, 23)
+
+        fun normalizeMultiWidgetMonthPercent(monthPercent: Int): Int =
+            monthPercent.coerceIn(MIN_MULTI_WIDGET_MONTH_PERCENT, MAX_MULTI_WIDGET_MONTH_PERCENT)
     }
 }
 

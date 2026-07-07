@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_agenda_task_row"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="top"
+    android:orientation="horizontal">
+
+    <LinearLayout
+        android:id="@+id/widget_agenda_date_column"
+        android:layout_width="50dp"
+        android:layout_height="match_parent"
+        android:gravity="top|center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_agenda_date_month"
+            android:layout_width="match_parent"
+            android:layout_height="13dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_agenda_date_day"
+            android:layout_width="match_parent"
+            android:layout_height="23dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="20sp" />
+
+        <View
+            android:id="@+id/widget_agenda_date_line"
+            android:layout_width="2dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#17202A"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_agenda_end_month"
+            android:layout_width="match_parent"
+            android:layout_height="12dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_agenda_end_day"
+            android:layout_width="match_parent"
+            android:layout_height="19dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="17sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+
+    <FrameLayout
+        android:id="@+id/widget_task_root"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_weight="1"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <ViewFlipper
+            android:id="@+id/widget_task_priority_motion"
+            android:layout_width="match_parent"
+            android:layout_height="96dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="-20dp"
+            android:layout_marginTop="-20dp"
+            android:layout_marginEnd="-20dp"
+            android:layout_marginBottom="-20dp"
+            android:animateFirstView="true"
+            android:autoStart="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:flipInterval="720"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_a"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_b"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_c"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_d"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_e"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_f"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_g"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_h"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_i"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_j"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_k"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_l"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_m"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_n"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_o"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_p"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_q"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_r"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_s"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_t"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_u"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_v"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_w"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_x"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_y"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_z"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_aa"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_ab"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_ac"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <ImageView
+                android:id="@+id/widget_task_priority_motion_ad"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+        </ViewFlipper>
+
+        <ImageView
+            android:id="@+id/widget_task_background_art"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_gravity="center_vertical"
+            android:contentDescription="@null"
+            android:scaleType="fitXY" />
+
+        <LinearLayout
+            android:id="@+id/widget_task_content"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_gravity="center_vertical"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingEnd="7dp">
+
+            <ImageView
+                android:id="@+id/widget_task_status"
+                android:layout_width="30dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="5dp"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_task_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12.3sp" />
+
+                <TextView
+                    android:id="@+id/widget_task_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#DDE7F2"
+                    android:textSize="10.2sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/widget_task_subtasks"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="14dp"
+            android:contentDescription="@null"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+</LinearLayout>

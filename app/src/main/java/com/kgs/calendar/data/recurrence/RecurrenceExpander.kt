@@ -89,18 +89,7 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
             out = out,
         )
 
-        val standardsExpansion = expandRuleWithIcal4j(
-            master = master,
-            rule = rule,
-            sourceZone = eventZone,
-            rangeStartMillis = rangeStartMillis,
-            rangeEndMillis = rangeEndMillis,
-            exDates = exDates,
-            exDatesAsLocalDate = exDatesAsLocalDate,
-        )
-        if (standardsExpansion != null) {
-            out += standardsExpansion
-        } else {
+        if (canExpandManually(freq, parts, byDay, byMonthDay, byMonth)) {
             runCatching {
                 when (freq) {
                     "DAILY" -> expandDaily(masterDate, masterTime, interval, state)
@@ -113,6 +102,21 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
                 // Defensive: if anything throws, surface just the master so the event isn't
                 // silently lost from the UI.
                 out.clear()
+                out.addAll(masterIfInRange(master, rangeStartMillis, rangeEndMillis))
+            }
+        } else {
+            val standardsExpansion = expandRuleWithIcal4j(
+                master = master,
+                rule = rule,
+                sourceZone = eventZone,
+                rangeStartMillis = rangeStartMillis,
+                rangeEndMillis = rangeEndMillis,
+                exDates = exDates,
+                exDatesAsLocalDate = exDatesAsLocalDate,
+            )
+            if (standardsExpansion != null) {
+                out += standardsExpansion
+            } else {
                 out.addAll(masterIfInRange(master, rangeStartMillis, rangeEndMillis))
             }
         }
@@ -198,6 +202,25 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
                 }
             }
             .sortedBy { it.startsAtMillis }
+    }
+
+    private fun canExpandManually(
+        freq: String,
+        parts: Map<String, String>,
+        byDay: List<String>,
+        byMonthDay: List<Int>,
+        byMonth: List<Int>,
+    ): Boolean {
+        if (freq !in setOf("DAILY", "WEEKLY", "MONTHLY", "YEARLY")) return false
+        val supportedKeys = setOf("FREQ", "INTERVAL", "COUNT", "UNTIL", "WKST", "BYDAY", "BYMONTHDAY", "BYMONTH")
+        if (parts.keys.any { it !in supportedKeys }) return false
+        return when (freq) {
+            "DAILY" -> byDay.isEmpty() && byMonthDay.isEmpty() && byMonth.isEmpty()
+            "WEEKLY" -> byMonthDay.isEmpty() && byMonth.isEmpty() && byDay.all { parseByDay(it)?.first == null }
+            "MONTHLY" -> byMonth.isEmpty() && byDay.all { parseByDay(it) != null }
+            "YEARLY" -> byDay.isEmpty() && byMonthDay.isEmpty() && byMonth.isEmpty()
+            else -> false
+        }
     }
 
     private fun masterIfInRange(master: EventEntity, rangeStart: Long, rangeEnd: Long): List<EventEntity> {

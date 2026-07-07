@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:clipToOutline="true">
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:padding="@dimen/widget_padding">
+
+        <LinearLayout
+            android:id="@+id/widget_multi_month_panel"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/widget_multi_month_header"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/widget_month_prev"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:textColor="#2563A8"
+                    android:textSize="23sp" />
+
+                <TextView
+                    android:id="@+id/widget_multi_month_title"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/month"
+                    android:textColor="#17202A"
+                    android:textSize="15sp" />
+
+                <ImageView
+                    android:id="@+id/widget_day_today"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/widget_badge_background"
+                    android:contentDescription="@string/today"
+                    android:padding="7dp"
+                    android:scaleType="center"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_multi_month_badge"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="@drawable/widget_badge_background"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/widget_month_next"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:textColor="#2563A8"
+                    android:textSize="23sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/widget_month_section"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="4dp"
+                android:layout_weight="1"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="vertical" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_multi_agenda_panel"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <FrameLayout
+                android:id="@+id/widget_list_viewport"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginStart="-20dp"
+                android:layout_marginEnd="-12dp"
+                android:clipChildren="true"
+                android:clipToPadding="true">
+
+                <ListView
+                    android:id="@+id/widget_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:cacheColorHint="@android:color/transparent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:divider="@android:color/transparent"
+                    android:dividerHeight="6dp"
+                    android:fadingEdge="none"
+                    android:fastScrollEnabled="false"
+                    android:listSelector="@android:color/transparent"
+                    android:overScrollMode="never"
+                    android:paddingStart="20dp"
+                    android:paddingTop="14dp"
+                    android:scrollbars="none" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/widget_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:minHeight="48dp"
+                android:textColor="#526173"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/widget_multi_agenda_top_fade"
+                android:layout_width="match_parent"
+                android:layout_height="14dp"
+                android:layout_gravity="top"
+                android:background="@drawable/widget_top_fade"
+                android:clickable="false"
+                android:focusable="false"
+                android:text="" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_bottom_fade"
+        android:layout_width="match_parent"
+        android:layout_height="14dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/widget_bottom_fade"
+        android:clickable="false"
+        android:focusable="false"
+        android:text=""
+        android:visibility="gone" />
+</FrameLayout>

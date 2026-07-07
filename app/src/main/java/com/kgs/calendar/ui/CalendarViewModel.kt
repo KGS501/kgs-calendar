@@ -16,6 +16,7 @@ import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
+import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -46,29 +47,49 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
+data class CalendarWidgetLaunchTarget(
+    val date: LocalDate,
+    val viewMode: CalendarViewMode,
+    val createEvent: Boolean = false,
+    val createTaskScheduled: Boolean? = null,
+    val openEventUid: String? = null,
+    val openTaskUid: String? = null,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModel(
     private val repository: CalendarRepository,
     private val settingsStore: SettingsStore,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
+    initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
 ) : ViewModel() {
+    private val initialSelectedDate = initialWidgetLaunchTarget?.date ?: LocalDate.now()
+    private val initialSelectedView = initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
+    private val initialWidgetCreatesEvent = initialWidgetLaunchTarget?.createEvent == true
+    private val initialWidgetCreatesTask = initialWidgetLaunchTarget?.createTaskScheduled != null
+    private val initialWidgetOpenEventUid = initialWidgetLaunchTarget?.openEventUid?.takeIf { it.isNotBlank() }
+    private val initialWidgetOpenTaskUid = initialWidgetLaunchTarget?.openTaskUid?.takeIf { it.isNotBlank() }
+    private val initialWidgetSerial = if (initialWidgetLaunchTarget != null) 1 else 0
     private val busy = MutableStateFlow(false)
     private val manualSyncing = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
     private val externalLoginUrl = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
     private val hiddenAndroidProviderCalendarNames = MutableStateFlow<List<String>>(emptyList())
-    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(null)
-    private val selectedDateOverride = MutableStateFlow<LocalDate?>(null)
-    private val dateNavigationSerial = MutableStateFlow(0)
-    private val widgetCreateEventDate = MutableStateFlow<LocalDate?>(null)
-    private val widgetCreateEventSerial = MutableStateFlow(0)
-    private val widgetCreateTaskDate = MutableStateFlow<LocalDate?>(null)
-    private val widgetCreateTaskScheduled = MutableStateFlow(false)
-    private val widgetCreateTaskSerial = MutableStateFlow(0)
-    private val widgetOpenTaskUid = MutableStateFlow<String?>(null)
-    private val widgetOpenTaskSerial = MutableStateFlow(0)
+    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(initialWidgetLaunchTarget?.viewMode)
+    private val selectedDateOverride = MutableStateFlow<LocalDate?>(initialWidgetLaunchTarget?.date)
+    private val dateNavigationSerial = MutableStateFlow(initialWidgetSerial)
+    private val widgetCreateEventDate = MutableStateFlow(if (initialWidgetCreatesEvent) initialSelectedDate else null)
+    private val widgetCreateEventSerial = MutableStateFlow(if (initialWidgetCreatesEvent) initialWidgetSerial else 0)
+    private val widgetCreateTaskDate = MutableStateFlow(if (initialWidgetCreatesTask) initialSelectedDate else null)
+    private val widgetCreateTaskScheduled = MutableStateFlow(initialWidgetLaunchTarget?.createTaskScheduled ?: false)
+    private val widgetCreateTaskSerial = MutableStateFlow(if (initialWidgetCreatesTask) initialWidgetSerial else 0)
+    private val widgetOpenEventUid = MutableStateFlow(initialWidgetOpenEventUid)
+    private val widgetOpenEventSerial = MutableStateFlow(if (initialWidgetOpenEventUid != null) initialWidgetSerial else 0)
+    private val widgetOpenTaskUid = MutableStateFlow(initialWidgetOpenTaskUid)
+    private val widgetOpenTaskSerial = MutableStateFlow(if (initialWidgetOpenTaskUid != null) initialWidgetSerial else 0)
+    private val initialDataReady = MutableStateFlow(false)
     private var selectedDatePersistJob: Job? = null
 
     init {
@@ -78,31 +99,46 @@ class CalendarViewModel(
                 .onFailure { message.value = it.message ?: "Could not prepare local calendar." }
         }
         viewModelScope.launch {
-            runCatching {
-                repository.refreshAndroidCalendarsIfEnabled(
-                    includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                )
-                refreshAndroidProviderDiagnosticsInternal()
+            val blockInitialUi = runCatching {
+                repository.shouldBlockInitialAndroidProviderRefresh()
+            }.getOrDefault(false)
+            if (!blockInitialUi) {
+                initialDataReady.value = true
             }
-                .onFailure { /* Missing permission should not show a startup error. */ }
+            try {
+                runCatching {
+                    repository.refreshAndroidCalendarsIfEnabled(
+                        includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
+                    )
+                    refreshAndroidProviderDiagnosticsInternal()
+                }
+                    .onFailure { /* Missing permission should not show a startup error. */ }
+            } finally {
+                if (blockInitialUi) {
+                    initialDataReady.value = true
+                }
+            }
+        }
+        if (initialWidgetLaunchTarget != null) {
+            persistWidgetSelection(initialWidgetLaunchTarget.date, initialWidgetLaunchTarget.viewMode)
         }
     }
 
     private val selectedView = combine(settingsStore.selectedView, selectedViewOverride) { stored, override -> override ?: stored }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, CalendarViewMode.ThreeDay)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
     private val storedSelectedDate = settingsStore.selectedDate
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LocalDate.now())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
     private val selectedDate = combine(storedSelectedDate, selectedDateOverride) { stored, override -> override ?: stored }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LocalDate.now())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
     private val hiddenCollectionHrefs = settingsStore.hiddenCollectionHrefs
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
     private val multiDayCount = settingsStore.multiDayCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
     private val visibleRange = combine(selectedDate, selectedView, multiDayCount) { date, view, dayCount ->
         visibleRangeFor(date, view, dayCount)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, visibleRangeFor(LocalDate.now(), CalendarViewMode.ThreeDay))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, visibleRangeFor(initialSelectedDate, initialSelectedView))
     private val dataRange = combine(selectedDate, selectedView, multiDayCount) { date, view, dayCount ->
         if (view == CalendarViewMode.ThreeDay) {
             date.multiDayDataRange(dayCount)
@@ -157,6 +193,22 @@ class CalendarViewModel(
                 }
             }
         }
+
+    private val initialUiState = CalendarUiState(
+        selectedDate = initialSelectedDate,
+        dateNavigationSerial = initialWidgetSerial,
+        widgetCreateEventDate = if (initialWidgetCreatesEvent) initialSelectedDate else null,
+        widgetCreateEventSerial = if (initialWidgetCreatesEvent) initialWidgetSerial else 0,
+        widgetCreateTaskDate = if (initialWidgetCreatesTask) initialSelectedDate else null,
+        widgetCreateTaskScheduled = initialWidgetLaunchTarget?.createTaskScheduled ?: false,
+        widgetCreateTaskSerial = if (initialWidgetCreatesTask) initialWidgetSerial else 0,
+        widgetOpenEventUid = initialWidgetOpenEventUid,
+        widgetOpenEventSerial = if (initialWidgetOpenEventUid != null) initialWidgetSerial else 0,
+        widgetOpenTaskUid = initialWidgetOpenTaskUid,
+        widgetOpenTaskSerial = if (initialWidgetOpenTaskUid != null) initialWidgetSerial else 0,
+        selectedView = initialSelectedView,
+        visibleRange = visibleRangeFor(initialSelectedDate, initialSelectedView),
+    )
 
     val uiState: StateFlow<CalendarUiState> = combine(
         repository.observeAccount(),
@@ -220,14 +272,30 @@ class CalendarViewModel(
         widgetCreateTaskDate,
         widgetCreateTaskScheduled,
         widgetCreateTaskSerial,
+        widgetOpenEventUid,
+        widgetOpenEventSerial,
         widgetOpenTaskUid,
         widgetOpenTaskSerial,
         settingsStore.tasksWidgetDisplayMode,
         settingsStore.tasksWidgetIncludeOverdue,
         settingsStore.tasksWidgetSortMode,
         settingsStore.tasksWidgetCreateMode,
+        settingsStore.tasksWidgetSubtaskDefaultMode,
+        settingsStore.dayWidgetScalePercent,
+        settingsStore.dayWidgetStartHour,
+        settingsStore.dayWidgetStartAtCurrentHour,
+        settingsStore.agendaWidgetColorMode,
+        settingsStore.agendaWidgetThemeMode,
+        settingsStore.tasksWidgetColorMode,
+        settingsStore.tasksWidgetThemeMode,
+        settingsStore.dayWidgetColorMode,
+        settingsStore.dayWidgetThemeMode,
+        settingsStore.multiWidgetColorMode,
+        settingsStore.multiWidgetThemeMode,
+        settingsStore.multiWidgetMonthPercent,
     ) { values ->
         CalendarUiState(
+            initialDataLoaded = true,
             account = values[0] as com.kgs.calendar.data.local.entity.AccountEntity?,
             accounts = values[1] as List<com.kgs.calendar.data.local.entity.AccountEntity>,
             collections = values[2] as List<com.kgs.calendar.data.local.entity.CollectionEntity>,
@@ -289,14 +357,33 @@ class CalendarViewModel(
             widgetCreateTaskDate = values[58] as LocalDate?,
             widgetCreateTaskScheduled = values[59] as Boolean,
             widgetCreateTaskSerial = values[60] as Int,
-            widgetOpenTaskUid = values[61] as String?,
-            widgetOpenTaskSerial = values[62] as Int,
-            tasksWidgetDisplayMode = values[63] as WidgetTaskDisplayMode,
-            tasksWidgetIncludeOverdue = values[64] as Boolean,
-            tasksWidgetSortMode = values[65] as WidgetTaskSortMode,
-            tasksWidgetCreateMode = values[66] as WidgetTaskCreateMode,
+            widgetOpenEventUid = values[61] as String?,
+            widgetOpenEventSerial = values[62] as Int,
+            widgetOpenTaskUid = values[63] as String?,
+            widgetOpenTaskSerial = values[64] as Int,
+            tasksWidgetDisplayMode = values[65] as WidgetTaskDisplayMode,
+            tasksWidgetIncludeOverdue = values[66] as Boolean,
+            tasksWidgetSortMode = values[67] as WidgetTaskSortMode,
+            tasksWidgetCreateMode = values[68] as WidgetTaskCreateMode,
+            tasksWidgetSubtaskDefaultMode = values[69] as WidgetTaskSubtaskDefaultMode,
+            dayWidgetScalePercent = values[70] as Int,
+            dayWidgetStartHour = values[71] as Int,
+            dayWidgetStartAtCurrentHour = values[72] as Boolean,
+            agendaWidgetColorMode = values[73] as WidgetColorMode,
+            agendaWidgetThemeMode = values[74] as WidgetThemeMode,
+            tasksWidgetColorMode = values[75] as WidgetColorMode,
+            tasksWidgetThemeMode = values[76] as WidgetThemeMode,
+            dayWidgetColorMode = values[77] as WidgetColorMode,
+            dayWidgetThemeMode = values[78] as WidgetThemeMode,
+            multiWidgetColorMode = values[79] as WidgetColorMode,
+            multiWidgetThemeMode = values[80] as WidgetThemeMode,
+            multiWidgetMonthPercent = values[81] as Int,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CalendarUiState())
+    }
+        .combine(initialDataReady) { uiState, ready ->
+            uiState.copy(initialDataLoaded = ready)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
     fun selectView(viewMode: CalendarViewMode) {
         selectedViewOverride.value = viewMode
@@ -308,6 +395,7 @@ class CalendarViewModel(
         viewMode: CalendarViewMode,
         createEvent: Boolean = false,
         createTaskScheduled: Boolean? = null,
+        openEventUid: String? = null,
         openTaskUid: String? = null,
     ) {
         selectedViewOverride.value = viewMode
@@ -322,10 +410,18 @@ class CalendarViewModel(
             widgetCreateTaskScheduled.value = createTaskScheduled
             widgetCreateTaskSerial.update { it + 1 }
         }
+        if (!openEventUid.isNullOrBlank()) {
+            widgetOpenEventUid.value = openEventUid
+            widgetOpenEventSerial.update { it + 1 }
+        }
         if (!openTaskUid.isNullOrBlank()) {
             widgetOpenTaskUid.value = openTaskUid
             widgetOpenTaskSerial.update { it + 1 }
         }
+        persistWidgetSelection(date, viewMode)
+    }
+
+    private fun persistWidgetSelection(date: LocalDate, viewMode: CalendarViewMode) {
         selectedDatePersistJob?.cancel()
         selectedDatePersistJob = viewModelScope.launch {
             settingsStore.setSelectedView(viewMode)
@@ -371,6 +467,69 @@ class CalendarViewModel(
         }
     }
 
+    fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
+        viewModelScope.launch {
+            settingsStore.setAgendaWidgetThemeMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
+        }
+    }
+
+    fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
+        viewModelScope.launch {
+            settingsStore.setAgendaWidgetColorMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
+        }
+    }
+
+    fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
+        viewModelScope.launch {
+            settingsStore.setTasksWidgetThemeMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
+        }
+    }
+
+    fun setTasksWidgetColorMode(mode: WidgetColorMode) {
+        viewModelScope.launch {
+            settingsStore.setTasksWidgetColorMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
+        }
+    }
+
+    fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
+        viewModelScope.launch {
+            settingsStore.setDayWidgetThemeMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
+        }
+    }
+
+    fun setDayWidgetColorMode(mode: WidgetColorMode) {
+        viewModelScope.launch {
+            settingsStore.setDayWidgetColorMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
+        }
+    }
+
+    fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
+        viewModelScope.launch {
+            settingsStore.setMultiWidgetThemeMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
+        }
+    }
+
+    fun setMultiWidgetColorMode(mode: WidgetColorMode) {
+        viewModelScope.launch {
+            settingsStore.setMultiWidgetColorMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
+        }
+    }
+
+    fun setMultiWidgetMonthPercent(monthPercent: Int) {
+        viewModelScope.launch {
+            settingsStore.setMultiWidgetMonthPercent(monthPercent)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
+        }
+    }
+
     fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
         viewModelScope.launch {
             settingsStore.setTasksWidgetDisplayMode(mode)
@@ -399,12 +558,43 @@ class CalendarViewModel(
         }
     }
 
+    fun setTasksWidgetSubtaskDefaultMode(mode: WidgetTaskSubtaskDefaultMode) {
+        viewModelScope.launch {
+            settingsStore.setTasksWidgetSubtaskDefaultMode(mode)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
+        }
+    }
+
+    fun setDayWidgetScalePercent(scalePercent: Int) {
+        viewModelScope.launch {
+            settingsStore.setDayWidgetScalePercent(scalePercent)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
+        }
+    }
+
+    fun setDayWidgetStartHour(startHour: Int) {
+        viewModelScope.launch {
+            settingsStore.setDayWidgetStartHour(startHour)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
+        }
+    }
+
+    fun setDayWidgetStartAtCurrentHour(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setDayWidgetStartAtCurrentHour(enabled)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
+        }
+    }
+
     fun setLanguageMode(mode: AppLanguageMode) {
         viewModelScope.launch { settingsStore.setLanguageMode(mode) }
     }
 
     fun setTaskColorMode(mode: TaskColorMode) {
-        viewModelScope.launch { settingsStore.setTaskColorMode(mode) }
+        viewModelScope.launch {
+            settingsStore.setTaskColorMode(mode)
+            KgsWidgetUpdateScheduler.updateAll(appContext)
+        }
     }
 
     fun setFocusTitleOnCreate(enabled: Boolean) {
@@ -420,11 +610,17 @@ class CalendarViewModel(
     }
 
     fun setPriorityAnimationsEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsStore.setPriorityAnimationsEnabled(enabled) }
+        viewModelScope.launch {
+            settingsStore.setPriorityAnimationsEnabled(enabled)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
+        }
     }
 
     fun setSubtasksExpandedByDefault(expanded: Boolean) {
-        viewModelScope.launch { settingsStore.setSubtasksExpandedByDefault(expanded) }
+        viewModelScope.launch {
+            settingsStore.setSubtasksExpandedByDefault(expanded)
+            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
+        }
     }
 
     fun setAutoLoadMapPreviews(enabled: Boolean) {
@@ -699,6 +895,12 @@ class CalendarViewModel(
         }
     }
 
+    fun moveAllDayEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
+        runEdit(rescheduleReminders = true) {
+            repository.moveAllDayEvent(uid, occurrenceStartMillis, date)
+        }
+    }
+
     fun copyEventTo(uid: String, collectionHref: String) {
         runEdit(rescheduleReminders = true) {
             repository.copyEventTo(uid, collectionHref)
@@ -799,6 +1001,12 @@ class CalendarViewModel(
     fun moveTimedTask(uid: String, occurrenceStartMillis: Long, date: LocalDate, start: LocalTime, end: LocalTime) {
         runEdit(rescheduleReminders = true) {
             repository.moveTimedTask(uid, occurrenceStartMillis, date, start, end)
+        }
+    }
+
+    fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
+        runEdit(rescheduleReminders = true) {
+            repository.moveAllDayTask(uid, occurrenceStartMillis, date)
         }
     }
 
@@ -912,6 +1120,7 @@ class CalendarViewModel(
                 repository.pushPendingChangesCreatedSince(startedAt)
             }.onSuccess {
                 message.value = null
+                KgsWidgetUpdateScheduler.updateAll(appContext)
             }.onFailure {
                 message.value = it.message ?: "Could not save changes."
             }
@@ -961,8 +1170,14 @@ private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
 @Suppress("UNCHECKED_CAST")
 class CalendarViewModelFactory(
     private val graph: AppGraph,
+    private val initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return CalendarViewModel(graph.repository, graph.settingsStore, graph.appContext) as T
+        return CalendarViewModel(
+            repository = graph.repository,
+            settingsStore = graph.settingsStore,
+            appContext = graph.appContext,
+            initialWidgetLaunchTarget = initialWidgetLaunchTarget,
+        ) as T
     }
 }

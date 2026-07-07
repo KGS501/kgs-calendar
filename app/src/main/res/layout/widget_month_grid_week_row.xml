@@ -4,8 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="0dp"
     android:layout_weight="1"
-    android:clipChildren="false"
-    android:clipToPadding="false">
+    android:clipChildren="true"
+    android:clipToPadding="true">
 
     <LinearLayout
         android:id="@+id/widget_month_grid_row"
@@ -18,9 +18,37 @@
         android:id="@+id/widget_month_week_chip_layers"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipChildren="false"
-        android:clipToPadding="false"
+        android:clipChildren="true"
+        android:clipToPadding="true"
         android:orientation="vertical"
         android:paddingTop="16dp"
-        android:paddingBottom="1dp" />
+        android:paddingBottom="2dp" />
+
+    <LinearLayout
+        android:id="@+id/widget_month_week_bottom_fade_row"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="bottom"
+        android:orientation="horizontal"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/widget_month_week_span_fade_layers"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="bottom"
+        android:orientation="vertical"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/widget_month_today_border_row"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="horizontal" />
 </FrameLayout>

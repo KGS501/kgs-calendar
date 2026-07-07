@@ -15,6 +15,7 @@ import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
+import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -22,6 +23,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 data class CalendarUiState(
+    val initialDataLoaded: Boolean = false,
     val account: AccountEntity? = null,
     val accounts: List<AccountEntity> = emptyList(),
     val collections: List<CollectionEntity> = emptyList(),
@@ -44,6 +46,8 @@ data class CalendarUiState(
     val widgetCreateTaskDate: LocalDate? = null,
     val widgetCreateTaskScheduled: Boolean = false,
     val widgetCreateTaskSerial: Int = 0,
+    val widgetOpenEventUid: String? = null,
+    val widgetOpenEventSerial: Int = 0,
     val widgetOpenTaskUid: String? = null,
     val widgetOpenTaskSerial: Int = 0,
     val selectedView: CalendarViewMode = CalendarViewMode.ThreeDay,
@@ -51,10 +55,23 @@ data class CalendarUiState(
     val colorMode: AppColorMode = AppColorMode.Auto,
     val monthWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
     val monthWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val agendaWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
+    val agendaWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val tasksWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
+    val tasksWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val dayWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
+    val dayWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val multiWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
+    val multiWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val multiWidgetMonthPercent: Int = SettingsStore.DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
     val tasksWidgetDisplayMode: WidgetTaskDisplayMode = WidgetTaskDisplayMode.Planned,
     val tasksWidgetIncludeOverdue: Boolean = true,
     val tasksWidgetSortMode: WidgetTaskSortMode = WidgetTaskSortMode.Date,
     val tasksWidgetCreateMode: WidgetTaskCreateMode = WidgetTaskCreateMode.Today,
+    val tasksWidgetSubtaskDefaultMode: WidgetTaskSubtaskDefaultMode = WidgetTaskSubtaskDefaultMode.FollowApp,
+    val dayWidgetScalePercent: Int = SettingsStore.DEFAULT_DAY_WIDGET_SCALE_PERCENT,
+    val dayWidgetStartHour: Int = SettingsStore.DEFAULT_DAY_WIDGET_START_HOUR,
+    val dayWidgetStartAtCurrentHour: Boolean = SettingsStore.DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR,
     val languageMode: AppLanguageMode = AppLanguageMode.System,
     val taskColorMode: TaskColorMode = TaskColorMode.Collection,
     val focusTitleOnCreate: Boolean = false,

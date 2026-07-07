@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_day_card_touch_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <TextView
+        android:id="@+id/widget_day_card_click"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:text="" />
+
+    <TextView
+        android:id="@+id/widget_day_card_checkbox_touch"
+        android:layout_width="44dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start|center_vertical"
+        android:background="@android:color/transparent"
+        android:text="" />
+</FrameLayout>

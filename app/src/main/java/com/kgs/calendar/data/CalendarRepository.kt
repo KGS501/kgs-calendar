@@ -51,6 +51,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -223,6 +224,13 @@ class CalendarRepository(
 
     suspend fun isAndroidProviderEnabled(): Boolean =
         database.accountDao().get(AndroidCalendarProviderClient.ANDROID_ACCOUNT_ID) != null
+
+    suspend fun shouldBlockInitialAndroidProviderRefresh(): Boolean {
+        val account = database.accountDao().get(AndroidCalendarProviderClient.ANDROID_ACCOUNT_ID) ?: return false
+        if (!androidCalendarProviderClient.hasCalendarPermissions()) return false
+        if (account.lastSyncAtMillis != null) return false
+        return database.eventDao().countForCollectionSource(SourceType.AndroidProvider) == 0
+    }
 
     suspend fun ensureLocalCalendar() {
         val account = database.accountDao().get(LOCAL_ACCOUNT_ID) ?: AccountEntity(
@@ -721,6 +729,39 @@ class CalendarRepository(
         }
     }
 
+    suspend fun moveAllDayEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
+        val existing = database.eventDao().get(uid) ?: return
+        val currentStart = existing.startsAtMillis.toDate()
+        val currentEnd = existing.endDateInclusive().coerceAtLeast(currentStart)
+        val spanDays = ChronoUnit.DAYS.between(currentStart, currentEnd).coerceAtLeast(0L)
+        val payload = EventEditPayload(
+            title = existing.title,
+            collectionHref = existing.collectionHref,
+            date = date,
+            endDate = date.plusDays(spanDays),
+            startTime = null,
+            endTime = null,
+            allDay = true,
+            description = existing.description,
+            location = existing.location,
+            locationMapVerified = existing.locationMapVerified,
+            manualColor = existing.manualColor,
+            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
+            reminderMinutes = existing.remindersCsv.toMinutesList(),
+            status = existing.status,
+            classification = existing.classification,
+            transparency = existing.transparency,
+            categories = existing.categories,
+            organizerJson = existing.organizerJson,
+            attendeesJson = existing.attendeesJson,
+        )
+        if (existing.recurrenceRule.isNullOrBlank()) {
+            updateEvent(uid, payload)
+        } else {
+            updateEventOccurrence(uid, occurrenceStartMillis, payload)
+        }
+    }
+
     suspend fun setEventParticipation(uid: String, attendeeEmails: List<String>, partstat: String) {
         val existing = database.eventDao().get(uid) ?: return
         if (isReadOnlyCollectionHref(existing.collectionHref) || isAndroidProviderCollectionHref(existing.collectionHref)) return
@@ -1072,6 +1113,41 @@ class CalendarRepository(
             dueDate = date,
             dueTime = endTime,
             dueHasTime = true,
+            priority = existing.priority,
+            percentComplete = existing.percentComplete,
+            isCompleted = existing.isCompleted,
+            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
+            parentUid = existing.parentUid,
+            status = existing.status,
+            reminderMinutes = existing.remindersCsv.toMinutesList(),
+        )
+        if (existing.recurrenceRule.isNullOrBlank()) {
+            updateTask(uid, payload)
+        } else {
+            updateTaskOccurrence(uid, occurrenceStartMillis, payload)
+        }
+    }
+
+    suspend fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
+        val existing = database.taskDao().get(uid) ?: return
+        val currentStart = existing.startAtMillis?.toDate() ?: existing.dueAtMillis?.toDate() ?: date
+        val currentEnd = (existing.dueAtMillis?.toDate() ?: existing.startAtMillis?.toDate() ?: currentStart).coerceAtLeast(currentStart)
+        val spanDays = ChronoUnit.DAYS.between(currentStart, currentEnd).coerceAtLeast(0L)
+        val payload = TaskEditPayload(
+            title = existing.title,
+            collectionHref = existing.collectionHref,
+            notes = existing.notes,
+            location = existing.location,
+            locationMapVerified = existing.locationMapVerified,
+            manualColor = existing.manualColor,
+            url = existing.url,
+            categories = existing.categories,
+            startDate = date,
+            startTime = null,
+            startHasTime = false,
+            dueDate = date.plusDays(spanDays),
+            dueTime = null,
+            dueHasTime = false,
             priority = existing.priority,
             percentComplete = existing.percentComplete,
             isCompleted = existing.isCompleted,
@@ -1588,10 +1664,21 @@ class CalendarRepository(
             return
         }
         try {
-            val response = readOnlyHttpClient.newCall(Request.Builder().url(account.serverUrl).get().build()).execute()
+            var contentType: String? = null
+            val response = readOnlyHttpClient.newCall(
+                Request.Builder()
+                    .url(account.serverUrl)
+                    .header("Accept", READ_ONLY_CALENDAR_ACCEPT)
+                    .get()
+                    .build(),
+            ).execute()
             val raw = response.use { body ->
                 if (!body.isSuccessful) error("URL returned HTTP ${body.code}")
+                contentType = body.header("Content-Type")
                 body.body?.string() ?: error("Empty calendar response.")
+            }
+            if (raw.looksLikeHtmlResponse(contentType)) {
+                error("URL returned a web page instead of an iCalendar feed.")
             }
             val fallbackColor = DEFAULT_COLORS[abs(account.id.hashCode()) % DEFAULT_COLORS.size]
             val automaticColor = existing?.automaticColor
@@ -2384,6 +2471,13 @@ class CalendarRepository(
         return statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
     }
 
+    private fun String.looksLikeHtmlResponse(contentType: String?): Boolean {
+        if (contentType?.contains("text/html", ignoreCase = true) == true) return true
+        val prefix = trimStart().take(256)
+        return prefix.startsWith("<!DOCTYPE html", ignoreCase = true) ||
+            prefix.startsWith("<html", ignoreCase = true)
+    }
+
     private fun AccountEntity.describeSyncError(error: Throwable): String {
         val source = displayName?.takeIf { it.isNotBlank() } ?: username
         error.message?.takeIf { it.startsWith("Source \"$source\":") }?.let { return it }
@@ -2417,6 +2511,7 @@ class CalendarRepository(
     companion object {
         private const val READ_ONLY_USERNAME = "Read-only URL"
         private const val READ_ONLY_PREFIX = "readonly-"
+        private const val READ_ONLY_CALENDAR_ACCEPT = "text/calendar, application/calendar+ics, text/plain, */*"
         private const val LOCAL_ACCOUNT_ID = "local"
         private const val LOCAL_USERNAME = "Local device"
         private const val LOCAL_SERVER_URL = "local://device"
@@ -2475,6 +2570,12 @@ private fun String.inferUid(): String? {
         ?.trim()
         ?.takeIf { it.isNotBlank() }
 }
+
+private fun Long.toDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+
+private fun EventEntity.endDateInclusive(): LocalDate =
+    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(ZoneId.systemDefault()).toLocalDate()
 
 private fun CollectionEntity.newResourceHref(uid: String): String =
     href.trimEnd('/') + "/" + uid.calendarObjectPathSegment() + ".ics"

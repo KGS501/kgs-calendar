@@ -2,8 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_month_chip_lane_row"
     android:layout_width="match_parent"
-    android:layout_height="14dp"
-    android:layout_marginTop="1dp"
-    android:clipChildren="false"
-    android:clipToPadding="false"
+    android:layout_height="15dp"
+    android:clipChildren="true"
+    android:clipToPadding="true"
     android:orientation="horizontal" />

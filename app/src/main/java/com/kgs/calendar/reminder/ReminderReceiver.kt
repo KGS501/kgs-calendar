@@ -22,7 +22,7 @@ class ReminderReceiver : BroadcastReceiver() {
             markTaskDone(context, intent)
             return
         }
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Erinnerung"
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_channel_name)
         val body = intent.getStringExtra(EXTRA_BODY).orEmpty()
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, title.hashCode())
         val taskResourceHref = intent.getStringExtra(EXTRA_TASK_RESOURCE_HREF)

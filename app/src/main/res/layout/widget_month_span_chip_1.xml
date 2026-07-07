@@ -1,12 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_month_span_chip_text"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_month_span_chip_root"
     android:layout_width="0dp"
-    android:layout_height="match_parent"
+    android:layout_height="14dp"
     android:layout_weight="1"
-    android:ellipsize="end"
-    android:fontFamily="sans-serif-medium"
-    android:gravity="center_vertical"
-    android:maxLines="1"
-    android:textColor="#FFFFFF"
-    android:textSize="8.5sp" />
+    android:clipChildren="true"
+    android:clipToPadding="true">
+
+    <ImageView
+        android:id="@+id/widget_month_span_chip_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="2dp"
+        android:contentDescription="@null"
+        android:scaleType="fitXY" />
+
+    <TextView
+        android:id="@+id/widget_month_span_chip_text"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="2dp"
+        android:ellipsize="none"
+        android:fadingEdgeLength="6dp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:requiresFadingEdge="horizontal"
+        android:scrollHorizontally="true"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textSize="9sp" />
+</FrameLayout>

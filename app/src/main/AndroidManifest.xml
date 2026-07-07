@@ -46,10 +46,23 @@
             android:name=".widget.KgsWidgetActionReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".widget.KgsWidgetRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".widget.KgsWidgetCollectionService"
             android:exported="false"
             android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <provider
+            android:name=".widget.KgsWidgetImageProvider"
+            android:authorities="${applicationId}.widget.images"
+            android:exported="true" />
 
         <receiver
             android:name=".widget.KgsAgendaWidgetProvider"
@@ -57,6 +70,7 @@
             android:label="@string/widget_agenda_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -69,6 +83,7 @@
             android:label="@string/widget_month_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -81,6 +96,7 @@
             android:label="@string/widget_tasks_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -93,6 +109,7 @@
             android:label="@string/widget_multi_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -105,6 +122,7 @@
             android:label="@string/widget_day_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

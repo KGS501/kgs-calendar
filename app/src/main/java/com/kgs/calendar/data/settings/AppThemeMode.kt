@@ -45,6 +45,12 @@ enum class WidgetTaskCreateMode(val label: String) {
     Unplanned("Unplanned task"),
 }
 
+enum class WidgetTaskSubtaskDefaultMode(val label: String) {
+    FollowApp("Follow app"),
+    Open("Open"),
+    Closed("Closed"),
+}
+
 enum class AppLanguageMode(val localeTag: String?) {
     System(null),
     English("en"),

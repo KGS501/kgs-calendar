@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_day_now_root"
+    android:layout_width="match_parent"
+    android:layout_height="22dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/widget_day_now_time"
+        android:layout_width="50dp"
+        android:layout_height="18dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp" />
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+
+    <TextView
+        android:id="@+id/widget_day_now_line"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_weight="1"
+        android:text="" />
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+</LinearLayout>

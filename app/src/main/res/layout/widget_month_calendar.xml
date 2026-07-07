@@ -17,59 +17,59 @@
 
         <TextView
             android:id="@+id/widget_month_prev"
-            android:layout_width="34dp"
+            android:layout_width="44dp"
             android:layout_height="34dp"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"
             android:textColor="#2563A8"
             android:textSize="24sp" />
 
-        <RelativeLayout
+        <TextView
+            android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="34dp"
-            android:layout_weight="1">
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/month"
+            android:textColor="#17202A"
+            android:textSize="16sp" />
 
-            <TextView
-                android:id="@+id/widget_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_centerHorizontal="true"
-                android:layout_centerVertical="true"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif-medium"
-                android:maxLines="1"
-                android:text="@string/month"
-                android:textColor="#17202A"
-                android:textSize="16sp" />
+        <ImageView
+            android:id="@+id/widget_day_today"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_badge_background"
+            android:contentDescription="@string/today"
+            android:padding="7dp"
+            android:scaleType="center"
+            android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/widget_badge"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_centerVertical="true"
-                android:layout_marginStart="8dp"
-                android:layout_toEndOf="@id/widget_title"
-                android:background="@drawable/widget_badge_background"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:textColor="#FFFFFF"
-                android:textSize="17sp" />
+        <TextView
+            android:id="@+id/widget_badge"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_badge_background"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp" />
 
-            <TextView
-                android:id="@+id/widget_subtitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="#526173"
-                android:textSize="12sp"
-                android:visibility="gone" />
-        </RelativeLayout>
+        <TextView
+            android:id="@+id/widget_subtitle"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/widget_month_next"
-            android:layout_width="34dp"
+            android:layout_width="44dp"
             android:layout_height="34dp"
             android:fontFamily="sans-serif-medium"
             android:gravity="center"

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_agenda_event_root"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="top"
+    android:orientation="horizontal">
+
+    <LinearLayout
+        android:id="@+id/widget_agenda_date_column"
+        android:layout_width="50dp"
+        android:layout_height="match_parent"
+        android:gravity="top|center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_agenda_date_month"
+            android:layout_width="match_parent"
+            android:layout_height="13dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_agenda_date_day"
+            android:layout_width="match_parent"
+            android:layout_height="23dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/widget_agenda_date_line"
+            android:layout_width="2dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#17202A"
+            android:text=""
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_agenda_end_month"
+            android:layout_width="match_parent"
+            android:layout_height="12dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_agenda_end_day"
+            android:layout_width="match_parent"
+            android:layout_height="19dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#17202A"
+            android:textSize="17sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+
+    <ImageView
+        android:id="@+id/widget_agenda_event_art"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
+        android:layout_weight="1"
+        android:contentDescription="@null"
+        android:scaleType="fitXY" />
+
+    <TextView
+        android:layout_width="12dp"
+        android:layout_height="1dp"
+        android:text="" />
+</LinearLayout>

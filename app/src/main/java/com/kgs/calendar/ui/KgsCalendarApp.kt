@@ -24,6 +24,7 @@ import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
 import android.util.TypedValue
 import android.widget.TextView
+import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -166,6 +167,7 @@ import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -190,6 +192,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -310,11 +313,12 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.AppThemeMode
+import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
-import com.kgs.calendar.data.settings.WidgetTaskSortMode
+import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
@@ -327,6 +331,56 @@ import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.ui.calendar.DayEndHour
+import com.kgs.calendar.ui.calendar.DayPagerPageCount
+import com.kgs.calendar.ui.calendar.DayStartHour
+import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
+import com.kgs.calendar.ui.calendar.MonthStripPageCount
+import com.kgs.calendar.ui.calendar.MonthViewBase
+import com.kgs.calendar.ui.calendar.MonthViewPageCount
+import com.kgs.calendar.ui.calendar.YearStripBase
+import com.kgs.calendar.ui.calendar.YearStripPageCount
+import com.kgs.calendar.ui.calendar.leadingDaysFrom
+import com.kgs.calendar.ui.calendar.monthGridHeight
+import com.kgs.calendar.ui.calendar.monthGridRowCount
+import com.kgs.calendar.ui.calendar.overviewPanelHeight
+import com.kgs.calendar.ui.calendar.shortMonthLabel
+import com.kgs.calendar.ui.calendar.toDayDate
+import com.kgs.calendar.ui.calendar.toDayPage
+import com.kgs.calendar.ui.calendar.toMonth
+import com.kgs.calendar.ui.calendar.toMonthPage
+import com.kgs.calendar.ui.calendar.toMonthViewPage
+import com.kgs.calendar.ui.calendar.weekHeaderLabels
+import com.kgs.calendar.ui.labels.RecurrenceOption
+import com.kgs.calendar.ui.labels.ReminderChoice
+import com.kgs.calendar.ui.labels.ReminderUnit
+import com.kgs.calendar.ui.labels.parseReminderMinutes
+import com.kgs.calendar.ui.labels.recurrenceFrequency
+import com.kgs.calendar.ui.labels.recurrencePart
+import com.kgs.calendar.ui.labels.toIsoUntilDate
+import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
+import com.kgs.calendar.ui.labels.toReminderAmountUnit
+import com.kgs.calendar.ui.layout.AllDayContinuationSegment
+import com.kgs.calendar.ui.layout.AllDayOverlayItem
+import com.kgs.calendar.ui.layout.TimedCalendarItem
+import com.kgs.calendar.ui.layout.TimedPlacement
+import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
+import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
+import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
+import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
+import com.kgs.calendar.ui.model.agendaSortMillis
+import com.kgs.calendar.ui.model.allDayTopEndDate
+import com.kgs.calendar.ui.model.allDayTopStartDate
+import com.kgs.calendar.ui.model.isAllDayTopItemOn
+import com.kgs.calendar.ui.model.isFullDayTaskOn
+import com.kgs.calendar.ui.model.occurrenceStartForEdit
+import com.kgs.calendar.ui.model.occursOn
+import com.kgs.calendar.ui.model.taskDate
+import com.kgs.calendar.ui.model.toDate
+import com.kgs.calendar.ui.model.toTime
+import com.kgs.calendar.ui.model.toTimeText
+import com.kgs.calendar.ui.model.visibleAgendaDates
+import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -399,20 +453,11 @@ private const val MotionShort = 150
 private const val MotionMedium = 300
 private const val MotionLong = 450
 private const val PENDING_BADGE_DELAY_MILLIS = 30_000L
-private const val DayStartHour = 0
-private const val DayEndHour = 23
 private const val DefaultHourRowHeightDp = 46f
 private const val AbsoluteMinHourRowHeightDp = 18f
 private const val MaxHourRowHeightDp = 92f
-private const val DayPagerPageCount = 80_000
 private const val DraftSnapMinutes = 15
 private const val DraftMinDurationMinutes = 15
-private const val DEFAULT_TASK_DURATION_MILLIS = 30L * 60L * 1000L
-private const val MonthStripPageCount = 24_000
-private const val MonthStripCenterPage = MonthStripPageCount / 2
-private const val MonthViewPageCount = 4_800
-private const val YearStripBase = 1800
-private const val YearStripPageCount = 401
 private val TimeSidebarWidth = 42.dp
 private val DayHeaderHeight = 56.dp
 private val DayColumnSpacing = 4.dp
@@ -429,10 +474,17 @@ private const val UiLocalAccountId = "local"
 private const val UiLocalCollectionPrefix = "local://"
 private const val UiAndroidAccountId = "android-provider"
 private const val UiAndroidCollectionPrefix = "android://calendar/"
-private val DayPagerBaseDate: LocalDate = LocalDate.of(2000, 1, 1)
-private val MonthStripBaseMonth: YearMonth = YearMonth.of(2000, 1)
-private val MonthViewBase: YearMonth = YearMonth.of(YearStripBase, 1)
 private val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
+
+@Composable
+private fun appString(@StringRes id: Int, vararg args: Any): String {
+    val context = LocalContext.current
+    val locale = LocalAppLocale.current
+    return remember(id, args.toList(), context, locale) {
+        val localized = context.withAppLocale(locale)
+        if (args.isEmpty()) localized.getString(id) else localized.getString(id, *args)
+    }
+}
 private val LocalExitingResourceHrefs = compositionLocalOf<Set<String>> { emptySet() }
 private val LocalTaskHierarchyExitProgress = compositionLocalOf { 0f }
 private val SecurePasswordKeyboardOptions = KeyboardOptions(
@@ -501,6 +553,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
     val localizedContext = remember(baseContext, appLocale) {
         baseContext.withAppLocale(appLocale)
     }
+    val localizedConfiguration = remember(configuration, appLocale) {
+        Configuration(configuration).apply { setLocale(appLocale) }
+    }
     DisposableEffect(appLocale) {
         val previousLocale = Locale.getDefault()
         Locale.setDefault(appLocale)
@@ -509,6 +564,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
 
     CompositionLocalProvider(
         LocalContext provides localizedContext,
+        LocalConfiguration provides localizedConfiguration,
         LocalAppLocale provides appLocale,
     ) {
     KgsCalendarTheme(themeMode = state.themeMode, darkTheme = useDarkTheme) {
@@ -539,6 +595,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         SideEffect {
             view.context.findActivity()?.window?.let { window ->
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkPalette
+                WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkPalette
+                window.navigationBarColor = Color.Transparent.toArgb()
             }
         }
         var createMenuOpen by remember { mutableStateOf(false) }
@@ -555,6 +613,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var settingsStartDestination by remember { mutableStateOf(SettingsDestination.Main) }
         var handledWidgetCreateEventSerial by rememberSaveable { mutableStateOf(0) }
         var handledWidgetCreateTaskSerial by rememberSaveable { mutableStateOf(0) }
+        var handledWidgetOpenEventSerial by rememberSaveable { mutableStateOf(0) }
         var handledWidgetOpenTaskSerial by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
@@ -563,6 +622,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var draftEnd by remember { mutableStateOf(LocalTime.of(16, 0)) }
         var draftWireframeColor by remember { mutableStateOf(WarmBrown.toArgb()) }
         var draftAllDay by remember { mutableStateOf(false) }
+        var draftTaskHasDate by remember { mutableStateOf(false) }
         var draftTaskUsesTime by remember { mutableStateOf(false) }
         var editorWireframeMode by remember { mutableStateOf(false) }
         var editorTransferDraft by remember { mutableStateOf<EditorTransferDraft?>(null) }
@@ -570,6 +630,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var creationExpandRequest by remember { mutableStateOf(0) }
         var conversionSource by remember { mutableStateOf<ConversionSource?>(null) }
         var recurringSaveRequest by remember { mutableStateOf<RecurringSaveRequest?>(null) }
+        var hiddenSaveNotice by remember { mutableStateOf<HiddenSaveNotice?>(null) }
         val deleteFadeResourceHrefs = remember { mutableStateMapOf<String, Unit>() }
         val pendingDeleteHrefs = remember(state.pendingMutationItems) {
             state.pendingMutationItems
@@ -611,6 +672,15 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             smoothCompletedTasks.exitingResourceHrefs +
             smoothSearchTasks.exitingResourceHrefs
         val problemItems = state.problemItems()
+        fun showHiddenSaveNotice(collectionHref: String?, kind: HiddenSaveKind) {
+            val resolvedHref = collectionHref ?: when (kind) {
+                HiddenSaveKind.Event -> state.defaultEventCollectionHref
+                HiddenSaveKind.Task -> state.defaultTaskCollectionHref
+            }
+            if (resolvedHref != null && resolvedHref in state.hiddenCollectionHrefs) {
+                hiddenSaveNotice = HiddenSaveNotice(resolvedHref, kind)
+            }
+        }
         val backgroundBlur by animateDpAsState(
             targetValue = if (createMenuOpen) 8.dp else 0.dp,
             animationSpec = tween(180, easing = MotionStandard),
@@ -683,6 +753,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             transfer.startTime?.let { draftStart = it }
             transfer.endTime?.let { draftEnd = it }
             transfer.allDay?.let { draftAllDay = it }
+            draftTaskHasDate = transfer.date != null
             draftTaskUsesTime = transfer.allDay != true && transfer.startTime != null
         }
 
@@ -716,6 +787,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             draftDate = date
             draftStart = LocalTime.now().nextDraftStart()
             draftEnd = draftStart.defaultDraftEnd(state.defaultEventDurationMinutes)
+            draftTaskHasDate = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate)
             draftAllDay = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate && !state.defaultTaskHasTime)
             draftTaskUsesTime = !scheduledForDay && useTaskDefaults && state.defaultTaskHasTime
             draftWireframeColor = state.collections
@@ -766,6 +838,28 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     date = state.widgetCreateTaskDate ?: state.selectedDate,
                     scheduledForDay = state.widgetCreateTaskScheduled,
                 )
+            }
+        }
+        LaunchedEffect(state.widgetOpenEventSerial, state.events) {
+            if (state.widgetOpenEventSerial > handledWidgetOpenEventSerial) {
+                val event = state.widgetOpenEventUid?.let { uid ->
+                    state.events.firstOrNull { it.resourceHref == uid || it.uid == uid }
+                }
+                if (event != null) {
+                    handledWidgetOpenEventSerial = state.widgetOpenEventSerial
+                    createMenuOpen = false
+                    searchOpen = false
+                    drawerOpen = false
+                    taskDrawerOpen = false
+                    settingsOpen = false
+                    problemsOpen = false
+                    editingCollection = null
+                    creationSheet = null
+                    detailTaskBackStack.clear()
+                    detailTaskMorphGeneration = 0
+                    detailTaskMorphSourceHref = null
+                    detailSheet = DetailSheet.Event(event)
+                }
             }
         }
         LaunchedEffect(state.widgetOpenTaskSerial, state.allTasks) {
@@ -841,6 +935,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onTaskStatusChanged = viewModel::setTaskStatus,
                         onEventMoved = viewModel::moveTimedEvent,
                         onTaskMoved = viewModel::moveTimedTask,
+                        onEventMovedAllDay = viewModel::moveAllDayEvent,
+                        onTaskMovedAllDay = viewModel::moveAllDayTask,
                         onSlotSelected = { date, start ->
                             editorWireframeMode = true
                             if (creationSheet != null) creationCollapseRequest++
@@ -964,6 +1060,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = DetailSheet.Task(it)
                     },
                     onShowCompleted = { completedTasksOpen = true },
+                    onCreateTask = {
+                        openTaskCreation(LocalDate.now(), scheduledForDay = false, useTaskDefaults = false)
+                    },
                 )
                 CalendarSearchOverlay(
                     visible = searchOpen,
@@ -1045,6 +1144,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         requestTitleFocus = state.focusTitleOnCreate,
                         onSave = { payload ->
                             viewModel.createEvent(payload)
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1079,10 +1179,15 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 draftStart = it.start
                                 draftEnd = it.end
                                 draftAllDay = it.allDay
-                            } ?: run { draftAllDay = false }
+                                draftTaskHasDate = true
+                            } ?: run {
+                                draftAllDay = false
+                                draftTaskHasDate = false
+                            }
                         },
                         onSave = { payload ->
                             viewModel.createTask(payload)
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1149,6 +1254,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 is ConversionSource.Task -> viewModel.convertTaskToEvent(source.task.resourceHref, payload)
                                 else -> viewModel.createEvent(payload)
                             }
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1176,11 +1282,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onSave = { payload ->
                             if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyForUi() == true) {
                                 viewModel.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
+                                showHiddenSaveNotice(sheet.event.collectionHref, HiddenSaveKind.Event)
                                 creationSheet = null
                             } else if (!sheet.event.recurrenceRule.isNullOrBlank() || sheet.event.isRecurring) {
                                 recurringSaveRequest = RecurringSaveRequest.Event(sheet.event, payload)
                             } else {
                                 viewModel.updateEvent(sheet.event.resourceHref, payload)
+                                showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                                 creationSheet = null
                             }
                         },
@@ -1206,6 +1314,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         headerTitle = stringResource(R.string.duplicate_event),
                         onSave = { payload ->
                             viewModel.createEvent(payload)
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1226,7 +1335,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         selectedEnd = draftEnd,
                         defaultTimed = draftTaskUsesTime,
                         defaultHasEndTime = draftTaskUsesTime,
-                        defaultHasDate = state.defaultTaskHasDate || draftTaskUsesTime,
+                        defaultHasDate = draftTaskHasDate || draftTaskUsesTime || draftAllDay,
                         defaultAllDay = draftAllDay,
                         requestTitleFocus = state.focusTitleOnCreate,
                         initialTask = null,
@@ -1239,13 +1348,18 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 draftStart = it.start
                                 draftEnd = it.end
                                 draftAllDay = it.allDay
-                            } ?: run { draftAllDay = false }
+                                draftTaskHasDate = true
+                            } ?: run {
+                                draftAllDay = false
+                                draftTaskHasDate = false
+                            }
                         },
                         onSave = { payload ->
                             when (val source = conversionSource) {
                                 is ConversionSource.Event -> viewModel.convertEventToTask(source.event.resourceHref, payload)
                                 else -> viewModel.createTask(payload)
                             }
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1272,6 +1386,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         headerTitle = stringResource(R.string.add_subtask),
                         onSave = { payload ->
                             viewModel.createTask(payload)
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             creationSheet = null
                         },
                         onSwitchToEvent = {},
@@ -1292,11 +1407,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onSave = { payload ->
                             if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyForUi() == true) {
                                 viewModel.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
+                                showHiddenSaveNotice(sheet.task.collectionHref, HiddenSaveKind.Task)
                                 creationSheet = null
                             } else if (!sheet.task.recurrenceRule.isNullOrBlank()) {
                                 recurringSaveRequest = RecurringSaveRequest.Task(sheet.task, payload)
                             } else {
                                 viewModel.updateTask(sheet.task.resourceHref, payload)
+                                showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                                 creationSheet = null
                             }
                         },
@@ -1323,6 +1440,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         headerTitle = stringResource(R.string.duplicate_task),
                         onSave = { payload ->
                             viewModel.createTask(payload)
+                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
                             creationSheet = null
                         },
@@ -1338,6 +1456,32 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                 }
             }
+        }
+
+        val currentHiddenSaveNotice = hiddenSaveNotice
+        val currentHiddenSaveCollection = currentHiddenSaveNotice?.let { notice ->
+            state.collections.firstOrNull { it.href == notice.collectionHref }
+        }
+        if (currentHiddenSaveNotice != null && currentHiddenSaveCollection == null) {
+            LaunchedEffect(currentHiddenSaveNotice) {
+                hiddenSaveNotice = null
+            }
+        }
+        if (currentHiddenSaveNotice != null && currentHiddenSaveCollection != null) {
+            HiddenCalendarCreationDialog(
+                collection = currentHiddenSaveCollection,
+                itemLabel = stringResource(
+                    when (currentHiddenSaveNotice.kind) {
+                        HiddenSaveKind.Event -> R.string.event
+                        HiddenSaveKind.Task -> R.string.task
+                    },
+                ),
+                onDismiss = { hiddenSaveNotice = null },
+                onUnhide = {
+                    viewModel.setCollectionVisibleInViews(currentHiddenSaveCollection.href, true)
+                    hiddenSaveNotice = null
+                },
+            )
         }
 
         // Rendered before the detail sheet so that tapping a task here lets the detail
@@ -1416,6 +1560,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     DetailSheetContent(
                         detail = animatedDetail,
                         collections = state.collections,
+                        hiddenCollectionHrefs = state.hiddenCollectionHrefs,
                         accounts = state.accounts,
                         problemResources = state.problemResources,
                         taskColorMode = state.taskColorMode,
@@ -1516,10 +1661,22 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onColorModeSelected = viewModel::setColorMode,
                 onMonthWidgetThemeSelected = viewModel::setMonthWidgetThemeMode,
                 onMonthWidgetColorModeSelected = viewModel::setMonthWidgetColorMode,
+                onAgendaWidgetThemeSelected = viewModel::setAgendaWidgetThemeMode,
+                onAgendaWidgetColorModeSelected = viewModel::setAgendaWidgetColorMode,
+                onTasksWidgetThemeSelected = viewModel::setTasksWidgetThemeMode,
+                onTasksWidgetColorModeSelected = viewModel::setTasksWidgetColorMode,
+                onDayWidgetThemeSelected = viewModel::setDayWidgetThemeMode,
+                onDayWidgetColorModeSelected = viewModel::setDayWidgetColorMode,
+                onMultiWidgetThemeSelected = viewModel::setMultiWidgetThemeMode,
+                onMultiWidgetColorModeSelected = viewModel::setMultiWidgetColorMode,
+                onMultiWidgetMonthPercentChanged = viewModel::setMultiWidgetMonthPercent,
                 onTasksWidgetDisplayModeSelected = viewModel::setTasksWidgetDisplayMode,
                 onTasksWidgetIncludeOverdueChanged = viewModel::setTasksWidgetIncludeOverdue,
-                onTasksWidgetSortModeSelected = viewModel::setTasksWidgetSortMode,
                 onTasksWidgetCreateModeSelected = viewModel::setTasksWidgetCreateMode,
+                onTasksWidgetSubtaskDefaultModeSelected = viewModel::setTasksWidgetSubtaskDefaultMode,
+                onDayWidgetScaleChanged = viewModel::setDayWidgetScalePercent,
+                onDayWidgetStartHourChanged = viewModel::setDayWidgetStartHour,
+                onDayWidgetStartAtCurrentHourChanged = viewModel::setDayWidgetStartAtCurrentHour,
                 onLanguageSelected = viewModel::setLanguageMode,
                 onTaskColorModeSelected = viewModel::setTaskColorMode,
                 onPriorityAnimationsChanged = viewModel::setPriorityAnimationsEnabled,
@@ -1585,6 +1742,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             ) {
                 CollectionSettingsSheet(
                     collection = collection,
+                    visibleInViews = collection.href !in state.hiddenCollectionHrefs,
                     onSave = { name, color ->
                         viewModel.updateCollectionAppearance(collection.href, name, color)
                         editingCollection = null
@@ -1592,6 +1750,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     onEnabledChanged = { enabled ->
                         viewModel.setCollectionEnabled(collection.href, enabled)
                         editingCollection = editingCollection?.copy(isEnabled = enabled)
+                    },
+                    onVisibleInViewsChanged = { visible ->
+                        viewModel.setCollectionVisibleInViews(collection.href, visible)
                     },
                     onDelete = if (collection.canDeleteFromServerForUi()) {
                         {
@@ -1618,6 +1779,10 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         is RecurringSaveRequest.Event -> viewModel.updateEventOccurrence(request.event.resourceHref, request.event.startsAtMillis, request.payload)
                         is RecurringSaveRequest.Task -> viewModel.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
                     }
+                    when (request) {
+                        is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
+                        is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
+                    }
                     recurringSaveRequest = null
                     creationSheet = null
                 },
@@ -1625,6 +1790,10 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     when (request) {
                         is RecurringSaveRequest.Event -> viewModel.updateEventFollowing(request.event.resourceHref, request.event.startsAtMillis, request.payload)
                         is RecurringSaveRequest.Task -> viewModel.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                    }
+                    when (request) {
+                        is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
+                        is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
                     }
                     recurringSaveRequest = null
                     creationSheet = null
@@ -1634,14 +1803,55 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         is RecurringSaveRequest.Event -> viewModel.updateEvent(request.event.resourceHref, request.payload)
                         is RecurringSaveRequest.Task -> viewModel.updateTask(request.task.resourceHref, request.payload)
                     }
+                    when (request) {
+                        is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
+                        is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
+                    }
                     recurringSaveRequest = null
                     creationSheet = null
                 },
             )
         }
+        AnimatedVisibility(
+            visible = !state.initialDataLoaded,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(1000f),
+            enter = fadeIn(animationSpec = tween(90, easing = MotionStandard)),
+            exit = fadeOut(animationSpec = tween(180, easing = MotionStandardAccelerate)),
+        ) {
+            StartupDataOverlay()
+        }
     }
 }
 
+}
+
+@Composable
+private fun StartupDataOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier.size(124.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 4.dp,
+            )
+            Image(
+                painter = painterResource(R.drawable.kgs_logo_vector),
+                contentDescription = stringResource(R.string.app_name),
+                modifier = Modifier.size(82.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1666,7 +1876,7 @@ private fun KgsModalBottomSheet(
     val scope = rememberCoroutineScope()
     val quietInteraction = remember { MutableInteractionSource() }
     val view = LocalView.current
-    val navigationBarColor = containerColor.toArgb()
+    val navigationBarColor = Color.Transparent.toArgb()
 
     DisposableEffect(view, navigationBarColor) {
         val window = view.context.findActivity()?.window
@@ -1686,20 +1896,23 @@ private fun KgsModalBottomSheet(
     ) {
             val screenHeightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
             val density = LocalDensity.current
-            val navBottomPx = with(density) { WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx() }
-            val sheetBottomPx = (screenHeightPx - navBottomPx).coerceAtLeast(1f)
+            val sheetBottomPx = screenHeightPx
             val expandedAnchor = screenHeightPx * 0.065f
             val halfAnchor = screenHeightPx * 0.50f
-            val quarterAnchor = sheetBottomPx * 0.82f
             val hiddenAnchor = sheetBottomPx
-            val editorSmallAnchor = hiddenAnchor - with(density) { EditorSmallVisibleHeight.toPx() }
-            val editorTinyAnchor = hiddenAnchor - with(density) { EditorTinyVisibleHeight.toPx() }
+            val navigationBarInsetPx = with(density) {
+                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx()
+            }
+            val sheetVisualBottomPx = (hiddenAnchor - navigationBarInsetPx).coerceAtLeast(expandedAnchor + 1f)
+            val quarterAnchor = (sheetVisualBottomPx - screenHeightPx * 0.18f).coerceIn(expandedAnchor, hiddenAnchor)
+            val editorSmallAnchor = sheetVisualBottomPx - with(density) { EditorSmallVisibleHeight.toPx() }
+            val editorTinyAnchor = sheetVisualBottomPx - with(density) { EditorTinyVisibleHeight.toPx() }
             val contentAnchor = initialContentHeight?.let { requestedHeight ->
                 val minVisibleHeight = with(density) { 148.dp.toPx() }
                 val sheetChromeAndBreathingRoom = with(density) { 104.dp.toPx() }
                 val requestedHeightPx = (with(density) { requestedHeight.toPx() } + sheetChromeAndBreathingRoom)
-                    .coerceIn(minVisibleHeight, screenHeightPx - expandedAnchor)
-                (hiddenAnchor - requestedHeightPx).coerceIn(expandedAnchor, hiddenAnchor - minVisibleHeight)
+                    .coerceIn(minVisibleHeight, sheetVisualBottomPx - expandedAnchor)
+                (sheetVisualBottomPx - requestedHeightPx).coerceIn(expandedAnchor, sheetVisualBottomPx - minVisibleHeight)
             }
             var sheetOffsetPx by remember { mutableFloatStateOf(hiddenAnchor) }
             var edgeBouncePx by remember { mutableFloatStateOf(0f) }
@@ -2463,6 +2676,81 @@ private fun DrawerCollectionRow(
 }
 
 @Composable
+private fun HiddenCalendarCreationDialog(
+    collection: CollectionEntity,
+    itemLabel: String,
+    onDismiss: () -> Unit,
+    onUnhide: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.hidden_calendar_creation_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    stringResource(R.string.hidden_calendar_creation_body, itemLabel, collection.displayName),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                )
+                val hiddenCalendarShape = RoundedCornerShape(18.dp)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .dashedBorder(SyncPendingOrange, 18.dp)
+                        .clickable(onClick = onUnhide),
+                    shape = hiddenCalendarShape,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        CollectionToggle(color = Color(collection.color), checked = false, onClick = onUnhide)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                collection.displayName,
+                                color = WarmInk,
+                                fontSize = 14.sp,
+                                lineHeight = 17.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Row(
+                                modifier = Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (collection.supportsEvents) {
+                                    CalendarCapabilityChip(stringResource(R.string.events), Color(0xFF2F5AEA))
+                                }
+                                if (collection.supportsTasks) {
+                                    CalendarCapabilityChip(stringResource(R.string.tasks), Color(0xFF00A86B))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onUnhide) {
+                Text(stringResource(R.string.unhide_calendar))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
+}
+
+@Composable
 private fun CalendarCapabilityChip(label: String, color: Color) {
     Surface(
         shape = RoundedCornerShape(999.dp),
@@ -2547,6 +2835,7 @@ private fun TaskDrawer(
     onTaskStatusChanged: (String, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
+    onCreateTask: () -> Unit,
 ) {
     val drawerProgress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -2627,6 +2916,20 @@ private fun TaskDrawer(
                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    IconButton(
+                        onClick = onCreateTask,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(accentContainerColor()),
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.new_task),
+                            tint = accentContainerContentColor(),
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                 }
                 TaskInbox(
@@ -2767,6 +3070,7 @@ private fun SearchResultsList(
     scrollTargetDate: LocalDate? = null,
     stickyHeaderBackground: Color = MaterialTheme.colorScheme.surface,
     showTaskChains: Boolean = true,
+    expandMultiDayEventSpans: Boolean = false,
 ) {
     val resolvedEmptyMessage = emptyMessage ?: stringResource(R.string.no_results)
     val noDateLabel = stringResource(R.string.no_date)
@@ -2819,8 +3123,15 @@ private fun SearchResultsList(
                 .map { CalendarSearchResult.TaskItem(it) }
         }
     }
-    val results = remember(eventResults, taskGroups, flatTaskItems) {
-        (eventResults.map { CalendarSearchResult.Event(it) } + taskGroups + flatTaskItems)
+    val eventItems = remember(eventResults, taskResults, expandMultiDayEventSpans) {
+        if (expandMultiDayEventSpans) {
+            buildAgendaEventResults(eventResults, taskResults)
+        } else {
+            eventResults.map { CalendarSearchResult.Event(it) }
+        }
+    }
+    val results = remember(eventItems, taskGroups, flatTaskItems) {
+        (eventItems + taskGroups + flatTaskItems)
             .sortedWith(
                 compareBy<CalendarSearchResult> { it.sortMillis == null }
                     .thenBy { it.sortMillis ?: Long.MAX_VALUE },
@@ -2829,15 +3140,15 @@ private fun SearchResultsList(
     val groupedResults = remember(results) {
         results.groupBy { item -> item.date?.year?.toString() ?: noDateLabel }
     }
-    val nowMillis = remember(results) { System.currentTimeMillis() }
+    val today = remember(results) { LocalDate.now() }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    val firstFutureKey = remember(results, nowMillis) {
-        results.firstOrNull { (it.sortMillis ?: Long.MAX_VALUE) >= nowMillis }?.stableKey()
+    val firstFutureKey = remember(results, today) {
+        results.firstOrNull { it.isFutureSearchSection(today) }?.stableKey()
     }
     var initialAutoScrollHandled by remember { mutableStateOf(false) }
     var lastHandledScrollRequestKey by remember { mutableStateOf(scrollRequestKey) }
-    val firstFutureLazyIndex = remember(groupedResults, firstFutureKey, nowMillis) {
+    val firstFutureLazyIndex = remember(groupedResults, firstFutureKey, today) {
         if (firstFutureKey == null) null else {
             var lazyIndex = if (showSearchIntro && query.isNotBlank()) 1 else 0
             var found: Int? = null
@@ -2846,7 +3157,7 @@ private fun SearchResultsList(
                 if (found != null) break
                 lazyIndex++ // sticky year header
                 for (item in groupItems) {
-                    if (!dividerInserted && (item.sortMillis ?: Long.MAX_VALUE) >= nowMillis) {
+                    if (!dividerInserted && item.isFutureSearchSection(today)) {
                         lazyIndex++ // past/future divider
                         dividerInserted = true
                     }
@@ -2860,7 +3171,7 @@ private fun SearchResultsList(
             found
         }
     }
-    val requestedDateLazyIndex = remember(groupedResults, scrollTargetDate, showSearchIntro, query, nowMillis) {
+    val requestedDateLazyIndex = remember(groupedResults, scrollTargetDate, showSearchIntro, query, today) {
         val targetDate = scrollTargetDate ?: return@remember null
         var lazyIndex = if (showSearchIntro && query.isNotBlank()) 1 else 0
         var found: Int? = null
@@ -2869,7 +3180,7 @@ private fun SearchResultsList(
             if (found != null) break
             lazyIndex++ // sticky year header
             for (item in groupItems) {
-                if (!dividerInserted && (item.sortMillis ?: Long.MAX_VALUE) >= nowMillis) {
+                if (!dividerInserted && item.isFutureSearchSection(today)) {
                     lazyIndex++ // past/future divider
                     dividerInserted = true
                 }
@@ -2950,8 +3261,11 @@ private fun SearchResultsList(
                             )
                         }
                     }
+                    var lastDateKey: String? = null
                     groupItems.forEach { item ->
-                        if (!futureDividerInserted && (item.sortMillis ?: Long.MAX_VALUE) >= nowMillis) {
+                        val dateKey = item.date?.toString() ?: "__no_date__"
+                        val showDate = dateKey != lastDateKey
+                        if (!futureDividerInserted && item.isFutureSearchSection(today)) {
                             item(key = "search-past-future-divider") {
                                 SearchPastFutureDivider()
                             }
@@ -2959,9 +3273,16 @@ private fun SearchResultsList(
                         }
                         item(key = item.stableKey()) {
                         when (item) {
-                            is CalendarSearchResult.Event -> SearchResultCard(event = item.event, onClick = { onEventClick(item.event) })
+                            is CalendarSearchResult.Event -> SearchResultCard(
+                                event = item.event,
+                                displayDate = item.date,
+                                spanEndDate = item.spanEndDate,
+                                showDate = showDate,
+                                onClick = { onEventClick(item.event) },
+                            )
                             is CalendarSearchResult.TaskItem -> SearchTaskResultCard(
                                 task = item.task,
+                                showDate = showDate,
                                 taskColorMode = taskColorMode,
                                 onTaskStatusChanged = onTaskStatusChanged,
                                 hierarchyDepth = 0,
@@ -2981,6 +3302,7 @@ private fun SearchResultsList(
                                     AnimatedTaskHierarchyEntry(entry) {
                                         SearchTaskResultCard(
                                             task = entry.task,
+                                            showDate = showDate,
                                             taskColorMode = taskColorMode,
                                             onTaskStatusChanged = onTaskStatusChanged,
                                             hierarchyDepth = entry.depth,
@@ -2996,6 +3318,7 @@ private fun SearchResultsList(
                             }
                         }
                         }
+                        lastDateKey = dateKey
                     }
                 }
                 item { Spacer(Modifier.height(80.dp)) }
@@ -3008,9 +3331,16 @@ private sealed interface CalendarSearchResult {
     val sortMillis: Long?
     val date: LocalDate?
 
-    data class Event(val event: EventEntity) : CalendarSearchResult {
-        override val sortMillis: Long = event.startsAtMillis
-        override val date: LocalDate = event.startsAtMillis.toDate()
+    data class Event(
+        val event: EventEntity,
+        override val date: LocalDate = event.startsAtMillis.toDate(),
+        val spanEndDate: LocalDate = date,
+    ) : CalendarSearchResult {
+        override val sortMillis: Long = if (date == event.startsAtMillis.toDate()) {
+            event.startsAtMillis
+        } else {
+            date.startOfDayMillis()
+        }
     }
 
     data class TaskGroup(val entries: List<TaskHierarchyEntry>) : CalendarSearchResult {
@@ -3030,9 +3360,72 @@ private sealed interface CalendarSearchResult {
 }
 
 private fun CalendarSearchResult.stableKey(): String = when (this) {
-    is CalendarSearchResult.Event -> "event-${event.resourceHref}-${event.startsAtMillis}"
+    is CalendarSearchResult.Event -> "event-${event.resourceHref}-${event.startsAtMillis}-$date-$spanEndDate"
     is CalendarSearchResult.TaskGroup -> "task-group-${entries.first().task.resourceHref}"
     is CalendarSearchResult.TaskItem -> "task-${task.resourceHref}-${task.agendaSortMillis() ?: 0L}"
+}
+
+private fun CalendarSearchResult.isFutureSearchSection(today: LocalDate): Boolean =
+    date?.isBefore(today) != true
+
+private fun buildAgendaEventResults(
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+): List<CalendarSearchResult.Event> {
+    val taskDates = tasks
+        .flatMap { it.visibleDates() }
+        .toSet()
+    val eventDatesByResource = events.associate { event ->
+        event.resourceHref to event.visibleAgendaDates()
+    }
+    return events.flatMap { event ->
+        val dates = eventDatesByResource[event.resourceHref].orEmpty()
+        if (dates.size <= 1) {
+            listOf(CalendarSearchResult.Event(event, dates.firstOrNull() ?: event.startsAtMillis.toDate()))
+        } else {
+            val interruptionDates = dates.filterTo(mutableSetOf()) { date ->
+                date in taskDates || events.any { other ->
+                    other.resourceHref != event.resourceHref && eventDatesByResource[other.resourceHref].orEmpty().contains(date)
+                }
+            }
+            event.toAgendaSpanResults(dates, interruptionDates)
+        }
+    }
+}
+
+private fun EventEntity.toAgendaSpanResults(
+    dates: List<LocalDate>,
+    interruptionDates: Set<LocalDate>,
+): List<CalendarSearchResult.Event> {
+    val sortedDates = dates.sorted()
+    if (sortedDates.isEmpty()) return emptyList()
+    val results = mutableListOf<CalendarSearchResult.Event>()
+    var segmentStart: LocalDate? = null
+    var previous: LocalDate? = null
+
+    fun flushSegment(end: LocalDate) {
+        val start = segmentStart ?: return
+        if (!end.isBefore(start)) {
+            results += CalendarSearchResult.Event(this, start, end)
+        }
+        segmentStart = null
+    }
+
+    sortedDates.forEach { date ->
+        val last = previous
+        if (last != null && last.plusDays(1) != date) {
+            flushSegment(last)
+        }
+        if (date in interruptionDates) {
+            flushSegment(date.minusDays(1))
+            results += CalendarSearchResult.Event(this, date, date)
+        } else if (segmentStart == null) {
+            segmentStart = date
+        }
+        previous = date
+    }
+    previous?.let(::flushSegment)
+    return results
 }
 
 @Composable
@@ -3064,42 +3457,41 @@ private fun SearchPastFutureDivider() {
 }
 
 @Composable
-private fun SearchResultCard(event: EventEntity, onClick: () -> Unit) {
-    val startDate = event.startsAtMillis.toDate()
+private fun SearchResultCard(
+    event: EventEntity,
+    showDate: Boolean,
+    onClick: () -> Unit,
+    displayDate: LocalDate = event.startsAtMillis.toDate(),
+    spanEndDate: LocalDate = displayDate,
+) {
     val isPast = event.endsAtMillis < System.currentTimeMillis()
+    val isSpan = spanEndDate.isAfter(displayDate)
+    val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
+    val rowHeight = when {
+        isSpan -> AgendaMultiDaySpanCardHeight
+        attendees.isNotEmpty() -> 76.dp
+        else -> 64.dp
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Column(
-            modifier = Modifier.width(50.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                startDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                color = WarmInk.copy(alpha = if (isPast) 0.58f else 1f),
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                startDate.dayOfMonth.toString(),
-                color = WarmInk.copy(alpha = if (isPast) 0.58f else 1f),
-                fontSize = 20.sp,
-                lineHeight = 23.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
         val visuals = event.cardVisuals(muted = isPast)
-        val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
+        SearchDateColumn(
+            date = displayDate,
+            muted = isPast,
+            visible = showDate,
+            endDate = spanEndDate.takeIf { isSpan },
+            height = if (isSpan) rowHeight else null,
+        )
         val eventTextStyle = tentativeReadableTextStyle(event.isTentative() && !isPast)
         val shape = RoundedCornerShape(13.dp)
         val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(if (attendees.isNotEmpty()) 76.dp else 64.dp)
+                .height(rowHeight)
                 .alpha(pendingAlpha)
                 .clip(shape)
                 .background(visuals.background)
@@ -3121,7 +3513,15 @@ private fun SearchResultCard(event: EventEntity, onClick: () -> Unit) {
                 verticalArrangement = Arrangement.Top,
             ) {
                 FadingTimedText(event.title, color = visuals.contentColor, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, textDecoration = visuals.textDecoration, shadow = eventTextStyle.shadow)
-                FadingTimedText(event.localizedTimeLabel(), color = visuals.contentColor.copy(alpha = if (isPast) 0.72f else 0.92f), fontSize = 12.sp, lineHeight = 15.sp, maxLines = 1, textDecoration = visuals.textDecoration, shadow = eventTextStyle.shadow)
+                FadingTimedText(
+                    if (isSpan) event.localizedAgendaSpanLabel(displayDate, spanEndDate) else event.localizedTimeLabel(),
+                    color = visuals.contentColor.copy(alpha = if (isPast) 0.72f else 0.92f),
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 1,
+                    textDecoration = visuals.textDecoration,
+                    shadow = eventTextStyle.shadow,
+                )
                 event.location?.takeIf { it.isNotBlank() }?.let {
                     FadingTimedText(it.cardLocationText(event.locationMapVerified), color = visuals.contentColor.copy(alpha = if (isPast) 0.66f else 0.86f), fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, textDecoration = visuals.textDecoration, shadow = eventTextStyle.shadow)
                 }
@@ -3146,6 +3546,7 @@ private fun SearchResultCard(event: EventEntity, onClick: () -> Unit) {
 @Composable
 private fun SearchTaskResultCard(
     task: TaskEntity,
+    showDate: Boolean,
     taskColorMode: TaskColorMode,
     onTaskStatusChanged: (String, String) -> Unit,
     hierarchyDepth: Int = 0,
@@ -3167,7 +3568,7 @@ private fun SearchTaskResultCard(
         verticalAlignment = Alignment.Top,
     ) {
         if (hierarchyDepth == 0) {
-            SearchDateColumn(date = taskDate, muted = isMuted)
+            SearchDateColumn(date = taskDate, muted = isMuted, visible = showDate)
         } else {
             Spacer(Modifier.width(50.dp))
         }
@@ -3192,42 +3593,79 @@ private fun SearchTaskResultCard(
     }
 }
 
+private val AgendaMultiDaySpanCardHeight = 96.dp
+
 @Composable
-private fun SearchDateColumn(date: LocalDate?, muted: Boolean) {
+private fun SearchDateColumn(
+    date: LocalDate?,
+    muted: Boolean,
+    visible: Boolean = true,
+    endDate: LocalDate? = null,
+    height: Dp? = null,
+) {
     Column(
-        modifier = Modifier.width(50.dp),
+        modifier = Modifier
+            .width(50.dp)
+            .then(if (height != null) Modifier.height(height) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (date == null) {
-            Text(
-                stringResource(R.string.none),
-                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                stringResource(R.string.date),
-                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        } else {
-            Text(
-                date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                date.dayOfMonth.toString(),
-                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                fontSize = 20.sp,
-                lineHeight = 23.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+        if (visible) {
+            if (date == null) {
+                Text(
+                    appString(R.string.none),
+                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    appString(R.string.date),
+                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Text(
+                    date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
+                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    date.dayOfMonth.toString(),
+                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                    fontSize = 20.sp,
+                    lineHeight = 23.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (endDate != null) {
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .weight(1f)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(WarmInk.copy(alpha = if (muted) 0.22f else 0.42f)),
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        endDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
+                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        endDate.dayOfMonth.toString(),
+                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                        fontSize = 17.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
         }
     }
 }
@@ -3324,6 +3762,8 @@ private fun CalendarShell(
     onTaskStatusChanged: (String, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
     onSlotSelected: (LocalDate, LocalTime) -> Unit,
     onAllDaySlotSelected: (LocalDate) -> Unit,
     draftEvent: DraftEventSelection?,
@@ -3569,6 +4009,8 @@ private fun CalendarShell(
                     onTaskStatusChanged = onTaskStatusChanged,
                     onEventMoved = onEventMoved,
                     onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
                     onSlotSelected = onSlotSelected,
                     onAllDaySlotSelected = onAllDaySlotSelected,
                     draftEvent = draftEvent,
@@ -3995,7 +4437,7 @@ private fun MonthDayCard(
         ) {
             Text(
                 day.dayOfMonth.toString(),
-                color = if (isToday) Color.White else WarmInk,
+                color = if (isToday) accentContainerContentColor() else WarmInk,
                 fontSize = 12.sp,
                 lineHeight = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -4744,7 +5186,7 @@ private fun MonthDayCell(
             isSelectedStart -> WarmPeach
             else -> Color.Transparent
     }
-    val textColor = if (isToday) Color.White else WarmInk
+    val textColor = if (isToday) accentContainerContentColor() else WarmInk
     Column(
         modifier = modifier
             .height(44.dp)
@@ -4947,6 +5389,8 @@ private fun ThreeDayView(
     onTaskStatusChanged: (String, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
     onSlotSelected: (LocalDate, LocalTime) -> Unit,
     onAllDaySlotSelected: (LocalDate) -> Unit,
     draftEvent: DraftEventSelection?,
@@ -4967,7 +5411,6 @@ private fun ThreeDayView(
     val scope = rememberCoroutineScope()
     val now = rememberNowMinute()
     val density = LocalDensity.current
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var dayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
     val bodyScrollableState = rememberScrollableState { delta ->
@@ -4995,6 +5438,8 @@ private fun ThreeDayView(
     val isDayMode = timelineMode == CalendarViewMode.Day
     val multiDayCount = state.multiDayCount.coerceMultiDayCount()
     val targetDayCount = if (isDayMode) 1 else multiDayCount
+    val dayEndGutterPx = daySpacingPx
+    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
     // Animate the column COUNT as a float between 1 and the configured multi-day count. The pager's fixed page size is
     // derived from it for the steady states and the back-button morph; the header-tap morph
     // instead uses [morphContext] + the overlay so the tapped day can expand from ANY column
@@ -5015,7 +5460,7 @@ private fun ThreeDayView(
     // while it slides out, instead of snapping to the destination count the instant the morph
     // starts.
     val clampedDayCount = ceil(animatedDayCount).roundToInt().coerceIn(1, MAX_MULTI_DAY_COUNT)
-    val dayWidthPx = ((dayViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
+    val dayWidthPx = ((dayGeometryViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
         .coerceAtLeast(with(density) { 32.dp.toPx() })
     val dayWidthDp = with(density) { dayWidthPx.toDp() }
     // Anchor the pager on selectedDate itself, NOT on visibleRange.startDate. The loaded range
@@ -5031,15 +5476,17 @@ private fun ThreeDayView(
     val actualVisiblePages = remember(
         pagerState.layoutInfo.visiblePagesInfo,
         dayViewportWidthPx,
+        dayGeometryViewportWidthPx,
         dayWidthPx,
         pagerState.currentPage,
         clampedDayCount,
     ) {
         val viewportWidth = dayViewportWidthPx
+        val geometryViewportWidth = dayGeometryViewportWidthPx
         val pageExtent = dayWidthPx + daySpacingPx
         pagerState.layoutInfo.visiblePagesInfo
             .filter { page ->
-                viewportWidth <= 0 || (page.offset + pageExtent > 0 && page.offset < viewportWidth + daySpacingPx)
+                viewportWidth <= 0 || (page.offset + pageExtent > 0 && page.offset < geometryViewportWidth + daySpacingPx)
             }
             .map { it.index.coerceIn(0, DayPagerPageCount - 1) }
             .distinct()
@@ -5251,10 +5698,10 @@ private fun ThreeDayView(
     val todayPage = todayDate.toDayPage()
     val currentLineGeometry = morphContext?.let { ctx ->
         val todaySlot = ctx.days.indexOf(todayDate)
-        if (todaySlot >= 0 && dayViewportWidthPx > 0) {
-            val columnWidthMulti = ((dayViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
+        if (todaySlot >= 0 && dayGeometryViewportWidthPx > 0f) {
+            val columnWidthMulti = ((dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
             val step = columnWidthMulti + daySpacingPx
-            val zoom = 1f + (dayViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+            val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
             val e = ctx.expandSlot
             CurrentLineGeometry(
                 leftPx = (todaySlot - e) * step * zoom + e * step * (1f - morphProgress),
@@ -5278,7 +5725,6 @@ private fun ThreeDayView(
     Box(
         Modifier
             .fillMaxSize()
-            .padding(bottom = navBottom)
             // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
             // element for the month-cell <-> day morph, so the entire view scales up out of (and
             // back into) the tapped month cell as one unit. Only enabled in 1-day mode: 3-day uses
@@ -5336,7 +5782,6 @@ private fun ThreeDayView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(end = 8.dp)
                     .onSizeChanged { dayViewportWidthPx = it.width }
                     .verticalPinchZoom(
                         topOffsetPx = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
@@ -5416,6 +5861,8 @@ private fun ThreeDayView(
                     onTaskStatusChanged = onTaskStatusChanged,
                     onEventMoved = onEventMoved,
                     onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
                     onDetail = onDetail,
                     onGridViewportHeight = { gridViewportHeightPx = it },
                     drawTimedGrid = false,
@@ -5430,9 +5877,9 @@ private fun ThreeDayView(
             // pager, so swapping back to the real pager at either end is seamless. The expanding
             // column's rect is mapped to the full viewport; every column scales around it.
             morphContext?.let { ctx ->
-                val columnWidthMulti = ((dayViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
+                val columnWidthMulti = ((dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
                 val step = columnWidthMulti + daySpacingPx
-                val zoom = 1f + (dayViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+                val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
                 val e = ctx.expandSlot
                 ctx.days.forEachIndexed { slot, day ->
                     val leftPx = (slot - e) * step * zoom + e * step * (1f - morphProgress)
@@ -5467,6 +5914,8 @@ private fun ThreeDayView(
                             onTaskStatusChanged = onTaskStatusChanged,
                             onEventMoved = onEventMoved,
                             onTaskMoved = onTaskMoved,
+                            onEventMovedAllDay = onEventMovedAllDay,
+                            onTaskMovedAllDay = onTaskMovedAllDay,
                             onDetail = onDetail,
                             onGridViewportHeight = {},
                         )
@@ -5487,9 +5936,16 @@ private fun ThreeDayView(
                     viewportWidthPx = dayViewportWidthPx.toFloat(),
                     topOffset = DayHeaderHeight,
                     height = animatedAllDayHeight,
+                    hourHeightDp = hourHeightDp,
+                    timeScrollPx = timeScroll.value,
+                    defaultEventDurationMinutes = state.defaultEventDurationMinutes,
                     draftEvent = draftEvent,
                     onDraftTap = onDraftTap,
                     onAllDaySlotSelected = onAllDaySlotSelected,
+                    onEventMoved = onEventMoved,
+                    onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
                     maxVisibleItems = state.maxVisibleAllDayItems,
                     expanded = allDayExpanded,
                     onExpandedChange = { allDayExpanded = it },
@@ -5513,9 +5969,16 @@ private fun ThreeDayView(
                     viewportWidthPx = dayViewportWidthPx.toFloat(),
                     topOffset = DayHeaderHeight,
                     height = animatedAllDayHeight,
+                    hourHeightDp = hourHeightDp,
+                    timeScrollPx = timeScroll.value,
+                    defaultEventDurationMinutes = state.defaultEventDurationMinutes,
                     draftEvent = draftEvent,
                     onDraftTap = onDraftTap,
                     onAllDaySlotSelected = onAllDaySlotSelected,
+                    onEventMoved = onEventMoved,
+                    onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
                     maxVisibleItems = state.maxVisibleAllDayItems,
                     expanded = allDayExpanded,
                     onExpandedChange = { allDayExpanded = it },
@@ -5560,7 +6023,7 @@ private fun ThreeDayView(
             CurrentTimeLine(
                 now = now,
                 todayPageOffset = with(density) { currentLineGeometry.leftPx.toDp() },
-                dayWidth = with(density) { (currentLineGeometry.widthPx + if (isDayMode) 8.dp.toPx() else 0f).toDp() },
+                dayWidth = with(density) { currentLineGeometry.widthPx.toDp() },
                 hourHeightDp = hourHeightDp,
                 topOffset = DayHeaderHeight + animatedAllDayHeight,
                 scrollOffset = with(density) { timeScroll.value.toDp() },
@@ -6060,6 +6523,8 @@ private fun DayPagerColumn(
     onTaskStatusChanged: (String, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onGridViewportHeight: (Int) -> Unit,
     taskColorMode: TaskColorMode,
@@ -6142,6 +6607,8 @@ private fun DayPagerColumn(
                 onTaskStatusChanged = onTaskStatusChanged,
                 onEventMoved = onEventMoved,
                 onTaskMoved = onTaskMoved,
+                onEventMovedAllDay = onEventMovedAllDay,
+                onTaskMovedAllDay = onTaskMovedAllDay,
                 onDetail = onDetail,
                 drawGrid = drawTimedGrid,
                 modifier = Modifier
@@ -6165,9 +6632,16 @@ private fun AllDayViewportOverlay(
     viewportWidthPx: Float,
     topOffset: Dp,
     height: Dp,
+    hourHeightDp: Float,
+    timeScrollPx: Int,
+    defaultEventDurationMinutes: Int,
     draftEvent: DraftEventSelection?,
     onDraftTap: () -> Unit,
     onAllDaySlotSelected: (LocalDate) -> Unit,
+    onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
     maxVisibleItems: Int,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -6263,6 +6737,23 @@ private fun AllDayViewportOverlay(
     val collapsedSegments = collapsedLayout.segments
     val continuationSegments = collapsedLayout.continuations
     val showCollapsedOverflowChips = hasCollapsedOverflow && !expanded && expansionProgress <= 0.08f
+    var draggingAllDayItemId by remember { mutableStateOf<String?>(null) }
+    fun moveAllDayItemToTimed(item: AllDayOverlayItem, date: LocalDate, start: LocalTime, end: LocalTime) {
+        item.event?.let { event ->
+            onEventMoved(event.resourceHref, event.startsAtMillis, date, start, end)
+        }
+        item.task?.let { task ->
+            onTaskMoved(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date, start, end)
+        }
+    }
+    fun moveAllDayItemToAllDay(item: AllDayOverlayItem, date: LocalDate) {
+        item.event?.let { event ->
+            onEventMovedAllDay(event.resourceHref, event.startsAtMillis, date)
+        }
+        item.task?.let { task ->
+            onTaskMovedAllDay(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date)
+        }
+    }
     val hiddenPages = if (!showCollapsedOverflowChips) {
         emptyMap()
     } else {
@@ -6278,7 +6769,7 @@ private fun AllDayViewportOverlay(
             .offset(y = topOffset)
             .fillMaxWidth()
             .height(height)
-            .verticalClipAllowHorizontalOverflow()
+            .then(if (draggingAllDayItemId == null) Modifier.verticalClipAllowHorizontalOverflow() else Modifier)
             .zIndex(9f),
     ) {
         Box(
@@ -6313,13 +6804,23 @@ private fun AllDayViewportOverlay(
                     animatedBaseLane
                 }
                 val itemAlpha = if (isOverflowItem) expansionProgress else 1f
+                val chipTopDp = 7.dp + (animatedLane * 29f).dp
                 AllDayViewportChip(
                     item = item,
+                    chipLeftPx = visibleLeft,
+                    chipTopDp = chipTopDp,
+                    allDayHeight = height,
+                    hourHeightDp = hourHeightDp,
+                    timeScrollPx = timeScrollPx,
+                    anchorPage = anchorPage,
+                    anchorOffsetPx = anchorOffsetPx,
+                    dayStepPx = dayStepPx,
+                    defaultDurationMinutes = if (item.task != null) (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt() else defaultEventDurationMinutes,
                     modifier = Modifier
                         .offset {
                             IntOffset(
                                 x = visibleLeft.roundToInt(),
-                                y = with(density) { (7.dp + (animatedLane * 29f).dp).roundToPx() },
+                                y = with(density) { chipTopDp.roundToPx() },
                             )
                         }
                         .graphicsLayer {
@@ -6330,6 +6831,9 @@ private fun AllDayViewportOverlay(
                         .height(24.dp),
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
+                    onMoveToTimed = ::moveAllDayItemToTimed,
+                    onMoveToAllDay = ::moveAllDayItemToAllDay,
+                    onDragStateChanged = { active -> draggingAllDayItemId = if (active) item.id else null },
                 )
             }
         }
@@ -6408,19 +6912,32 @@ private fun AllDayViewportOverlay(
                         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
                         label = "collapsedAllDayLane",
                     )
+                    val chipTopDp = 7.dp + (animatedLane * 29f).dp
                     AllDayViewportChip(
                         item = item,
+                        chipLeftPx = visibleLeft,
+                        chipTopDp = chipTopDp,
+                        allDayHeight = height,
+                        hourHeightDp = hourHeightDp,
+                        timeScrollPx = timeScrollPx,
+                        anchorPage = anchorPage,
+                        anchorOffsetPx = anchorOffsetPx,
+                        dayStepPx = dayStepPx,
+                        defaultDurationMinutes = if (item.task != null) (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt() else defaultEventDurationMinutes,
                         modifier = Modifier
                             .offset {
                                 IntOffset(
                                     x = visibleLeft.roundToInt(),
-                                    y = with(density) { (7.dp + (animatedLane * 29f).dp).roundToPx() },
+                                    y = with(density) { chipTopDp.roundToPx() },
                                 )
                             }
                             .width(with(density) { visibleWidth.toDp() })
                             .height(24.dp),
                         onTaskStatusChanged = onTaskStatusChanged,
                         onDetail = onDetail,
+                        onMoveToTimed = ::moveAllDayItemToTimed,
+                        onMoveToAllDay = ::moveAllDayItemToAllDay,
+                        onDragStateChanged = { active -> draggingAllDayItemId = if (active) item.id else null },
                     )
                 }
             }
@@ -6615,9 +7132,21 @@ private fun AllDayOverflowChip(
 private fun AllDayViewportChip(
     item: AllDayOverlayItem,
     modifier: Modifier,
+    chipLeftPx: Float,
+    chipTopDp: Dp,
+    allDayHeight: Dp,
+    hourHeightDp: Float,
+    timeScrollPx: Int,
+    anchorPage: Int,
+    anchorOffsetPx: Float,
+    dayStepPx: Float,
+    defaultDurationMinutes: Int,
     shape: RoundedCornerShape = RoundedCornerShape(8.dp),
     onTaskStatusChanged: (String, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
+    onMoveToTimed: (AllDayOverlayItem, LocalDate, LocalTime, LocalTime) -> Unit,
+    onMoveToAllDay: (AllDayOverlayItem, LocalDate) -> Unit,
+    onDragStateChanged: (Boolean) -> Unit,
 ) {
     val eventVisuals = remember(item.event?.status, item.event?.manualColor, item.event?.color, CurrentDarkPalette) { item.event?.cardVisuals() }
     val color = eventVisuals?.background ?: Color(item.color)
@@ -6636,9 +7165,115 @@ private fun AllDayViewportChip(
         if (item.completed && !lastCompleted) burstKey++
         lastCompleted = item.completed
     }
+    val density = LocalDensity.current
+    var dragX by remember(item.id) { mutableFloatStateOf(0f) }
+    var dragY by remember(item.id) { mutableFloatStateOf(0f) }
+    var isDragging by remember(item.id) { mutableStateOf(false) }
+    var dragPointerOffset by remember(item.id) { mutableStateOf(Offset.Zero) }
+    val chipTopPxForDrag = with(density) { chipTopDp.toPx() }
+    val allDayHeightPxForDrag = with(density) { allDayHeight.toPx() }
+    val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
+    val laneTopPx = with(density) { 7.dp.toPx() }
+    val laneStridePx = with(density) { 29.dp.toPx() }
+    val rawFingerX = chipLeftPx + dragPointerOffset.x + dragX
+    val rawFingerY = chipTopPxForDrag + dragPointerOffset.y + dragY
+    val snappedPageDelta = if (dayStepPx > 0f) floor((rawFingerX - anchorOffsetPx) / dayStepPx).toInt() else 0
+    val snappedPage = (anchorPage + snappedPageDelta).coerceIn(0, DayPagerPageCount - 1)
+    val snappedLeftPx = anchorOffsetPx + (snappedPage - anchorPage) * dayStepPx
+    val draggedIntoTimedGrid = rawFingerY >= allDayHeightPxForDrag && hourHeightPxForDrag > 0f && dayStepPx > 0f
+    val snappedDragX = snappedLeftPx - chipLeftPx
+    val snappedDragY = if (draggedIntoTimedGrid) {
+        val duration = defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
+        val gridY = rawFingerY - allDayHeightPxForDrag + timeScrollPx
+        val minuteOffset = ((gridY / hourHeightPxForDrag) * 60f).roundToInt().snapDraftMinute()
+        val startMinute = (DayStartHour * 60 + minuteOffset)
+            .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+        allDayHeightPxForDrag +
+            (((startMinute - DayStartHour * 60) / 60f) * hourHeightPxForDrag) -
+            timeScrollPx -
+            chipTopPxForDrag
+    } else {
+        val lane = if (laneStridePx > 0f) ((rawFingerY - laneTopPx) / laneStridePx).roundToInt().coerceAtLeast(0) else 0
+        (laneTopPx + lane * laneStridePx).coerceIn(0f, (allDayHeightPxForDrag - with(density) { 24.dp.toPx() }).coerceAtLeast(0f)) -
+            chipTopPxForDrag
+    }
+    val displayDragX by animateFloatAsState(
+        targetValue = if (isDragging) snappedDragX else 0f,
+        animationSpec = tween(90, easing = MotionStandard),
+        label = "allDayDraggedSnapX",
+    )
+    val displayDragY by animateFloatAsState(
+        targetValue = if (isDragging) snappedDragY else 0f,
+        animationSpec = tween(90, easing = MotionStandard),
+        label = "allDayDraggedSnapY",
+    )
+    val dragModifier = Modifier.pointerInput(
+        item.id,
+        chipLeftPx,
+        chipTopDp,
+        allDayHeight,
+        hourHeightDp,
+        timeScrollPx,
+        anchorPage,
+        anchorOffsetPx,
+        dayStepPx,
+        defaultDurationMinutes,
+    ) {
+        val chipTopPx = chipTopDp.toPx()
+        val allDayHeightPx = allDayHeight.toPx()
+        val hourHeightPx = hourHeightDp.dp.toPx()
+        detectDragGesturesAfterLongPress(
+            onDragStart = { offset ->
+                dragPointerOffset = offset
+                isDragging = true
+                onDragStateChanged(true)
+            },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                dragX += dragAmount.x
+                dragY += dragAmount.y
+            },
+            onDragCancel = {
+                isDragging = false
+                dragX = 0f
+                dragY = 0f
+                onDragStateChanged(false)
+            },
+            onDragEnd = {
+                val fingerX = chipLeftPx + dragPointerOffset.x + dragX
+                val fingerY = chipTopPx + dragPointerOffset.y + dragY
+                val pageDelta = if (dayStepPx > 0f) floor((fingerX - anchorOffsetPx) / dayStepPx).toInt() else 0
+                val targetDate = (anchorPage + pageDelta).coerceIn(0, DayPagerPageCount - 1).toDayDate()
+                if (fingerY >= allDayHeightPx && hourHeightPx > 0f && dayStepPx > 0f) {
+                    val duration = defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
+                    val gridY = fingerY - allDayHeightPx + timeScrollPx
+                    val minuteOffset = ((gridY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+                    val startMinute = (DayStartHour * 60 + minuteOffset)
+                        .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+                    onMoveToTimed(item, targetDate, startMinute.toDraftLocalTime(), (startMinute + duration).toDraftLocalTime())
+                } else {
+                    onMoveToAllDay(item, targetDate)
+                }
+                isDragging = false
+                dragX = 0f
+                dragY = 0f
+                onDragStateChanged(false)
+            },
+        )
+    }
     Box(
         modifier = modifier
-            .zIndex(if (item.task != null && !item.completed && taskPriorityIntensity(item.task.priority) > 0f) 3f else 0f)
+            .zIndex(
+                when {
+                    isDragging -> 80f
+                    item.task != null && !item.completed && taskPriorityIntensity(item.task.priority) > 0f -> 3f
+                    else -> 0f
+                },
+            )
+            .graphicsLayer {
+                translationX = displayDragX
+                translationY = displayDragY
+            }
             .alpha(alpha * pendingAlpha)
             .then(
                 if (item.task != null && !item.completed) {
@@ -6655,11 +7290,17 @@ private fun AllDayViewportChip(
                     else -> Modifier
                 },
             )
-            .clickable {
-                item.event?.let { onDetail(DetailSheet.Event(it)) }
-                item.task?.let { onDetail(DetailSheet.Task(it)) }
-            },
+            .then(dragModifier),
     ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(shape)
+                .clickable {
+                    item.event?.let { onDetail(DetailSheet.Event(it)) }
+                    item.task?.let { onDetail(DetailSheet.Task(it)) }
+                },
+        )
         TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())
         Row(
             modifier = Modifier
@@ -6888,6 +7529,8 @@ private fun DayTimedColumn(
     onTaskStatusChanged: (String, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     modifier: Modifier = Modifier,
     drawGrid: Boolean = true,
@@ -6937,6 +7580,7 @@ private fun DayTimedColumn(
                     color = item.event.displayColor(),
                     dayWidthPx = dayWidthPx,
                     onMove = { targetDate, start, end -> onEventMoved(item.event.resourceHref, item.event.startsAtMillis, targetDate, start, end) },
+                    onMoveAllDay = { targetDate -> onEventMovedAllDay(item.event.resourceHref, item.event.startsAtMillis, targetDate) },
                     onClick = { onDetail(DetailSheet.Event(item.event)) },
                 )
                 is TimedCalendarItem.TaskItem -> TimedTaskBlock(
@@ -6956,6 +7600,13 @@ private fun DayTimedColumn(
                             targetDate,
                             start,
                             end,
+                        )
+                    },
+                    onMoveAllDay = { targetDate ->
+                        onTaskMovedAllDay(
+                            item.task.resourceHref,
+                            item.task.startAtMillis ?: item.task.dueAtMillis ?: System.currentTimeMillis(),
+                            targetDate,
                         )
                     },
                     onClick = { onDetail(DetailSheet.Task(item.task)) },
@@ -7094,6 +7745,7 @@ private fun TimedEventBlock(
     color: Int,
     dayWidthPx: Float,
     onMove: (LocalDate, LocalTime, LocalTime) -> Unit,
+    onMoveAllDay: (LocalDate) -> Unit,
     onClick: () -> Unit,
 ) {
     val visuals = remember(event.status, event.manualColor, event.color, color, CurrentDarkPalette) { event.cardVisuals() }
@@ -7194,7 +7846,13 @@ private fun TimedEventBlock(
                 val nextStart = (placement.startMinute + minuteDelta)
                     .snapDraftMinute()
                     .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
-                onMove(day.plusDays(dayDelta.toLong()), nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                val targetDate = day.plusDays(dayDelta.toLong())
+                val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
+                if (movedTopPx < with(density) { (-16).dp.toPx() }) {
+                    onMoveAllDay(targetDate)
+                } else {
+                    onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                }
                 isDragging = false
                 dragX = 0f
                 dragY = 0f
@@ -7358,6 +8016,7 @@ private fun TimedTaskBlock(
     dayWidthPx: Float,
     onTaskStatusChanged: (String, String) -> Unit,
     onMove: (LocalDate, LocalTime, LocalTime) -> Unit,
+    onMoveAllDay: (LocalDate) -> Unit,
     onClick: () -> Unit,
 ) {
     val background = remember(color) { Color(color) }
@@ -7453,7 +8112,13 @@ private fun TimedTaskBlock(
                 val nextStart = (placement.startMinute + minuteDelta)
                     .snapDraftMinute()
                     .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
-                onMove(day.plusDays(dayDelta.toLong()), nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                val targetDate = day.plusDays(dayDelta.toLong())
+                val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
+                if (movedTopPx < with(density) { (-16).dp.toPx() }) {
+                    onMoveAllDay(targetDate)
+                } else {
+                    onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                }
                 isDragging = false
                 dragX = 0f
                 dragY = 0f
@@ -7625,7 +8290,9 @@ private fun DraftEventWireframe(
     val startMinute = draft.start.minuteOfDay().coerceIn(visibleStartMinute, visibleEndMinute - DraftMinDurationMinutes)
     val endMinute = draft.end.minuteOfDay().coerceIn(startMinute + DraftMinDurationMinutes, visibleEndMinute)
     val topDp = (startMinute - visibleStartMinute) / 60f * hourHeightDp
-    val heightDp = max(26f, (endMinute - startMinute) / 60f * hourHeightDp)
+    val visualHeightDp = ((endMinute - startMinute) / 60f * hourHeightDp).coerceAtLeast(1f)
+    val touchHeightDp = max(44f, visualHeightDp)
+    val visualTopInsetDp = (touchHeightDp - visualHeightDp) / 2f
     val shape = RoundedCornerShape(8.dp)
     val wireframeColor = Color(draft.color)
     var dragX by remember { mutableFloatStateOf(0f) }
@@ -7736,19 +8403,16 @@ private fun DraftEventWireframe(
             .offset {
                 IntOffset(
                     animatedDragX.roundToInt(),
-                    with(density) { topDp.dp.roundToPx() },
+                    with(density) { (topDp - visualTopInsetDp).dp.roundToPx() },
                 )
             }
             .fillMaxWidth()
-            .height(heightDp.dp)
+            .height(touchHeightDp.dp)
             .padding(horizontal = 2.dp),
     ) {
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .clip(shape)
-                .background(wireframeColor.copy(alpha = 0.14f))
-                .border(1.5.dp, wireframeColor, shape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -7756,12 +8420,21 @@ private fun DraftEventWireframe(
                 )
                 .draftDrag(DraftDragMode.Move),
         )
+        Box(
+            modifier = Modifier
+                .offset(y = visualTopInsetDp.dp)
+                .fillMaxWidth()
+                .height(visualHeightDp.dp)
+                .clip(shape)
+                .background(wireframeColor.copy(alpha = 0.14f))
+                .border(1.5.dp, wireframeColor, shape)
+        )
         // Start handle on the LEFT edge (top), end handle on the RIGHT edge (bottom) — diagonally
         // opposite so they never collide even in a narrow 3-day column.
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(x = (-6).dp, y = (-20).dp)
+                .offset(x = (-6).dp, y = (visualTopInsetDp - 20f).dp)
                 .size(40.dp)
                 .draftDrag(DraftDragMode.Start),
             contentAlignment = Alignment.Center,
@@ -7776,8 +8449,8 @@ private fun DraftEventWireframe(
         }
         Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 6.dp, y = 20.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 6.dp, y = (visualTopInsetDp + visualHeightDp - 20f).dp)
                 .size(40.dp)
                 .draftDrag(DraftDragMode.End),
             contentAlignment = Alignment.Center,
@@ -8283,6 +8956,14 @@ private fun EventEditorSheet(
     }
     var attendeesJson by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
     var locationPickerOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
+    var invalidRangeDialogOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
+    val invalidTimeRange = eventDateTimeRangeInvalid(
+        startDateText = dateText,
+        endDateText = endDateText,
+        startTimeText = startText,
+        endTimeText = endText,
+        allDay = allDay,
+    )
 
     fun currentTransferDraft(): EditorTransferDraft =
         EditorTransferDraft(
@@ -8310,7 +8991,7 @@ private fun EventEditorSheet(
         }
     }
 
-    LaunchedEffect(initialEvent?.uid, transferDraft, selectedDate, selectedStart, selectedEnd) {
+    LaunchedEffect(initialEvent?.uid, transferDraft) {
         if (initialEvent == null && transferDraft == null) {
             dateText = selectedDate.toString()
             endDateText = selectedDate.toString()
@@ -8386,6 +9067,10 @@ private fun EventEditorSheet(
                 title = headerTitle ?: stringResource(if (initialEvent == null) R.string.new_event else R.string.edit_event),
                 action = stringResource(R.string.save),
                 onAction = {
+                    if (invalidTimeRange) {
+                        invalidRangeDialogOpen = true
+                        return@EditorContainer
+                    }
                     onSave(
                         EventEditPayload(
                             title = title,
@@ -8454,11 +9139,11 @@ private fun EventEditorSheet(
                         initialScrollKey = initialEvent?.resourceHref,
                     ) {
                         eventCollections.forEach { collection ->
-                            FilterChip(
+                            CalendarSelectorChip(
+                                collection = collection,
                                 selected = collection.href == selectedCollectionHref,
                                 onClick = { selectedCollectionHref = collection.href },
-                                label = { Text(collection.displayName, maxLines = 1, softWrap = false) },
-                                leadingIcon = { Box(Modifier.size(10.dp).clip(CircleShape).background(Color(collection.color))) },
+                                hidden = collection.href in state.hiddenCollectionHrefs,
                             )
                         }
                     }
@@ -8479,6 +9164,7 @@ private fun EventEditorSheet(
                             onStartTextChange = { startText = it },
                             endText = endText,
                             onEndTextChange = { endText = it },
+                            endIsError = invalidTimeRange,
                         )
                     }
                 }
@@ -8525,6 +9211,9 @@ private fun EventEditorSheet(
             }
             }
         }
+    }
+    if (invalidRangeDialogOpen) {
+        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
     }
 }
 
@@ -8619,6 +9308,22 @@ private fun NoWritableSourceNotice(
 }
 
 @Composable
+private fun InvalidTimeRangeDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(appString(R.string.invalid_time_range_title)) },
+        text = { Text(appString(R.string.invalid_time_range_message)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(appString(R.string.ok))
+            }
+        },
+        shape = RoundedCornerShape(26.dp),
+        containerColor = popupSurfaceColor(),
+    )
+}
+
+@Composable
 private fun EventScheduleEditor(
     allDay: Boolean,
     dateText: String,
@@ -8629,6 +9334,7 @@ private fun EventScheduleEditor(
     onStartTextChange: (String) -> Unit,
     endText: String,
     onEndTextChange: (String) -> Unit,
+    endIsError: Boolean = false,
 ) {
     Column(
         modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
@@ -8673,6 +9379,7 @@ private fun EventScheduleEditor(
                 value = endDateText,
                 onValueChange = onEndDateTextChange,
                 label = { Text(stringResource(R.string.end_date)) },
+                isError = endIsError,
                 modifier = Modifier.weight(1f),
             )
             AnimatedVisibility(
@@ -8686,6 +9393,7 @@ private fun EventScheduleEditor(
                     value = endText,
                     onValueChange = onEndTextChange,
                     label = { Text(stringResource(R.string.end)) },
+                    isError = endIsError,
                     modifier = Modifier.width(112.dp),
                 )
             }
@@ -8700,12 +9408,16 @@ private fun DatePickerField(
     onValueChange: (String) -> Unit,
     label: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    supportingText: String? = null,
 ) {
     var dialogOpen by remember { mutableStateOf(false) }
     PickerOutlinedField(
         value = value,
         label = label,
         onClick = { dialogOpen = true },
+        isError = isError,
+        supportingText = supportingText,
         modifier = modifier,
     )
     if (dialogOpen) {
@@ -8747,12 +9459,16 @@ private fun TimePickerField(
     onValueChange: (String) -> Unit,
     label: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    supportingText: String? = null,
 ) {
     var dialogOpen by remember { mutableStateOf(false) }
     PickerOutlinedField(
         value = value,
         label = label,
         onClick = { dialogOpen = true },
+        isError = isError,
+        supportingText = supportingText,
         modifier = modifier,
     )
     if (dialogOpen) {
@@ -8879,8 +9595,15 @@ private fun PickerOutlinedField(
     label: @Composable () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    supportingText: String? = null,
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val supportingMessage = supportingText
+    val supportingContent: (@Composable () -> Unit)? =
+        if (supportingMessage == null) null else {
+            { Text(supportingMessage) }
+        }
     Box(modifier = modifier) {
         OutlinedTextField(
             value = value,
@@ -8889,6 +9612,8 @@ private fun PickerOutlinedField(
             singleLine = true,
             readOnly = true,
             shape = shape,
+            isError = isError,
+            supportingText = supportingContent,
             modifier = Modifier.fillMaxWidth(),
         )
         Box(
@@ -9064,6 +9789,53 @@ private fun CalendarChip(title: String, color: Color) {
 }
 
 @Composable
+private fun CalendarSelectorChip(
+    collection: CollectionEntity,
+    selected: Boolean,
+    hidden: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        modifier = Modifier
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 12.dp) else Modifier),
+        shape = shape,
+        color = if (selected) WarmPeach else Color.Transparent,
+        border = if (hidden) {
+            null
+        } else {
+            BorderStroke(
+                width = 1.dp,
+                color = if (selected) WarmBrown.copy(alpha = 0.42f) else WarmLine.copy(alpha = 0.72f),
+            )
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(Color(collection.color)),
+            )
+            Text(
+                collection.displayName,
+                maxLines = 1,
+                softWrap = false,
+                color = WarmInk,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun EditorLine(
     icon: ImageVector?,
     modifier: Modifier = Modifier,
@@ -9198,6 +9970,18 @@ private fun TaskEditorSheet(
         )
     }
     var locationPickerOpen by remember(initialTask?.uid) { mutableStateOf(false) }
+    var invalidRangeDialogOpen by remember(initialTask?.uid) { mutableStateOf(false) }
+    val invalidTimeRange = taskDateTimeRangeInvalid(
+        hasStartDate = hasStartDate,
+        startDateText = startDateText,
+        hasStartTime = hasStartTime,
+        startTimeText = startTimeText,
+        hasEndDate = hasEndDate,
+        endDateText = endDateText,
+        hasEndTime = hasEndTime,
+        endTimeText = dueTimeText,
+        allDay = allDay,
+    )
     val titleFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(initialTask?.uid, selectedCollectionHref, taskCollections, parentCandidates) {
@@ -9217,7 +10001,7 @@ private fun TaskEditorSheet(
         }
     }
 
-    LaunchedEffect(initialTask?.uid, transferDraft, selectedDate, selectedStart, selectedEnd) {
+    LaunchedEffect(initialTask?.uid, transferDraft) {
         if (initialTask == null && transferDraft == null) {
             startDateText = selectedDate.toString()
             endDateText = selectedDate.toString()
@@ -9345,6 +10129,10 @@ private fun TaskEditorSheet(
                 }
             } else {
                 EditorContainer(title = headerTitle ?: stringResource(if (initialTask == null) R.string.new_task else R.string.edit_task), action = stringResource(R.string.save), onAction = {
+                if (invalidTimeRange) {
+                    invalidRangeDialogOpen = true
+                    return@EditorContainer
+                }
                 val payload = runCatching {
                     TaskEditPayload(
                         title = title,
@@ -9449,11 +10237,11 @@ private fun TaskEditorSheet(
                         initialScrollKey = initialTask?.resourceHref,
                     ) {
                         taskCollections.forEach { collection ->
-                            FilterChip(
+                            CalendarSelectorChip(
+                                collection = collection,
                                 selected = collection.href == selectedCollectionHref,
                                 onClick = { selectedCollectionHref = collection.href },
-                                label = { Text(collection.displayName, maxLines = 1, softWrap = false) },
-                                leadingIcon = { Box(Modifier.size(10.dp).clip(CircleShape).background(Color(collection.color))) },
+                                hidden = collection.href in state.hiddenCollectionHrefs,
                             )
                         }
                     }
@@ -9504,6 +10292,7 @@ private fun TaskEditorSheet(
                             onHasEndTimeChange = { hasEndTime = it },
                             endTimeText = dueTimeText,
                             onEndTimeTextChange = { dueTimeText = it },
+                            endIsError = invalidTimeRange,
                         )
                     }
                 }
@@ -9529,6 +10318,9 @@ private fun TaskEditorSheet(
             }
         }
     }
+    if (invalidRangeDialogOpen) {
+        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
+    }
 }
 
 @Composable
@@ -9551,6 +10343,7 @@ private fun TaskScheduleEditor(
     onHasEndTimeChange: (Boolean) -> Unit,
     endTimeText: String,
     onEndTimeTextChange: (String) -> Unit,
+    endIsError: Boolean = false,
 ) {
     val scheduled = hasStartDate || hasEndDate
     Column(
@@ -9596,6 +10389,7 @@ private fun TaskScheduleEditor(
             timeText = endTimeText,
             onTimeTextChange = onEndTimeTextChange,
             allDay = allDay,
+            isError = endIsError,
         )
     }
 }
@@ -10057,6 +10851,7 @@ private fun TaskScheduleRow(
     timeText: String,
     onTimeTextChange: (String) -> Unit,
     allDay: Boolean,
+    isError: Boolean = false,
 ) {
     AnimatedContent(
         targetState = hasDate,
@@ -10080,6 +10875,7 @@ private fun TaskScheduleRow(
                     value = dateText,
                     onValueChange = onDateTextChange,
                     label = { Text(label) },
+                    isError = isError,
                     modifier = Modifier.weight(1f),
                 )
                 AnimatedVisibility(
@@ -10093,6 +10889,7 @@ private fun TaskScheduleRow(
                         value = timeText,
                         onValueChange = onTimeTextChange,
                         label = { Text(timeLabel) },
+                        isError = isError,
                         modifier = Modifier.width(104.dp),
                     )
                 }
@@ -10246,16 +11043,7 @@ private fun CategoryDetailLine(label: String, categories: String) {
     }
 }
 
-private val ReminderPresets = listOf(
-    0 to "Zum Zeitpunkt",
-    5 to "5 Min",
-    10 to "10 Min",
-    15 to "15 Min",
-    30 to "30 Min",
-    60 to "1 Std",
-    120 to "2 Std",
-    1440 to "1 Tag",
-)
+private val ReminderPresets = listOf(0, 5, 10, 15, 30, 60, 120, 1440)
 
 private interface EventIcalOption {
     val value: String
@@ -10281,14 +11069,14 @@ private enum class EventTransparencyOption(override val value: String, override 
 
 @Composable
 private fun EventIcalOption.localizedLabel(): String = when (value.uppercase(Locale.US)) {
-    "CONFIRMED" -> stringResource(R.string.confirmed)
-    "TENTATIVE" -> stringResource(R.string.tentative)
-    "CANCELLED" -> stringResource(R.string.cancelled)
-    "PUBLIC" -> stringResource(R.string.full_details)
-    "CONFIDENTIAL" -> stringResource(R.string.busy_only)
-    "PRIVATE" -> stringResource(R.string.hidden)
-    "OPAQUE" -> stringResource(R.string.busy)
-    "TRANSPARENT" -> stringResource(R.string.free)
+    "CONFIRMED" -> appString(R.string.confirmed)
+    "TENTATIVE" -> appString(R.string.tentative)
+    "CANCELLED" -> appString(R.string.cancelled)
+    "PUBLIC" -> appString(R.string.full_details)
+    "CONFIDENTIAL" -> appString(R.string.busy_only)
+    "PRIVATE" -> appString(R.string.hidden)
+    "OPAQUE" -> appString(R.string.busy)
+    "TRANSPARENT" -> appString(R.string.free)
     else -> label
 }
 
@@ -10452,78 +11240,33 @@ private fun ParticipantEditorRow(
     }
 }
 
-private fun String?.parseReminderMinutes(): Set<Int> =
-    this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.normalizedReminderOffsets()?.toSet().orEmpty()
-
 @Composable
 private fun reminderMinuteLabel(minutes: Int): String = when {
-    minutes == REMINDER_AT_END -> stringResource(R.string.at_end)
-    minutes == REMINDER_AT_START -> stringResource(R.string.at_start)
-    minutes % 1440 == 0 -> stringResource(R.string.days_before, minutes / 1440)
-    minutes % 60 == 0 -> stringResource(R.string.hours_before, minutes / 60)
-    else -> stringResource(R.string.minutes_before, minutes)
-}
-
-private enum class ReminderUnit(val label: String, val minutes: Int) {
-    Minutes("Minutes", 1),
-    Hours("Hours", 60),
-    Days("Days", 1440),
-    Weeks("Weeks", 10080),
-}
-
-private enum class ReminderChoice(val label: String, val minutes: Int?) {
-    None("No reminder", null),
-    AtStart("At start", REMINDER_AT_START),
-    AtEnd("At end", REMINDER_AT_END),
-    FifteenMinutes("15 min before", 15),
-    TwoHours("2 hours before", 120),
-    OneDay("1 day before", 1440),
-    OneWeek("1 week before", 10080),
-    Custom("Custom reminder", Int.MIN_VALUE),
+    minutes == REMINDER_AT_END -> appString(R.string.at_end)
+    minutes == REMINDER_AT_START -> appString(R.string.at_start)
+    minutes % 1440 == 0 -> appString(R.string.days_before, minutes / 1440)
+    minutes % 60 == 0 -> appString(R.string.hours_before, minutes / 60)
+    else -> appString(R.string.minutes_before, minutes)
 }
 
 @Composable
 private fun ReminderUnit.localizedLabel(): String = when (this) {
-    ReminderUnit.Minutes -> stringResource(R.string.minutes)
-    ReminderUnit.Hours -> stringResource(R.string.hours)
-    ReminderUnit.Days -> stringResource(R.string.days)
-    ReminderUnit.Weeks -> stringResource(R.string.weeks)
+    ReminderUnit.Minutes -> appString(R.string.minutes)
+    ReminderUnit.Hours -> appString(R.string.hours)
+    ReminderUnit.Days -> appString(R.string.days)
+    ReminderUnit.Weeks -> appString(R.string.weeks)
 }
 
 @Composable
 private fun ReminderChoice.localizedLabel(): String = when (this) {
-    ReminderChoice.None -> stringResource(R.string.no_reminder)
-    ReminderChoice.AtStart -> stringResource(R.string.at_start)
-    ReminderChoice.AtEnd -> stringResource(R.string.at_end)
-    ReminderChoice.FifteenMinutes -> stringResource(R.string.fifteen_min_before)
-    ReminderChoice.TwoHours -> stringResource(R.string.two_hours_before)
-    ReminderChoice.OneDay -> stringResource(R.string.one_day_before)
-    ReminderChoice.OneWeek -> stringResource(R.string.one_week_before_full)
-    ReminderChoice.Custom -> stringResource(R.string.custom_reminder)
-}
-
-private fun Int.toReminderAmountUnit(): Pair<Int, ReminderUnit> {
-    if (this <= 0) return 0 to ReminderUnit.Minutes
-    return when {
-        this % ReminderUnit.Weeks.minutes == 0 -> this / ReminderUnit.Weeks.minutes to ReminderUnit.Weeks
-        this % ReminderUnit.Days.minutes == 0 -> this / ReminderUnit.Days.minutes to ReminderUnit.Days
-        this % ReminderUnit.Hours.minutes == 0 -> this / ReminderUnit.Hours.minutes to ReminderUnit.Hours
-        else -> this to ReminderUnit.Minutes
-    }
-}
-
-private fun String?.reminderSummary(): String? {
-    val minutes = this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.distinct()?.sorted().orEmpty()
-    if (minutes.isEmpty()) return null
-    return minutes.joinToString(", ") {
-        when {
-            it == REMINDER_AT_END -> "At end"
-            it == REMINDER_AT_START -> "At start"
-            it % 1440 == 0 -> "${it / 1440} day(s) before"
-            it % 60 == 0 -> "${it / 60} hr before"
-            else -> "$it min before"
-        }
-    }
+    ReminderChoice.None -> appString(R.string.no_reminder)
+    ReminderChoice.AtStart -> appString(R.string.at_start)
+    ReminderChoice.AtEnd -> appString(R.string.at_end)
+    ReminderChoice.FifteenMinutes -> appString(R.string.fifteen_min_before)
+    ReminderChoice.TwoHours -> appString(R.string.two_hours_before)
+    ReminderChoice.OneDay -> appString(R.string.one_day_before)
+    ReminderChoice.OneWeek -> appString(R.string.one_week_before_full)
+    ReminderChoice.Custom -> appString(R.string.custom_reminder)
 }
 
 @Composable
@@ -10563,14 +11306,14 @@ private fun DialogActions(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) }
         Button(
             onClick = onSave,
             enabled = saveEnabled,
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
         ) {
-            Text(stringResource(R.string.save))
+            Text(appString(R.string.save))
         }
     }
 }
@@ -10789,8 +11532,8 @@ private fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<Int
     EditorSection {
         CompactEditorHeaderLine(
             icon = Icons.Default.Notifications,
-            title = stringResource(R.string.reminders),
-            value = if (selected.isEmpty()) stringResource(R.string.none) else selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", "),
+            title = appString(R.string.reminders),
+            value = if (selected.isEmpty()) appString(R.string.none) else selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", "),
             actionIcon = Icons.Default.Add,
             actionDescription = stringResource(R.string.add_reminder),
             onAction = {
@@ -10918,7 +11661,7 @@ private fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave: 
         ReminderUnit.Days to dayUnitLabel,
         ReminderUnit.Weeks to weekUnitLabel,
     )
-    ModalEditorDialog(title = stringResource(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder), onDismiss = onDismiss) {
+    ModalEditorDialog(title = appString(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ReminderChoice.entries.forEach { choice ->
@@ -10980,14 +11723,14 @@ private fun ReminderEditor(selected: Set<Int>, onToggle: (Int) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(stringResource(R.string.reminders), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(appString(R.string.reminders), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
         }
         FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReminderPresets.forEach { (minutes, label) ->
+            ReminderPresets.forEach { minutes ->
                 FilterChip(
                     selected = minutes in selected,
                     onClick = { onToggle(minutes) },
-                    label = { Text(label) },
+                    label = { Text(reminderMinuteLabel(minutes)) },
                 )
             }
         }
@@ -10999,7 +11742,7 @@ private fun ReminderEditor(selected: Set<Int>, onToggle: (Int) -> Unit) {
             OutlinedTextField(
                 value = customMinutesText,
                 onValueChange = { value -> customMinutesText = value.filter { it.isDigit() }.take(5) },
-                label = { Text(stringResource(R.string.own_minutes_before)) },
+                label = { Text(appString(R.string.own_minutes_before)) },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.weight(1f),
@@ -11013,16 +11756,16 @@ private fun ReminderEditor(selected: Set<Int>, onToggle: (Int) -> Unit) {
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
             ) {
-                Text(stringResource(R.string.add))
+                Text(appString(R.string.add))
             }
         }
         selected
-            .filterNot { preset -> ReminderPresets.any { it.first == preset } }
+            .filterNot { preset -> preset in ReminderPresets }
             .sorted()
             .takeIf { it.isNotEmpty() }
             ?.let { values ->
                 Text(
-                    "${stringResource(R.string.custom)}: ${values.map { reminderMinuteLabel(it) }.joinToString(", ")}",
+                    "${appString(R.string.custom)}: ${values.map { reminderMinuteLabel(it) }.joinToString(", ")}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     lineHeight = 16.sp,
@@ -11038,8 +11781,8 @@ private fun CompactRecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChan
     EditorSection {
         CompactEditorHeaderLine(
             icon = Icons.Default.Repeat,
-            title = stringResource(R.string.recurrence),
-            value = recurrenceRule.takeIf { it.isNotBlank() }?.toLocalizedRecurrenceLabel() ?: stringResource(R.string.none),
+            title = appString(R.string.recurrence),
+            value = recurrenceRule.takeIf { it.isNotBlank() }?.toLocalizedRecurrenceLabel() ?: appString(R.string.none),
             actionIcon = if (recurrenceRule.isBlank()) Icons.Default.Add else Icons.Default.Edit,
             actionDescription = if (recurrenceRule.isBlank()) stringResource(R.string.add_recurrence) else stringResource(R.string.edit_recurrence),
             onAction = { dialogOpen = true },
@@ -11077,7 +11820,7 @@ private fun RecurrenceDialog(
         RecurrenceOption.Monthly to monthlyUnitLabel,
         RecurrenceOption.Yearly to yearlyUnitLabel,
     )
-    ModalEditorDialog(title = stringResource(R.string.recurrence), onDismiss = onDismiss) {
+    ModalEditorDialog(title = appString(R.string.recurrence), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             RepeatModeSegmented(
                 repeated = draft.option != RecurrenceOption.Once,
@@ -11299,7 +12042,7 @@ private fun RecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (St
                     onValueChange = { value ->
                         update(draft.copy(interval = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999) ?: 1))
                     },
-                    label = { Text(stringResource(R.string.every_x, draft.option.localizedIntervalUnitLabel())) },
+                    label = { Text(appString(R.string.every_x, draft.option.localizedIntervalUnitLabel())) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -11353,9 +12096,9 @@ private enum class RecurrenceEndMode(val label: String) {
 
 @Composable
 private fun RecurrenceEndMode.localizedLabel(): String = when (this) {
-    RecurrenceEndMode.Never -> stringResource(R.string.never)
-    RecurrenceEndMode.Count -> stringResource(R.string.after_count)
-    RecurrenceEndMode.Until -> stringResource(R.string.until_date)
+    RecurrenceEndMode.Never -> appString(R.string.never)
+    RecurrenceEndMode.Count -> appString(R.string.after_count)
+    RecurrenceEndMode.Until -> appString(R.string.until_date)
 }
 
 private data class RecurrenceDraft(
@@ -11928,7 +12671,7 @@ private fun ColorPickerDialog(initialColor: Int, onDismiss: () -> Unit, onSave: 
         saturation = hsv[1]
         brightness = hsv[2]
     }
-    ModalEditorDialog(title = stringResource(R.string.choose_color), onDismiss = onDismiss) {
+    ModalEditorDialog(title = appString(R.string.choose_color), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 modifier = Modifier
@@ -12270,6 +13013,7 @@ private fun AgendaList(
         scrollTargetDate = scrollTargetDate,
         stickyHeaderBackground = MaterialTheme.colorScheme.background,
         showTaskChains = false,
+        expandMultiDayEventSpans = true,
     )
 }
 
@@ -12743,7 +13487,7 @@ private fun TaskInboxSectionHeader(
             ) {
                 Text(
                     count.toString(),
-                    color = Color.White,
+                    color = accentContainerContentColor(),
                     fontSize = 11.sp,
                     lineHeight = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -12782,7 +13526,7 @@ private fun TaskInboxSectionHeader(
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         if (actionIcon != null) {
-                            Icon(actionIcon, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                            Icon(actionIcon, contentDescription = null, tint = accentContainerContentColor(), modifier = Modifier.size(17.dp))
                             Spacer(Modifier.width(7.dp))
                         }
                         AnimatedContent(
@@ -12792,7 +13536,7 @@ private fun TaskInboxSectionHeader(
                         ) { label ->
                             Text(
                                 label,
-                                color = Color.White,
+                                color = accentContainerContentColor(),
                                 fontSize = 12.sp,
                                 lineHeight = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -13321,6 +14065,7 @@ private fun TaskDetailHeaderCard(
     taskColorMode: TaskColorMode,
     hasSubtasks: Boolean,
     collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String>,
     readOnlySource: Boolean,
     burstKey: Int,
     onTaskStatusChanged: (String, String) -> Unit,
@@ -13437,6 +14182,7 @@ private fun TaskDetailHeaderCard(
                     visible = controlsVisible,
                     task = task,
                     collections = collections,
+                    hiddenCollectionHrefs = hiddenCollectionHrefs,
                     readOnlySource = readOnlySource,
                     contentColor = contentColor,
                     onEditTask = onEditTask,
@@ -13454,6 +14200,7 @@ private fun TaskDetailHeaderActions(
     visible: Boolean,
     task: TaskEntity,
     collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String>,
     readOnlySource: Boolean,
     contentColor: Color,
     onEditTask: (TaskEntity) -> Unit,
@@ -13473,6 +14220,7 @@ private fun TaskDetailHeaderActions(
             }
             DetailOverflowMenu(
                 copyTargets = collections.filter { it.supportsTasks && it.href != task.collectionHref && !it.isReadOnlyForUi() },
+                hiddenCollectionHrefs = hiddenCollectionHrefs,
                 recurringScopes = false,
                 itemLabel = stringResource(R.string.task),
                 canDelete = !readOnlySource,
@@ -13491,6 +14239,7 @@ private fun TaskDetailHeaderActions(
 private fun DetailSheetContent(
     detail: DetailSheet,
     collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String>,
     accounts: List<AccountEntity>,
     problemResources: List<CalendarResourceEntity>,
     taskColorMode: TaskColorMode,
@@ -13627,6 +14376,7 @@ private fun DetailSheetContent(
                         }
                         DetailOverflowMenu(
                             copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyForUi() },
+                            hiddenCollectionHrefs = hiddenCollectionHrefs,
                             recurringScopes = recurring,
                             itemLabel = stringResource(R.string.event),
                             canDelete = !readOnlySource,
@@ -13668,6 +14418,7 @@ private fun DetailSheetContent(
                             taskColorMode = taskColorMode,
                             hasSubtasks = descendantTasks.any { it.parentUid == detail.task.uid },
                             collections = collections,
+                            hiddenCollectionHrefs = hiddenCollectionHrefs,
                             readOnlySource = readOnlySource,
                             burstKey = burstKey,
                             onTaskStatusChanged = onTaskStatusChanged,
@@ -14210,6 +14961,7 @@ private fun DetailSheet.sourceFootnoteText(
 @Composable
 private fun DetailOverflowMenu(
     copyTargets: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
     recurringScopes: Boolean,
     itemLabel: String,
     canDelete: Boolean = true,
@@ -14262,6 +15014,7 @@ private fun DetailOverflowMenu(
         if (copyExpanded) {
             CopyTargetDialog(
                 copyTargets = copyTargets,
+                hiddenCollectionHrefs = hiddenCollectionHrefs,
                 onDismiss = { copyExpanded = false },
                 onCopyTo = { href ->
                     copyExpanded = false
@@ -14294,6 +15047,7 @@ private fun DetailOverflowMenu(
 @Composable
 private fun CopyTargetDialog(
     copyTargets: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
     onDismiss: () -> Unit,
     onCopyTo: (String) -> Unit,
 ) {
@@ -14313,10 +15067,12 @@ private fun CopyTargetDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 copyTargets.forEach { collection ->
+                    val hidden = collection.href in hiddenCollectionHrefs
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
+                            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 14.dp) else Modifier)
                             .clickable { onCopyTo(collection.href) }
                             .padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -14337,7 +15093,7 @@ private fun CopyTargetDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) }
         },
     )
 }
@@ -14360,23 +15116,23 @@ private fun RecurringSaveScopeDialog(
         containerColor = scopeDialogBackground(),
         titleContentColor = WarmInk,
         textContentColor = WarmInk,
-        title = { Text(stringResource(R.string.edit_repeat_question), fontWeight = FontWeight.SemiBold) },
+        title = { Text(appString(R.string.edit_repeat_question), fontWeight = FontWeight.SemiBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    stringResource(R.string.edit_series_body, itemLabel),
+                    appString(R.string.edit_series_body, itemLabel),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     lineHeight = 18.sp,
                 )
                 Spacer(Modifier.height(2.dp))
-                DeleteScopeButton(stringResource(R.string.only_this_repeat), onClick = onSaveThis)
-                DeleteScopeButton(stringResource(R.string.this_and_following), onClick = onSaveFollowing)
-                DeleteScopeButton(stringResource(R.string.all_repeats), onClick = onSaveAll)
+                DeleteScopeButton(appString(R.string.only_this_repeat), onClick = onSaveThis)
+                DeleteScopeButton(appString(R.string.this_and_following), onClick = onSaveFollowing)
+                DeleteScopeButton(appString(R.string.all_repeats), onClick = onSaveAll)
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
     )
 }
 
@@ -14403,23 +15159,23 @@ private fun DeleteConfirmationDialog(
                 containerColor = scopeDialogBackground(),
                 titleContentColor = WarmInk,
                 textContentColor = WarmInk,
-                title = { Text(stringResource(R.string.delete_repeat_question), fontWeight = FontWeight.SemiBold) },
+                title = { Text(appString(R.string.delete_repeat_question), fontWeight = FontWeight.SemiBold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            stringResource(R.string.event_belongs_to_series_delete),
+                            appString(R.string.event_belongs_to_series_delete),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 14.sp,
                             lineHeight = 18.sp,
                         )
                         Spacer(Modifier.height(2.dp))
-                        DeleteScopeButton(stringResource(R.string.only_this_event), onClick = { pending = EventDeleteScope.This })
-                        DeleteScopeButton(stringResource(R.string.this_and_following_events), onClick = { pending = EventDeleteScope.ThisAndFollowing })
-                        DeleteScopeButton(stringResource(R.string.all_events_in_series), destructive = true, onClick = { pending = EventDeleteScope.All })
+                        DeleteScopeButton(appString(R.string.only_this_event), onClick = { pending = EventDeleteScope.This })
+                        DeleteScopeButton(appString(R.string.this_and_following_events), onClick = { pending = EventDeleteScope.ThisAndFollowing })
+                        DeleteScopeButton(appString(R.string.all_events_in_series), destructive = true, onClick = { pending = EventDeleteScope.All })
                     }
                 },
                 confirmButton = {},
-                dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+                dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
             )
         } else {
             AlertDialog(
@@ -14429,13 +15185,13 @@ private fun DeleteConfirmationDialog(
                 containerColor = scopeDialogBackground(),
                 titleContentColor = WarmInk,
                 textContentColor = WarmInk,
-                title = { Text(stringResource(R.string.truly_delete), fontWeight = FontWeight.SemiBold) },
+                title = { Text(appString(R.string.truly_delete), fontWeight = FontWeight.SemiBold) },
                 text = {
                     Text(
                         when (pendingScope) {
-                            EventDeleteScope.This -> stringResource(R.string.only_this_deleted)
-                            EventDeleteScope.ThisAndFollowing -> stringResource(R.string.this_and_following_deleted)
-                            EventDeleteScope.All -> stringResource(R.string.all_series_deleted)
+                            EventDeleteScope.This -> appString(R.string.only_this_deleted)
+                            EventDeleteScope.ThisAndFollowing -> appString(R.string.this_and_following_deleted)
+                            EventDeleteScope.All -> appString(R.string.all_series_deleted)
                         },
                     )
                 },
@@ -14448,9 +15204,9 @@ private fun DeleteConfirmationDialog(
                                 EventDeleteScope.All -> onDeleteAll()
                             }
                         },
-                    ) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                    ) { Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 },
-                dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
+                dismissButton = { TextButton(onClick = { pending = null }) { Text(appString(R.string.cancel)) } },
             )
         }
     } else {
@@ -14461,14 +15217,14 @@ private fun DeleteConfirmationDialog(
             containerColor = scopeDialogBackground(),
             titleContentColor = WarmInk,
             textContentColor = WarmInk,
-            title = { Text(stringResource(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
-            text = { Text(stringResource(R.string.delete_irreversible)) },
+            title = { Text(appString(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
+            text = { Text(appString(R.string.delete_irreversible)) },
             confirmButton = {
                 TextButton(onClick = onDeleteAll) {
-                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                    Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
         )
     }
 }
@@ -14949,10 +15705,22 @@ private fun SettingsPage(
     onColorModeSelected: (AppColorMode) -> Unit,
     onMonthWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMonthWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onAgendaWidgetThemeSelected: (WidgetThemeMode) -> Unit,
+    onAgendaWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onTasksWidgetThemeSelected: (WidgetThemeMode) -> Unit,
+    onTasksWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onDayWidgetThemeSelected: (WidgetThemeMode) -> Unit,
+    onDayWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onMultiWidgetThemeSelected: (WidgetThemeMode) -> Unit,
+    onMultiWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onMultiWidgetMonthPercentChanged: (Int) -> Unit,
     onTasksWidgetDisplayModeSelected: (WidgetTaskDisplayMode) -> Unit,
     onTasksWidgetIncludeOverdueChanged: (Boolean) -> Unit,
-    onTasksWidgetSortModeSelected: (WidgetTaskSortMode) -> Unit,
     onTasksWidgetCreateModeSelected: (WidgetTaskCreateMode) -> Unit,
+    onTasksWidgetSubtaskDefaultModeSelected: (WidgetTaskSubtaskDefaultMode) -> Unit,
+    onDayWidgetScaleChanged: (Int) -> Unit,
+    onDayWidgetStartHourChanged: (Int) -> Unit,
+    onDayWidgetStartAtCurrentHourChanged: (Boolean) -> Unit,
     onLanguageSelected: (AppLanguageMode) -> Unit,
     onTaskColorModeSelected: (TaskColorMode) -> Unit,
     onPriorityAnimationsChanged: (Boolean) -> Unit,
@@ -15006,11 +15774,11 @@ private fun SettingsPage(
     var taskDefaultDialogOpen by remember { mutableStateOf(false) }
     var themeDialogOpen by remember { mutableStateOf(false) }
     var colorModeDialogOpen by remember { mutableStateOf(false) }
-    var monthWidgetThemeDialogOpen by remember { mutableStateOf(false) }
-    var monthWidgetColorModeDialogOpen by remember { mutableStateOf(false) }
+    var widgetThemeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
+    var widgetColorModeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
     var tasksWidgetDisplayDialogOpen by remember { mutableStateOf(false) }
-    var tasksWidgetSortDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetCreateDialogOpen by remember { mutableStateOf(false) }
+    var tasksWidgetSubtaskDefaultDialogOpen by remember { mutableStateOf(false) }
     var languageDialogOpen by remember { mutableStateOf(false) }
     var defaultEventCollectionDialogOpen by remember { mutableStateOf(false) }
     var defaultTaskCollectionDialogOpen by remember { mutableStateOf(false) }
@@ -15163,7 +15931,7 @@ private fun SettingsPage(
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widgets),
                                     value = stringResource(R.string.widget_settings_summary),
-                                    leadingIcon = Icons.Default.CalendarMonth,
+                                    leadingIcon = Icons.Default.Widgets,
                                 ) {
                                     navigateTo(SettingsDestination.Widgets)
                                 }
@@ -15248,6 +16016,7 @@ private fun SettingsPage(
                                 CollectionReorderList(
                                     collections = visibleCollections,
                                     accounts = accounts,
+                                    hiddenCollectionHrefs = state.hiddenCollectionHrefs,
                                     onReordered = onCollectionsReordered,
                                     onCollectionClick = onCollectionSettings,
                                 )
@@ -15696,20 +16465,75 @@ private fun SettingsPage(
                             }
                         }
                         SettingsDestination.Widgets -> {
-                            SettingsSection(title = stringResource(R.string.widget_month_name), icon = Icons.Default.CalendarMonth) {
+                            SettingsSection(title = stringResource(R.string.widgets), icon = Icons.Default.Widgets) {
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.widget_agenda_name),
+                                    value = state.agendaWidgetThemeMode.localizedLabel(),
+                                    leadingIcon = Icons.Default.ViewAgenda,
+                                ) { navigateTo(SettingsDestination.WidgetAgenda) }
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.widget_month_name),
+                                    value = state.monthWidgetThemeMode.localizedLabel(),
+                                    leadingIcon = Icons.Default.CalendarMonth,
+                                ) { navigateTo(SettingsDestination.WidgetMonth) }
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.widget_tasks_name),
+                                    value = state.tasksWidgetThemeMode.localizedLabel(),
+                                    leadingIcon = Icons.Default.TaskAlt,
+                                ) { navigateTo(SettingsDestination.WidgetTasks) }
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.widget_day_name),
+                                    value = state.dayWidgetThemeMode.localizedLabel(),
+                                    leadingIcon = Icons.Default.ViewDay,
+                                ) { navigateTo(SettingsDestination.WidgetDay) }
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.widget_multi_name),
+                                    value = state.multiWidgetThemeMode.localizedLabel(),
+                                    leadingIcon = Icons.Default.Widgets,
+                                ) { navigateTo(SettingsDestination.WidgetMulti) }
+                            }
+                        }
+                        SettingsDestination.WidgetAgenda -> {
+                            SettingsSection(title = stringResource(R.string.widget_agenda_name), icon = Icons.Default.ViewAgenda) {
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.color_scheme),
+                                    value = state.agendaWidgetThemeMode.localizedLabel(),
+                                    onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetAgenda },
+                                )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.monthWidgetColorMode.localizedLabel(),
-                                    onClick = { monthWidgetColorModeDialogOpen = true },
+                                    value = state.agendaWidgetColorMode.localizedLabel(),
+                                    onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetAgenda },
                                 )
+                            }
+                        }
+                        SettingsDestination.WidgetMonth -> {
+                            SettingsSection(title = stringResource(R.string.widget_month_name), icon = Icons.Default.CalendarMonth) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
                                     value = state.monthWidgetThemeMode.localizedLabel(),
-                                    onClick = { monthWidgetThemeDialogOpen = true },
+                                    onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetMonth },
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.appearance),
+                                    value = state.monthWidgetColorMode.localizedLabel(),
+                                    onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetMonth },
                                 )
                                 SettingsHelpText(stringResource(R.string.widget_month_settings_help))
                             }
+                        }
+                        SettingsDestination.WidgetTasks -> {
                             SettingsSection(title = stringResource(R.string.widget_tasks_name), icon = Icons.Default.TaskAlt) {
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.color_scheme),
+                                    value = state.tasksWidgetThemeMode.localizedLabel(),
+                                    onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetTasks },
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.appearance),
+                                    value = state.tasksWidgetColorMode.localizedLabel(),
+                                    onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetTasks },
+                                )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.tasks_widget_display),
                                     value = state.tasksWidgetDisplayMode.localizedLabel(),
@@ -15723,22 +16547,81 @@ private fun SettingsPage(
                                     )
                                 }
                                 SettingsButtonRow(
-                                    label = stringResource(R.string.tasks_widget_sort),
-                                    value = state.tasksWidgetSortMode.localizedLabel(),
-                                    onClick = { tasksWidgetSortDialogOpen = true },
-                                )
-                                SettingsButtonRow(
                                     label = stringResource(R.string.tasks_widget_plus_action),
                                     value = state.tasksWidgetCreateMode.localizedLabel(),
                                     onClick = { tasksWidgetCreateDialogOpen = true },
                                 )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.tasks_widget_subtasks_default),
+                                    value = state.tasksWidgetSubtaskDefaultMode.localizedLabel(),
+                                    onClick = { tasksWidgetSubtaskDefaultDialogOpen = true },
+                                )
                                 SettingsHelpText(stringResource(R.string.tasks_widget_settings_help))
                             }
                         }
-                        SettingsDestination.Privacy -> PrivacyPolicyPage(
-                            autoLoadMapPreviews = state.autoLoadMapPreviews,
-                            onAutoLoadMapPreviewsChanged = onAutoLoadMapPreviewsChanged,
-                        )
+                        SettingsDestination.WidgetDay -> {
+                            SettingsSection(title = stringResource(R.string.widget_day_name), icon = Icons.Default.ViewDay) {
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.color_scheme),
+                                    value = state.dayWidgetThemeMode.localizedLabel(),
+                                    onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetDay },
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.appearance),
+                                    value = state.dayWidgetColorMode.localizedLabel(),
+                                    onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetDay },
+                                )
+                                SettingsSliderRow(
+                                    title = stringResource(R.string.day_widget_scale),
+                                    subtitle = stringResource(R.string.day_widget_scale_help),
+                                    value = state.dayWidgetScalePercent,
+                                    valueLabel = "${state.dayWidgetScalePercent}%",
+                                    range = SettingsStore.MIN_DAY_WIDGET_SCALE_PERCENT..SettingsStore.MAX_DAY_WIDGET_SCALE_PERCENT,
+                                    step = 5,
+                                    onValueChanged = onDayWidgetScaleChanged,
+                                )
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.day_widget_start_current_hour),
+                                    subtitle = stringResource(R.string.day_widget_start_current_hour_help),
+                                    checked = state.dayWidgetStartAtCurrentHour,
+                                    onCheckedChange = onDayWidgetStartAtCurrentHourChanged,
+                                )
+                                AnimatedVisibility(visible = !state.dayWidgetStartAtCurrentHour) {
+                                    SettingsSliderRow(
+                                        title = stringResource(R.string.day_widget_start_hour),
+                                        subtitle = stringResource(R.string.day_widget_start_hour_help),
+                                        value = state.dayWidgetStartHour,
+                                        valueLabel = "%02d:00".format(state.dayWidgetStartHour),
+                                        range = 0..23,
+                                        onValueChanged = onDayWidgetStartHourChanged,
+                                    )
+                                }
+                            }
+                        }
+                        SettingsDestination.WidgetMulti -> {
+                            SettingsSection(title = stringResource(R.string.widget_multi_name), icon = Icons.Default.Widgets) {
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.color_scheme),
+                                    value = state.multiWidgetThemeMode.localizedLabel(),
+                                    onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetMulti },
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.appearance),
+                                    value = state.multiWidgetColorMode.localizedLabel(),
+                                    onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetMulti },
+                                )
+                                SettingsSliderRow(
+                                    title = stringResource(R.string.multi_widget_split),
+                                    subtitle = stringResource(R.string.multi_widget_split_help),
+                                    value = state.multiWidgetMonthPercent,
+                                    valueLabel = "${state.multiWidgetMonthPercent}% / ${100 - state.multiWidgetMonthPercent}%",
+                                    range = SettingsStore.MIN_MULTI_WIDGET_MONTH_PERCENT..SettingsStore.MAX_MULTI_WIDGET_MONTH_PERCENT,
+                                    step = 5,
+                                    onValueChanged = onMultiWidgetMonthPercentChanged,
+                                )
+                            }
+                        }
+                        SettingsDestination.Privacy -> PrivacyPolicyPage()
                         SettingsDestination.EventFieldOrder -> {
                             SettingsSection(title = stringResource(R.string.event_fields), icon = Icons.Default.Event) {
                                 FieldOrderList(
@@ -15796,6 +16679,7 @@ private fun SettingsPage(
                                 CollectionReorderList(
                                     collections = state.collections,
                                     accounts = state.accounts,
+                                    hiddenCollectionHrefs = state.hiddenCollectionHrefs,
                                     onReordered = onCollectionsReordered,
                                     onCollectionClick = onCollectionSettings,
                                 )
@@ -15811,7 +16695,7 @@ private fun SettingsPage(
     if (defaultViewDialogOpen) {
         AlertDialog(
             onDismissRequest = { defaultViewDialogOpen = false },
-            title = { Text(stringResource(R.string.default_view)) },
+            title = { Text(appString(R.string.default_view)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(CalendarViewMode.ThreeDay, CalendarViewMode.Day, CalendarViewMode.Month, CalendarViewMode.Agenda).forEach { view ->
@@ -15829,14 +16713,14 @@ private fun SettingsPage(
             },
             confirmButton = {
                 TextButton(onClick = { defaultViewDialogOpen = false }) {
-                    Text(stringResource(R.string.done))
+                    Text(appString(R.string.done))
                 }
             }
         )
     }
     if (firstDayDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.first_day_of_week),
+            title = appString(R.string.first_day_of_week),
             options = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY, DayOfWeek.SATURDAY),
             selected = state.firstDayOfWeek,
             label = { it.localizedWeekdayLabel() },
@@ -15859,7 +16743,7 @@ private fun SettingsPage(
     }
     if (colorModeDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.appearance),
+            title = appString(R.string.appearance),
             options = listOf(AppColorMode.Auto, AppColorMode.Light, AppColorMode.Dark),
             selected = state.colorMode,
             label = { it.localizedLabel() },
@@ -15870,22 +16754,36 @@ private fun SettingsPage(
             onDismiss = { colorModeDialogOpen = false },
         )
     }
-    if (monthWidgetColorModeDialogOpen) {
+    widgetColorModeDialogTarget?.let { target ->
         SettingsChoiceDialog(
-            title = stringResource(R.string.appearance),
+            title = appString(R.string.appearance),
             options = listOf(WidgetColorMode.FollowApp, WidgetColorMode.FollowOs, WidgetColorMode.Light, WidgetColorMode.Dark),
-            selected = state.monthWidgetColorMode,
+            selected = when (target) {
+                SettingsDestination.WidgetAgenda -> state.agendaWidgetColorMode
+                SettingsDestination.WidgetMonth -> state.monthWidgetColorMode
+                SettingsDestination.WidgetTasks -> state.tasksWidgetColorMode
+                SettingsDestination.WidgetDay -> state.dayWidgetColorMode
+                SettingsDestination.WidgetMulti -> state.multiWidgetColorMode
+                else -> WidgetColorMode.FollowApp
+            },
             label = { it.localizedLabel() },
             onSelected = {
-                onMonthWidgetColorModeSelected(it)
-                monthWidgetColorModeDialogOpen = false
+                when (target) {
+                    SettingsDestination.WidgetAgenda -> onAgendaWidgetColorModeSelected(it)
+                    SettingsDestination.WidgetMonth -> onMonthWidgetColorModeSelected(it)
+                    SettingsDestination.WidgetTasks -> onTasksWidgetColorModeSelected(it)
+                    SettingsDestination.WidgetDay -> onDayWidgetColorModeSelected(it)
+                    SettingsDestination.WidgetMulti -> onMultiWidgetColorModeSelected(it)
+                    else -> Unit
+                }
+                widgetColorModeDialogTarget = null
             },
-            onDismiss = { monthWidgetColorModeDialogOpen = false },
+            onDismiss = { widgetColorModeDialogTarget = null },
         )
     }
-    if (monthWidgetThemeDialogOpen) {
+    widgetThemeDialogTarget?.let { target ->
         SettingsChoiceDialog(
-            title = stringResource(R.string.color_scheme),
+            title = appString(R.string.color_scheme),
             options = listOf(
                 WidgetThemeMode.FollowApp,
                 WidgetThemeMode.KgsBlue,
@@ -15893,18 +16791,32 @@ private fun SettingsPage(
                 WidgetThemeMode.KgsFresh,
                 WidgetThemeMode.SystemDynamic,
             ),
-            selected = state.monthWidgetThemeMode,
+            selected = when (target) {
+                SettingsDestination.WidgetAgenda -> state.agendaWidgetThemeMode
+                SettingsDestination.WidgetMonth -> state.monthWidgetThemeMode
+                SettingsDestination.WidgetTasks -> state.tasksWidgetThemeMode
+                SettingsDestination.WidgetDay -> state.dayWidgetThemeMode
+                SettingsDestination.WidgetMulti -> state.multiWidgetThemeMode
+                else -> WidgetThemeMode.FollowApp
+            },
             label = { it.localizedLabel() },
             onSelected = {
-                onMonthWidgetThemeSelected(it)
-                monthWidgetThemeDialogOpen = false
+                when (target) {
+                    SettingsDestination.WidgetAgenda -> onAgendaWidgetThemeSelected(it)
+                    SettingsDestination.WidgetMonth -> onMonthWidgetThemeSelected(it)
+                    SettingsDestination.WidgetTasks -> onTasksWidgetThemeSelected(it)
+                    SettingsDestination.WidgetDay -> onDayWidgetThemeSelected(it)
+                    SettingsDestination.WidgetMulti -> onMultiWidgetThemeSelected(it)
+                    else -> Unit
+                }
+                widgetThemeDialogTarget = null
             },
-            onDismiss = { monthWidgetThemeDialogOpen = false },
+            onDismiss = { widgetThemeDialogTarget = null },
         )
     }
     if (tasksWidgetDisplayDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.tasks_widget_display),
+            title = appString(R.string.tasks_widget_display),
             options = listOf(WidgetTaskDisplayMode.Planned, WidgetTaskDisplayMode.Unplanned, WidgetTaskDisplayMode.Today),
             selected = state.tasksWidgetDisplayMode,
             label = { it.localizedLabel() },
@@ -15915,22 +16827,9 @@ private fun SettingsPage(
             onDismiss = { tasksWidgetDisplayDialogOpen = false },
         )
     }
-    if (tasksWidgetSortDialogOpen) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.tasks_widget_sort),
-            options = listOf(WidgetTaskSortMode.Date, WidgetTaskSortMode.Priority, WidgetTaskSortMode.Status),
-            selected = state.tasksWidgetSortMode,
-            label = { it.localizedLabel() },
-            onSelected = {
-                onTasksWidgetSortModeSelected(it)
-                tasksWidgetSortDialogOpen = false
-            },
-            onDismiss = { tasksWidgetSortDialogOpen = false },
-        )
-    }
     if (tasksWidgetCreateDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.tasks_widget_plus_action),
+            title = appString(R.string.tasks_widget_plus_action),
             options = listOf(WidgetTaskCreateMode.Today, WidgetTaskCreateMode.Unplanned),
             selected = state.tasksWidgetCreateMode,
             label = { it.localizedLabel() },
@@ -15941,9 +16840,26 @@ private fun SettingsPage(
             onDismiss = { tasksWidgetCreateDialogOpen = false },
         )
     }
+    if (tasksWidgetSubtaskDefaultDialogOpen) {
+        SettingsChoiceDialog(
+            title = appString(R.string.tasks_widget_subtasks_default),
+            options = listOf(
+                WidgetTaskSubtaskDefaultMode.FollowApp,
+                WidgetTaskSubtaskDefaultMode.Open,
+                WidgetTaskSubtaskDefaultMode.Closed,
+            ),
+            selected = state.tasksWidgetSubtaskDefaultMode,
+            label = { it.localizedLabel() },
+            onSelected = {
+                onTasksWidgetSubtaskDefaultModeSelected(it)
+                tasksWidgetSubtaskDefaultDialogOpen = false
+            },
+            onDismiss = { tasksWidgetSubtaskDefaultDialogOpen = false },
+        )
+    }
     if (languageDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.app_language),
+            title = appString(R.string.app_language),
             options = listOf(AppLanguageMode.System, AppLanguageMode.English, AppLanguageMode.German),
             selected = state.languageMode,
             label = { it.localizedLabel() },
@@ -15966,7 +16882,7 @@ private fun SettingsPage(
     }
     if (taskDefaultDialogOpen) {
         SettingsChoiceDialog(
-            title = stringResource(R.string.new_tasks),
+            title = appString(R.string.new_tasks),
             options = listOf(TaskDefaultSchedule.None, TaskDefaultSchedule.DateOnly, TaskDefaultSchedule.DateTime),
             selected = when {
                 !state.defaultTaskHasDate -> TaskDefaultSchedule.None
@@ -15984,9 +16900,10 @@ private fun SettingsPage(
     }
     if (defaultEventCollectionDialogOpen) {
         CollectionSelectionDialog(
-            title = stringResource(R.string.default_calendar),
+            title = appString(R.string.default_calendar),
             selectedHref = state.defaultEventCollectionHref,
             collections = state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() },
+            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
             onSelected = {
                 onDefaultEventCollectionSelected(it)
                 defaultEventCollectionDialogOpen = false
@@ -15996,9 +16913,10 @@ private fun SettingsPage(
     }
     if (defaultTaskCollectionDialogOpen) {
         CollectionSelectionDialog(
-            title = stringResource(R.string.default_list),
+            title = appString(R.string.default_list),
             selectedHref = state.defaultTaskCollectionHref,
             collections = state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() },
+            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
             onSelected = {
                 onDefaultTaskCollectionSelected(it)
                 defaultTaskCollectionDialogOpen = false
@@ -16252,6 +17170,7 @@ private fun CollectionSelectionDialog(
     title: String,
     selectedHref: String?,
     collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
     onSelected: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -16266,17 +17185,18 @@ private fun CollectionSelectionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                SettingsRadioRow(selected = selectedHref == null, title = stringResource(R.string.automatic), onClick = { onSelected(null) })
+                SettingsRadioRow(selected = selectedHref == null, title = appString(R.string.automatic), onClick = { onSelected(null) })
                 collections.forEach { collection ->
                     SettingsCollectionChoiceRow(
                         selected = selectedHref == collection.href,
                         collection = collection,
+                        hidden = collection.href in hiddenCollectionHrefs,
                         onClick = { onSelected(collection.href) },
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
     )
 }
 
@@ -16284,6 +17204,7 @@ private fun CollectionSelectionDialog(
 private fun SettingsCollectionChoiceRow(
     selected: Boolean,
     collection: CollectionEntity,
+    hidden: Boolean = false,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -16291,6 +17212,7 @@ private fun SettingsCollectionChoiceRow(
             .fillMaxWidth()
             .height(SettingsControlHeight)
             .clip(SettingsControlShape)
+            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 25.dp) else Modifier)
             .clickable(onClick = onClick),
         shape = SettingsControlShape,
         color = if (selected) WarmPeach else settingsControlColor(),
@@ -16335,9 +17257,9 @@ private enum class TaskDefaultSchedule(val label: String) {
 
 @Composable
 private fun TaskDefaultSchedule.localizedLabel(): String = when (this) {
-    TaskDefaultSchedule.None -> stringResource(R.string.no_date)
-    TaskDefaultSchedule.DateOnly -> stringResource(R.string.date_only)
-    TaskDefaultSchedule.DateTime -> stringResource(R.string.date_and_time)
+    TaskDefaultSchedule.None -> appString(R.string.no_date)
+    TaskDefaultSchedule.DateOnly -> appString(R.string.date_only)
+    TaskDefaultSchedule.DateTime -> appString(R.string.date_and_time)
 }
 
 private enum class DurationUnit(val label: String, val minutes: Int) {
@@ -16347,8 +17269,8 @@ private enum class DurationUnit(val label: String, val minutes: Int) {
 
 @Composable
 private fun DurationUnit.localizedLabel(): String = when (this) {
-    DurationUnit.Minutes -> stringResource(R.string.minutes)
-    DurationUnit.Hours -> stringResource(R.string.hours)
+    DurationUnit.Minutes -> appString(R.string.minutes)
+    DurationUnit.Hours -> appString(R.string.hours)
 }
 
 private enum class EventDurationChoice {
@@ -16366,7 +17288,7 @@ private fun ThemeSelectionDialog(
     val scheme = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.choose_design)) },
+        title = { Text(appString(R.string.choose_design)) },
         text = {
             Column(
                 modifier = Modifier
@@ -16385,7 +17307,7 @@ private fun ThemeSelectionDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
     )
 }
 
@@ -16465,19 +17387,19 @@ private fun EventDurationDialog(
         DurationUnit.Minutes to minuteDurationLabel,
         DurationUnit.Hours to hourDurationLabel,
     )
-    ModalEditorDialog(title = stringResource(R.string.default_event_duration), onDismiss = onDismiss) {
+    ModalEditorDialog(title = appString(R.string.default_event_duration), onDismiss = onDismiss) {
         PresetListRow(
-            label = stringResource(R.string.thirty_min),
+            label = appString(R.string.thirty_min),
             selected = choice == EventDurationChoice.ThirtyMinutes,
             onClick = { choice = EventDurationChoice.ThirtyMinutes },
         )
         PresetListRow(
-            label = stringResource(R.string.one_hour),
+            label = appString(R.string.one_hour),
             selected = choice == EventDurationChoice.OneHour,
             onClick = { choice = EventDurationChoice.OneHour },
         )
         PresetListRow(
-            label = stringResource(R.string.custom_duration),
+            label = appString(R.string.custom_duration),
             selected = choice == EventDurationChoice.Custom,
             onClick = { choice = EventDurationChoice.Custom },
         )
@@ -16496,7 +17418,7 @@ private fun EventDurationDialog(
                     }
                 },
                 unitOptions = durationUnitLabels.map { it.second },
-                label = stringResource(R.string.duration),
+                label = appString(R.string.duration),
             )
         }
         DialogActions(
@@ -16537,7 +17459,7 @@ private fun <T> SettingsChoiceDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
     )
 }
 
@@ -16719,6 +17641,7 @@ private fun CalendarUiState.localizedDefaultTaskScheduleLabel(): String = when {
 private fun CollectionReorderList(
     collections: List<CollectionEntity>,
     accounts: List<AccountEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
     onReordered: (List<String>) -> Unit,
     onCollectionClick: (CollectionEntity) -> Unit = {},
 ) {
@@ -16749,7 +17672,10 @@ private fun CollectionReorderList(
         }
     }
 
-    val reorderable = remember(ordered) { ordered.filter { it.isVisibleInSettingsCalendarList() } }
+    val reorderable = remember(ordered) { ordered.filter { it.isVisibleInSettingsCalendarList() && it.isEnabled } }
+    val inactiveCollections = remember(ordered) {
+        ordered.filter { it.isVisibleInSettingsCalendarList() && !it.isEnabled }
+    }
 
     // Live target slot derived from how far the finger has travelled in whole visible rows.
     val targetIndex = draggingIndex?.let { start ->
@@ -16794,6 +17720,13 @@ private fun CollectionReorderList(
                         .height(rowHeightDp)
                         .clip(SettingsControlShape)
                         .background(if (isDragging) WarmPeach else settingsControlColor())
+                        .then(
+                            if (collection.href in hiddenCollectionHrefs) {
+                                Modifier.dashedBorder(SyncPendingOrange, 25.dp)
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clickable(onClick = { onCollectionClick(collection) }),
                 ) {
                 Row(
@@ -16866,7 +17799,7 @@ private fun CollectionReorderList(
                                                 visibleMutable.add(end, moved)
                                                 val nextVisible = visibleMutable.toMutableList()
                                                 val reorderedAll = ordered.map { item ->
-                                                    if (item.isVisibleInSettingsCalendarList()) nextVisible.removeAt(0) else item
+                                                    if (item.isVisibleInSettingsCalendarList() && item.isEnabled) nextVisible.removeAt(0) else item
                                                 }
                                                 val nextOrder = reorderedAll.map { it.href }
                                                 ordered = reorderedAll
@@ -16897,6 +17830,26 @@ private fun CollectionReorderList(
             }
           }
         }
+        if (inactiveCollections.isNotEmpty()) {
+            Text(
+                stringResource(R.string.inactive_calendars),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+            )
+            inactiveCollections.forEach { collection ->
+                key("inactive-${collection.href}") {
+                    InactiveCollectionOrderRow(
+                        collection = collection,
+                        accountName = accountNames[collection.accountId] ?: stringResource(R.string.source),
+                        hidden = collection.href in hiddenCollectionHrefs,
+                        onClick = { onCollectionClick(collection) },
+                    )
+                }
+            }
+        }
         if (ordered.none { it.isVisibleInSettingsCalendarList() }) {
             Text(
                 stringResource(R.string.no_calendars_synced),
@@ -16904,6 +17857,58 @@ private fun CollectionReorderList(
                 fontSize = 13.sp,
                 lineHeight = 16.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun InactiveCollectionOrderRow(
+    collection: CollectionEntity,
+    accountName: String,
+    hidden: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(SettingsControlHeight)
+            .clip(SettingsControlShape)
+            .background(settingsControlColor().copy(alpha = 0.72f))
+            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 25.dp) else Modifier)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 16.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(collection.color).copy(alpha = 0.62f)),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    collection.displayName,
+                    color = WarmInk.copy(alpha = 0.72f),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "$accountName - ${stringResource(R.string.calendar_inactive)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -16918,6 +17923,11 @@ private enum class SettingsDestination(val title: String) {
     Behavior("Behavior"),
     Design("Design"),
     Widgets("Widgets"),
+    WidgetAgenda("Agenda widget"),
+    WidgetMonth("Month widget"),
+    WidgetTasks("Tasks widget"),
+    WidgetMulti("Multi widget"),
+    WidgetDay("Day widget"),
     Privacy("Privacy"),
     EventFieldOrder("Event fields"),
     TaskFieldOrder("Task fields"),
@@ -16936,6 +17946,11 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.Behavior -> stringResource(R.string.behavior)
     SettingsDestination.Design -> stringResource(R.string.design)
     SettingsDestination.Widgets -> stringResource(R.string.widgets)
+    SettingsDestination.WidgetAgenda -> stringResource(R.string.widget_agenda_name)
+    SettingsDestination.WidgetMonth -> stringResource(R.string.widget_month_name)
+    SettingsDestination.WidgetTasks -> stringResource(R.string.widget_tasks_name)
+    SettingsDestination.WidgetMulti -> stringResource(R.string.widget_multi_name)
+    SettingsDestination.WidgetDay -> stringResource(R.string.widget_day_name)
     SettingsDestination.Privacy -> stringResource(R.string.privacy)
     SettingsDestination.EventFieldOrder -> stringResource(R.string.event_fields)
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
@@ -16944,10 +17959,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
 }
 
 @Composable
-private fun PrivacyPolicyPage(
-    autoLoadMapPreviews: Boolean,
-    onAutoLoadMapPreviewsChanged: (Boolean) -> Unit,
-) {
+private fun PrivacyPolicyPage() {
     val context = LocalContext.current
     SettingsSection(title = stringResource(R.string.privacy), icon = Icons.Default.Lock) {
         SettingsMenuRow(
@@ -16968,12 +17980,6 @@ private fun PrivacyPolicyPage(
         PrivacyTextCard(
             title = stringResource(R.string.privacy_location_title),
             body = stringResource(R.string.privacy_location_body),
-        )
-        SettingsSwitchRow(
-            title = stringResource(R.string.auto_map_previews),
-            checked = autoLoadMapPreviews,
-            onCheckedChange = onAutoLoadMapPreviewsChanged,
-            subtitle = stringResource(R.string.auto_map_previews_help),
         )
         PrivacyTextCard(
             title = stringResource(R.string.privacy_delete_title),
@@ -17146,6 +18152,14 @@ private fun accentContainerColor(): Color =
         WarmBrown.blendWith(Color.White, 0.18f)
     } else {
         WarmBrown.blendWith(Color.White, 0.78f)
+    }
+
+@Composable
+private fun accentContainerContentColor(): Color =
+    if (MaterialTheme.colorScheme.background.isDark()) {
+        MaterialTheme.colorScheme.background
+    } else {
+        if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
     }
 
 @Composable
@@ -17418,6 +18432,7 @@ private fun SettingsSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     subtitle: String? = null,
+    warningUnchecked: Boolean = false,
 ) {
     Surface(
         modifier = Modifier
@@ -17444,7 +18459,19 @@ private fun SettingsSwitchRow(
                     }
                 }
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = if (warningUnchecked) {
+                    SwitchDefaults.colors(
+                        uncheckedThumbColor = SyncPendingOrange,
+                        uncheckedTrackColor = SyncPendingOrange.copy(alpha = 0.28f),
+                        uncheckedBorderColor = SyncPendingOrange,
+                    )
+                } else {
+                    SwitchDefaults.colors()
+                },
+            )
         }
     }
 }
@@ -17454,7 +18481,9 @@ private fun SettingsSliderRow(
     title: String,
     subtitle: String? = null,
     value: Int,
+    valueLabel: String = value.toString(),
     range: IntRange,
+    step: Int = 1,
     onValueChanged: (Int) -> Unit,
 ) {
     Surface(
@@ -17479,13 +18508,18 @@ private fun SettingsSliderRow(
                     subtitle?.let { InlineHelpButton(it) }
                     Text(title, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
                 }
-                Text(value.toString(), color = WarmBrown, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(valueLabel, color = WarmBrown, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
             }
+            val safeStep = step.coerceAtLeast(1)
+            val span = (range.last - range.first).coerceAtLeast(safeStep)
             Slider(
                 value = value.toFloat(),
-                onValueChange = { onValueChanged(it.roundToInt().coerceIn(range.first, range.last)) },
+                onValueChange = {
+                    val snapped = range.first + (((it - range.first) / safeStep).roundToInt() * safeStep)
+                    onValueChanged(snapped.coerceIn(range.first, range.last))
+                },
                 valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = (range.last - range.first - 1).coerceAtLeast(0),
+                steps = (span / safeStep - 1).coerceAtLeast(0),
             )
         }
     }
@@ -17622,8 +18656,10 @@ private fun SettingsRadioRow(selected: Boolean, title: String, leadingIcon: Imag
 @Composable
 private fun CollectionSettingsSheet(
     collection: CollectionEntity,
+    visibleInViews: Boolean,
     onSave: (String, Int?) -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
+    onVisibleInViewsChanged: (Boolean) -> Unit,
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
@@ -17678,6 +18714,13 @@ private fun CollectionSettingsSheet(
                 Text(stringResource(R.string.remove_custom_color))
             }
         }
+        SettingsSwitchRow(
+            title = if (visibleInViews) appString(R.string.calendar_visible) else appString(R.string.calendar_hidden),
+            checked = visibleInViews,
+            onCheckedChange = onVisibleInViewsChanged,
+            subtitle = appString(R.string.calendar_sidebar_help),
+            warningUnchecked = !visibleInViews,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -17770,11 +18813,11 @@ private fun CollectionSettingsSheet(
 
 @Composable
 private fun CalendarViewMode.localizedLabel(): String = when (this) {
-    CalendarViewMode.ThreeDay -> stringResource(R.string.three_days)
-    CalendarViewMode.Day -> stringResource(R.string.day)
-    CalendarViewMode.Month -> stringResource(R.string.month)
-    CalendarViewMode.Agenda -> stringResource(R.string.agenda)
-    CalendarViewMode.Tasks -> stringResource(R.string.tasks)
+    CalendarViewMode.ThreeDay -> appString(R.string.three_days)
+    CalendarViewMode.Day -> appString(R.string.day)
+    CalendarViewMode.Month -> appString(R.string.month)
+    CalendarViewMode.Agenda -> appString(R.string.agenda)
+    CalendarViewMode.Tasks -> appString(R.string.tasks)
 }
 
 private fun CalendarViewMode.settingsIcon(): ImageVector = when (this) {
@@ -17785,7 +18828,8 @@ private fun CalendarViewMode.settingsIcon(): ImageVector = when (this) {
     CalendarViewMode.Tasks -> Icons.Default.TaskAlt
 }
 
-private fun Modifier.dashedBorder(color: Color): Modifier = drawBehind {
+private fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
+    drawContent()
     val stroke = 1.8.dp.toPx()
     drawRoundRect(
         color = color,
@@ -17799,7 +18843,8 @@ private fun Modifier.dashedBorder(color: Color): Modifier = drawBehind {
     )
 }
 
-private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehind {
+private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawWithContent {
+    drawContent()
     val stroke = 1.8.dp.toPx()
     drawRoundRect(
         color = color,
@@ -17816,13 +18861,13 @@ private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehi
 @Composable
 private fun DayOfWeek.localizedWeekdayLabel(): String =
     when (this) {
-        DayOfWeek.MONDAY -> stringResource(R.string.week_monday)
-        DayOfWeek.TUESDAY -> stringResource(R.string.week_tuesday)
-        DayOfWeek.WEDNESDAY -> stringResource(R.string.week_wednesday)
-        DayOfWeek.THURSDAY -> stringResource(R.string.week_thursday)
-        DayOfWeek.FRIDAY -> stringResource(R.string.week_friday)
-        DayOfWeek.SATURDAY -> stringResource(R.string.week_saturday)
-        DayOfWeek.SUNDAY -> stringResource(R.string.week_sunday)
+        DayOfWeek.MONDAY -> appString(R.string.week_monday)
+        DayOfWeek.TUESDAY -> appString(R.string.week_tuesday)
+        DayOfWeek.WEDNESDAY -> appString(R.string.week_wednesday)
+        DayOfWeek.THURSDAY -> appString(R.string.week_thursday)
+        DayOfWeek.FRIDAY -> appString(R.string.week_friday)
+        DayOfWeek.SATURDAY -> appString(R.string.week_saturday)
+        DayOfWeek.SUNDAY -> appString(R.string.week_sunday)
     }
 
 private fun Modifier.horizontalEdgeFade(
@@ -18171,70 +19216,70 @@ private fun TaskEntity.statusLabel(): String = when (status?.uppercase()) {
 
 @Composable
 private fun AppThemeMode.localizedLabel(): String = when (this) {
-    AppThemeMode.KgsBlue -> stringResource(R.string.kgs_blue)
-    AppThemeMode.KgsWarm -> stringResource(R.string.kgs_warm)
-    AppThemeMode.KgsFresh -> stringResource(R.string.kgs_fresh)
-    AppThemeMode.SystemDynamic -> stringResource(R.string.android_colors)
+    AppThemeMode.KgsBlue -> appString(R.string.kgs_blue)
+    AppThemeMode.KgsWarm -> appString(R.string.kgs_warm)
+    AppThemeMode.KgsFresh -> appString(R.string.kgs_fresh)
+    AppThemeMode.SystemDynamic -> appString(R.string.android_colors)
 }
 
 @Composable
 private fun AppColorMode.localizedLabel(): String = when (this) {
-    AppColorMode.Auto -> stringResource(R.string.auto)
-    AppColorMode.Light -> stringResource(R.string.light)
-    AppColorMode.Dark -> stringResource(R.string.dark)
+    AppColorMode.Auto -> appString(R.string.auto)
+    AppColorMode.Light -> appString(R.string.light)
+    AppColorMode.Dark -> appString(R.string.dark)
 }
 
 @Composable
 private fun WidgetThemeMode.localizedLabel(): String = when (this) {
-    WidgetThemeMode.FollowApp -> stringResource(R.string.follow_app)
-    WidgetThemeMode.KgsBlue -> stringResource(R.string.kgs_blue)
-    WidgetThemeMode.KgsWarm -> stringResource(R.string.kgs_warm)
-    WidgetThemeMode.KgsFresh -> stringResource(R.string.kgs_fresh)
-    WidgetThemeMode.SystemDynamic -> stringResource(R.string.android_colors)
+    WidgetThemeMode.FollowApp -> appString(R.string.follow_app)
+    WidgetThemeMode.KgsBlue -> appString(R.string.kgs_blue)
+    WidgetThemeMode.KgsWarm -> appString(R.string.kgs_warm)
+    WidgetThemeMode.KgsFresh -> appString(R.string.kgs_fresh)
+    WidgetThemeMode.SystemDynamic -> appString(R.string.android_colors)
 }
 
 @Composable
 private fun WidgetColorMode.localizedLabel(): String = when (this) {
-    WidgetColorMode.FollowApp -> stringResource(R.string.follow_app)
-    WidgetColorMode.FollowOs -> stringResource(R.string.follow_os)
-    WidgetColorMode.Light -> stringResource(R.string.light)
-    WidgetColorMode.Dark -> stringResource(R.string.dark)
+    WidgetColorMode.FollowApp -> appString(R.string.follow_app)
+    WidgetColorMode.FollowOs -> appString(R.string.follow_os)
+    WidgetColorMode.Light -> appString(R.string.light)
+    WidgetColorMode.Dark -> appString(R.string.dark)
 }
 
 @Composable
 private fun WidgetTaskDisplayMode.localizedLabel(): String = when (this) {
-    WidgetTaskDisplayMode.Planned -> stringResource(R.string.planned_tasks)
-    WidgetTaskDisplayMode.Unplanned -> stringResource(R.string.unplanned_tasks)
-    WidgetTaskDisplayMode.Today -> stringResource(R.string.tasks_for_today)
-}
-
-@Composable
-private fun WidgetTaskSortMode.localizedLabel(): String = when (this) {
-    WidgetTaskSortMode.Date -> stringResource(R.string.date)
-    WidgetTaskSortMode.Priority -> stringResource(R.string.priority)
-    WidgetTaskSortMode.Status -> stringResource(R.string.status)
+    WidgetTaskDisplayMode.Planned -> appString(R.string.planned_tasks)
+    WidgetTaskDisplayMode.Unplanned -> appString(R.string.unplanned_tasks)
+    WidgetTaskDisplayMode.Today -> appString(R.string.tasks_for_today)
 }
 
 @Composable
 private fun WidgetTaskCreateMode.localizedLabel(): String = when (this) {
-    WidgetTaskCreateMode.Today -> stringResource(R.string.create_task_for_today)
-    WidgetTaskCreateMode.Unplanned -> stringResource(R.string.create_unplanned_task)
+    WidgetTaskCreateMode.Today -> appString(R.string.create_task_for_today)
+    WidgetTaskCreateMode.Unplanned -> appString(R.string.create_unplanned_task)
+}
+
+@Composable
+private fun WidgetTaskSubtaskDefaultMode.localizedLabel(): String = when (this) {
+    WidgetTaskSubtaskDefaultMode.FollowApp -> appString(R.string.follow_app)
+    WidgetTaskSubtaskDefaultMode.Open -> appString(R.string.subtasks_default_open)
+    WidgetTaskSubtaskDefaultMode.Closed -> appString(R.string.subtasks_default_closed)
 }
 
 @Composable
 private fun AppLanguageMode.localizedLabel(): String = when (this) {
-    AppLanguageMode.System -> stringResource(R.string.follow_system)
-    AppLanguageMode.English -> stringResource(R.string.english)
-    AppLanguageMode.German -> stringResource(R.string.german)
+    AppLanguageMode.System -> appString(R.string.follow_system)
+    AppLanguageMode.English -> appString(R.string.english)
+    AppLanguageMode.German -> appString(R.string.german)
 }
 
 @Composable
 private fun TaskEntity.localizedStatusLabel(): String = when (status?.uppercase()) {
-    "IN-PROCESS" -> stringResource(R.string.in_progress)
-    "CANCELLED" -> stringResource(R.string.aborted)
-    "COMPLETED" -> stringResource(R.string.status_completed)
-    "NEEDS-ACTION" -> stringResource(R.string.status_open)
-    null -> if (isCompleted) stringResource(R.string.status_completed) else stringResource(R.string.status_open)
+    "IN-PROCESS" -> appString(R.string.in_progress)
+    "CANCELLED" -> appString(R.string.aborted)
+    "COMPLETED" -> appString(R.string.status_completed)
+    "NEEDS-ACTION" -> appString(R.string.status_open)
+    null -> if (isCompleted) appString(R.string.status_completed) else appString(R.string.status_open)
     else -> status!!
 }
 
@@ -18487,10 +19532,10 @@ private enum class ParticipantRoleOption(val value: String, val label: String) {
 
 @Composable
 private fun ParticipantRoleOption.localizedLabel(): String = when (this) {
-    ParticipantRoleOption.Chair -> stringResource(R.string.chair)
-    ParticipantRoleOption.Required -> stringResource(R.string.required_participant)
-    ParticipantRoleOption.Optional -> stringResource(R.string.optional_participant)
-    ParticipantRoleOption.NonParticipant -> stringResource(R.string.non_participant)
+    ParticipantRoleOption.Chair -> appString(R.string.chair)
+    ParticipantRoleOption.Required -> appString(R.string.required_participant)
+    ParticipantRoleOption.Optional -> appString(R.string.optional_participant)
+    ParticipantRoleOption.NonParticipant -> appString(R.string.non_participant)
 }
 
 @Composable
@@ -18741,9 +19786,9 @@ private fun String.eventStatusLabel(): String = when (uppercase(Locale.US)) {
 
 @Composable
 private fun EventEntity.statusLabelText(): String = when ((status ?: EventStatusOption.Confirmed.value).uppercase(Locale.US)) {
-    "TENTATIVE" -> stringResource(R.string.tentative)
-    "CANCELLED" -> stringResource(R.string.cancelled)
-    else -> stringResource(R.string.confirmed)
+    "TENTATIVE" -> appString(R.string.tentative)
+    "CANCELLED" -> appString(R.string.cancelled)
+    else -> appString(R.string.confirmed)
 }
 
 private fun String.eventClassLabel(): String = when (uppercase(Locale.US)) {
@@ -18754,9 +19799,9 @@ private fun String.eventClassLabel(): String = when (uppercase(Locale.US)) {
 
 @Composable
 private fun EventEntity.classLabelText(): String = when ((classification ?: EventClassOption.Public.value).uppercase(Locale.US)) {
-    "CONFIDENTIAL" -> stringResource(R.string.busy_only)
-    "PRIVATE" -> stringResource(R.string.hidden)
-    else -> stringResource(R.string.full_details)
+    "CONFIDENTIAL" -> appString(R.string.busy_only)
+    "PRIVATE" -> appString(R.string.hidden)
+    else -> appString(R.string.full_details)
 }
 
 private fun String.eventTransparencyLabel(): String = when (uppercase(Locale.US)) {
@@ -18766,8 +19811,8 @@ private fun String.eventTransparencyLabel(): String = when (uppercase(Locale.US)
 
 @Composable
 private fun EventEntity.transparencyLabelText(): String = when ((transparency ?: EventTransparencyOption.Busy.value).uppercase(Locale.US)) {
-    "TRANSPARENT" -> stringResource(R.string.free)
-    else -> stringResource(R.string.busy)
+    "TRANSPARENT" -> appString(R.string.free)
+    else -> appString(R.string.busy)
 }
 
 private fun String.participationLabel(): String = when (uppercase(Locale.US)) {
@@ -18793,11 +19838,11 @@ private fun CalendarParticipant.displayParticipationLabel(): String =
 @Composable
 private fun CalendarParticipant.localizedDisplayParticipationLabel(): String =
     localizedDeliveryStatusLabel() ?: when (partstat.uppercase(Locale.US)) {
-        "ACCEPTED" -> stringResource(R.string.accept)
-        "DECLINED" -> stringResource(R.string.decline)
-        "TENTATIVE" -> stringResource(R.string.tentative)
-        "DELEGATED" -> stringResource(R.string.delegated)
-        else -> stringResource(R.string.no_response)
+        "ACCEPTED" -> appString(R.string.accept)
+        "DECLINED" -> appString(R.string.decline)
+        "TENTATIVE" -> appString(R.string.tentative)
+        "DELEGATED" -> appString(R.string.delegated)
+        else -> appString(R.string.no_response)
     }
 
 @Composable
@@ -18830,11 +19875,19 @@ private fun CalendarParticipant.deliveryStatusColor(): Color =
     }
 
 private val TaskStatusOptions = listOf(
-    "NEEDS-ACTION" to "Offen",
-    "IN-PROCESS" to "In Bearbeitung",
-    "COMPLETED" to "Erledigt",
-    "CANCELLED" to "Abgebrochen",
+    "NEEDS-ACTION",
+    "IN-PROCESS",
+    "COMPLETED",
+    "CANCELLED",
 )
+
+@Composable
+private fun taskStatusOptionLabel(value: String): String = when (value) {
+    "IN-PROCESS" -> appString(R.string.in_progress)
+    "COMPLETED" -> appString(R.string.status_completed)
+    "CANCELLED" -> appString(R.string.aborted)
+    else -> appString(R.string.status_open)
+}
 
 /** Normalised effective status, falling back to the legacy isCompleted boolean. */
 private fun TaskEntity.effectiveStatus(): String = status?.uppercase()
@@ -18865,9 +19918,9 @@ private enum class PlannedTaskSort(val label: String) {
 
 @Composable
 private fun PlannedTaskSort.localizedLabel(): String = when (this) {
-    PlannedTaskSort.Date -> stringResource(R.string.date)
-    PlannedTaskSort.Priority -> stringResource(R.string.priority)
-    PlannedTaskSort.Status -> stringResource(R.string.status)
+    PlannedTaskSort.Date -> appString(R.string.date)
+    PlannedTaskSort.Priority -> appString(R.string.priority)
+    PlannedTaskSort.Status -> appString(R.string.status)
 }
 
 /**
@@ -18970,14 +20023,15 @@ private fun TaskStatusPickerDialog(
         ) {
             Column(modifier = Modifier.padding(vertical = 10.dp)) {
                 Text(
-                    "Status",
+                    appString(R.string.status),
                     color = WarmInk,
                     fontSize = 14.sp,
                     lineHeight = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
                 )
-                TaskStatusOptions.forEach { (value, label) ->
+                TaskStatusOptions.forEach { value ->
+                    val label = taskStatusOptionLabel(value)
                     val selected = value == current
                     Row(
                         modifier = Modifier
@@ -19302,35 +20356,6 @@ private fun String.trimHtmlDataPrefixForDisplay(): String {
     }
 }
 
-private fun String.toRecurrenceOption(): RecurrenceOption {
-    val freq = recurrenceFrequency() ?: return RecurrenceOption.Once
-    return when (freq) {
-        "DAILY" -> RecurrenceOption.Daily
-        "WEEKLY" -> if (hasOnlyFrequency()) RecurrenceOption.Weekly else RecurrenceOption.Custom
-        "MONTHLY" -> if (hasOnlyFrequency()) RecurrenceOption.Monthly else RecurrenceOption.Custom
-        "YEARLY" -> if (hasOnlyFrequency()) RecurrenceOption.Yearly else RecurrenceOption.Custom
-        else -> RecurrenceOption.Custom
-    }
-}
-
-private fun String.toRecurrenceLabel(): String {
-    val rule = trim()
-    if (rule.isBlank()) return "One-time"
-    val freqLabel = when (rule.recurrenceFrequency()) {
-        "DAILY" -> "Daily"
-        "WEEKLY" -> "Weekly"
-        "MONTHLY" -> "Monthly"
-        "YEARLY" -> "Yearly"
-        else -> "Custom"
-    }
-    val dayPart = rule.recurrencePart("BYDAY") ?: rule.recurrencePart("DAY")
-    val dayLabel = dayPart?.split(',')?.joinToString(", ") { it.toWeekdayLabel() }
-    val interval = rule.recurrencePart("INTERVAL")?.toIntOrNull()?.takeIf { it > 1 }?.let { "every $it" }
-    val count = rule.recurrencePart("COUNT")?.let { "$it times" }
-    val until = rule.recurrencePart("UNTIL")?.toIsoUntilDate()
-    return listOfNotNull(freqLabel, interval, dayLabel?.let { "on $it" }, count, until?.let { "until $it" }).joinToString(" ")
-}
-
 @Composable
 private fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
     val code = scheduleStatus
@@ -19340,10 +20365,10 @@ private fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
         ?.takeIf { it.isNotBlank() }
         ?: return null
     return when {
-        code == "1.0" -> stringResource(R.string.invitation_preparing)
+        code == "1.0" -> appString(R.string.invitation_preparing)
         code == "1.2" || code == "2.0" -> null
-        code.startsWith("1.") -> stringResource(R.string.invitation_sent)
-        code.startsWith("3.") || code.startsWith("5.") -> stringResource(R.string.delivery_failed)
+        code.startsWith("1.") -> appString(R.string.invitation_sent)
+        code.startsWith("3.") || code.startsWith("5.") -> appString(R.string.delivery_failed)
         else -> null
     }
 }
@@ -19351,25 +20376,25 @@ private fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
 @Composable
 private fun String.toLocalizedRecurrenceLabel(): String {
     val rule = trim()
-    if (rule.isBlank()) return stringResource(R.string.one_time)
+    if (rule.isBlank()) return appString(R.string.one_time)
     val freqLabel = when (rule.recurrenceFrequency()) {
-        "DAILY" -> stringResource(R.string.daily)
-        "WEEKLY" -> stringResource(R.string.weekly)
-        "MONTHLY" -> stringResource(R.string.monthly)
-        "YEARLY" -> stringResource(R.string.yearly)
-        else -> stringResource(R.string.custom_recurrence)
+        "DAILY" -> appString(R.string.daily)
+        "WEEKLY" -> appString(R.string.weekly)
+        "MONTHLY" -> appString(R.string.monthly)
+        "YEARLY" -> appString(R.string.yearly)
+        else -> appString(R.string.custom_recurrence)
     }
     val dayPart = rule.recurrencePart("BYDAY") ?: rule.recurrencePart("DAY")
     val dayLabel = dayPart?.split(',')?.map { it.toLocalizedWeekdayLabel() }?.joinToString(", ")
-    val interval = rule.recurrencePart("INTERVAL")?.toIntOrNull()?.takeIf { it > 1 }?.let { "${stringResource(R.string.every)} $it" }
-    val count = rule.recurrencePart("COUNT")?.let { stringResource(R.string.times_count, it) }
+    val interval = rule.recurrencePart("INTERVAL")?.toIntOrNull()?.takeIf { it > 1 }?.let { "${appString(R.string.every)} $it" }
+    val count = rule.recurrencePart("COUNT")?.let { appString(R.string.times_count, it) }
     val until = rule.recurrencePart("UNTIL")?.toIsoUntilDate()
     return listOfNotNull(
         freqLabel,
         interval,
-        dayLabel?.let { stringResource(R.string.on_weekday, it) },
+        dayLabel?.let { appString(R.string.on_weekday, it) },
         count,
-        until?.let { stringResource(R.string.until, it) },
+        until?.let { appString(R.string.until, it) },
     ).joinToString(" ")
 }
 
@@ -19380,54 +20405,15 @@ private fun String?.localizedReminderSummary(): String? {
     return minutes.map { reminderMinuteLabel(it) }.joinToString(", ")
 }
 
-private fun String.recurrenceFrequency(): String? =
-    recurrencePart("FREQ")?.uppercase(Locale.US)
-
-private fun String.recurrencePart(key: String): String? =
-    split(';')
-        .mapNotNull { part -> part.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0].uppercase(Locale.US) to it[1] } }
-        .firstOrNull { it.first == key.uppercase(Locale.US) }
-        ?.second
-
-private fun String.hasOnlyFrequency(): Boolean =
-    trim().split(';').filter { it.isNotBlank() }.size == 1
-
-private fun String.toIsoUntilDate(): String? {
-    val raw = take(8)
-    return runCatching { LocalDate.parse(raw, DateTimeFormatter.BASIC_ISO_DATE).toString() }.getOrNull()
-}
-
-private fun String.toRecurrenceUntilValue(): String? =
-    runCatching { LocalDate.parse(this).format(DateTimeFormatter.BASIC_ISO_DATE) }.getOrNull()
-
-private fun RecurrenceOption.intervalUnitLabel(): String = when (this) {
-    RecurrenceOption.Daily -> "Days"
-    RecurrenceOption.Weekly -> "Weeks"
-    RecurrenceOption.Monthly -> "Months"
-    RecurrenceOption.Yearly -> "Years"
-    else -> "Intervals"
-}
-
-private fun String.toWeekdayLabel(): String = when (uppercase(Locale.US)) {
-    "MO" -> "Mon"
-    "TU" -> "Tue"
-    "WE" -> "Wed"
-    "TH" -> "Thu"
-    "FR" -> "Fri"
-    "SA" -> "Sat"
-    "SU" -> "Sun"
-    else -> this
-}
-
 @Composable
 private fun String.toLocalizedWeekdayLabel(): String = when (uppercase(Locale.US)) {
-    "MO" -> stringResource(R.string.week_monday_short)
-    "TU" -> stringResource(R.string.week_tuesday_short)
-    "WE" -> stringResource(R.string.week_wednesday_short)
-    "TH" -> stringResource(R.string.week_thursday_short)
-    "FR" -> stringResource(R.string.week_friday_short)
-    "SA" -> stringResource(R.string.week_saturday_short)
-    "SU" -> stringResource(R.string.week_sunday_short)
+    "MO" -> appString(R.string.week_monday_short)
+    "TU" -> appString(R.string.week_tuesday_short)
+    "WE" -> appString(R.string.week_wednesday_short)
+    "TH" -> appString(R.string.week_thursday_short)
+    "FR" -> appString(R.string.week_friday_short)
+    "SA" -> appString(R.string.week_saturday_short)
+    "SU" -> appString(R.string.week_sunday_short)
     else -> this
 }
 
@@ -19477,35 +20463,6 @@ private fun String.parseHexColorOrNull(): Int? {
     return (0xFF000000.toInt() or normalized.toInt(16))
 }
 
-private fun LocalDate.toDayPage(): Int =
-    ChronoUnit.DAYS.between(DayPagerBaseDate, this).toInt().coerceIn(0, DayPagerPageCount - 1)
-
-private fun Int.toDayDate(): LocalDate =
-    DayPagerBaseDate.plusDays(toLong())
-
-private fun YearMonth.toMonthPage(): Int =
-    (MonthStripCenterPage + ChronoUnit.MONTHS.between(MonthStripBaseMonth, this))
-        .toInt()
-        .coerceIn(0, MonthStripPageCount - 1)
-
-private fun Int.toMonth(): YearMonth =
-    MonthStripBaseMonth.plusMonths((this - MonthStripCenterPage).toLong())
-
-private fun YearMonth.toMonthViewPage(): Int =
-    ChronoUnit.MONTHS.between(MonthViewBase, this)
-        .toInt()
-        .coerceIn(0, MonthViewPageCount - 1)
-
-private fun YearMonth.shortMonthLabel(formatter: DateTimeFormatter, locale: Locale): String {
-    val short = format(formatter).replaceFirstChar { it.titlecase(locale) }
-    val full = format(DateTimeFormatter.ofPattern("MMMM", locale)).replaceFirstChar { it.titlecase(locale) }
-    return if (short.removeSuffix(".").equals(full, ignoreCase = true)) {
-        full
-    } else {
-        short.removeSuffix(".") + "."
-    }
-}
-
 private fun LocalTime.nextDraftStart(): LocalTime {
     val nextHourMinute = ((hour + 1).coerceAtMost(23)) * 60
     return nextHourMinute.toDraftLocalTime()
@@ -19515,6 +20472,52 @@ private fun LocalTime.defaultDraftEnd(durationMinutes: Int = 60): LocalTime =
     (minuteOfDay() + durationMinutes.coerceIn(15, 24 * 60)).coerceAtMost((DayEndHour + 1) * 60 - 1).toDraftLocalTime()
 
 private fun LocalTime.minuteOfDay(): Int = hour * 60 + minute
+
+private fun LocalDate.startOfDayMillis(): Long =
+    atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+private fun eventDateTimeRangeInvalid(
+    startDateText: String,
+    endDateText: String,
+    startTimeText: String,
+    endTimeText: String,
+    allDay: Boolean,
+): Boolean {
+    val startDate = runCatching { LocalDate.parse(startDateText) }.getOrNull() ?: return false
+    val endDate = runCatching { LocalDate.parse(endDateText) }.getOrNull() ?: return false
+    if (allDay) return endDate.isBefore(startDate)
+    val startTime = runCatching { LocalTime.parse(startTimeText) }.getOrNull() ?: return false
+    val endTime = runCatching { LocalTime.parse(endTimeText) }.getOrNull() ?: return false
+    return !endDate.atTime(endTime).isAfter(startDate.atTime(startTime))
+}
+
+private fun taskDateTimeRangeInvalid(
+    hasStartDate: Boolean,
+    startDateText: String,
+    hasStartTime: Boolean,
+    startTimeText: String,
+    hasEndDate: Boolean,
+    endDateText: String,
+    hasEndTime: Boolean,
+    endTimeText: String,
+    allDay: Boolean,
+): Boolean {
+    if (!hasStartDate || !hasEndDate) return false
+    val startDate = runCatching { LocalDate.parse(startDateText) }.getOrNull() ?: return false
+    val endDate = runCatching { LocalDate.parse(endDateText) }.getOrNull() ?: return false
+    if (allDay || (!hasStartTime && !hasEndTime)) return endDate.isBefore(startDate)
+    val startTime = if (hasStartTime) {
+        runCatching { LocalTime.parse(startTimeText) }.getOrNull() ?: return false
+    } else {
+        LocalTime.MIDNIGHT
+    }
+    val endTime = if (hasEndTime) {
+        runCatching { LocalTime.parse(endTimeText) }.getOrNull() ?: return false
+    } else {
+        LocalTime.MAX
+    }
+    return !endDate.atTime(endTime).isAfter(startDate.atTime(startTime))
+}
 
 private fun Int.toDraftLocalTime(): LocalTime {
     val minute = coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - 1)
@@ -19713,36 +20716,6 @@ private fun String.toDisplayDate(): String = runCatching {
     LocalDate.parse(this).format(DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", Locale.getDefault()))
 }.getOrDefault(this)
 
-private fun YearMonth.monthGridRowCount(firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY): Int {
-    val leadingEmptyDays = atDay(1).leadingDaysFrom(firstDayOfWeek)
-    return max(5, (leadingEmptyDays + lengthOfMonth() + 6) / 7)
-}
-
-private fun YearMonth.monthGridHeight(firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY): Dp {
-    val rows = monthGridRowCount(firstDayOfWeek)
-    return (rows * 44 + (rows - 1) * 2).dp
-}
-
-private fun YearMonth.overviewPanelHeight(firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY): Dp =
-    96.dp + monthGridHeight(firstDayOfWeek)
-
-private fun LocalDate.leadingDaysFrom(firstDayOfWeek: DayOfWeek): Int =
-    (dayOfWeek.value - firstDayOfWeek.value + 7) % 7
-
-private fun weekHeaderLabels(firstDayOfWeek: DayOfWeek): List<String> =
-    (0 until 7).map { offset ->
-        val day = DayOfWeek.of(((firstDayOfWeek.value - 1 + offset) % 7) + 1)
-        when (day) {
-            DayOfWeek.MONDAY -> "M"
-            DayOfWeek.TUESDAY -> "D"
-            DayOfWeek.WEDNESDAY -> "M"
-            DayOfWeek.THURSDAY -> "D"
-            DayOfWeek.FRIDAY -> "F"
-            DayOfWeek.SATURDAY -> "S"
-            DayOfWeek.SUNDAY -> "S"
-        }
-    }
-
 sealed interface CreationSheet {
     data object EventLow : CreationSheet
     data object EventFull : CreationSheet
@@ -19753,6 +20726,16 @@ sealed interface CreationSheet {
     data class EditTask(val task: TaskEntity) : CreationSheet
     data class DuplicateEvent(val event: EventEntity) : CreationSheet
     data class DuplicateTask(val task: TaskEntity) : CreationSheet
+}
+
+private data class HiddenSaveNotice(
+    val collectionHref: String,
+    val kind: HiddenSaveKind,
+)
+
+private enum class HiddenSaveKind {
+    Event,
+    Task,
 }
 
 private sealed interface ConversionSource {
@@ -19907,32 +20890,23 @@ private enum class DraftDragMode {
     End,
 }
 
-private enum class RecurrenceOption(val label: String, val rule: String?) {
-    Once("One-time", null),
-    Daily("Daily", "FREQ=DAILY"),
-    Weekly("Weekly", "FREQ=WEEKLY"),
-    Monthly("Monthly", "FREQ=MONTHLY"),
-    Yearly("Yearly", "FREQ=YEARLY"),
-    Custom("Custom", "CUSTOM"),
-}
-
 @Composable
 private fun RecurrenceOption.localizedLabel(): String = when (this) {
-    RecurrenceOption.Once -> stringResource(R.string.one_time)
-    RecurrenceOption.Daily -> stringResource(R.string.daily)
-    RecurrenceOption.Weekly -> stringResource(R.string.weekly)
-    RecurrenceOption.Monthly -> stringResource(R.string.monthly)
-    RecurrenceOption.Yearly -> stringResource(R.string.yearly)
-    RecurrenceOption.Custom -> stringResource(R.string.custom_recurrence)
+    RecurrenceOption.Once -> appString(R.string.one_time)
+    RecurrenceOption.Daily -> appString(R.string.daily)
+    RecurrenceOption.Weekly -> appString(R.string.weekly)
+    RecurrenceOption.Monthly -> appString(R.string.monthly)
+    RecurrenceOption.Yearly -> appString(R.string.yearly)
+    RecurrenceOption.Custom -> appString(R.string.custom_recurrence)
 }
 
 @Composable
 private fun RecurrenceOption.localizedIntervalUnitLabel(): String = when (this) {
-    RecurrenceOption.Daily -> stringResource(R.string.days)
-    RecurrenceOption.Weekly -> stringResource(R.string.weeks)
-    RecurrenceOption.Monthly -> stringResource(R.string.months)
-    RecurrenceOption.Yearly -> stringResource(R.string.years)
-    else -> stringResource(R.string.intervals)
+    RecurrenceOption.Daily -> appString(R.string.days)
+    RecurrenceOption.Weekly -> appString(R.string.weeks)
+    RecurrenceOption.Monthly -> appString(R.string.months)
+    RecurrenceOption.Yearly -> appString(R.string.years)
+    else -> appString(R.string.intervals)
 }
 
 sealed interface DetailSheet {
@@ -19982,208 +20956,6 @@ private fun rememberNowMinute(): LocalTime {
         }
     }
     return now
-}
-
-private data class TimedPlacement(
-    val topDp: Float,
-    val heightDp: Float,
-    val startMinute: Int,
-    val endMinute: Int,
-)
-
-private data class TimedEventLayout(
-    val event: EventEntity,
-    val placement: TimedPlacement,
-    val lane: Int,
-    val laneCount: Int,
-)
-
-private sealed interface TimedCalendarItem {
-    val placement: TimedPlacement
-
-    data class EventItem(val event: EventEntity, override val placement: TimedPlacement) : TimedCalendarItem
-    data class TaskItem(val task: TaskEntity, override val placement: TimedPlacement) : TimedCalendarItem
-}
-
-private data class TimedCalendarLayout(
-    val item: TimedCalendarItem,
-    val placement: TimedPlacement,
-    val lane: Int,
-    val laneCount: Int,
-)
-
-private data class PendingTimedEvent(
-    val event: EventEntity,
-    val placement: TimedPlacement,
-)
-
-private data class AllDayOverlayItem(
-    val id: String,
-    val title: String,
-    val color: Int,
-    val startPage: Int,
-    val endPage: Int,
-    val lane: Int,
-    val event: EventEntity? = null,
-    val task: TaskEntity? = null,
-    val completed: Boolean = false,
-)
-
-private data class AllDayOverlaySegment(
-    val item: AllDayOverlayItem,
-    val startPage: Int,
-    val endPage: Int,
-    val lane: Int,
-)
-
-private data class AllDayContinuationSegment(
-    val item: AllDayOverlayItem,
-    val page: Int,
-    val lane: Int,
-    val fromPrevious: Boolean,
-    val toNext: Boolean,
-)
-
-private data class AllDayCollapsedLayout(
-    val segments: List<AllDayOverlaySegment>,
-    val continuations: List<AllDayContinuationSegment>,
-)
-
-private fun allDayViewportPriorityTier(
-    startPage: Int,
-    endPage: Int,
-    visibleStartPage: Int,
-    visibleEndPage: Int,
-): Int {
-    val fillsVisibleWindow = startPage <= visibleStartPage && endPage >= visibleEndPage
-    return if (startPage < visibleStartPage || fillsVisibleWindow) 0 else 1
-}
-
-private fun allDayCollapsedPageItemComparator(
-    visibleStartPage: Int,
-    visibleEndPage: Int,
-): Comparator<AllDayOverlayItem> =
-    compareBy<AllDayOverlayItem> { allDayViewportPriorityTier(it.startPage, it.endPage, visibleStartPage, visibleEndPage) }
-        .thenByDescending { it.endPage - it.startPage }
-        .thenBy { it.startPage }
-        .thenBy { it.lane }
-        .thenBy { it.title }
-
-private fun buildCollapsedAllDayLayout(
-    overlayItems: List<AllDayOverlayItem>,
-    pageItemsByPage: Map<Int, List<AllDayOverlayItem>>,
-    visibleStartPage: Int,
-    visibleEndPage: Int,
-    maxVisibleItems: Int,
-    collapsedVisibleItemLimit: Int,
-): AllDayCollapsedLayout {
-    val overflowVisibleLimit = when {
-        maxVisibleItems <= 0 -> 0
-        else -> (maxVisibleItems - 1).coerceAtLeast(0)
-    }
-
-    fun pageVisibleLimit(pageItems: List<AllDayOverlayItem>): Int =
-        if (pageItems.size > maxVisibleItems) overflowVisibleLimit else maxVisibleItems
-
-    fun itemVisibleOnPage(item: AllDayOverlayItem, page: Int): Boolean {
-        val pageItems = pageItemsByPage[page].orEmpty()
-        if (pageItems.isEmpty()) return false
-        val limit = pageVisibleLimit(pageItems)
-        if (limit <= 0) return false
-        return pageItems.take(limit).any { it.id == item.id }
-    }
-
-    fun itemHiddenOnCollapsedPage(item: AllDayOverlayItem, page: Int): Boolean {
-        val pageItems = pageItemsByPage[page].orEmpty()
-        if (pageItems.size <= maxVisibleItems) return false
-        return pageItems.any { it.id == item.id } && !itemVisibleOnPage(item, page)
-    }
-
-    val rawSegments = overlayItems.flatMap { item ->
-        val visiblePages = (max(item.startPage, visibleStartPage)..min(item.endPage, visibleEndPage))
-            .filter { page -> itemVisibleOnPage(item, page) }
-        if (visiblePages.isEmpty()) return@flatMap emptyList()
-        val segments = mutableListOf<AllDayOverlaySegment>()
-        var start = visiblePages.first()
-        var previous = start
-        visiblePages.drop(1).forEach { page ->
-            if (page == previous + 1) {
-                previous = page
-            } else {
-                segments += AllDayOverlaySegment(item, start, previous, lane = item.lane)
-                start = page
-                previous = page
-            }
-        }
-        segments += AllDayOverlaySegment(item, start, previous, lane = item.lane)
-        segments
-    }
-
-    val assignedSegments = assignCollapsedAllDaySegmentLanes(rawSegments)
-    val continuations = overlayItems.flatMap { item ->
-        val firstPage = max(item.startPage, visibleStartPage)
-        val lastPage = min(item.endPage, visibleEndPage)
-        if (firstPage > lastPage) return@flatMap emptyList()
-        (firstPage..lastPage).mapNotNull { page ->
-            if (!itemHiddenOnCollapsedPage(item, page)) return@mapNotNull null
-            val previousSegment = assignedSegments
-                .filter { it.item.id == item.id && it.endPage < page }
-                .maxByOrNull { it.endPage }
-            val nextSegment = assignedSegments
-                .filter { it.item.id == item.id && it.startPage > page }
-                .minByOrNull { it.startPage }
-            val previousPageHidden = page > visibleStartPage && itemHiddenOnCollapsedPage(item, page - 1)
-            val nextPageHidden = page < visibleEndPage && itemHiddenOnCollapsedPage(item, page + 1)
-            val fromPrevious = (previousSegment != null || item.startPage < page) && !previousPageHidden
-            val toNext = (nextSegment != null || item.endPage > page) && !nextPageHidden
-            val lane = when {
-                previousSegment != null -> previousSegment.lane
-                nextSegment != null -> nextSegment.lane
-                else -> overflowVisibleLimit
-            }.coerceIn(0, overflowVisibleLimit)
-            if (!fromPrevious && !toNext) {
-                null
-            } else {
-                AllDayContinuationSegment(
-                    item = item,
-                    page = page,
-                    lane = lane,
-                    fromPrevious = fromPrevious,
-                    toNext = toNext,
-                )
-            }
-        }
-    }
-    return AllDayCollapsedLayout(
-        segments = assignedSegments,
-        continuations = continuations,
-    )
-}
-
-private fun assignCollapsedAllDaySegmentLanes(segments: List<AllDayOverlaySegment>): List<AllDayOverlaySegment> {
-    if (segments.isEmpty()) return emptyList()
-    data class AssignedSegment(
-        val segment: AllDayOverlaySegment,
-        var lane: Int,
-    )
-
-    val laneEnds = mutableListOf<Int>()
-    val assigned = segments
-        .sortedWith(
-            compareBy<AllDayOverlaySegment> { it.startPage }
-                .thenBy { it.item.lane }
-                .thenBy { it.item.title },
-        )
-        .map { segment ->
-            val lane = laneEnds.indexOfFirst { it < segment.startPage }.let { index ->
-                if (index >= 0) index else laneEnds.size.also { laneEnds.add(Int.MIN_VALUE) }
-            }
-            laneEnds[lane] = segment.endPage
-            AssignedSegment(segment, lane)
-        }
-        .toMutableList()
-
-    return assigned.map { it.segment.copy(lane = it.lane) }
 }
 
 private fun buildAllDayOverlayItems(
@@ -20284,217 +21056,21 @@ private fun buildAllDayOverlayItems(
     }
 }
 
-private fun layoutTimedItemsForDay(
-    day: LocalDate,
-    hourHeightDp: Float,
-    events: List<EventEntity>,
-    tasks: List<TaskEntity>,
-): List<TimedCalendarLayout> {
-    val pending = buildList {
-        events.forEach { event ->
-            event.timedPlacementOn(day, hourHeightDp)?.let { add(TimedCalendarItem.EventItem(event, it)) }
-        }
-        tasks.forEach { task ->
-            task.timedPlacementOn(day, hourHeightDp)?.let { add(TimedCalendarItem.TaskItem(task, it)) }
-        }
-    }.sortedWith(compareBy<TimedCalendarItem> { it.placement.startMinute }.thenBy { it.placement.endMinute })
-
-    val result = mutableListOf<TimedCalendarLayout>()
-    val group = mutableListOf<TimedCalendarItem>()
-    var groupEnd = Int.MIN_VALUE
-
-    fun flushGroup() {
-        if (group.isEmpty()) return
-        val laneEnds = mutableListOf<Int>()
-        val assigned = group.map { item ->
-            val lane = laneEnds.indexOfFirst { it <= item.placement.startMinute }.let { index ->
-                if (index >= 0) index else laneEnds.size.also { laneEnds.add(Int.MIN_VALUE) }
-            }
-            laneEnds[lane] = item.placement.endMinute
-            item to lane
-        }
-        val laneCount = max(1, laneEnds.size)
-        assigned.forEach { (item, lane) ->
-            result += TimedCalendarLayout(item, item.placement, lane, laneCount)
-        }
-        group.clear()
-        groupEnd = Int.MIN_VALUE
-    }
-
-    pending.forEach { item ->
-        if (group.isNotEmpty() && item.placement.startMinute >= groupEnd) {
-            flushGroup()
-        }
-        group += item
-        groupEnd = max(groupEnd, item.placement.endMinute)
-    }
-    flushGroup()
-
-    return result
-}
-
-private fun List<EventEntity>.layoutTimedEventsForDay(day: LocalDate, hourHeightDp: Float): List<TimedEventLayout> {
-    val pending = mapNotNull { event ->
-        event.timedPlacementOn(day, hourHeightDp)?.let { PendingTimedEvent(event, it) }
-    }.sortedWith(compareBy<PendingTimedEvent> { it.placement.startMinute }.thenBy { it.placement.endMinute })
-
-    val result = mutableListOf<TimedEventLayout>()
-    val group = mutableListOf<PendingTimedEvent>()
-    var groupEnd = Int.MIN_VALUE
-
-    fun flushGroup() {
-        if (group.isEmpty()) return
-        val laneEnds = mutableListOf<Int>()
-        val assigned = group.map { item ->
-            val lane = laneEnds.indexOfFirst { it <= item.placement.startMinute }.let { index ->
-                if (index >= 0) index else laneEnds.size.also { laneEnds.add(Int.MIN_VALUE) }
-            }
-            laneEnds[lane] = item.placement.endMinute
-            item to lane
-        }
-        val laneCount = max(1, laneEnds.size)
-        assigned.forEach { (item, lane) ->
-            result += TimedEventLayout(item.event, item.placement, lane, laneCount)
-        }
-        group.clear()
-        groupEnd = Int.MIN_VALUE
-    }
-
-    pending.forEach { item ->
-        if (group.isNotEmpty() && item.placement.startMinute >= groupEnd) {
-            flushGroup()
-        }
-        group += item
-        groupEnd = max(groupEnd, item.placement.endMinute)
-    }
-    flushGroup()
-
-    return result
-}
-
-private fun EventEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlacement? {
-    if (allDay || isTimedMultiDayMiddleOn(day)) return null
-    val visibleStart = day.atTime(DayStartHour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val visibleEnd = day.atTime(DayEndHour, 0).plusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val overlapStart = max(startsAtMillis, visibleStart)
-    val overlapEnd = min(endsAtMillis, visibleEnd)
-    if (overlapEnd <= overlapStart) return null
-
-    val topMinutes = ((overlapStart - visibleStart) / 60_000.0).roundToInt()
-    val durationMinutes = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
-    return TimedPlacement(
-        topDp = topMinutes / 60f * hourHeightDp,
-        heightDp = max(4f, durationMinutes / 60f * hourHeightDp),
-        startMinute = topMinutes,
-        endMinute = topMinutes + durationMinutes,
-    )
-}
-
-private fun TaskEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlacement? {
-    val startTimed = startAtMillis?.takeIf { startHasTime }
-    val dueTimed = dueAtMillis?.takeIf { dueHasTime }
-    if (startTimed == null && dueTimed == null) return null
-
-    val start = startTimed ?: (dueTimed!! - DEFAULT_TASK_DURATION_MILLIS)
-    val end = when {
-        startTimed != null && dueTimed != null && dueTimed > startTimed -> dueTimed
-        startTimed != null -> startTimed + DEFAULT_TASK_DURATION_MILLIS
-        else -> dueTimed!!
-    }
-    val visibleStart = day.atTime(DayStartHour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val visibleEnd = day.atTime(DayEndHour, 0).plusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val overlapStart = max(start, visibleStart)
-    val overlapEnd = min(max(end, start + DEFAULT_TASK_DURATION_MILLIS), visibleEnd)
-    if (overlapEnd <= overlapStart) return null
-
-    val topMinutes = ((overlapStart - visibleStart) / 60_000.0).roundToInt()
-    val durationMinutes = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
-    return TimedPlacement(
-        topDp = topMinutes / 60f * hourHeightDp,
-        heightDp = max(4f, durationMinutes / 60f * hourHeightDp),
-        startMinute = topMinutes,
-        endMinute = topMinutes + durationMinutes,
-    )
-}
-
-private fun TaskEntity.isFullDayTaskOn(day: LocalDate): Boolean {
-    if (startAtMillis == null && dueAtMillis == null) return false
-    if (startHasTime || dueHasTime) return false
-    return day in visibleDates()
-}
-
-private fun EventEntity.occursOn(date: LocalDate): Boolean {
-    val start = startsAtMillis.toDate()
-    val end = endDateInclusive()
-    return !date.isBefore(start) && !date.isAfter(end)
-}
-
-private fun EventEntity.endDateInclusive(): LocalDate =
-    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(ZoneId.systemDefault()).toLocalDate()
-
-private fun EventEntity.isTimedMultiDay(): Boolean =
-    !allDay && startsAtMillis.toDate().isBefore(endDateInclusive())
-
-private fun EventEntity.isTimedMultiDayMiddleOn(date: LocalDate): Boolean {
-    if (!isTimedMultiDay()) return false
-    val start = startsAtMillis.toDate()
-    val end = endDateInclusive()
-    return date.isAfter(start) && date.isBefore(end)
-}
-
-private fun EventEntity.isAllDayTopItemOn(date: LocalDate): Boolean =
-    if (allDay) occursOn(date) else isTimedMultiDayMiddleOn(date)
-
-private fun EventEntity.allDayTopStartDate(): LocalDate? =
-    if (allDay) {
-        startsAtMillis.toDate()
-    } else if (isTimedMultiDay()) {
-        startsAtMillis.toDate().plusDays(1).takeIf { !it.isAfter(endDateInclusive().minusDays(1)) }
-    } else {
-        null
-    }
-
-private fun EventEntity.allDayTopEndDate(): LocalDate? =
-    if (allDay) {
-        endDateInclusive()
-    } else if (isTimedMultiDay()) {
-        endDateInclusive().minusDays(1).takeIf { !it.isBefore(startsAtMillis.toDate().plusDays(1)) }
-    } else {
-        null
-    }
-
-private fun TaskEntity.taskDate(): LocalDate? {
-    val millis = dueAtMillis ?: startAtMillis ?: return null
-    return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-}
-
-private fun TaskEntity.agendaSortMillis(): Long? =
-    startAtMillis ?: dueAtMillis
-
-private fun TaskEntity.occurrenceStartForEdit(): Long =
-    startAtMillis ?: dueAtMillis ?: System.currentTimeMillis()
-
-private fun TaskEntity.visibleDates(): List<LocalDate> {
-    val start = startAtMillis?.toDate()
-    val due = dueAtMillis?.toDate()
-    val first = start ?: due ?: return emptyList()
-    val last = due ?: start ?: first
-    if (last.isBefore(first)) return listOf(first)
-    val dates = mutableListOf<LocalDate>()
-    var date = first
-    var guard = 0
-    while (!date.isAfter(last) && guard < 370) {
-        dates += date
-        date = date.plusDays(1)
-        guard++
-    }
-    return dates
-}
-
 @Composable
 private fun EventEntity.localizedTimeLabel(): String {
     if (allDay) return stringResource(R.string.all_day)
     return "${startsAtMillis.toTimeText()} - ${endsAtMillis.toTimeText()}"
+}
+
+@Composable
+private fun EventEntity.localizedAgendaSpanLabel(startDate: LocalDate, endDate: LocalDate): String {
+    val dateFormatter = DateTimeFormatter.ofPattern("d. MMM yyyy", LocalAppLocale.current)
+    val allDayLabel = appString(R.string.all_day)
+    return if (allDay) {
+        "${startDate.format(dateFormatter)} - ${endDate.format(dateFormatter)}, $allDayLabel"
+    } else {
+        "${startDate.format(dateFormatter)} - ${endDate.format(dateFormatter)}"
+    }
 }
 
 @Composable
@@ -20528,15 +21104,6 @@ private fun TaskEntity.localizedTaskTimeLabel(): String {
         else -> "$dateText, ${stringResource(R.string.all_day)}"
     }
 }
-
-private fun Long.toDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
-
-private fun Long.toTime(): LocalTime =
-    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalTime()
-
-private fun Long.toTimeText(): String =
-    toTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 
 private fun Color.isDark(): Boolean {
     val luminance = 0.299f * red + 0.587f * green + 0.114f * blue

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_month_day_root"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_marginStart="1dp"
+    android:layout_marginTop="1dp"
+    android:layout_marginEnd="1dp"
+    android:layout_marginBottom="1dp"
+    android:layout_weight="1">
+
+    <TextView
+        android:id="@+id/widget_month_day_card_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_item_background"
+        android:text="" />
+
+    <TextView
+        android:id="@+id/widget_month_day_text"
+        android:layout_width="32dp"
+        android:layout_height="15dp"
+        android:layout_gravity="top|start"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="top|start"
+        android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="1dp"
+        android:textColor="#17202A"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_month_overflow_text"
+        android:layout_width="36dp"
+        android:layout_height="15dp"
+        android:layout_gravity="top|end"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical|end"
+        android:maxLines="1"
+        android:paddingStart="1dp"
+        android:paddingEnd="8dp"
+        android:textColor="#526173"
+        android:textSize="8sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="15dp"
+        android:orientation="vertical"
+        android:paddingBottom="1dp">
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_1_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_1_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_2_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_2_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_3_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_3_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_4_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_4_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_5_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_5_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_6_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_6_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_7_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_7_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_month_chip_8_container"
+            style="@style/WidgetMonthDynamicChipContainer">
+
+            <TextView
+                android:id="@+id/widget_month_chip_8_text"
+                style="@style/WidgetMonthDynamicChipText" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_month_bottom_fade"
+        android:layout_width="match_parent"
+        android:layout_height="11dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/widget_month_cell_bottom_fade"
+        android:text="" />
+</FrameLayout>

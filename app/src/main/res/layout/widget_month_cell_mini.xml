@@ -3,7 +3,9 @@
     android:id="@+id/widget_month_day_root"
     android:layout_width="0dp"
     android:layout_height="match_parent"
+    android:layout_marginStart="1dp"
     android:layout_marginTop="1dp"
+    android:layout_marginEnd="1dp"
     android:layout_marginBottom="1dp"
     android:layout_weight="1">
 
@@ -11,149 +13,115 @@
         android:id="@+id/widget_month_day_card_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginStart="1dp"
-        android:layout_marginEnd="1dp"
-        android:text=""
-        android:background="@drawable/widget_month_cell_compact" />
+        android:background="@drawable/widget_month_cell_compact"
+        android:text="" />
+
+    <TextView
+        android:id="@+id/widget_month_day_text"
+        android:layout_width="28dp"
+        android:layout_height="13dp"
+        android:layout_gravity="top|start"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="top|start"
+        android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="1dp"
+        android:textColor="#17202A"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_month_overflow_text"
+        android:layout_width="34dp"
+        android:layout_height="13dp"
+        android:layout_gravity="top|end"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical|end"
+        android:maxLines="1"
+        android:paddingStart="1dp"
+        android:paddingEnd="8dp"
+        android:textColor="#526173"
+        android:textSize="7sp"
+        android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/widget_month_dot_area"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingStart="1dp"
-        android:paddingTop="1dp"
-        android:paddingEnd="1dp"
-        android:paddingBottom="1dp">
-
-        <TextView
-            android:id="@+id/widget_month_day_text"
-            android:layout_width="match_parent"
-            android:layout_height="11dp"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="#17202A"
-            android:textSize="10sp" />
+        android:layout_marginTop="15dp"
+        android:background="@android:color/transparent"
+        android:gravity="top|center_horizontal"
+        android:orientation="vertical">
 
         <LinearLayout
-            android:id="@+id/widget_month_dot_area"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="top|center_horizontal"
-            android:orientation="vertical">
+            android:id="@+id/widget_month_dot_row_1"
+            android:layout_width="wrap_content"
+            android:layout_height="9dp"
+            android:background="@android:color/transparent"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
 
-            <LinearLayout
-                android:id="@+id/widget_month_dot_row_1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:visibility="gone">
+            <ImageView
+                android:id="@+id/widget_month_dot_1"
+                style="@style/WidgetMonthDot" />
 
-                <TextView
-                    android:id="@+id/widget_month_dot_1"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
+            <ImageView
+                android:id="@+id/widget_month_dot_2"
+                style="@style/WidgetMonthDot" />
 
-                <TextView
-                    android:id="@+id/widget_month_dot_2"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
+            <ImageView
+                android:id="@+id/widget_month_dot_3"
+                style="@style/WidgetMonthDot" />
 
-                <TextView
-                    android:id="@+id/widget_month_dot_3"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
+            <ImageView
+                android:id="@+id/widget_month_dot_4"
+                style="@style/WidgetMonthDot" />
 
-                <TextView
-                    android:id="@+id/widget_month_dot_4"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/widget_month_dot_row_2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/widget_month_dot_5"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/widget_month_dot_6"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/widget_month_dot_7"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/widget_month_dot_8"
-                    android:layout_width="5dp"
-                    android:layout_height="6dp"
-                    android:gravity="center"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:textSize="8sp"
-                    android:visibility="gone" />
-            </LinearLayout>
+            <ImageView
+                android:id="@+id/widget_month_dot_5"
+                style="@style/WidgetMonthDot" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/widget_month_overflow_text"
-            android:layout_width="match_parent"
-            android:layout_height="8dp"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
+        <LinearLayout
+            android:id="@+id/widget_month_dot_row_2"
+            android:layout_width="wrap_content"
+            android:layout_height="9dp"
+            android:layout_marginTop="-1dp"
+            android:background="@android:color/transparent"
             android:gravity="center"
-            android:maxLines="1"
-            android:textColor="#526173"
-            android:textSize="7sp"
-            android:visibility="gone" />
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/widget_month_dot_6"
+                style="@style/WidgetMonthDot" />
+
+            <ImageView
+                android:id="@+id/widget_month_dot_7"
+                style="@style/WidgetMonthDot" />
+
+            <ImageView
+                android:id="@+id/widget_month_dot_8"
+                style="@style/WidgetMonthDot" />
+
+            <ImageView
+                android:id="@+id/widget_month_dot_9"
+                style="@style/WidgetMonthDot" />
+
+            <ImageView
+                android:id="@+id/widget_month_dot_10"
+                style="@style/WidgetMonthDot" />
+        </LinearLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_month_bottom_fade"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/widget_month_cell_bottom_fade"
+        android:text=""
+        android:visibility="gone" />
 </FrameLayout>

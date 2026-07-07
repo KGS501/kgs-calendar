@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:clipToOutline="true">
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/widget_padding"
+        android:paddingTop="@dimen/widget_padding"
+        android:paddingEnd="@dimen/widget_padding"
+        android:paddingBottom="0dp">
+
+        <LinearLayout
+            android:id="@+id/widget_header"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_month_prev"
+                android:layout_width="42dp"
+                android:layout_height="34dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#2563A8"
+                android:textSize="24sp" />
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:maxLines="1"
+                android:text="@string/day"
+                android:textColor="#17202A"
+                android:textSize="16sp" />
+
+            <ImageView
+                android:id="@+id/widget_day_today"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/widget_badge_background"
+                android:contentDescription="@string/today"
+                android:padding="7dp"
+                android:scaleType="center"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/widget_badge"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/widget_badge_background"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/widget_month_next"
+                android:layout_width="42dp"
+                android:layout_height="34dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#2563A8"
+                android:textSize="24sp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/widget_day_header_compact"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/widget_month_prev_compact"
+                android:layout_width="42dp"
+                android:layout_height="34dp"
+                android:layout_gravity="start|center_vertical"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#2563A8"
+                android:textSize="24sp" />
+
+            <ImageView
+                android:id="@+id/widget_day_today_compact"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center"
+                android:background="@drawable/widget_badge_background"
+                android:contentDescription="@string/today"
+                android:padding="7dp"
+                android:scaleType="center"
+                android:translationX="-42dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/widget_badge_compact"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center"
+                android:background="@drawable/widget_badge_background"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp" />
+
+            <TextView
+                android:id="@+id/widget_month_next_compact"
+                android:layout_width="42dp"
+                android:layout_height="34dp"
+                android:layout_gravity="end|center_vertical"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="#2563A8"
+                android:textSize="24sp" />
+        </FrameLayout>
+
+        <ImageView
+            android:id="@+id/widget_day_timeline_art"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginStart="-12dp"
+            android:layout_marginTop="0dp"
+            android:layout_marginEnd="-12dp"
+            android:layout_weight="1"
+            android:contentDescription="@null"
+            android:scaleType="fitXY"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/widget_day_all_day_section"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginStart="-12dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="-12dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/widget_day_all_day_art"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitXY" />
+
+            <include layout="@layout/widget_day_priority_motion" />
+
+            <FrameLayout
+                android:id="@+id/widget_day_all_day_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/widget_empty"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/widget_month_section"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/widget_day_list_viewport"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginStart="-12dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="-12dp"
+            android:layout_marginBottom="0dp"
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+
+            <ListView
+                android:id="@+id/widget_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:cacheColorHint="@android:color/transparent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="0dp"
+                android:fadingEdge="none"
+                android:fastScrollEnabled="false"
+                android:listSelector="@android:color/transparent"
+                android:overScrollMode="never"
+                android:scrollbars="none" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_bottom_fade"
+        android:layout_width="match_parent"
+        android:layout_height="14dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/widget_bottom_fade"
+        android:clickable="false"
+        android:focusable="false"
+        android:text="" />
+</FrameLayout>

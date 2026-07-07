@@ -142,6 +142,15 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE resourceHref = :resourceHref")
     suspend fun byResource(resourceHref: String): EventEntity?
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM events
+        INNER JOIN collections ON collections.href = events.collectionHref
+        WHERE collections.sourceType = :sourceType
+        """,
+    )
+    suspend fun countForCollectionSource(sourceType: String): Int
+
     @Upsert
     suspend fun upsert(event: EventEntity)
 
