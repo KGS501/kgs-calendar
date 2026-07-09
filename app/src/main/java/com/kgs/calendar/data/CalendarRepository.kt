@@ -1593,7 +1593,6 @@ class CalendarRepository(
             supportsEvents = supportsEvents,
             supportsTasks = supportsTasks,
         )
-        syncNow(forceFullCalDavRefresh = true)
     }
 
     suspend fun deleteCalDavCalendar(href: String) {

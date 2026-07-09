@@ -13,6 +13,10 @@ import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.reminder.ReminderScheduler
+import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
+import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -62,6 +66,20 @@ class AppGraph(context: Context) {
         calDavClient = calDavHttpClient,
         androidCalendarProviderClient = androidCalendarProviderClient,
         icalCodec = icalCodec,
+    )
+
+    val sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(
+        includeDisabledProviderCalendars = { settingsStore.showDisabledAndroidProviderCalendars.first() },
+        fullRefresh = { includeDisabledProviderCalendars ->
+            repository.syncNow(
+                includeDisabledProviderCalendars = includeDisabledProviderCalendars,
+                forceFullCalDavRefresh = true,
+            )
+        },
+        reconcileLocalState = {
+            ReminderScheduler.reschedule(appContext)
+            KgsWidgetUpdateScheduler.updateAll(appContext)
+        },
     )
 
     private companion object {

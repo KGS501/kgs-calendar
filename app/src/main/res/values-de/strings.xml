@@ -538,4 +538,6 @@
     <string name="tasks_widget_settings_help">Diese Einstellungen betreffen nur das Aufgaben-Widget. Aufgabenzeilen k&#246;nnen eine Aufgabe in der App &#246;ffnen, und der Statuskreis schaltet direkt auf dem Homescreen zwischen offen und erledigt um.</string>
     <string name="follow_app">App folgen</string>
     <string name="follow_os">System folgen</string>
+    <string name="calendar_settings_saved_refresh_failed">Die Kalendereinstellung wurde gespeichert, aber die vollst&#228;ndige Aktualisierung ist fehlgeschlagen. Beim n&#228;chsten Abgleich wird sie erneut versucht.</string>
+    <string name="calendar_settings_saved_reconciliation_failed">Die Kalendereinstellung und Aktualisierung wurden abgeschlossen, aber Erinnerungen oder Widgets konnten nicht aktualisiert werden.</string>
 </resources>

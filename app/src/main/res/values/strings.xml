@@ -538,4 +538,6 @@
     <string name="tasks_widget_settings_help">These controls only affect the tasks widget. Task rows can open a task in the app, and the status circle toggles open/completed from the home screen.</string>
     <string name="follow_app">Follow app</string>
     <string name="follow_os">Follow OS</string>
+    <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
+    <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
 </resources>

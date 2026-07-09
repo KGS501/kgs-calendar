@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.kgs.calendar.AppGraph
 import com.kgs.calendar.KgsCalendarApplication
+import com.kgs.calendar.R
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.AppColorMode
@@ -26,6 +27,10 @@ import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.reminder.ReminderScheduler
+import com.kgs.calendar.sync.CalendarStructuralMutation
+import com.kgs.calendar.sync.PostMutationStage
+import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.sync.StructuralMutationResult
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,6 +65,7 @@ data class CalendarWidgetLaunchTarget(
 class CalendarViewModel(
     private val repository: CalendarRepository,
     private val settingsStore: SettingsStore,
+    private val sourceCalendarMutationCoordinator: SourceCalendarMutationCoordinator,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
@@ -751,7 +757,9 @@ class CalendarViewModel(
         viewModelScope.launch {
             busy.value = true
             val saved = runCatching {
-                repository.saveManualAccount(serverUrl, username, appPassword)
+                sourceCalendarMutationCoordinator.run(CalendarStructuralMutation.AddSource) {
+                    repository.saveManualAccount(serverUrl, username, appPassword)
+                }
             }
             saved.onFailure {
                 val errorMessage = it.message ?: "Could not verify this CalDAV login."
@@ -762,80 +770,52 @@ class CalendarViewModel(
             if (saved.isFailure) {
                 return@launch
             }
-
-            message.value = "CalDAV account added."
+            refreshAndroidProviderDiagnosticsInternal()
+            val resultMessage = structuralMutationMessage(saved.getOrThrow(), "CalDAV account synced.")
+            message.value = resultMessage
             busy.value = false
-            onResult?.invoke(true, null)
-
-            runCatching {
-                repository.syncNow(
-                    includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                    forceFullCalDavRefresh = true,
-                )
-            }.onSuccess {
-                message.value = "CalDAV account synced."
-            }.onFailure {
-                val errorMessage = it.message ?: "The CalDAV account was added, but its first sync failed."
-                message.value = errorMessage
-            }
-            runCatching { ReminderScheduler.reschedule(appContext) }
+            onResult?.invoke(true, resultMessage)
         }
     }
 
     fun startBrowserLogin(serverUrl: String) {
-        runBusy(rescheduleReminders = true) {
-            val start = repository.startLoginFlow(serverUrl)
-            externalLoginUrl.value = start.loginUrl
-            repository.completeLoginFlow(start.pollEndpoint, start.token)
-            repository.syncNow(
-                includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                forceFullCalDavRefresh = true,
-            )
-            message.value = "Login complete."
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Login complete.") {
+            val login = repository.startLoginFlow(serverUrl)
+            externalLoginUrl.value = login.loginUrl
+            repository.completeLoginFlow(login.pollEndpoint, login.token)
         }
     }
 
     fun addReadOnlyCalendar(url: String) {
-        runBusy(rescheduleReminders = true, showManualSync = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Read-only calendar added.", showManualSync = true) {
             repository.addReadOnlyCalendar(url)
-            syncAllSourcesAfterAddingSource()
-            message.value = "Read-only calendar added."
         }
     }
 
     fun addAndroidDeviceCalendars() {
-        runBusy(rescheduleReminders = true, showManualSync = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Android device calendars added.", showManualSync = true) {
             repository.enableAndroidCalendars(
                 includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
             )
             (appContext.applicationContext as? KgsCalendarApplication)?.registerAndroidCalendarObserverIfPermitted()
-            syncAllSourcesAfterAddingSource()
-            message.value = "Android device calendars added."
         }
     }
 
     fun renameAccount(accountId: String, displayName: String) {
-        runBusy {
+        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source renamed.") {
             repository.renameAccount(accountId, displayName)
-            message.value = "Source renamed."
         }
     }
 
     fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source updated.") {
             repository.updateAccount(accountId, displayName, serverUrl, username, appPassword)
-            repository.syncNow(
-                includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                forceFullCalDavRefresh = true,
-            )
-            message.value = "Source updated."
         }
     }
 
     fun deleteAccount(accountId: String) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
             repository.deleteAccount(accountId)
-            message.value = "Source removed."
         }
     }
 
@@ -1017,13 +997,13 @@ class CalendarViewModel(
     }
 
     fun setCollectionEnabled(href: String, enabled: Boolean) {
-        viewModelScope.launch {
-            runCatching {
-                repository.setCollectionEnabled(href, enabled)
-                message.value = null
-            }.onFailure {
-                message.value = it.message ?: "Could not update calendar."
-            }
+        val kind = if (enabled) {
+            CalendarStructuralMutation.EnableCalendar
+        } else {
+            CalendarStructuralMutation.DisableCalendar
+        }
+        runStructuralMutation(kind) {
+            repository.setCollectionEnabled(href, enabled)
         }
     }
 
@@ -1034,13 +1014,8 @@ class CalendarViewModel(
     }
 
     fun updateCollectionAppearance(href: String, displayName: String, customColor: Int?) {
-        viewModelScope.launch {
-            runCatching {
-                repository.updateCollectionAppearance(href, displayName, customColor)
-                message.value = null
-            }.onFailure {
-                message.value = it.message ?: "Could not update calendar."
-            }
+        runStructuralMutation(CalendarStructuralMutation.EditCalendar) {
+            repository.updateCollectionAppearance(href, displayName, customColor)
         }
     }
 
@@ -1050,7 +1025,7 @@ class CalendarViewModel(
         supportsEvents: Boolean,
         supportsTasks: Boolean,
     ) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddCalendar, "CalDAV calendar created.") {
             repository.createCalDavCalendar(
                 accountId = accountId,
                 displayName = displayName,
@@ -1058,14 +1033,12 @@ class CalendarViewModel(
                 supportsEvents = supportsEvents,
                 supportsTasks = supportsTasks,
             )
-            message.value = "CalDAV calendar created."
         }
     }
 
     fun deleteCalDavCalendar(href: String) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.RemoveCalendar, "CalDAV calendar deleted.") {
             repository.deleteCalDavCalendar(href)
-            message.value = "CalDAV calendar deleted."
         }
     }
 
@@ -1130,6 +1103,39 @@ class CalendarViewModel(
         }
     }
 
+    private fun runStructuralMutation(
+        kind: CalendarStructuralMutation,
+        successMessage: String? = null,
+        showManualSync: Boolean = false,
+        mutation: suspend () -> Unit,
+    ) {
+        viewModelScope.launch {
+            busy.value = true
+            if (showManualSync) manualSyncing.value = true
+            runCatching {
+                sourceCalendarMutationCoordinator.run(kind, mutation)
+            }.onSuccess { result ->
+                refreshAndroidProviderDiagnosticsInternal()
+                message.value = structuralMutationMessage(result, successMessage)
+            }.onFailure {
+                message.value = it.message ?: "Could not update calendar settings."
+            }
+            if (showManualSync) manualSyncing.value = false
+            busy.value = false
+        }
+    }
+
+    private fun structuralMutationMessage(
+        result: StructuralMutationResult,
+        successMessage: String?,
+    ): String? = when (result) {
+        StructuralMutationResult.Complete -> successMessage
+        is StructuralMutationResult.SavedWithFollowUpFailure -> when (result.stage) {
+            PostMutationStage.Refresh -> appContext.getString(R.string.calendar_settings_saved_refresh_failed)
+            PostMutationStage.Reconciliation -> appContext.getString(R.string.calendar_settings_saved_reconciliation_failed)
+        }
+    }
+
     private fun updateNotificationSetting(block: suspend () -> Unit) {
         viewModelScope.launch {
             runCatching {
@@ -1149,13 +1155,6 @@ class CalendarViewModel(
         hiddenAndroidProviderCalendarNames.value = repository.hiddenOrNotSyncedAndroidCalendars()
     }
 
-    private suspend fun syncAllSourcesAfterAddingSource() {
-        repository.syncNow(
-            includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-            forceFullCalDavRefresh = true,
-        )
-        refreshAndroidProviderDiagnosticsInternal()
-    }
 }
 
 private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
@@ -1176,6 +1175,7 @@ class CalendarViewModelFactory(
         return CalendarViewModel(
             repository = graph.repository,
             settingsStore = graph.settingsStore,
+            sourceCalendarMutationCoordinator = graph.sourceCalendarMutationCoordinator,
             appContext = graph.appContext,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
         ) as T
