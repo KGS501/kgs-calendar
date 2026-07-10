@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.Locale
 
 class WidgetMonthModelTest {
     @Test
@@ -405,6 +406,42 @@ class WidgetMonthModelTest {
         }
 
         assertTrue(row.monthBottomFadeSegments(textItemCapacity = 4).isEmpty())
+    }
+
+    @Test
+    fun singleDayItemsUseOccurrenceTimeBeforeTitle() {
+        val month = YearMonth.of(2026, 7)
+        val day = LocalDate.of(2026, 7, 9)
+        val layout = WidgetMonthModel.layout(
+            month = month,
+            gridStart = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, DayOfWeek.MONDAY),
+            candidates = listOf(
+                WidgetMonthCandidate("late", "Alpha", 0, 2_000L, day, day, false),
+                WidgetMonthCandidate("early", "Zulu", 0, 1_000L, day, day, false),
+            ),
+            locale = Locale.US,
+        )
+
+        assertEquals(listOf("early", "late"), layout.itemsByDay.getValue(day).map { it.id })
+    }
+
+    @Test
+    fun singleDayItemsWithSameTimeUseLocalizedTitleTieBreak() {
+        val month = YearMonth.of(2026, 7)
+        val day = LocalDate.of(2026, 7, 9)
+        val layout = WidgetMonthModel.layout(
+            month = month,
+            gridStart = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, DayOfWeek.MONDAY),
+            candidates = listOf(
+                WidgetMonthCandidate("zulu", "Zulu", 0, 1_000L, day, day, false),
+                WidgetMonthCandidate("alpha", "Alpha", 0, 1_000L, day, day, false),
+            ),
+            locale = Locale.US,
+        )
+
+        assertEquals(listOf("alpha", "zulu"), layout.itemsByDay.getValue(day).map { it.id })
     }
 
     @Test
