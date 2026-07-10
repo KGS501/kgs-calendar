@@ -39,12 +39,13 @@
             android:textColor="#17202A"
             android:textSize="20sp" />
 
-        <View
+        <TextView
             android:id="@+id/widget_agenda_date_line"
             android:layout_width="2dp"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:background="#17202A"
+            android:text=""
             android:visibility="gone" />
 
         <TextView
@@ -355,7 +356,7 @@
                     android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#FFFFFF"
+                    android:textColor="#00000000"
                     android:textSize="12.3sp" />
 
                 <TextView
@@ -366,7 +367,7 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#DDE7F2"
+                    android:textColor="#00000000"
                     android:textSize="10.2sp" />
             </LinearLayout>
         </LinearLayout>

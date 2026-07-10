@@ -123,28 +123,22 @@ private const val WIDGET_PRIORITY_MOTION_ITEM_LIMIT = 15
 private const val WIDGET_DAY_MAX_PRIORITY_MOTION_ROWS = WIDGET_PRIORITY_MOTION_ITEM_LIMIT
 private const val WIDGET_DAY_TITLE_FADE_WIDTH_DP = 14f
 private const val WIDGET_DAY_BOUNDARY_ROW_HEIGHT_DP = 18f
-private const val WIDGET_COLLECTION_RENDER_SIGNATURE_VERSION = 10
-private const val WIDGET_TASK_MAX_DEPTH = 5
+private const val WIDGET_COLLECTION_RENDER_SIGNATURE_VERSION = 11
+private const val WIDGET_TASK_MAX_DEPTH = WidgetTaskCardRenderer.MAX_DEPTH
 internal const val WIDGET_TASK_ART_WIDTH_DP = 360
-private const val WIDGET_TASK_MIN_CARD_WIDTH_DP = 48f
-private const val WIDGET_TASK_ROW_HEIGHT_DP = 56
-private const val WIDGET_TASK_CARD_HEIGHT_DP = 46
-private const val WIDGET_TASK_CARD_RADIUS_DP = 14
-private const val WIDGET_TASK_CARD_SIDE_INSET_DP = 12
-private const val WIDGET_TASK_CARD_PADDING_START_DP = 8
-private const val WIDGET_TASK_CARD_PADDING_END_DP = 8
-private const val WIDGET_TASK_STATUS_RADIUS_DP = 6.9f
-private const val WIDGET_TASK_STATUS_STROKE_DP = 1.45f
-private const val WIDGET_TASK_SUBTASK_ARROW_HALF_WIDTH_DP = 4.25f
-private const val WIDGET_TASK_SUBTASK_ARROW_HALF_HEIGHT_DP = 2.1f
-private const val WIDGET_TASK_SUBTASK_ARROW_STROKE_DP = 1.55f
-private const val WIDGET_TASK_HIERARCHY_INDENT_DP = 18
-private const val WIDGET_TASK_HIERARCHY_STEM_DP = 10
-private const val WIDGET_TASK_HIERARCHY_OVERLAP_DP = 4
+private const val WIDGET_TASK_MIN_CARD_WIDTH_DP = WidgetTaskCardRenderer.MIN_CARD_WIDTH_DP
+private const val WIDGET_TASK_ROW_HEIGHT_DP = WidgetTaskCardRenderer.ROW_HEIGHT_DP
+private const val WIDGET_TASK_CARD_HEIGHT_DP = WidgetTaskCardRenderer.CARD_HEIGHT_DP
+private const val WIDGET_TASK_CARD_SIDE_INSET_DP = WidgetTaskCardRenderer.CARD_SIDE_INSET_DP
+private const val WIDGET_TASK_STATUS_RADIUS_DP = WidgetTaskCardRenderer.STATUS_RADIUS_DP
+private const val WIDGET_TASK_STATUS_STROKE_DP = WidgetTaskCardRenderer.STATUS_STROKE_DP
+private const val WIDGET_TASK_SUBTASK_ARROW_HALF_WIDTH_DP = WidgetTaskCardRenderer.CHEVRON_HALF_WIDTH_DP
+private const val WIDGET_TASK_SUBTASK_ARROW_HALF_HEIGHT_DP = WidgetTaskCardRenderer.CHEVRON_HALF_HEIGHT_DP
+private const val WIDGET_TASK_SUBTASK_ARROW_STROKE_DP = WidgetTaskCardRenderer.CHEVRON_STROKE_DP
+private val WIDGET_TASK_CARD_RENDERER = WidgetTaskCardRenderer()
 private const val WIDGET_TASKS_PRIORITY_FRAME_COUNT = 20
 private const val WIDGET_AGENDA_PRIORITY_FRAME_COUNT = 30
 private const val WIDGET_COLLECTION_VIEW_TYPE_COUNT = 8
-private const val WIDGET_TASK_ART_BITMAP_SCALE = 1.0f
 private const val WIDGET_AGENDA_ART_BITMAP_SCALE = 1.15f
 private const val WIDGET_TASK_PRIORITY_BITMAP_SCALE = 1.15f
 private const val WIDGET_TASK_TRANSITION_BITMAP_SCALE = 0.78f
@@ -6020,26 +6014,36 @@ internal data class WidgetListRow(
             views.setOnClickFillInIntent(R.id.widget_agenda_task_row, openFillInIntent(openTask = true))
         }
         val taskArtWidthDp = renderOptions.taskArtWidthDp.coerceAtLeast(1f)
+        val cardMeta = if (launchKind == KgsWidgetKind.Day) location.orEmpty() else meta
+        val baseSpec = WIDGET_TASK_CARD_RENDERER.baseSpec(
+            kind = launchKind,
+            priority = priority,
+            widthDp = taskArtWidthDp,
+            depth = depth,
+            childCount = childCount,
+            hasMeta = cardMeta.isNotBlank(),
+            completed = completed,
+        )
         val rowRenderOptions = renderOptions.taskRows[stableId]
         val rowProgress = rowRenderOptions?.rowProgress?.coerceIn(0f, 1f) ?: 1f
         val rowEasedProgress = rowProgress
         val subtaskExpansionProgress = rowRenderOptions?.subtaskExpansionProgress?.coerceIn(0f, 1f)
             ?: if (subtasksExpanded) 1f else 0f
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val rowHeight = max(WIDGET_TASK_TRANSITION_MIN_ROW_HEIGHT_DP, WIDGET_TASK_ROW_HEIGHT_DP * rowEasedProgress)
-            val cardHeight = max(WIDGET_TASK_TRANSITION_MIN_ROW_HEIGHT_DP, WIDGET_TASK_CARD_HEIGHT_DP * rowEasedProgress)
+            val rowHeight = max(WIDGET_TASK_TRANSITION_MIN_ROW_HEIGHT_DP, baseSpec.rowHeightDp * rowEasedProgress)
+            val cardHeight = max(WIDGET_TASK_TRANSITION_MIN_ROW_HEIGHT_DP, baseSpec.cardHeightDp * rowEasedProgress)
             views.setViewLayoutHeight(R.id.widget_task_root, rowHeight, TypedValue.COMPLEX_UNIT_DIP)
             views.setViewLayoutHeight(R.id.widget_task_background_art, rowHeight, TypedValue.COMPLEX_UNIT_DIP)
             views.setViewLayoutHeight(R.id.widget_task_priority_motion, rowHeight, TypedValue.COMPLEX_UNIT_DIP)
             views.setViewLayoutHeight(R.id.widget_task_content, cardHeight, TypedValue.COMPLEX_UNIT_DIP)
         }
         views.setFloat(R.id.widget_task_root, "setAlpha", rowEasedProgress)
-        val contentStart = context.dpToPx(taskCardLeft(taskArtWidthDp) + WIDGET_TASK_CARD_PADDING_START_DP).roundToInt()
+        val contentStart = context.dpToPx(baseSpec.contentStartDp).roundToInt()
         val cardColor = if (completed) color.blendWith(palette.rootBackgroundColor, 0.48f) else color
         val contentColor = if (cardColor.isDarkColor()) 0xFFFFFFFF.toInt() else 0xFF1C1A18.toInt()
         val secondaryColor = contentColor.withAlpha(if (completed) 0.52f else 0.74f)
         val priorityIntensity = if (!completed && priorityMotionEnabled && !renderOptions.suppressPriorityMotion) {
-            taskPriorityIntensity(priority)
+            WIDGET_TASK_CARD_RENDERER.priorityIntensity(priority)
         } else {
             0f
         }
@@ -6072,10 +6076,11 @@ internal data class WidgetListRow(
                         contentColor = contentColor,
                         secondaryColor = secondaryColor,
                         priority = priority,
-                        intensity = priorityIntensity,
                         frame = frame,
                         frameCount = priorityFrameCount,
                         subtaskExpansionProgress = subtaskExpansionProgress,
+                        baseSpec = baseSpec,
+                        cardMeta = cardMeta,
                     ),
                 )
             }
@@ -6100,8 +6105,12 @@ internal data class WidgetListRow(
                     palette = palette,
                     taskArtWidthDp = taskArtWidthDp,
                     cardColor = cardColor,
+                    contentColor = contentColor.withAlpha(if (completed) 0.62f else 1f),
+                    secondaryColor = secondaryColor,
                     subtaskExpansionProgress = subtaskExpansionProgress,
                     lightweight = renderOptions.lightweightTaskTransition,
+                    baseSpec = baseSpec,
+                    cardMeta = cardMeta,
                 ),
             )
             views.setViewVisibility(R.id.widget_task_background_art, View.VISIBLE)
@@ -6110,25 +6119,21 @@ internal data class WidgetListRow(
             R.id.widget_task_priority_motion,
             if (priorityIntensity > 0f) View.VISIBLE else View.GONE,
         )
-        val contentEndPadding = taskCardSideInsetDp() + WIDGET_TASK_CARD_PADDING_END_DP.toFloat() + if (childCount > 0) 36f else 0f
+        val contentEndPadding = (taskArtWidthDp - baseSpec.textEndDp).coerceAtLeast(0f)
         views.setViewPadding(R.id.widget_task_content, contentStart, 0, context.dpToPx(contentEndPadding).roundToInt(), 0)
-        val overlayContentColor = if (priorityIntensity > 0f) 0x00000000 else contentColor.withAlpha(if (completed) 0.62f else 1f)
-        val overlaySecondaryColor = if (priorityIntensity > 0f) 0x00000000 else secondaryColor
-        val arrowContentColor = if (priorityIntensity > 0f) {
-            0x00000000
-        } else {
-            contentColor.withAlpha(if (completed) 0.62f else 1f)
-        }
+        val overlayContentColor = 0x00000000
+        views.setTextViewTextSize(R.id.widget_task_title, TypedValue.COMPLEX_UNIT_SP, baseSpec.titleTextSizeSp)
+        views.setTextViewTextSize(R.id.widget_task_meta, TypedValue.COMPLEX_UNIT_SP, baseSpec.metaTextSizeSp)
         views.setImageViewBitmap(
             R.id.widget_task_status,
             taskStatusIconBitmap(context, statusGlyph, overlayContentColor),
         )
         views.setTextViewText(R.id.widget_task_title, title)
         views.setTextColor(R.id.widget_task_title, overlayContentColor)
-        views.setTextViewText(R.id.widget_task_meta, meta)
-        views.setTextColor(R.id.widget_task_meta, overlaySecondaryColor)
+        views.setTextViewText(R.id.widget_task_meta, cardMeta)
+        views.setTextColor(R.id.widget_task_meta, overlayContentColor)
         if (childCount > 0) {
-            views.setImageViewBitmap(R.id.widget_task_subtasks, taskSubtasksArrowBitmap(context, arrowContentColor, subtaskExpansionProgress))
+            views.setImageViewBitmap(R.id.widget_task_subtasks, taskSubtasksArrowBitmap(context, overlayContentColor, subtaskExpansionProgress))
             views.setOnClickFillInIntent(R.id.widget_task_subtasks, toggleSubtasksFillInIntent(appWidgetId))
         }
         views.setViewVisibility(R.id.widget_task_subtasks, if (childCount > 0) View.VISIBLE else View.GONE)
@@ -6307,26 +6312,6 @@ internal data class WidgetListRow(
         setTextViewTextSize(R.id.widget_agenda_date_day, TypedValue.COMPLEX_UNIT_SP, 10f)
     }
 
-    private fun taskCardLeft(taskArtWidthDp: Float): Float {
-        val boundedDepth = depth.coerceIn(0, WIDGET_TASK_MAX_DEPTH)
-        val sideInset = taskCardSideInsetDp()
-        val preferredLeft = sideInset + boundedDepth * WIDGET_TASK_HIERARCHY_INDENT_DP.toFloat()
-        val maxLeft = taskArtWidthDp - sideInset - WIDGET_TASK_MIN_CARD_WIDTH_DP
-        return min(preferredLeft, maxLeft).coerceAtLeast(sideInset)
-    }
-
-    private fun taskCardRight(taskArtWidthDp: Float): Float {
-        val left = taskCardLeft(taskArtWidthDp)
-        val preferredRight = taskArtWidthDp - taskCardSideInsetDp()
-        return max(preferredRight, left + WIDGET_TASK_MIN_CARD_WIDTH_DP)
-    }
-
-    private fun taskCardSideInsetDp(): Float =
-        if (launchKind == KgsWidgetKind.Agenda || launchKind == KgsWidgetKind.Day) 0f else WIDGET_TASK_CARD_SIDE_INSET_DP.toFloat()
-
-    private fun taskArtBitmapScale(): Float =
-        if (launchKind == KgsWidgetKind.Agenda || launchKind == KgsWidgetKind.Day) WIDGET_AGENDA_ART_BITMAP_SCALE else WIDGET_TASK_ART_BITMAP_SCALE
-
     private fun agendaEventCardBitmap(
         context: Context,
         palette: WidgetPalette,
@@ -6422,21 +6407,35 @@ internal data class WidgetListRow(
         palette: WidgetPalette,
         taskArtWidthDp: Float,
         cardColor: Int,
+        contentColor: Int,
+        secondaryColor: Int,
         subtaskExpansionProgress: Float,
         lightweight: Boolean,
+        baseSpec: TaskCardBaseSpec,
+        cardMeta: String,
     ): Bitmap {
         val bitmapScale = context.resources.displayMetrics.density *
-            if (lightweight) WIDGET_TASK_TRANSITION_BITMAP_SCALE else taskArtBitmapScale()
+            if (lightweight) WIDGET_TASK_TRANSITION_BITMAP_SCALE else WIDGET_TASK_PRIORITY_BITMAP_SCALE
         val bitmap = Bitmap.createBitmap(
             (taskArtWidthDp * bitmapScale).roundToInt().coerceAtLeast(1),
-            (WIDGET_TASK_ROW_HEIGHT_DP * bitmapScale).roundToInt().coerceAtLeast(1),
+            (baseSpec.rowHeightDp * bitmapScale).roundToInt().coerceAtLeast(1),
             Bitmap.Config.RGB_565,
         )
         val canvas = Canvas(bitmap)
         canvas.drawColor(palette.rootBackgroundColor)
         canvas.scale(bitmapScale, bitmapScale)
-        drawTaskHierarchy(canvas, palette.hierarchyLine, subtaskExpansionProgress)
-        drawTaskCard(canvas, taskArtWidthDp, cardColor, alpha = 1f)
+        drawTaskHierarchy(canvas, palette.hierarchyLine, subtaskExpansionProgress, baseSpec)
+        drawTaskCard(canvas, baseSpec, cardColor, TaskPriorityEffect.None)
+        drawTaskContent(
+            context = context,
+            canvas = canvas,
+            baseSpec = baseSpec,
+            contentColor = contentColor,
+            secondaryColor = secondaryColor,
+            effect = TaskPriorityEffect.None,
+            cardMeta = cardMeta,
+            subtaskExpansionProgress = subtaskExpansionProgress,
+        )
         return bitmap
     }
 
@@ -6448,125 +6447,109 @@ internal data class WidgetListRow(
         contentColor: Int,
         secondaryColor: Int,
         priority: Int?,
-        intensity: Float,
         frame: Int,
         frameCount: Int,
         subtaskExpansionProgress: Float,
+        baseSpec: TaskCardBaseSpec,
+        cardMeta: String,
     ): Bitmap {
         val overdrawDp = if (launchKind == KgsWidgetKind.Agenda || launchKind == KgsWidgetKind.Day) WIDGET_TASK_PRIORITY_OVERDRAW_DP else 0f
         val bitmapScale = context.resources.displayMetrics.density * WIDGET_TASK_PRIORITY_BITMAP_SCALE
         val bitmap = Bitmap.createBitmap(
             ((taskArtWidthDp + overdrawDp * 2f) * bitmapScale).roundToInt().coerceAtLeast(1),
-            ((WIDGET_TASK_ROW_HEIGHT_DP + overdrawDp * 2f) * bitmapScale).roundToInt().coerceAtLeast(1),
+            ((baseSpec.rowHeightDp + overdrawDp * 2f) * bitmapScale).roundToInt().coerceAtLeast(1),
             Bitmap.Config.ARGB_8888,
         )
         val canvas = Canvas(bitmap)
         canvas.drawColor(palette.rootBackgroundColor)
         canvas.scale(bitmapScale, bitmapScale)
         canvas.translate(overdrawDp, overdrawDp)
-        val cycleFraction = ((frame + 0.5f) / frameCount.toFloat()).coerceIn(0f, 1f)
-        val halfFraction = if (cycleFraction < 0.5f) cycleFraction * 2f else (cycleFraction - 0.5f) * 2f
-        val eased = motionStandardEasing(halfFraction)
-        val phase = if (cycleFraction < 0.5f) eased else 1f - eased
-        val highestPriorityShake = if (priority == 1) {
-            val shakePhase = (((frame + 0.5f) * 42f) % 210f) / 210f
-            cos(shakePhase.toDouble() * PI * 6.0).toFloat() * 1.05f / bitmapScale
-        } else {
-            0f
-        }
-        val bounce = (phase - 0.5f) * -2f * intensity
-        val cardScale = 1f + intensity * 0.018f * phase
-        val glowSpread = 8f * intensity * (0.45f + phase)
-        val glowOutset = glowSpread / 2f
-        drawTaskHierarchy(canvas, palette.hierarchyLine, subtaskExpansionProgress)
+        val effect = WIDGET_TASK_CARD_RENDERER.effect(priority, frame, frameCount, bitmapScale)
+        val glowOutset = effect.glowSpread / 2f
+        drawTaskHierarchy(canvas, palette.hierarchyLine, subtaskExpansionProgress, baseSpec)
         drawTaskCard(
             canvas = canvas,
-            taskArtWidthDp = taskArtWidthDp,
+            baseSpec = baseSpec,
             color = cardColor,
+            effect = effect.copy(scale = 1f),
             horizontalSpread = glowOutset,
             verticalSpread = glowOutset,
-            alpha = 0.18f * intensity * (0.45f + 0.55f * phase),
-            translationX = highestPriorityShake,
-            translationY = bounce,
-            radius = WIDGET_TASK_CARD_RADIUS_DP + glowSpread / 3f,
+            alpha = effect.glowAlpha,
+            radius = baseSpec.cornerRadiusDp + effect.glowSpread / 3f,
         )
         drawTaskCard(
             canvas = canvas,
-            taskArtWidthDp = taskArtWidthDp,
+            baseSpec = baseSpec,
             color = cardColor,
-            alpha = 1f,
-            translationX = highestPriorityShake,
-            translationY = bounce,
-            scale = cardScale,
+            effect = effect,
         )
         drawTaskContent(
             context = context,
             canvas = canvas,
-            taskArtWidthDp = taskArtWidthDp,
+            baseSpec = baseSpec,
             contentColor = contentColor.withAlpha(if (completed) 0.62f else 1f),
             secondaryColor = secondaryColor,
-            translationX = highestPriorityShake,
-            translationY = bounce,
-            scale = cardScale,
+            effect = effect,
+            cardMeta = cardMeta,
             subtaskExpansionProgress = subtaskExpansionProgress,
-            drawSubtasksChevron = true,
         )
         return bitmap
     }
 
-    private fun drawTaskHierarchy(canvas: Canvas, lineColor: Int, subtaskExpansionProgress: Float) {
-        val boundedDepth = depth.coerceIn(0, WIDGET_TASK_MAX_DEPTH)
+    private fun drawTaskHierarchy(
+        canvas: Canvas,
+        lineColor: Int,
+        subtaskExpansionProgress: Float,
+        baseSpec: TaskCardBaseSpec,
+    ) {
+        val boundedDepth = baseSpec.hierarchyDepth
         if (boundedDepth <= 0 && childCount <= 0 && continuationLevels.isEmpty()) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = lineColor
-            strokeWidth = 1.65f
+            strokeWidth = baseSpec.hierarchyLineStrokeDp
             strokeCap = Paint.Cap.ROUND
             style = Paint.Style.STROKE
         }
-        val centerY = WIDGET_TASK_ROW_HEIGHT_DP / 2f
-        val height = WIDGET_TASK_ROW_HEIGHT_DP.toFloat()
+        val centerY = baseSpec.rowHeightDp / 2f
+        val height = baseSpec.rowHeightDp
         continuationLevels.forEach { level ->
             if (level in 0 until WIDGET_TASK_MAX_DEPTH) {
-                val x = WIDGET_TASK_CARD_SIDE_INSET_DP + level * WIDGET_TASK_HIERARCHY_INDENT_DP + WIDGET_TASK_HIERARCHY_STEM_DP.toFloat()
-                canvas.drawLine(x, -WIDGET_TASK_HIERARCHY_OVERLAP_DP.toFloat(), x, height + WIDGET_TASK_HIERARCHY_OVERLAP_DP, paint)
+                val x = baseSpec.hierarchySideInsetDp + level * baseSpec.hierarchyIndentDp + baseSpec.hierarchyStemDp
+                canvas.drawLine(x, -baseSpec.hierarchyOverlapDp, x, height + baseSpec.hierarchyOverlapDp, paint)
             }
         }
         if (boundedDepth > 0) {
             val branchLevel = boundedDepth - 1
-            val branchX = WIDGET_TASK_CARD_SIDE_INSET_DP + branchLevel * WIDGET_TASK_HIERARCHY_INDENT_DP + WIDGET_TASK_HIERARCHY_STEM_DP.toFloat()
-            val branchBottom = if (lastSibling) centerY else height + WIDGET_TASK_HIERARCHY_OVERLAP_DP
-            canvas.drawLine(branchX, -WIDGET_TASK_HIERARCHY_OVERLAP_DP.toFloat(), branchX, branchBottom, paint)
-            val branchEndX = WIDGET_TASK_CARD_SIDE_INSET_DP + boundedDepth * WIDGET_TASK_HIERARCHY_INDENT_DP + WIDGET_TASK_HIERARCHY_OVERLAP_DP + 2f
+            val branchX = baseSpec.hierarchySideInsetDp + branchLevel * baseSpec.hierarchyIndentDp + baseSpec.hierarchyStemDp
+            val branchBottom = if (lastSibling) centerY else height + baseSpec.hierarchyOverlapDp
+            canvas.drawLine(branchX, -baseSpec.hierarchyOverlapDp, branchX, branchBottom, paint)
+            val branchEndX = baseSpec.hierarchySideInsetDp + boundedDepth * baseSpec.hierarchyIndentDp + baseSpec.hierarchyOverlapDp + 2f
             canvas.drawLine(branchX, centerY, branchEndX, centerY, paint)
         }
         if (childCount > 0 && subtaskExpansionProgress > 0.01f) {
-            val x = WIDGET_TASK_CARD_SIDE_INSET_DP + boundedDepth * WIDGET_TASK_HIERARCHY_INDENT_DP + WIDGET_TASK_HIERARCHY_STEM_DP.toFloat()
-            val cardBottom = (WIDGET_TASK_ROW_HEIGHT_DP + WIDGET_TASK_CARD_HEIGHT_DP) / 2f
-            val tailEnd = lerpFloat(cardBottom - 1f, height + WIDGET_TASK_HIERARCHY_OVERLAP_DP, subtaskExpansionProgress.coerceIn(0f, 1f))
+            val x = baseSpec.hierarchySideInsetDp + boundedDepth * baseSpec.hierarchyIndentDp + baseSpec.hierarchyStemDp
+            val cardBottom = (baseSpec.rowHeightDp + baseSpec.cardHeightDp) / 2f
+            val tailEnd = lerpFloat(cardBottom - 1f, height + baseSpec.hierarchyOverlapDp, subtaskExpansionProgress.coerceIn(0f, 1f))
             canvas.drawLine(x, cardBottom - 1f, x, tailEnd, paint)
         }
     }
 
     private fun drawTaskCard(
         canvas: Canvas,
-        taskArtWidthDp: Float,
+        baseSpec: TaskCardBaseSpec,
         color: Int,
+        effect: TaskPriorityEffect,
         horizontalSpread: Float = 0f,
         verticalSpread: Float = horizontalSpread,
         alpha: Float = 1f,
-        translationX: Float = 0f,
-        translationY: Float = 0f,
-        scale: Float = 1f,
-        radius: Float = WIDGET_TASK_CARD_RADIUS_DP + horizontalSpread * 0.45f,
+        radius: Float = baseSpec.cornerRadiusDp + horizontalSpread * 0.45f,
     ) {
-        val cardLeft = taskCardLeft(taskArtWidthDp)
-        val cardRight = taskCardRight(taskArtWidthDp)
-        val cardTop = (WIDGET_TASK_ROW_HEIGHT_DP - WIDGET_TASK_CARD_HEIGHT_DP) / 2f
-        val cardBottom = cardTop + WIDGET_TASK_CARD_HEIGHT_DP
-        val centerX = (cardLeft + cardRight) / 2f + translationX
-        val centerY = (cardTop + cardBottom) / 2f + translationY
-        val halfWidth = ((cardRight - cardLeft) * scale) / 2f
-        val halfHeight = (WIDGET_TASK_CARD_HEIGHT_DP * scale) / 2f
+        val cardTop = (baseSpec.rowHeightDp - baseSpec.cardHeightDp) / 2f
+        val cardBottom = cardTop + baseSpec.cardHeightDp
+        val centerX = (baseSpec.cardLeftDp + baseSpec.cardRightDp) / 2f + effect.translationX
+        val centerY = (cardTop + cardBottom) / 2f + effect.translationY
+        val halfWidth = ((baseSpec.cardRightDp - baseSpec.cardLeftDp) * effect.scale) / 2f
+        val halfHeight = (baseSpec.cardHeightDp * effect.scale) / 2f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
             this.color = if (alpha >= 0.999f) color else color.withAlpha(alpha)
@@ -6583,69 +6566,66 @@ internal data class WidgetListRow(
     private fun drawTaskContent(
         context: Context,
         canvas: Canvas,
-        taskArtWidthDp: Float,
+        baseSpec: TaskCardBaseSpec,
         contentColor: Int,
         secondaryColor: Int,
-        translationX: Float,
-        translationY: Float,
-        scale: Float,
+        effect: TaskPriorityEffect,
+        cardMeta: String,
         subtaskExpansionProgress: Float,
-        drawSubtasksChevron: Boolean = true,
     ) {
-        val cardLeft = taskCardLeft(taskArtWidthDp)
-        val cardRight = taskCardRight(taskArtWidthDp)
-        val centerY = WIDGET_TASK_ROW_HEIGHT_DP / 2f + translationY
-        val contentStart = cardLeft + WIDGET_TASK_CARD_PADDING_START_DP + translationX
-        val statusCenterX = contentStart + 15f * scale
+        val cardCenterX = (baseSpec.cardLeftDp + baseSpec.cardRightDp) / 2f
+        fun transformedX(value: Float): Float =
+            cardCenterX + (value - cardCenterX) * effect.scale + effect.translationX
+
+        val centerY = baseSpec.rowHeightDp / 2f + effect.translationY
         drawTaskStatusGlyph(
             canvas = canvas,
             statusGlyph = statusGlyph,
             tint = contentColor,
-            centerX = statusCenterX,
+            centerX = transformedX(baseSpec.statusCenterXDp),
             centerY = centerY,
-            radius = WIDGET_TASK_STATUS_RADIUS_DP * scale,
-            strokeWidth = WIDGET_TASK_STATUS_STROKE_DP * scale,
+            radius = baseSpec.statusRadiusDp * effect.scale,
+            strokeWidth = baseSpec.statusStrokeDp * effect.scale,
         )
 
-        val arrowSpace = if (childCount > 0) 36f else 0f
-        val textStart = contentStart + 30f * scale + 5f
-        val textEnd = cardRight - WIDGET_TASK_CARD_PADDING_END_DP - arrowSpace
-        val compactTypography = launchKind == KgsWidgetKind.Agenda || launchKind == KgsWidgetKind.Day
-        val cardMeta = if (launchKind == KgsWidgetKind.Day) location.orEmpty() else meta
         val hasMeta = cardMeta.isNotBlank()
-        val titleTextSize = if (compactTypography) 12.3f else 13f
-        val metaTextSize = if (compactTypography) 10.2f else 11f
-        val titleBaselineOffset = when {
-            launchKind == KgsWidgetKind.Day && !hasMeta -> 4.2f
-            compactTypography -> -4.3f
-            else -> -3.6f
-        }
-        val metaBaselineOffset = if (compactTypography) 10.8f else 13f
+        val textStart = transformedX(baseSpec.textStartDp)
+        val textEnd = transformedX(baseSpec.textEndDp)
+        val fontScale = context.resources.displayMetrics.scaledDensity / context.resources.displayMetrics.density
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = contentColor
-            textSize = titleTextSize * scale
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            textSize = baseSpec.titleTextSizeSp * fontScale * effect.scale
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
         val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = secondaryColor
-            textSize = metaTextSize * scale
+            textSize = baseSpec.metaTextSizeSp * fontScale * effect.scale
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         }
         val maxTextWidth = (textEnd - textStart).coerceAtLeast(0f)
-        canvas.drawText(ellipsizeForPaint(title, titlePaint, maxTextWidth), textStart, centerY + titleBaselineOffset * scale, titlePaint)
+        canvas.drawText(
+            ellipsizeForPaint(title, titlePaint, maxTextWidth),
+            textStart,
+            centerY + baseSpec.titleBaselineOffsetDp * effect.scale,
+            titlePaint,
+        )
         if (hasMeta) {
-            canvas.drawText(ellipsizeForPaint(cardMeta, metaPaint, maxTextWidth), textStart, centerY + metaBaselineOffset * scale, metaPaint)
+            canvas.drawText(
+                ellipsizeForPaint(cardMeta, metaPaint, maxTextWidth),
+                textStart,
+                centerY + baseSpec.metaBaselineOffsetDp * effect.scale,
+                metaPaint,
+            )
         }
 
-        if (childCount > 0 && drawSubtasksChevron) {
-            val arrowCenterX = cardRight - WIDGET_TASK_CARD_PADDING_END_DP - 15f + translationX
+        if (childCount > 0) {
             drawTaskSubtasksChevron(
                 canvas = canvas,
                 tint = contentColor,
-                centerX = arrowCenterX,
+                centerX = transformedX(baseSpec.chevronCenterXDp),
                 centerY = centerY,
                 expandedProgress = subtaskExpansionProgress,
-                scale = scale,
+                scale = effect.scale,
             )
         }
     }
