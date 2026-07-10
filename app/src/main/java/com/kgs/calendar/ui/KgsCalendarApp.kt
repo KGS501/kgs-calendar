@@ -615,6 +615,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var handledWidgetCreateTaskSerial by rememberSaveable { mutableStateOf(0) }
         var handledWidgetOpenEventSerial by rememberSaveable { mutableStateOf(0) }
         var handledWidgetOpenTaskSerial by rememberSaveable { mutableStateOf(0) }
+        var handledCalendarLaunchSerial by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
         var draftDate by remember { mutableStateOf(LocalDate.now()) }
@@ -881,6 +882,32 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     detailTaskMorphGeneration = 0
                     detailTaskMorphSourceHref = null
                     detailSheet = DetailSheet.Task(task)
+                }
+            }
+        }
+        LaunchedEffect(state.calendarLaunchSerial) {
+            if (state.calendarLaunchSerial > handledCalendarLaunchSerial) {
+                val launchedEvent = state.calendarLaunchEvent
+                val launchedTask = state.calendarLaunchTask
+                val detail = when {
+                    launchedEvent != null -> DetailSheet.Event(launchedEvent)
+                    launchedTask != null -> DetailSheet.Task(launchedTask)
+                    else -> null
+                }
+                if (detail != null) {
+                    handledCalendarLaunchSerial = state.calendarLaunchSerial
+                    createMenuOpen = false
+                    searchOpen = false
+                    drawerOpen = false
+                    taskDrawerOpen = false
+                    settingsOpen = false
+                    problemsOpen = false
+                    editingCollection = null
+                    creationSheet = null
+                    detailTaskBackStack.clear()
+                    detailTaskMorphGeneration = 0
+                    detailTaskMorphSourceHref = null
+                    detailSheet = detail
                 }
             }
         }
@@ -21119,5 +21146,3 @@ private fun Color.blendWith(target: Color, amount: Float): Color {
         alpha = alpha + (target.alpha - alpha) * t,
     )
 }
-
-

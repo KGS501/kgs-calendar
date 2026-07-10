@@ -2461,6 +2461,10 @@ class CalendarRepository(
     fun expandTaskReminderOccurrences(master: TaskEntity, fromMillis: Long, toMillis: Long) =
         taskRecurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
 
+    suspend fun eventByResource(resourceHref: String): EventEntity? = database.eventDao().byResource(resourceHref)
+
+    suspend fun taskByResource(resourceHref: String): TaskEntity? = database.taskDao().byResource(resourceHref)
+
     private fun newUid(): String = "${UUID.randomUUID()}@kgs-calendar"
 
     private fun CollectionEntity.resolvedAutomaticColor(): Int =

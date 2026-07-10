@@ -29,6 +29,9 @@ import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.navigation.CalendarLaunchResolution
+import com.kgs.calendar.navigation.CalendarLaunchResolver
+import com.kgs.calendar.navigation.CalendarLaunchTarget
 import com.kgs.calendar.sync.CalendarStructuralMutation
 import com.kgs.calendar.sync.PostMutationStage
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
@@ -69,25 +72,31 @@ class CalendarViewModel(
     private val settingsStore: SettingsStore,
     private val sourceCalendarMutationCoordinator: SourceCalendarMutationCoordinator,
     private val taskMutationCoordinator: TaskMutationCoordinator,
+    private val calendarLaunchResolver: CalendarLaunchResolver,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
+    initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
 ) : ViewModel() {
-    private val initialSelectedDate = initialWidgetLaunchTarget?.date ?: LocalDate.now()
-    private val initialSelectedView = initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
+    private val initialSelectedDate = initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date ?: LocalDate.now()
+    private val initialSelectedView = initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
     private val initialWidgetCreatesEvent = initialWidgetLaunchTarget?.createEvent == true
     private val initialWidgetCreatesTask = initialWidgetLaunchTarget?.createTaskScheduled != null
     private val initialWidgetOpenEventUid = initialWidgetLaunchTarget?.openEventUid?.takeIf { it.isNotBlank() }
     private val initialWidgetOpenTaskUid = initialWidgetLaunchTarget?.openTaskUid?.takeIf { it.isNotBlank() }
-    private val initialWidgetSerial = if (initialWidgetLaunchTarget != null) 1 else 0
+    private val initialWidgetSerial = if (initialWidgetLaunchTarget != null || initialCalendarLaunchTarget != null) 1 else 0
     private val busy = MutableStateFlow(false)
     private val manualSyncing = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
     private val externalLoginUrl = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
     private val hiddenAndroidProviderCalendarNames = MutableStateFlow<List<String>>(emptyList())
-    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(initialWidgetLaunchTarget?.viewMode)
-    private val selectedDateOverride = MutableStateFlow<LocalDate?>(initialWidgetLaunchTarget?.date)
+    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
+        initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode,
+    )
+    private val selectedDateOverride = MutableStateFlow<LocalDate?>(
+        initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date,
+    )
     private val dateNavigationSerial = MutableStateFlow(initialWidgetSerial)
     private val widgetCreateEventDate = MutableStateFlow(if (initialWidgetCreatesEvent) initialSelectedDate else null)
     private val widgetCreateEventSerial = MutableStateFlow(if (initialWidgetCreatesEvent) initialWidgetSerial else 0)
@@ -98,6 +107,8 @@ class CalendarViewModel(
     private val widgetOpenEventSerial = MutableStateFlow(if (initialWidgetOpenEventUid != null) initialWidgetSerial else 0)
     private val widgetOpenTaskUid = MutableStateFlow(initialWidgetOpenTaskUid)
     private val widgetOpenTaskSerial = MutableStateFlow(if (initialWidgetOpenTaskUid != null) initialWidgetSerial else 0)
+    private val resolvedCalendarLaunch = MutableStateFlow<ResolvedCalendarLaunch?>(null)
+    private var nextCalendarLaunchSerial = 0
     private val initialDataReady = MutableStateFlow(false)
     private var selectedDatePersistJob: Job? = null
 
@@ -107,6 +118,7 @@ class CalendarViewModel(
                 .onSuccess { message.value = null }
                 .onFailure { message.value = it.message ?: "Could not prepare local calendar." }
         }
+        initialCalendarLaunchTarget?.let(::openFromCalendarLaunch)
         viewModelScope.launch {
             val blockInitialUi = runCatching {
                 repository.shouldBlockInitialAndroidProviderRefresh()
@@ -392,6 +404,13 @@ class CalendarViewModel(
         .combine(initialDataReady) { uiState, ready ->
             uiState.copy(initialDataLoaded = ready)
         }
+        .combine(resolvedCalendarLaunch) { uiState, resolved ->
+            uiState.copy(
+                calendarLaunchEvent = resolved?.resolution?.event,
+                calendarLaunchTask = resolved?.resolution?.task,
+                calendarLaunchSerial = resolved?.serial ?: 0,
+            )
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
     fun selectView(viewMode: CalendarViewMode) {
@@ -428,6 +447,18 @@ class CalendarViewModel(
             widgetOpenTaskSerial.update { it + 1 }
         }
         persistWidgetSelection(date, viewMode)
+    }
+
+    fun openFromCalendarLaunch(target: CalendarLaunchTarget) {
+        viewModelScope.launch {
+            val resolution = calendarLaunchResolver.resolve(target) ?: return@launch
+            selectedViewOverride.value = resolution.viewMode
+            selectedDateOverride.value = resolution.date
+            dateNavigationSerial.update { it + 1 }
+            nextCalendarLaunchSerial += 1
+            resolvedCalendarLaunch.value = ResolvedCalendarLaunch(nextCalendarLaunchSerial, resolution)
+            persistWidgetSelection(resolution.date, resolution.viewMode)
+        }
     }
 
     private fun persistWidgetSelection(date: LocalDate, viewMode: CalendarViewMode) {
@@ -1186,6 +1217,7 @@ private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
 class CalendarViewModelFactory(
     private val graph: AppGraph,
     private val initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
+    private val initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return CalendarViewModel(
@@ -1193,8 +1225,15 @@ class CalendarViewModelFactory(
             settingsStore = graph.settingsStore,
             sourceCalendarMutationCoordinator = graph.sourceCalendarMutationCoordinator,
             taskMutationCoordinator = graph.taskMutationCoordinator,
+            calendarLaunchResolver = graph.calendarLaunchResolver,
             appContext = graph.appContext,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
+            initialCalendarLaunchTarget = initialCalendarLaunchTarget,
         ) as T
     }
 }
+
+private data class ResolvedCalendarLaunch(
+    val serial: Int,
+    val resolution: CalendarLaunchResolution,
+)

@@ -5,15 +5,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.text.Html
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
-import com.kgs.calendar.domain.model.REMINDER_AT_END
-import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import java.time.Instant
 import java.time.LocalDate
@@ -31,7 +28,6 @@ object ReminderScheduler {
     const val CHANNEL_ID = "kgs_reminders"
     private const val PREFS = "kgs_reminder_alarms"
     private const val KEY_CODES = "scheduled_codes"
-    private const val KEY_TASK_CODES_PREFIX = "task_codes:"
     private const val KEY_ACTIVE_TASK_CODES_PREFIX = "active_task_codes:"
     private const val WINDOW_DAYS = 21L
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yy")
@@ -60,131 +56,80 @@ object ReminderScheduler {
         val (events, tasks) = repository.reminderCandidates()
         val now = System.currentTimeMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
-
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        cancelLegacySchedules(context, alarmManager)
+        val planner = ReminderPlanner()
+        val plans = mutableListOf<ReminderAlarmPlan>()
 
-        // Cancel previously scheduled alarms.
-        prefs.getStringSet(KEY_CODES, emptySet()).orEmpty().forEach { codeStr ->
-            codeStr.toIntOrNull()?.let { code ->
-                alarmManager.cancel(pendingIntent(context, code, null, null, null))
-            }
-        }
-
-        val newCodes = mutableSetOf<String>()
-        val taskCodes = mutableMapOf<String, MutableSet<String>>()
-
-        fun schedule(triggerAt: Long, title: String, body: String?, taskResourceHref: String? = null) {
-            if (triggerAt < now || triggerAt > windowEnd) return
-            val code = ((taskResourceHref ?: "") + "|" + title + "|" + body + "|" + triggerAt).hashCode()
-            val pi = pendingIntent(context, code, title, body, taskResourceHref)
-            scheduleExactCompat(alarmManager, triggerAt, pi)
-            newCodes += code.toString()
-            taskResourceHref?.let { taskCodes.getOrPut(it) { mutableSetOf() } += code.toString() }
-        }
-
-        // Events (expand recurring ones within the window).
         events.forEach { master ->
             val offsets = master.remindersCsv.minutes()
             if (offsets.isEmpty()) return@forEach
-            val occurrences: List<EventEntity> = if (!master.recurrenceRule.isNullOrBlank()) {
-                repository.expandEventReminders(master, now, windowEnd)
-            } else {
-                listOf(master)
-            }
-            occurrences.forEach { occ ->
-                offsets.forEach { offset ->
-                    val triggerAt = when (offset) {
-                        REMINDER_AT_END -> occ.endsAtMillis
-                        REMINDER_AT_START -> occ.startsAtMillis
-                        else -> occ.startsAtMillis - offset * 60_000L
-                    }
-                    schedule(triggerAt, occ.title, eventNotificationBody(occ, triggerAt))
+            repository.expandEventReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+                val event = occurrence.item
+                val reminderOccurrence = ReminderOccurrence(
+                    occurrenceId = occurrence.occurrenceId,
+                    startAtMillis = event.startsAtMillis,
+                    endAtMillis = event.endsAtMillis,
+                    defaultAnchorAtMillis = event.startsAtMillis,
+                    title = event.title,
+                    body = null,
+                )
+                plans += planner.plan(reminderOccurrence, offsets).map { plan ->
+                    plan.copy(body = eventNotificationBody(event, plan.triggerAtMillis))
                 }
             }
         }
 
-        // Tasks (use due, else start).
         tasks.forEach { master ->
-            val occurrences = if (!master.recurrenceRule.isNullOrBlank() || !master.rDatesCsv.isNullOrBlank()) {
-                repository.expandTaskReminders(master, now, windowEnd)
-            } else {
-                listOf(master)
-            }
-            occurrences.forEach { task ->
-                task.remindersCsv.minutes().forEach { offset ->
-                    val anchor = task.dueAtMillis ?: task.startAtMillis
-                    val triggerAt = when (offset) {
-                        REMINDER_AT_END -> task.dueAtMillis
-                        REMINDER_AT_START -> task.startAtMillis
-                        else -> anchor?.minus(offset * 60_000L)
-                    } ?: return@forEach
-                    val title = task.title.takeIf { it.isNotBlank() } ?: context.getString(R.string.untitled_task)
-                    schedule(triggerAt, title, taskNotificationBody(task, triggerAt), task.resourceHref)
+            repository.expandTaskReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+                val task = occurrence.item
+                val reminderOccurrence = ReminderOccurrence(
+                    occurrenceId = occurrence.occurrenceId,
+                    startAtMillis = task.startAtMillis,
+                    endAtMillis = task.dueAtMillis,
+                    defaultAnchorAtMillis = task.dueAtMillis ?: task.startAtMillis,
+                    title = task.title.takeIf { it.isNotBlank() } ?: context.getString(R.string.untitled_task),
+                    body = null,
+                )
+                plans += planner.plan(reminderOccurrence, task.remindersCsv.minutes()).map { plan ->
+                    plan.copy(body = taskNotificationBody(task, plan.triggerAtMillis))
                 }
             }
         }
 
-        prefs.edit().apply {
-            prefs.all.keys.filter { it.startsWith(KEY_TASK_CODES_PREFIX) }.forEach(::remove)
-            putStringSet(KEY_CODES, newCodes)
-            taskCodes.forEach { (taskResourceHref, codes) ->
-                putStringSet(taskCodesKey(taskResourceHref), codes)
-            }
-        }.apply()
+        val activePlans = plans
+            .filter { it.triggerAtMillis in now..windowEnd }
+            .distinctBy { it.alarmRequestCode }
+        graph.reminderRegistry.replaceAllScheduled(
+            activePlans.map { ScheduledReminderRecord(it.alarmRequestCode, it.occurrenceId, it.notificationKey) },
+        )
+        activePlans.forEach { plan ->
+            scheduleExactCompat(alarmManager, plan.triggerAtMillis, ReminderIntents.alarmPendingIntent(context, plan))
+        }
     }
 
     private fun String?.minutes(): List<Int> =
         this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.filter { it.isSupportedReminderOffset() }.orEmpty()
 
-    fun cancelTaskNotifications(context: Context, taskResourceHref: String) {
+    private fun cancelLegacySchedules(context: Context, alarmManager: AlarmManager) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val codes = (
-            prefs.getStringSet(taskCodesKey(taskResourceHref), emptySet()).orEmpty() +
-                prefs.getStringSet(activeTaskCodesKey(taskResourceHref), emptySet()).orEmpty()
-            )
-            .mapNotNull { it.toIntOrNull() }
-        if (codes.isEmpty()) return
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val codes = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty().mapNotNull(String::toIntOrNull)
         codes.forEach { code ->
-            alarmManager.cancel(pendingIntent(context, code, null, null, taskResourceHref))
-            notificationManager.cancel(code)
+            PendingIntent.getBroadcast(
+                context,
+                code,
+                android.content.Intent(context, ReminderReceiver::class.java),
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            )?.let(alarmManager::cancel)
         }
-        val remainingCodes = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty() - codes.map { it.toString() }.toSet()
-        prefs.edit()
-            .putStringSet(KEY_CODES, remainingCodes)
-            .remove(taskCodesKey(taskResourceHref))
-            .remove(activeTaskCodesKey(taskResourceHref))
-            .apply()
-    }
-
-    fun recordTaskNotification(context: Context, taskResourceHref: String, notificationId: Int) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val key = activeTaskCodesKey(taskResourceHref)
-        val current = prefs.getStringSet(key, emptySet()).orEmpty()
-        prefs.edit().putStringSet(key, current + notificationId.toString()).apply()
-    }
-
-    private fun taskCodesKey(taskResourceHref: String): String =
-        KEY_TASK_CODES_PREFIX + taskResourceHref
-
-    private fun activeTaskCodesKey(taskResourceHref: String): String =
-        KEY_ACTIVE_TASK_CODES_PREFIX + taskResourceHref
-
-    private fun pendingIntent(context: Context, code: Int, title: String?, body: String?, taskResourceHref: String?): PendingIntent {
-        val intent = Intent(context, ReminderReceiver::class.java).apply {
-            if (title != null) putExtra(ReminderReceiver.EXTRA_TITLE, title)
-            if (body != null) putExtra(ReminderReceiver.EXTRA_BODY, body)
-            if (taskResourceHref != null) putExtra(ReminderReceiver.EXTRA_TASK_RESOURCE_HREF, taskResourceHref)
-            putExtra(ReminderReceiver.EXTRA_NOTIFICATION_ID, code)
-        }
-        return PendingIntent.getBroadcast(
-            context,
-            code,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        prefs.all
+            .filterKeys { it.startsWith(KEY_ACTIVE_TASK_CODES_PREFIX) }
+            .values
+            .filterIsInstance<Set<*>>()
+            .flatMap { it.mapNotNull { value -> value.toString().toIntOrNull() } }
+            .forEach { notificationId -> notificationManager.cancel(notificationId) }
+        prefs.edit().clear().apply()
     }
 
     private fun scheduleExactCompat(alarmManager: AlarmManager, triggerAt: Long, pi: PendingIntent) {

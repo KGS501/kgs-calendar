@@ -1,14 +1,14 @@
 package com.kgs.calendar.reminder
 
-import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.kgs.calendar.KgsCalendarApplication
-import com.kgs.calendar.MainActivity
 import com.kgs.calendar.R
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.navigation.CalendarLaunchTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,16 +25,13 @@ class ReminderReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_channel_name)
         val body = intent.getStringExtra(EXTRA_BODY).orEmpty()
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, title.hashCode())
-        val taskResourceHref = intent.getStringExtra(EXTRA_TASK_RESOURCE_HREF)
+        val notificationTag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG) ?: "kgs-reminder"
+        val target = CalendarLaunchTarget.readFrom(intent) ?: return
+        val notificationKey = ReminderNotificationKey(notificationTag, notificationId)
 
         ReminderScheduler.ensureChannel(context)
 
-        val contentIntent = android.app.PendingIntent.getActivity(
-            context,
-            notificationId,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val contentIntent = ReminderIntents.contentPendingIntent(context, target, notificationKey)
 
         val notificationBuilder = NotificationCompat.Builder(context, ReminderScheduler.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
@@ -49,23 +46,13 @@ class ReminderReceiver : BroadcastReceiver() {
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
         }
-        if (!taskResourceHref.isNullOrBlank()) {
-            val doneIntent = Intent(context, ReminderReceiver::class.java).apply {
-                action = ACTION_MARK_TASK_DONE
-                putExtra(EXTRA_TASK_RESOURCE_HREF, taskResourceHref)
-                putExtra(EXTRA_NOTIFICATION_ID, notificationId)
-            }
-            val donePendingIntent = android.app.PendingIntent.getBroadcast(
-                context,
-                notificationId xor taskResourceHref.hashCode(),
-                doneIntent,
-                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-            )
+        val taskOccurrence = target.occurrence as? CalendarOccurrenceId.Task
+        if (taskOccurrence != null) {
             notificationBuilder.addAction(
                 NotificationCompat.Action.Builder(
                     R.drawable.ic_notification,
                     context.getString(R.string.mark_done),
-                    donePendingIntent,
+                    ReminderIntents.markDonePendingIntent(context, taskOccurrence, notificationKey),
                 ).build(),
             )
         }
@@ -74,26 +61,33 @@ class ReminderReceiver : BroadcastReceiver() {
         // POST_NOTIFICATIONS may be revoked; notify() is a no-op then rather than crashing.
         runCatching {
             if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                taskResourceHref?.takeIf { it.isNotBlank() }?.let {
-                    ReminderScheduler.recordTaskNotification(context, it, notificationId)
+                NotificationManagerCompat.from(context).notify(notificationTag, notificationId, notification)
+                val pendingResult = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    runCatching {
+                        KgsCalendarApplication.graph(context.applicationContext).reminderRegistry.recordNotification(
+                            ActiveReminderNotification(target.occurrence ?: return@runCatching, notificationKey),
+                        )
+                    }
+                    pendingResult.finish()
                 }
-                NotificationManagerCompat.from(context).notify(notificationId, notification)
             }
         }
     }
 
     private fun markTaskDone(context: Context, intent: Intent) {
-        val taskResourceHref = intent.getStringExtra(EXTRA_TASK_RESOURCE_HREF)?.takeIf { it.isNotBlank() } ?: return
-        val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, taskResourceHref.hashCode())
-        NotificationManagerCompat.from(context).cancel(notificationId)
+        val occurrenceId = (CalendarLaunchTarget.readFrom(intent)?.occurrence as? CalendarOccurrenceId.Task) ?: return
+        val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, occurrenceId.stableKey.hashCode())
+        val notificationTag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG) ?: "kgs-reminder"
+        NotificationManagerCompat.from(context).cancel(notificationTag, notificationId)
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             runCatching {
                 val graph = KgsCalendarApplication.graph(appContext)
-                graph.taskMutationCoordinator.setStatus(taskResourceHref, "COMPLETED")
+                graph.taskMutationCoordinator.setStatus(occurrenceId.resourceHref, "COMPLETED", occurrenceId)
             }
-            NotificationManagerCompat.from(appContext).cancel(notificationId)
+            NotificationManagerCompat.from(appContext).cancel(notificationTag, notificationId)
             pendingResult.finish()
         }
     }
@@ -103,10 +97,6 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_BODY = "extra_body"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
-        const val EXTRA_TASK_RESOURCE_HREF = "extra_task_resource_href"
-
-        @Suppress("unused")
-        private fun manager(context: Context): NotificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        const val EXTRA_NOTIFICATION_TAG = "extra_notification_tag"
     }
 }

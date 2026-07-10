@@ -16,6 +16,7 @@ import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.reminder.ReminderRegistry
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
@@ -85,6 +86,13 @@ class AppGraph(context: Context) {
     )
 
     val reminderRegistry = ReminderRegistry.create(appContext)
+
+    val calendarLaunchResolver = CalendarLaunchResolver(
+        eventByResource = repository::eventByResource,
+        taskByResource = repository::taskByResource,
+        expandEvents = repository::expandEventReminderOccurrences,
+        expandTasks = repository::expandTaskReminderOccurrences,
+    )
 
     val taskMutationCoordinator = TaskMutationCoordinator(
         persistStatus = repository::setTaskStatus,
