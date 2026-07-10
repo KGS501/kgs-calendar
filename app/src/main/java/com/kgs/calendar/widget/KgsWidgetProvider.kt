@@ -1402,12 +1402,6 @@ object KgsWidgetUpdater {
     }
 }
 
-internal data class MonthWidgetRenderResult(
-    val views: RemoteViews,
-    val hasCompleteData: Boolean,
-    val signature: String?,
-)
-
 internal data class WidgetDayTimeline(
     val day: LocalDate,
     val allDayItems: List<WidgetDayItem>,
