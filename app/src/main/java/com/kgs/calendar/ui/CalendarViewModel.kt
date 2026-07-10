@@ -27,6 +27,7 @@ import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolution
@@ -43,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -98,6 +100,7 @@ class CalendarViewModel(
         initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date,
     )
     private val dateNavigationSerial = MutableStateFlow(initialWidgetSerial)
+    private val foregroundRecenterSerial = MutableStateFlow(0)
     private val widgetCreateEventDate = MutableStateFlow(if (initialWidgetCreatesEvent) initialSelectedDate else null)
     private val widgetCreateEventSerial = MutableStateFlow(if (initialWidgetCreatesEvent) initialWidgetSerial else 0)
     private val widgetCreateTaskDate = MutableStateFlow(if (initialWidgetCreatesTask) initialSelectedDate else null)
@@ -111,6 +114,14 @@ class CalendarViewModel(
     private var nextCalendarLaunchSerial = 0
     private val initialDataReady = MutableStateFlow(false)
     private var selectedDatePersistJob: Job? = null
+    private val foregroundRecenterPolicy = ForegroundRecenterPolicy()
+    private var explicitLaunchSuppressionUntilMillis = if (
+        initialWidgetLaunchTarget != null || initialCalendarLaunchTarget != null
+    ) {
+        System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
+    } else {
+        Long.MIN_VALUE
+    }
 
     init {
         viewModelScope.launch {
@@ -142,6 +153,23 @@ class CalendarViewModel(
         }
         if (initialWidgetLaunchTarget != null) {
             persistWidgetSelection(initialWidgetLaunchTarget.date, initialWidgetLaunchTarget.viewMode)
+        }
+        (appContext.applicationContext as? KgsCalendarApplication)?.processForegroundedAt?.let { foregroundEvents ->
+            viewModelScope.launch {
+                foregroundEvents.collect { foregroundedAt ->
+                    val backgroundedAt = settingsStore.lastBackgroundedAtMillis.first()
+                    settingsStore.setLastBackgroundedAtMillis(null)
+                    if (
+                        foregroundRecenterPolicy.shouldRecenter(
+                            backgroundedAt = backgroundedAt,
+                            foregroundedAt = foregroundedAt,
+                            explicitLaunchPending = foregroundedAt <= explicitLaunchSuppressionUntilMillis,
+                        )
+                    ) {
+                        recenterToToday(LocalDate.now(zoneId))
+                    }
+                }
+            }
         }
     }
 
@@ -411,6 +439,9 @@ class CalendarViewModel(
                 calendarLaunchSerial = resolved?.serial ?: 0,
             )
         }
+        .combine(foregroundRecenterSerial) { uiState, serial ->
+            uiState.copy(foregroundRecenterSerial = serial)
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
     fun selectView(viewMode: CalendarViewMode) {
@@ -426,6 +457,7 @@ class CalendarViewModel(
         openEventUid: String? = null,
         openTaskUid: String? = null,
     ) {
+        suppressAutomaticRecenterForExplicitLaunch()
         selectedViewOverride.value = viewMode
         selectedDateOverride.value = date
         dateNavigationSerial.update { it + 1 }
@@ -450,6 +482,7 @@ class CalendarViewModel(
     }
 
     fun openFromCalendarLaunch(target: CalendarLaunchTarget) {
+        suppressAutomaticRecenterForExplicitLaunch()
         viewModelScope.launch {
             val resolution = calendarLaunchResolver.resolve(target) ?: return@launch
             selectedViewOverride.value = resolution.viewMode
@@ -477,6 +510,20 @@ class CalendarViewModel(
             delay(700)
             settingsStore.setSelectedDate(date)
         }
+    }
+
+    fun recenterToToday(today: LocalDate = LocalDate.now(zoneId)) {
+        selectedDateOverride.value = today
+        dateNavigationSerial.update { it + 1 }
+        foregroundRecenterSerial.update { it + 1 }
+        selectedDatePersistJob?.cancel()
+        selectedDatePersistJob = viewModelScope.launch {
+            settingsStore.setSelectedDate(today)
+        }
+    }
+
+    private fun suppressAutomaticRecenterForExplicitLaunch() {
+        explicitLaunchSuppressionUntilMillis = System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
     }
 
     fun setThemeMode(mode: AppThemeMode) {
@@ -1200,6 +1247,10 @@ class CalendarViewModel(
 
     private suspend fun refreshAndroidProviderDiagnosticsInternal() {
         hiddenAndroidProviderCalendarNames.value = repository.hiddenOrNotSyncedAndroidCalendars()
+    }
+
+    private companion object {
+        const val EXPLICIT_LAUNCH_SUPPRESSION_MILLIS = 15_000L
     }
 
 }

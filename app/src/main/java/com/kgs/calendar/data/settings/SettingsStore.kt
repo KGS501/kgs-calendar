@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -22,6 +23,20 @@ import java.time.LocalDate
 private val Context.dataStore by preferencesDataStore(name = "kgs_settings")
 
 class SettingsStore(private val context: Context) {
+    val lastBackgroundedAtMillis: Flow<Long?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_BACKGROUNDED_AT_MILLIS]
+    }
+
+    suspend fun setLastBackgroundedAtMillis(value: Long?) {
+        context.dataStore.edit { prefs ->
+            if (value == null) {
+                prefs.remove(KEY_LAST_BACKGROUNDED_AT_MILLIS)
+            } else {
+                prefs[KEY_LAST_BACKGROUNDED_AT_MILLIS] = value
+            }
+        }
+    }
+
     private fun widgetThemeMode(key: Preferences.Key<String>): Flow<WidgetThemeMode> = context.dataStore.data.map { prefs ->
         runCatching {
             WidgetThemeMode.valueOf(prefs[key] ?: WidgetThemeMode.FollowApp.name)
@@ -486,6 +501,7 @@ class SettingsStore(private val context: Context) {
 
     companion object {
         private val KEY_VIEW = stringPreferencesKey("selected_view")
+        private val KEY_LAST_BACKGROUNDED_AT_MILLIS = longPreferencesKey("last_backgrounded_at_millis")
         private val KEY_DATE = stringPreferencesKey("selected_date")
         private val KEY_THEME = stringPreferencesKey("theme_mode")
         private val KEY_COLOR_MODE = stringPreferencesKey("color_mode")

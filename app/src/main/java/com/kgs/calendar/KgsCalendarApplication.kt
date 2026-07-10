@@ -9,6 +9,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import androidx.room.InvalidationTracker
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
@@ -20,6 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class KgsCalendarApplication : Application() {
@@ -27,6 +33,20 @@ class KgsCalendarApplication : Application() {
         private set
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _processForegroundedAt = MutableSharedFlow<Long>(replay = 1)
+    val processForegroundedAt: SharedFlow<Long> = _processForegroundedAt.asSharedFlow()
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            _processForegroundedAt.tryEmit(System.currentTimeMillis())
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            val backgroundedAt = System.currentTimeMillis()
+            scope.launch {
+                appGraph.settingsStore.setLastBackgroundedAtMillis(backgroundedAt)
+            }
+        }
+    }
     private var androidCalendarRefreshJob: Job? = null
     private var androidCalendarObserver: ContentObserver? = null
     private var widgetRefreshJob: Job? = null
@@ -45,6 +65,7 @@ class KgsCalendarApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         appGraph = AppGraph(this)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         ReminderScheduler.ensureChannel(this)
         registerWidgetRefreshHooks()
         registerAndroidCalendarObserverIfPermitted()

@@ -382,6 +382,8 @@ import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
+import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
+import com.kgs.calendar.ui.time.rememberCalendarTimeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -539,6 +541,7 @@ private fun SecurePasswordField(
 @Composable
 fun KgsCalendarApp(viewModel: CalendarViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val calendarTime = rememberCalendarTimeState()
     val systemDark = isSystemInDarkTheme()
     val useDarkTheme = when (state.colorMode) {
         AppColorMode.Auto -> systemDark
@@ -566,6 +569,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LocalContext provides localizedContext,
         LocalConfiguration provides localizedConfiguration,
         LocalAppLocale provides appLocale,
+        LocalCalendarTimeSnapshot provides calendarTime,
     ) {
     KgsCalendarTheme(themeMode = state.themeMode, darkTheme = useDarkTheme) {
         val scheme = MaterialTheme.colorScheme
@@ -618,7 +622,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var handledCalendarLaunchSerial by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
-        var draftDate by remember { mutableStateOf(LocalDate.now()) }
+        var draftDate by remember { mutableStateOf(calendarTime.today) }
         var draftStart by remember { mutableStateOf(LocalTime.of(15, 0)) }
         var draftEnd by remember { mutableStateOf(LocalTime.of(16, 0)) }
         var draftWireframeColor by remember { mutableStateOf(WarmBrown.toArgb()) }
@@ -1088,7 +1092,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     },
                     onShowCompleted = { completedTasksOpen = true },
                     onCreateTask = {
-                        openTaskCreation(LocalDate.now(), scheduledForDay = false, useTaskDefaults = false)
+                        openTaskCreation(calendarTime.today, scheduledForDay = false, useTaskDefaults = false)
                     },
                 )
                 CalendarSearchOverlay(
@@ -1456,7 +1460,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.DuplicateTask -> TaskEditorSheet(
                         state = state,
-                        selectedDate = sheet.task.taskDate() ?: LocalDate.now(),
+                        selectedDate = sheet.task.taskDate() ?: calendarTime.today,
                         selectedStart = sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart(),
                         selectedEnd = sheet.task.dueAtMillis?.toTime() ?: (sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart()).defaultDraftEnd(),
                         defaultTimed = sheet.task.startAtMillis != null && sheet.task.startHasTime,
@@ -3167,7 +3171,7 @@ private fun SearchResultsList(
     val groupedResults = remember(results) {
         results.groupBy { item -> item.date?.year?.toString() ?: noDateLabel }
     }
-    val today = remember(results) { LocalDate.now() }
+    val today = LocalCalendarTimeSnapshot.current.today
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val firstFutureKey = remember(results, today) {
@@ -3823,6 +3827,21 @@ private fun CalendarShell(
     // (tapping a year in the strip, or the Today button), never by manual scrolling — so the
     // month view can jump straight there without the scroll<->selectedDate sync fighting it.
     var monthJumpRequest by remember { mutableStateOf<YearMonth?>(null) }
+    var handledForegroundRecenterSerial by rememberSaveable { mutableStateOf(0) }
+    val today = LocalCalendarTimeSnapshot.current.today
+
+    LaunchedEffect(state.foregroundRecenterSerial) {
+        if (state.foregroundRecenterSerial <= handledForegroundRecenterSerial) return@LaunchedEffect
+        handledForegroundRecenterSerial = state.foregroundRecenterSerial
+        when (state.selectedView) {
+            CalendarViewMode.Agenda -> {
+                agendaScrollTargetDate = today
+                agendaTodayScrollRequest++
+            }
+            CalendarViewMode.Month -> monthJumpRequest = YearMonth.from(today)
+            else -> Unit
+        }
+    }
 
     LaunchedEffect(state.selectedDate) {
         overviewMonthText = YearMonth.from(state.selectedDate).toString()
@@ -3908,13 +3927,13 @@ private fun CalendarShell(
             onMenu = onMenu,
             onToday = {
                 if (state.selectedView == CalendarViewMode.Agenda) {
-                    agendaScrollTargetDate = LocalDate.now()
+                    agendaScrollTargetDate = today
                     agendaTodayScrollRequest++
                 }
                 onToday()
                 // In the month grid, also jump the list to the current month so "Today" actually
                 // brings the view back (selectedDate alone won't move the scroll position).
-                if (isMonthView) monthJumpRequest = YearMonth.now()
+                if (isMonthView) monthJumpRequest = YearMonth.from(today)
             },
             onSearch = onSearch,
             onTasks = onTasks,
@@ -4193,7 +4212,7 @@ private fun CalendarToolbar(
             Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search), tint = WarmInk, modifier = Modifier.size(24.dp))
         }
         IconButton(onClick = onToday, modifier = Modifier.size(40.dp)) {
-            TodayDateIcon(day = LocalDate.now().dayOfMonth, modifier = Modifier.size(24.dp))
+            TodayDateIcon(day = LocalCalendarTimeSnapshot.current.today.dayOfMonth, modifier = Modifier.size(24.dp))
         }
         IconButton(onClick = onTasks, modifier = Modifier.size(40.dp)) {
             Box(contentAlignment = Alignment.Center) {
@@ -4424,7 +4443,7 @@ private fun MonthDayCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isToday = day == LocalDate.now()
+    val isToday = day == LocalCalendarTimeSnapshot.current.today
     val todayCellColor = WarmBrown.blendWith(MaterialTheme.colorScheme.surface, 0.84f).copy(alpha = 0.96f)
     // Keep the visible month cell in the month scene. Only an invisible anchor participates as
     // the source of the container transform. Otherwise Compose lifts the solid cell into the
@@ -5182,7 +5201,7 @@ private fun MonthGrid(
                             day = day,
                             colors = markers?.colors.orEmpty().map(::Color),
                             hasMore = markers?.hasMore == true,
-                            isToday = day == LocalDate.now(),
+                            isToday = day == LocalCalendarTimeSnapshot.current.today,
                             isSelectedStart = day == selectedStart,
                             enabled = daysEnabled,
                             onClick = { onDaySelected(day) },
@@ -5436,7 +5455,8 @@ private fun ThreeDayView(
     monthMorphDay: LocalDate,
 ) {
     val scope = rememberCoroutineScope()
-    val now = rememberNowMinute()
+    val calendarTime = LocalCalendarTimeSnapshot.current
+    val now = calendarTime.nowMinute
     val density = LocalDensity.current
     var dayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
@@ -5721,7 +5741,7 @@ private fun ThreeDayView(
         }
     }
 
-    val todayDate = LocalDate.now()
+    val todayDate = calendarTime.today
     val todayPage = todayDate.toDayPage()
     val currentLineGeometry = morphContext?.let { ctx ->
         val todaySlot = ctx.days.indexOf(todayDate)
@@ -6572,7 +6592,7 @@ private fun DayPagerColumn(
     Column(Modifier.fillMaxSize()) {
         DayHeader(
             day = day,
-            selected = day == LocalDate.now(),
+            selected = day == LocalCalendarTimeSnapshot.current.today,
             modifier = Modifier
                 .zIndex(4f)
                 .height(DayHeaderHeight)
@@ -9448,7 +9468,7 @@ private fun DatePickerField(
         modifier = modifier,
     )
     if (dialogOpen) {
-        val initialDate = runCatching { LocalDate.parse(value) }.getOrDefault(LocalDate.now())
+        val initialDate = runCatching { LocalDate.parse(value) }.getOrDefault(LocalCalendarTimeSnapshot.current.today)
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
         )
@@ -20971,18 +20991,6 @@ private fun EditorTransferDraft.withDestinationReminderDefaults(destinationDefau
             .toSet(),
         sourceDefaultReminderMinutes = destinationDefaults,
     )
-}
-
-@Composable
-private fun rememberNowMinute(): LocalTime {
-    var now by remember { mutableStateOf(LocalTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = LocalTime.now()
-            delay(60_000)
-        }
-    }
-    return now
 }
 
 private fun buildAllDayOverlayItems(

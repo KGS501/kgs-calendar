@@ -41,6 +41,7 @@ data class CalendarUiState(
     val problemTasks: List<TaskEntity> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
     val dateNavigationSerial: Int = 0,
+    val foregroundRecenterSerial: Int = 0,
     val widgetCreateEventDate: LocalDate? = null,
     val widgetCreateEventSerial: Int = 0,
     val widgetCreateTaskDate: LocalDate? = null,
