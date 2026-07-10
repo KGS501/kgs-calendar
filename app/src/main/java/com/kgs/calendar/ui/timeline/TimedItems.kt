@@ -256,8 +256,11 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -383,6 +386,11 @@ import com.kgs.calendar.ui.model.toTime
 import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
+import com.kgs.calendar.ui.timeline.TimelineDragBounds
+import com.kgs.calendar.ui.timeline.TimelineDragPoint
+import com.kgs.calendar.ui.timeline.TimelineDraggedItem
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -683,10 +691,14 @@ private fun TimedEventBlock(
     var dragX by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
     var dragY by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
     var isDragging by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(false) }
+    var rootOverlayDrag by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(false) }
+    var cardCoordinates by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
-    LaunchedEffect(isDragging) { dragReporter(day, isDragging) }
-    DisposableEffect(event.resourceHref, event.startsAtMillis) {
-        onDispose { dragReporter(day, false) }
+    val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
+    DisposableEffect(event.resourceHref, event.startsAtMillis, dragReporter) {
+        onDispose {
+            if (latestRootOverlayDrag) dragReporter.cancel()
+        }
     }
     val density = LocalDensity.current
     val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
@@ -754,33 +766,75 @@ private fun TimedEventBlock(
         val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
-            onDragStart = {
+            onDragStart = { offset ->
                 isDragging = true
+                val coordinates = cardCoordinates
+                rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
+                if (rootOverlayDrag && coordinates != null) {
+                    val pointer = coordinates.localToRoot(offset)
+                    val topLeft = coordinates.positionInRoot()
+                    dragReporter.start(
+                        TimelineTimedDragStart(
+                            item = TimelineDraggedItem(
+                                kind = TimelineDraggedItemKind.Event,
+                                resourceHref = event.resourceHref,
+                                occurrenceMillis = event.startsAtMillis,
+                                title = event.title,
+                                colorArgb = background.toArgb(),
+                                priority = null,
+                                completed = false,
+                                sourceDate = day,
+                                startMinute = placement.startMinute,
+                                endMinute = placement.endMinute,
+                            ),
+                            pointerInRoot = TimelineDragPoint(pointer.x, pointer.y),
+                            cardBoundsInRoot = TimelineDragBounds(
+                                left = topLeft.x,
+                                top = topLeft.y,
+                                width = coordinates.size.width.toFloat(),
+                                height = coordinates.size.height.toFloat(),
+                            ),
+                        ),
+                    )
+                }
             },
             onDrag = { change, dragAmount ->
                 change.consume()
-                dragX += dragAmount.x
-                dragY += dragAmount.y
+                if (rootOverlayDrag) {
+                    cardCoordinates?.localToRoot(change.position)?.let { pointer ->
+                        dragReporter.update(TimelineDragPoint(pointer.x, pointer.y))
+                    }
+                } else {
+                    dragX += dragAmount.x
+                    dragY += dragAmount.y
+                }
             },
             onDragCancel = {
+                if (rootOverlayDrag) dragReporter.cancel()
                 isDragging = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
             onDragEnd = {
-                val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
-                val minuteDelta = ((dragY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
-                val nextStart = (placement.startMinute + minuteDelta)
-                    .snapDraftMinute()
-                    .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
-                val targetDate = day.plusDays(dayDelta.toLong())
-                val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
-                if (movedTopPx < with(density) { (-16).dp.toPx() }) {
-                    onMoveAllDay(targetDate)
+                if (rootOverlayDrag) {
+                    dragReporter.end()
                 } else {
-                    onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                    val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
+                    val minuteDelta = ((dragY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+                    val nextStart = (placement.startMinute + minuteDelta)
+                        .snapDraftMinute()
+                        .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+                    val targetDate = day.plusDays(dayDelta.toLong())
+                    val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
+                    if (movedTopPx < with(density) { (-16).dp.toPx() }) {
+                        onMoveAllDay(targetDate)
+                    } else {
+                        onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                    }
                 }
                 isDragging = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
@@ -813,8 +867,10 @@ private fun TimedEventBlock(
                     boundsTransform = MorphItemBoundsTransform,
                 )
                 .padding(vertical = 1.dp)
-                .alpha(pendingAlpha)
+                .alpha(if (rootOverlayDrag) 0f else pendingAlpha)
                 .background(background, shape)
+                .onGloballyPositioned { cardCoordinates = it }
+                .testTag("timeline-timed-event-${event.resourceHref}")
                 .then(dragModifier),
         ) {
             Box(
@@ -964,10 +1020,14 @@ private fun TimedTaskBlock(
     var dragX by remember(task.resourceHref) { mutableStateOf(0f) }
     var dragY by remember(task.resourceHref) { mutableStateOf(0f) }
     var isDragging by remember(task.resourceHref) { mutableStateOf(false) }
+    var rootOverlayDrag by remember(task.resourceHref) { mutableStateOf(false) }
+    var cardCoordinates by remember(task.resourceHref) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
-    LaunchedEffect(isDragging) { dragReporter(day, isDragging) }
-    DisposableEffect(task.resourceHref) {
-        onDispose { dragReporter(day, false) }
+    val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
+    DisposableEffect(task.resourceHref, dragReporter) {
+        onDispose {
+            if (latestRootOverlayDrag) dragReporter.cancel()
+        }
     }
     val density = LocalDensity.current
     val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
@@ -1020,33 +1080,75 @@ private fun TimedTaskBlock(
         val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
-            onDragStart = {
+            onDragStart = { offset ->
                 isDragging = true
+                val coordinates = cardCoordinates
+                rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
+                if (rootOverlayDrag && coordinates != null) {
+                    val pointer = coordinates.localToRoot(offset)
+                    val topLeft = coordinates.positionInRoot()
+                    dragReporter.start(
+                        TimelineTimedDragStart(
+                            item = TimelineDraggedItem(
+                                kind = TimelineDraggedItemKind.Task,
+                                resourceHref = task.resourceHref,
+                                occurrenceMillis = task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(),
+                                title = task.title,
+                                colorArgb = background.toArgb(),
+                                priority = task.priority,
+                                completed = inactive,
+                                sourceDate = day,
+                                startMinute = placement.startMinute,
+                                endMinute = placement.endMinute,
+                            ),
+                            pointerInRoot = TimelineDragPoint(pointer.x, pointer.y),
+                            cardBoundsInRoot = TimelineDragBounds(
+                                left = topLeft.x,
+                                top = topLeft.y,
+                                width = coordinates.size.width.toFloat(),
+                                height = coordinates.size.height.toFloat(),
+                            ),
+                        ),
+                    )
+                }
             },
             onDrag = { change, dragAmount ->
                 change.consume()
-                dragX += dragAmount.x
-                dragY += dragAmount.y
+                if (rootOverlayDrag) {
+                    cardCoordinates?.localToRoot(change.position)?.let { pointer ->
+                        dragReporter.update(TimelineDragPoint(pointer.x, pointer.y))
+                    }
+                } else {
+                    dragX += dragAmount.x
+                    dragY += dragAmount.y
+                }
             },
             onDragCancel = {
+                if (rootOverlayDrag) dragReporter.cancel()
                 isDragging = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
             onDragEnd = {
-                val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
-                val minuteDelta = ((dragY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
-                val nextStart = (placement.startMinute + minuteDelta)
-                    .snapDraftMinute()
-                    .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
-                val targetDate = day.plusDays(dayDelta.toLong())
-                val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
-                if (movedTopPx < with(density) { (-16).dp.toPx() }) {
-                    onMoveAllDay(targetDate)
+                if (rootOverlayDrag) {
+                    dragReporter.end()
                 } else {
-                    onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                    val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
+                    val minuteDelta = ((dragY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+                    val nextStart = (placement.startMinute + minuteDelta)
+                        .snapDraftMinute()
+                        .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+                    val targetDate = day.plusDays(dayDelta.toLong())
+                    val movedTopPx = with(density) { placement.topDp.dp.toPx() } + dragY
+                    if (movedTopPx < with(density) { (-16).dp.toPx() }) {
+                        onMoveAllDay(targetDate)
+                    } else {
+                        onMove(targetDate, nextStart.toDraftLocalTime(), (nextStart + duration).toDraftLocalTime())
+                    }
                 }
                 isDragging = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
@@ -1081,8 +1183,10 @@ private fun TimedTaskBlock(
                 )
                 .taskPriorityMotion(if (inactive) null else task.priority, background)
                 .padding(vertical = 1.dp)
-                .alpha(taskAlpha * pendingAlpha)
+                .alpha(if (rootOverlayDrag) 0f else taskAlpha * pendingAlpha)
                 .background(background, shape)
+                .onGloballyPositioned { cardCoordinates = it }
+                .testTag("timeline-timed-task-${task.resourceHref}")
                 .then(dragModifier),
         ) {
             TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())

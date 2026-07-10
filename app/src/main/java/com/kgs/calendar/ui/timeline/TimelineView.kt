@@ -257,7 +257,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -383,6 +385,16 @@ import com.kgs.calendar.ui.model.toTime
 import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
+import com.kgs.calendar.ui.timeline.AllDayReservation
+import com.kgs.calendar.ui.timeline.NoOpTimelineTimedDragReporter
+import com.kgs.calendar.ui.timeline.TimelineDragPoint
+import com.kgs.calendar.ui.timeline.TimelineDragReducer
+import com.kgs.calendar.ui.timeline.TimelineDragSession
+import com.kgs.calendar.ui.timeline.TimelineDraggedItem
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineDropTarget
+import com.kgs.calendar.ui.timeline.TimelineTimedDragReporter
+import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -427,7 +439,24 @@ import kotlin.math.floor
 import kotlin.random.Random
 import kotlin.math.ln
 import kotlin.math.tan
+private data class TimelineRootDragLayout(
+    val rootOrigin: TimelineDragPoint,
+    val anchorPage: Int,
+    val anchorOffsetPx: Float,
+    val dayWidthPx: Float,
+    val dayStepPx: Float,
+    val sidebarWidthPx: Float,
+    val fixedAllDayBoundaryY: Float,
+    val sourceInsetXPx: Float,
+    val sourceWidthPx: Float,
+    val sourceHeightPx: Float,
+)
 
+private data class ActiveTimelineTimedDrag(
+    val item: TimelineDraggedItem,
+    val session: TimelineDragSession,
+    val layout: TimelineRootDragLayout,
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -465,6 +494,8 @@ internal fun TimelineView(
     val calendarTime = LocalCalendarTimeSnapshot.current
     val now = calendarTime.nowMinute
     val density = LocalDensity.current
+    var timelineRootOffset by remember { mutableStateOf(Offset.Zero) }
+    var activeTimedDrag by remember { mutableStateOf<ActiveTimelineTimedDrag?>(null) }
     var dayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
     val bodyScrollableState = rememberScrollableState { delta ->
@@ -559,7 +590,7 @@ internal fun TimelineView(
     }
     val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
     var allDayExpanded by remember { mutableStateOf(false) }
-    val allDayHeight = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent) {
+    val baseAllDayHeight = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent) {
         pagerVisibleDays.allDayAreaHeight(
             events = state.events,
             tasks = calendarTasks,
@@ -568,6 +599,12 @@ internal fun TimelineView(
             draftDate = draftEvent?.takeIf { it.allDay }?.date,
         )
     }
+    val visibleReservation = activeTimedDrag?.session?.reservation
+        ?.takeIf { reservation -> reservation.date in pagerVisibleDays }
+    val allDayHeight = visibleReservation
+        ?.minimumViewportHeight()
+        ?.let { reservationHeight -> maxOf(baseAllDayHeight, reservationHeight) }
+        ?: baseAllDayHeight
     val allDayHasOverflow = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems) {
         pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems)
     }
@@ -776,9 +813,146 @@ internal fun TimelineView(
         geometry.leftPx < dayViewportWidthPx && geometry.leftPx + geometry.widthPx > 0f
     } == true
 
+    val timedDragReducer = remember(density) {
+        TimelineDragReducer(
+            entryMarginPx = with(density) { 12.dp.toPx() },
+            exitMarginPx = with(density) { 16.dp.toPx() },
+        )
+    }
+    val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Unit>(
+        newValue = dragStart@ { start ->
+            if (morphContext != null || dayWidthPx <= 0f) return@dragStart
+            val firstPage = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
+            val anchorPage = firstPage?.index ?: pagerState.currentPage
+            val anchorOffsetPx = firstPage?.offset?.toFloat() ?: 0f
+            val sidebarWidthPx = with(density) { TimeSidebarWidth.toPx() }
+            val dayStepPx = dayWidthPx + daySpacingPx
+            val rootOrigin = TimelineDragPoint(timelineRootOffset.x, timelineRootOffset.y)
+            val sourcePageLeft = sidebarWidthPx + anchorOffsetPx +
+                (start.item.sourceDate.toDayPage() - anchorPage) * dayStepPx
+            val sourceLeft = start.cardBoundsInRoot.left - rootOrigin.x
+            val layout = TimelineRootDragLayout(
+                rootOrigin = rootOrigin,
+                anchorPage = anchorPage,
+                anchorOffsetPx = anchorOffsetPx,
+                dayWidthPx = dayWidthPx,
+                dayStepPx = dayStepPx,
+                sidebarWidthPx = sidebarWidthPx,
+                fixedAllDayBoundaryY = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
+                sourceInsetXPx = sourceLeft - sourcePageLeft,
+                sourceWidthPx = start.cardBoundsInRoot.width,
+                sourceHeightPx = start.cardBoundsInRoot.height,
+            )
+            activeTimedDrag = ActiveTimelineTimedDrag(
+                item = start.item,
+                session = TimelineDragSession(
+                    target = TimelineDropTarget.Timed(
+                        date = start.item.sourceDate,
+                        startMinute = start.item.startMinute,
+                        endMinute = start.item.endMinute,
+                    ),
+                ),
+                layout = layout,
+            )
+        },
+    )
+    val currentDragUpdate = rememberUpdatedState<(TimelineDragPoint) -> Unit>(
+        newValue = dragUpdate@ { pointerInRoot ->
+            val active = activeTimedDrag ?: return@dragUpdate
+            val layout = active.layout
+            val pointerX = pointerInRoot.x - layout.rootOrigin.x
+            val pointerY = pointerInRoot.y - layout.rootOrigin.y
+            val dayAreaX = pointerX - layout.sidebarWidthPx
+            val pageDelta = floor((dayAreaX - layout.anchorOffsetPx) / layout.dayStepPx).toInt()
+            val targetPage = (layout.anchorPage + pageDelta).coerceIn(0, DayPagerPageCount - 1)
+            val targetDate = targetPage.toDayDate()
+            val duration = (active.item.endMinute - active.item.startMinute)
+                .coerceAtLeast(DraftMinDurationMinutes)
+            val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }.coerceAtLeast(1f)
+            val gridY = pointerY - layout.fixedAllDayBoundaryY + timeScroll.value
+            val minuteOffset = ((gridY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+            val startMinute = (DayStartHour * 60 + minuteOffset)
+                .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+            val timedTarget = TimelineDropTarget.Timed(
+                date = targetDate,
+                startMinute = startMinute,
+                endMinute = startMinute + duration,
+            )
+            val reservation = allDayReservationFor(
+                date = targetDate,
+                events = state.events,
+                tasks = calendarTasks,
+                taskColorMode = state.taskColorMode,
+            )
+            val allDayTarget = TimelineDropTarget.AllDay(
+                date = reservation.date,
+                lane = reservation.lane,
+            )
+            activeTimedDrag = active.copy(
+                session = timedDragReducer.update(
+                    pointerY = pointerY,
+                    boundaryY = layout.fixedAllDayBoundaryY,
+                    timedTarget = timedTarget,
+                    allDayTarget = allDayTarget,
+                    previous = active.session,
+                ),
+            )
+        },
+    )
+    val currentDragEnd = rememberUpdatedState<() -> Unit>(
+        newValue = dragEnd@ {
+            val active = activeTimedDrag ?: return@dragEnd
+            activeTimedDrag = null
+            when (val target = active.session.target) {
+                is TimelineDropTarget.AllDay -> when (active.item.kind) {
+                    TimelineDraggedItemKind.Event -> onEventMovedAllDay(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                    )
+
+                    TimelineDraggedItemKind.Task -> onTaskMovedAllDay(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                    )
+                }
+
+                is TimelineDropTarget.Timed -> when (active.item.kind) {
+                    TimelineDraggedItemKind.Event -> onEventMoved(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                        target.startMinute.toDraftLocalTime(),
+                        target.endMinute.toDraftLocalTime(),
+                    )
+
+                    TimelineDraggedItemKind.Task -> onTaskMoved(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                        target.startMinute.toDraftLocalTime(),
+                        target.endMinute.toDraftLocalTime(),
+                    )
+                }
+            }
+        },
+    )
+    val currentDragCancel = rememberUpdatedState<() -> Unit>(newValue = { activeTimedDrag = null })
+    val timedDragReporter = remember {
+        object : TimelineTimedDragReporter {
+            override val usesRootOverlay: Boolean = true
+            override fun start(start: TimelineTimedDragStart) = currentDragStart.value(start)
+            override fun update(pointerInRoot: TimelineDragPoint) = currentDragUpdate.value(pointerInRoot)
+            override fun end() = currentDragEnd.value()
+            override fun cancel() = currentDragCancel.value()
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
+            .onGloballyPositioned { timelineRootOffset = it.positionInRoot() }
             // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
             // element for the month-cell <-> day morph, so the entire view scales up out of (and
             // back into) the tapped month cell as one unit. Only enabled in 1-day mode: 3-day uses
@@ -847,7 +1021,6 @@ internal fun TimelineView(
                     // un-clipped in steady state so a card can still be dragged across day edges.)
                     .then(if (morphContext != null) Modifier.clipToBounds() else Modifier),
             ) {
-            var draggingDay by remember { mutableStateOf<LocalDate?>(null) }
             // Enable per-item (event/task) morphs out of the month cell only for the real pager in
             // 1-day mode and only when NOT doing the 3-day affine morph — so the selected day's
             // cards pair up with the month pills, without the affine overlay's copies registering
@@ -855,10 +1028,7 @@ internal fun TimelineView(
             val itemMorphDay = if (morphContext == null && isDayMode) state.selectedDate else null
             CompositionLocalProvider(
                 LocalMorphItemDay provides itemMorphDay,
-                LocalTimedDragReporter provides { date, active ->
-                    if (active) draggingDay = date
-                    else if (draggingDay == date) draggingDay = null
-                },
+                LocalTimedDragReporter provides timedDragReporter,
             ) {
             if (morphContext == null) {
                 TimedGridViewportLayer(
@@ -891,7 +1061,7 @@ internal fun TimelineView(
                     .alpha(if (morphContext != null) 0f else 1f),
             ) { page ->
                 val day = page.toDayDate()
-                Box(modifier = Modifier.zIndex(if (day == draggingDay) 50f else 0f)) {
+                Box(modifier = Modifier.zIndex(0f)) {
                 DayPagerColumn(
                     day = day,
                     visibleStartDate = visibleStartDate,
@@ -1006,6 +1176,7 @@ internal fun TimelineView(
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
                     priorityPageCount = ctx.days.size,
+                    reservation = visibleReservation,
                 )
             }
             val firstVisiblePageInfo = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
@@ -1039,6 +1210,7 @@ internal fun TimelineView(
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
                     priorityPageCount = targetDayCount,
+                    reservation = visibleReservation,
                 )
             }
             }
@@ -1084,6 +1256,14 @@ internal fun TimelineView(
                 modifier = Modifier
                     .matchParentSize()
                     .zIndex(30f),
+            )
+        }
+        activeTimedDrag?.let { active ->
+            TimelineTimedDragOverlay(
+                active = active,
+                animatedAllDayHeight = animatedAllDayHeight,
+                hourHeightDp = hourHeightDp,
+                timeScrollPx = timeScroll.value,
             )
         }
     }
@@ -1255,7 +1435,9 @@ private fun DayHeader(day: LocalDate, selected: Boolean, modifier: Modifier = Mo
  * day renders behind the next page's background, since pager pages are drawn in
  * index order by default.
  */
-internal val LocalTimedDragReporter = compositionLocalOf<(LocalDate, Boolean) -> Unit> { { _, _ -> } }
+internal val LocalTimedDragReporter = compositionLocalOf<TimelineTimedDragReporter> {
+    NoOpTimelineTimedDragReporter
+}
 
 @Composable
 private fun DayPagerColumn(
@@ -1448,6 +1630,110 @@ private fun TimeSidebar(hours: IntRange, hourHeightDp: Float, onZoom: (Float, Fl
     }
 }
 
+
+@Composable
+private fun TimelineTimedDragOverlay(
+    active: ActiveTimelineTimedDrag,
+    animatedAllDayHeight: Dp,
+    hourHeightDp: Float,
+    timeScrollPx: Int,
+) {
+    val density = LocalDensity.current
+    val layout = active.layout
+    val target = active.session.target
+    val targetPageLeft = layout.anchorOffsetPx +
+        (target.date.toDayPage() - layout.anchorPage) * layout.dayStepPx
+    val horizontalInsetPx = with(density) { 2.dp.toPx() }
+    val targetX = when (target) {
+        is TimelineDropTarget.AllDay -> layout.sidebarWidthPx + targetPageLeft + horizontalInsetPx
+        is TimelineDropTarget.Timed -> layout.sidebarWidthPx + targetPageLeft + layout.sourceInsetXPx
+    }
+    val targetY = when (target) {
+        is TimelineDropTarget.AllDay -> with(density) {
+            (DayHeaderHeight + 7.dp + (target.lane * 29).dp).toPx()
+        }
+
+        is TimelineDropTarget.Timed -> with(density) {
+            (DayHeaderHeight + animatedAllDayHeight).toPx() +
+                ((target.startMinute - DayStartHour * 60) / 60f) * hourHeightDp.dp.toPx() -
+                timeScrollPx
+        }
+    }
+    val targetWidth = when (target) {
+        is TimelineDropTarget.AllDay -> (layout.dayWidthPx - horizontalInsetPx * 2f).coerceAtLeast(1f)
+        is TimelineDropTarget.Timed -> layout.sourceWidthPx.coerceAtMost(layout.dayWidthPx).coerceAtLeast(1f)
+    }
+    val targetHeight = when (target) {
+        is TimelineDropTarget.AllDay -> with(density) { 24.dp.toPx() }
+        is TimelineDropTarget.Timed -> layout.sourceHeightPx
+    }
+    val animatedX by animateFloatAsState(
+        targetValue = targetX,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayX",
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = targetY,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayY",
+    )
+    val animatedWidth by animateFloatAsState(
+        targetValue = targetWidth,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayWidth",
+    )
+    val animatedHeight by animateFloatAsState(
+        targetValue = targetHeight,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayHeight",
+    )
+    val color = Color(active.item.colorArgb)
+    val contentColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
+    val shape = RoundedCornerShape(if (target is TimelineDropTarget.AllDay) 8.dp else 10.dp)
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(animatedX.roundToInt(), animatedY.roundToInt()) }
+            .width(with(density) { animatedWidth.toDp() })
+            .height(with(density) { animatedHeight.toDp() })
+            .zIndex(100f)
+            .shadow(7.dp, shape)
+            .then(
+                if (active.item.kind == TimelineDraggedItemKind.Task && !active.item.completed) {
+                    Modifier.taskPriorityMotion(active.item.priority, color)
+                } else {
+                    Modifier
+                },
+            )
+            .background(color, shape)
+            .testTag("timeline-drag-overlay"),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = if (target is TimelineDropTarget.AllDay) 3.dp else 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (active.item.kind == TimelineDraggedItemKind.Task) {
+                Icon(
+                    imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                text = active.item.title,
+                color = contentColor,
+                fontSize = 12.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (target is TimelineDropTarget.AllDay) 1 else 2,
+                overflow = TextOverflow.Clip,
+            )
+        }
+    }
+}
 
 @Composable
 private fun CurrentTimeLine(

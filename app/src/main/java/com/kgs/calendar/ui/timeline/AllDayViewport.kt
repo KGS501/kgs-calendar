@@ -383,6 +383,7 @@ import com.kgs.calendar.ui.model.toTime
 import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
+import com.kgs.calendar.ui.timeline.AllDayReservation
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -429,6 +430,29 @@ import kotlin.math.ln
 import kotlin.math.tan
 
 
+internal fun allDayReservationFor(
+    date: LocalDate,
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+    taskColorMode: TaskColorMode,
+): AllDayReservation {
+    val page = date.toDayPage()
+    val occupiedLanes = buildAllDayOverlayItems(
+        events = events,
+        tasks = tasks,
+        taskColorMode = taskColorMode,
+        visibleStartPage = page,
+        visibleEndPage = page,
+    ).filter { page in it.startPage..it.endPage }
+        .mapTo(mutableSetOf()) { it.lane }
+    return AllDayReservation(date = date, lane = firstFreeLaneIndex(occupiedLanes))
+}
+
+internal fun AllDayReservation.minimumViewportHeight(): Dp {
+    val rowCount = lane + 1
+    return (rowCount * 24 + (rowCount - 1) * 5 + 15).dp
+}
+
 @Composable
 internal fun AllDayViewportOverlay(
     events: List<EventEntity>,
@@ -457,6 +481,7 @@ internal fun AllDayViewportOverlay(
     onTaskStatusChanged: (String, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     priorityPageCount: Int,
+    reservation: AllDayReservation? = null,
 ) {
     if (height <= 0.dp || viewportWidthPx <= 0f || dayStepPx <= 0f) return
     val bufferStartPage = (anchorPage - 10).coerceAtLeast(0)
@@ -774,6 +799,36 @@ internal fun AllDayViewportOverlay(
                         .height(22.dp),
                     hiddenItems = hiddenItems,
                     onClick = { onExpandedChange(true) },
+                )
+            }
+        }
+        reservation?.let { reserved ->
+            val reservedPage = reserved.date.toDayPage()
+            val left = anchorOffsetPx + (reservedPage - anchorPage) * dayStepPx
+            val visibleLeft = left.coerceAtLeast(0f)
+            val visibleRight = (left + dayWidthPx).coerceAtMost(viewportWidthPx)
+            if (reservedPage in visibleStartPage..visibleEndPage && visibleRight - visibleLeft > 1f) {
+                val animatedLane by animateFloatAsState(
+                    targetValue = reserved.lane.toFloat(),
+                    animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                    label = "allDayReservationLane",
+                )
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = visibleLeft.roundToInt(),
+                                y = with(density) { (7.dp + (animatedLane * 29f).dp).roundToPx() },
+                            )
+                        }
+                        .width(with(density) { (visibleRight - visibleLeft).toDp() })
+                        .height(24.dp)
+                        .zIndex(18f)
+                        .padding(horizontal = 2.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(WarmBrown.copy(alpha = 0.10f))
+                        .border(1.dp, WarmBrown.copy(alpha = 0.38f), RoundedCornerShape(8.dp))
+                        .testTag("timeline-all-day-reservation-${reserved.date}-${reserved.lane}"),
                 )
             }
         }

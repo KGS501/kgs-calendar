@@ -39,6 +39,65 @@ internal data class TimelineDragSession(
     val reservation: AllDayReservation? = target.toReservation(),
 )
 
+internal enum class TimelineDraggedItemKind { Event, Task }
+
+internal data class TimelineDraggedItem(
+    val kind: TimelineDraggedItemKind,
+    val resourceHref: String,
+    val occurrenceMillis: Long,
+    val title: String,
+    val colorArgb: Int,
+    val priority: Int?,
+    val completed: Boolean,
+    val sourceDate: LocalDate,
+    val startMinute: Int,
+    val endMinute: Int,
+) {
+    init {
+        require(endMinute > startMinute) { "Dragged item must have a positive duration" }
+    }
+}
+
+internal data class TimelineDragPoint(val x: Float, val y: Float) {
+    init {
+        require(x.isFinite() && y.isFinite()) { "Drag point must be finite" }
+    }
+}
+
+internal data class TimelineDragBounds(
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val height: Float,
+) {
+    init {
+        require(listOf(left, top, width, height).all(Float::isFinite)) { "Drag bounds must be finite" }
+        require(width > 0f && height > 0f) { "Drag bounds must be positive" }
+    }
+}
+
+internal data class TimelineTimedDragStart(
+    val item: TimelineDraggedItem,
+    val pointerInRoot: TimelineDragPoint,
+    val cardBoundsInRoot: TimelineDragBounds,
+)
+
+internal interface TimelineTimedDragReporter {
+    val usesRootOverlay: Boolean
+    fun start(start: TimelineTimedDragStart)
+    fun update(pointerInRoot: TimelineDragPoint)
+    fun end()
+    fun cancel()
+}
+
+internal object NoOpTimelineTimedDragReporter : TimelineTimedDragReporter {
+    override val usesRootOverlay: Boolean = false
+    override fun start(start: TimelineTimedDragStart) = Unit
+    override fun update(pointerInRoot: TimelineDragPoint) = Unit
+    override fun end() = Unit
+    override fun cancel() = Unit
+}
+
 internal class TimelineDragReducer(
     private val entryMarginPx: Float,
     private val exitMarginPx: Float,
