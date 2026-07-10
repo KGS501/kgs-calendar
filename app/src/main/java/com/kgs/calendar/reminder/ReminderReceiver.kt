@@ -89,13 +89,9 @@ class ReminderReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
-            val startedAt = System.currentTimeMillis()
             runCatching {
                 val graph = KgsCalendarApplication.graph(appContext)
-                graph.repository.setTaskStatus(taskResourceHref, "COMPLETED")
-                ReminderScheduler.cancelTaskNotifications(appContext, taskResourceHref)
-                graph.repository.pushPendingChangesCreatedSince(startedAt)
-                ReminderScheduler.reschedule(appContext)
+                graph.taskMutationCoordinator.setStatus(taskResourceHref, "COMPLETED")
             }
             NotificationManagerCompat.from(appContext).cancel(notificationId)
             pendingResult.finish()

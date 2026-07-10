@@ -67,4 +67,30 @@ class KgsDatabaseInstrumentedTest {
 
         assertEquals("Test task", database.taskDao().get("task-1")!!.title)
     }
+
+    @Test
+    fun resourceLookupKeepsDuplicateUidsInSeparateCollections() = runBlocking {
+        database.accountDao().upsert(
+            AccountEntity(serverUrl = "https://nextcloud.test", username = "fromb", displayName = "fromb", lastSyncAtMillis = null),
+        )
+        val firstCollection = "/remote.php/dav/calendars/fromb/work/"
+        val secondCollection = "/remote.php/dav/calendars/fromb/home/"
+        database.collectionDao().upsertAll(
+            listOf(
+                CollectionEntity(firstCollection, AccountEntity.PRIMARY_ID, "Work", 0xff176b5d.toInt(), false, true, null, null),
+                CollectionEntity(secondCollection, AccountEntity.PRIMARY_ID, "Home", 0xff3267a8.toInt(), false, true, null, null),
+            ),
+        )
+        val firstHref = "${firstCollection}same-uid.ics"
+        val secondHref = "${secondCollection}same-uid.ics"
+        val first = TaskEntity("same-uid", firstCollection, firstHref, "Work task", null, dueAtMillis = null, startAtMillis = null, completedAtMillis = null, isCompleted = false, priority = null, color = 0xff176b5d.toInt())
+        val second = TaskEntity("same-uid", secondCollection, secondHref, "Home task", null, dueAtMillis = null, startAtMillis = null, completedAtMillis = null, isCompleted = false, priority = null, color = 0xff3267a8.toInt())
+        database.taskDao().upsert(first)
+        database.taskDao().upsert(second)
+
+        database.taskDao().upsert(database.taskDao().byResource(secondHref)!!.copy(status = "COMPLETED", isCompleted = true))
+
+        assertEquals(null, database.taskDao().byResource(firstHref)!!.status)
+        assertEquals("COMPLETED", database.taskDao().byResource(secondHref)!!.status)
+    }
 }

@@ -1033,8 +1033,8 @@ class CalendarRepository(
         createTask(payload)
     }
 
-    suspend fun setTaskCompleted(uid: String, completed: Boolean) {
-        setTaskStatus(uid, if (completed) "COMPLETED" else "NEEDS-ACTION")
+    suspend fun setTaskCompleted(resourceHref: String, completed: Boolean) {
+        setTaskStatus(resourceHref, if (completed) "COMPLETED" else "NEEDS-ACTION")
     }
 
     /**
@@ -1042,8 +1042,8 @@ class CalendarRepository(
      * task and keeps the derived [TaskEntity.isCompleted] / completedAtMillis fields
      * in sync. COMPLETED is the only status that counts as "done".
      */
-    suspend fun setTaskStatus(uid: String, status: String) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun setTaskStatus(resourceHref: String, status: String) {
+        val existing = database.taskDao().byResource(resourceHref) ?: return
         if (isReadOnlyCollectionHref(existing.collectionHref)) return
         val resource = database.resourceDao().get(existing.resourceHref)
         val completed = status.equals("COMPLETED", ignoreCase = true)

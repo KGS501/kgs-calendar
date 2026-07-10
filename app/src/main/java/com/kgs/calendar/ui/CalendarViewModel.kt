@@ -20,6 +20,7 @@ import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
@@ -27,6 +28,7 @@ import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.reminder.ReminderScheduler
+import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.sync.CalendarStructuralMutation
 import com.kgs.calendar.sync.PostMutationStage
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
@@ -66,6 +68,7 @@ class CalendarViewModel(
     private val repository: CalendarRepository,
     private val settingsStore: SettingsStore,
     private val sourceCalendarMutationCoordinator: SourceCalendarMutationCoordinator,
+    private val taskMutationCoordinator: TaskMutationCoordinator,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
@@ -914,29 +917,30 @@ class CalendarViewModel(
         }
     }
 
-    fun updateTask(uid: String, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTask(uid, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTask(resourceHref: String, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(resourceHref, effectiveTaskStatus(resourceHref, payload)) {
+                repository.updateTask(resourceHref, payload)
             }
         }
     }
 
-    fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTaskOccurrence(uid, occurrenceStartMillis, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTaskOccurrence(resourceHref: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(
+                resourceHref = resourceHref,
+                status = effectiveTaskStatus(resourceHref, payload),
+                occurrenceId = CalendarOccurrenceId.Task(resourceHref, occurrenceStartMillis),
+            ) {
+                repository.updateTaskOccurrence(resourceHref, occurrenceStartMillis, payload)
             }
         }
     }
 
-    fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTaskFollowing(uid, occurrenceStartMillis, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTaskFollowing(resourceHref: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(resourceHref, effectiveTaskStatus(resourceHref, payload)) {
+                repository.updateTaskFollowing(resourceHref, occurrenceStartMillis, payload)
             }
         }
     }
@@ -948,21 +952,18 @@ class CalendarViewModel(
         }
     }
 
-    fun setTaskCompleted(uid: String, completed: Boolean) {
-        runEdit(rescheduleReminders = true) {
-            repository.setTaskCompleted(uid, completed)
-            if (completed) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
-            }
+    fun setTaskCompleted(resourceHref: String, completed: Boolean) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.setStatus(
+                resourceHref,
+                if (completed) "COMPLETED" else "NEEDS-ACTION",
+            )
         }
     }
 
-    fun setTaskStatus(uid: String, status: String) {
-        runEdit(rescheduleReminders = true) {
-            repository.setTaskStatus(uid, status)
-            if (status.equals("COMPLETED", ignoreCase = true)) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
-            }
+    fun setTaskStatus(resourceHref: String, status: String) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.setStatus(resourceHref, status)
         }
     }
 
@@ -1103,6 +1104,21 @@ class CalendarViewModel(
         }
     }
 
+    private fun runTaskStatusMutation(mutation: suspend () -> Unit) {
+        viewModelScope.launch {
+            runCatching { mutation() }
+                .onSuccess { message.value = null }
+                .onFailure { message.value = it.message ?: "Could not save changes." }
+        }
+    }
+
+    private fun effectiveTaskStatus(resourceHref: String, payload: TaskEditPayload): String {
+        payload.status?.takeIf { it.isNotBlank() }?.let { return it }
+        val existing = uiState.value.allTasks.firstOrNull { it.resourceHref == resourceHref }
+        existing?.status?.takeIf { payload.isCompleted == existing.isCompleted }?.let { return it }
+        return if (payload.isCompleted) "COMPLETED" else "NEEDS-ACTION"
+    }
+
     private fun runStructuralMutation(
         kind: CalendarStructuralMutation,
         successMessage: String? = null,
@@ -1176,6 +1192,7 @@ class CalendarViewModelFactory(
             repository = graph.repository,
             settingsStore = graph.settingsStore,
             sourceCalendarMutationCoordinator = graph.sourceCalendarMutationCoordinator,
+            taskMutationCoordinator = graph.taskMutationCoordinator,
             appContext = graph.appContext,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
         ) as T

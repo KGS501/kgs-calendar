@@ -521,16 +521,15 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                     try {
                         val graph = KgsCalendarApplication.graph(context.applicationContext)
                         val task = graph.repository.allTasksSnapshot()
-                            .firstOrNull { it.resourceHref == taskId || it.uid == taskId }
+                            .firstOrNull { it.resourceHref == taskId }
                         if (task != null) {
                             val nextStatus = if (task.isCompleted || task.status.equals("COMPLETED", ignoreCase = true)) {
                                 "NEEDS-ACTION"
                             } else {
                                 "COMPLETED"
                             }
-                            graph.repository.setTaskStatus(task.resourceHref, nextStatus)
+                            graph.taskMutationCoordinator.setStatus(task.resourceHref, nextStatus)
                         }
-                        KgsWidgetUpdateScheduler.updateAll(context.applicationContext)
                     } finally {
                         pending.finish()
                     }
