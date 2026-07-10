@@ -1,4 +1,4 @@
-﻿@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 
 package com.kgs.calendar.ui
 
@@ -262,6 +262,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -350,6 +351,8 @@ import com.kgs.calendar.ui.calendar.toMonth
 import com.kgs.calendar.ui.calendar.toMonthPage
 import com.kgs.calendar.ui.calendar.toMonthViewPage
 import com.kgs.calendar.ui.calendar.weekHeaderLabels
+import com.kgs.calendar.ui.editor.EditorSchedulePreview
+import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.labels.RecurrenceOption
 import com.kgs.calendar.ui.labels.ReminderChoice
 import com.kgs.calendar.ui.labels.ReminderUnit
@@ -425,51 +428,51 @@ import kotlin.random.Random
 import kotlin.math.ln
 import kotlin.math.tan
 
-private val DefaultUiTokens = CalendarUiTokens.Default
-private val WarmBrown: Color @Composable get() = LocalCalendarUiTokens.current.warmBrown
-private val WarmPeach: Color @Composable get() = LocalCalendarUiTokens.current.warmPeach
-private val WarmGrid: Color @Composable get() = LocalCalendarUiTokens.current.warmGrid
-private val WarmLine: Color @Composable get() = LocalCalendarUiTokens.current.warmLine
-private val TaskHierarchyLine: Color @Composable get() = LocalCalendarUiTokens.current.taskHierarchyLine
-private val WarmInk: Color @Composable get() = LocalCalendarUiTokens.current.warmInk
-private val CurrentDarkPalette: Boolean @Composable get() = LocalCalendarUiTokens.current.darkPalette
-private val PriorityAnimationsEnabled: Boolean @Composable get() = LocalCalendarUiTokens.current.priorityAnimationsEnabled
-private val SyncPendingOrange = DefaultUiTokens.syncPendingOrange
-private val DraftAccent = DefaultUiTokens.draftAccent
-private val ItemColorPalette = DefaultUiTokens.itemColorPalette
-private val MotionStandard = DefaultUiTokens.motionStandard
-private val MotionStandardAccelerate = DefaultUiTokens.motionStandardAccelerate
-private val MotionEmphasized = DefaultUiTokens.motionEmphasized
-private val MorphEasing = DefaultUiTokens.morphEasing
-private val MotionShort = DefaultUiTokens.motionShortMillis
-private val MotionMedium = DefaultUiTokens.motionMediumMillis
-private val MotionLong = DefaultUiTokens.motionLongMillis
-private val PENDING_BADGE_DELAY_MILLIS = DefaultUiTokens.pendingBadgeDelayMillis
-private val DefaultHourRowHeightDp = DefaultUiTokens.defaultHourRowHeightDp
-private val AbsoluteMinHourRowHeightDp = DefaultUiTokens.absoluteMinHourRowHeightDp
-private val MaxHourRowHeightDp = DefaultUiTokens.maxHourRowHeightDp
-private val DraftSnapMinutes = DefaultUiTokens.draftSnapMinutes
-private val DraftMinDurationMinutes = DefaultUiTokens.draftMinDurationMinutes
-private val TimeSidebarWidth = DefaultUiTokens.timeSidebarWidth
-private val DayHeaderHeight = DefaultUiTokens.dayHeaderHeight
-private val DayColumnSpacing = DefaultUiTokens.dayColumnSpacing
-private val HourCellGap = DefaultUiTokens.hourCellGap
-private val EditorHorizontalPadding = DefaultUiTokens.editorHorizontalPadding
-private val EditorSectionHorizontalPadding = DefaultUiTokens.editorSectionHorizontalPadding
-private val UniversalControlHeight = DefaultUiTokens.universalControlHeight
-private val SettingsControlHeight = DefaultUiTokens.settingsControlHeight
-private val SettingsControlShape = DefaultUiTokens.settingsControlShape
-private val EditorTinyVisibleHeight = DefaultUiTokens.editorTinyVisibleHeight
-private val EditorSmallVisibleHeight = DefaultUiTokens.editorSmallVisibleHeight
+internal val DefaultUiTokens = CalendarUiTokens.Default
+internal val WarmBrown: Color @Composable get() = LocalCalendarUiTokens.current.warmBrown
+internal val WarmPeach: Color @Composable get() = LocalCalendarUiTokens.current.warmPeach
+internal val WarmGrid: Color @Composable get() = LocalCalendarUiTokens.current.warmGrid
+internal val WarmLine: Color @Composable get() = LocalCalendarUiTokens.current.warmLine
+internal val TaskHierarchyLine: Color @Composable get() = LocalCalendarUiTokens.current.taskHierarchyLine
+internal val WarmInk: Color @Composable get() = LocalCalendarUiTokens.current.warmInk
+internal val CurrentDarkPalette: Boolean @Composable get() = LocalCalendarUiTokens.current.darkPalette
+internal val PriorityAnimationsEnabled: Boolean @Composable get() = LocalCalendarUiTokens.current.priorityAnimationsEnabled
+internal val SyncPendingOrange = DefaultUiTokens.syncPendingOrange
+internal val DraftAccent = DefaultUiTokens.draftAccent
+internal val ItemColorPalette = DefaultUiTokens.itemColorPalette
+internal val MotionStandard = DefaultUiTokens.motionStandard
+internal val MotionStandardAccelerate = DefaultUiTokens.motionStandardAccelerate
+internal val MotionEmphasized = DefaultUiTokens.motionEmphasized
+internal val MorphEasing = DefaultUiTokens.morphEasing
+internal val MotionShort = DefaultUiTokens.motionShortMillis
+internal val MotionMedium = DefaultUiTokens.motionMediumMillis
+internal val MotionLong = DefaultUiTokens.motionLongMillis
+internal val PENDING_BADGE_DELAY_MILLIS = DefaultUiTokens.pendingBadgeDelayMillis
+internal val DefaultHourRowHeightDp = DefaultUiTokens.defaultHourRowHeightDp
+internal val AbsoluteMinHourRowHeightDp = DefaultUiTokens.absoluteMinHourRowHeightDp
+internal val MaxHourRowHeightDp = DefaultUiTokens.maxHourRowHeightDp
+internal val DraftSnapMinutes = DefaultUiTokens.draftSnapMinutes
+internal val DraftMinDurationMinutes = DefaultUiTokens.draftMinDurationMinutes
+internal val TimeSidebarWidth = DefaultUiTokens.timeSidebarWidth
+internal val DayHeaderHeight = DefaultUiTokens.dayHeaderHeight
+internal val DayColumnSpacing = DefaultUiTokens.dayColumnSpacing
+internal val HourCellGap = DefaultUiTokens.hourCellGap
+internal val EditorHorizontalPadding = DefaultUiTokens.editorHorizontalPadding
+internal val EditorSectionHorizontalPadding = DefaultUiTokens.editorSectionHorizontalPadding
+internal val UniversalControlHeight = DefaultUiTokens.universalControlHeight
+internal val SettingsControlHeight = DefaultUiTokens.settingsControlHeight
+internal val SettingsControlShape = DefaultUiTokens.settingsControlShape
+internal val EditorTinyVisibleHeight = DefaultUiTokens.editorTinyVisibleHeight
+internal val EditorSmallVisibleHeight = DefaultUiTokens.editorSmallVisibleHeight
 private const val UiReadOnlyCollectionPrefix = "readonly-"
 private const val UiLocalAccountId = "local"
 private const val UiLocalCollectionPrefix = "local://"
 private const val UiAndroidAccountId = "android-provider"
 private const val UiAndroidCollectionPrefix = "android://calendar/"
-private val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
+internal val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
 
 @Composable
-private fun appString(@StringRes id: Int, vararg args: Any): String {
+internal fun appString(@StringRes id: Int, vararg args: Any): String {
     val context = LocalContext.current
     val locale = LocalAppLocale.current
     return remember(id, args.toList(), context, locale) {
@@ -596,13 +599,18 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var handledCalendarLaunchSerial by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
-        var draftDate by remember { mutableStateOf(calendarTime.today) }
-        var draftStart by remember { mutableStateOf(LocalTime.of(15, 0)) }
-        var draftEnd by remember { mutableStateOf(LocalTime.of(16, 0)) }
+        var editorSchedule by remember {
+            mutableStateOf(
+                EditorScheduleState.fromPreview(
+                    EditorSchedulePreview(
+                        date = calendarTime.today,
+                        start = LocalTime.of(15, 0),
+                        end = LocalTime.of(16, 0),
+                    ),
+                ),
+            )
+        }
         var draftWireframeColor by remember { mutableStateOf(defaultWireframeColor) }
-        var draftAllDay by remember { mutableStateOf(false) }
-        var draftTaskHasDate by remember { mutableStateOf(false) }
-        var draftTaskUsesTime by remember { mutableStateOf(false) }
         var editorWireframeMode by remember { mutableStateOf(false) }
         var editorTransferDraft by remember { mutableStateOf<EditorTransferDraft?>(null) }
         var creationCollapseRequest by remember { mutableStateOf(0) }
@@ -727,21 +735,81 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             if (detailSheet == null) detailTaskMorphGeneration = 0
         }
 
+        fun scheduleState(
+            date: LocalDate,
+            start: LocalTime,
+            end: LocalTime,
+            hasStartDate: Boolean = true,
+            hasEndDate: Boolean = true,
+            hasStartTime: Boolean = true,
+            hasEndTime: Boolean = true,
+            allDay: Boolean = false,
+            endDate: LocalDate = date,
+        ): EditorScheduleState = EditorScheduleState(
+            startDateText = date.toString(),
+            endDateText = endDate.toString(),
+            startTimeText = start.toString().take(5),
+            endTimeText = end.toString().take(5),
+            hasStartDate = hasStartDate,
+            hasEndDate = hasEndDate,
+            hasStartTime = hasStartTime && !allDay,
+            hasEndTime = hasEndTime && !allDay,
+            allDay = allDay,
+            lastValidPreview = null,
+        ).recalculatePreview()
+
+        fun scheduleForEvent(event: EventEntity): EditorScheduleState = scheduleState(
+            date = event.startsAtMillis.toDate(),
+            endDate = if (event.allDay) (event.endsAtMillis - 1).toDate() else event.endsAtMillis.toDate(),
+            start = if (event.allDay) LocalTime.MIDNIGHT else event.startsAtMillis.toTime(),
+            end = if (event.allDay) LocalTime.of(23, 59) else event.endsAtMillis.toTime(),
+            hasStartTime = !event.allDay,
+            hasEndTime = !event.allDay,
+            allDay = event.allDay,
+        )
+
+        fun scheduleForTask(task: TaskEntity): EditorScheduleState {
+            val startDate = task.startAtMillis?.toDate()
+            val endDate = task.dueAtMillis?.toDate()
+            val fallbackDate = startDate ?: endDate ?: calendarTime.today
+            val start = task.startAtMillis?.toTime() ?: task.dueAtMillis?.toTime()?.minusMinutes(30) ?: LocalTime.of(15, 0)
+            val end = task.dueAtMillis?.toTime() ?: start.defaultDraftEnd()
+            val hasStartTime = task.startAtMillis != null && task.startHasTime
+            val hasEndTime = task.dueAtMillis != null && task.dueHasTime
+            return scheduleState(
+                date = startDate ?: fallbackDate,
+                endDate = endDate ?: fallbackDate,
+                start = start,
+                end = end,
+                hasStartDate = startDate != null,
+                hasEndDate = endDate != null,
+                hasStartTime = hasStartTime,
+                hasEndTime = hasEndTime,
+                allDay = (startDate != null || endDate != null) && !hasStartTime && !hasEndTime,
+            )
+        }
+
         fun applyTransferScheduleToDraft(transfer: EditorTransferDraft) {
-            transfer.date?.let { draftDate = it }
-            transfer.startTime?.let { draftStart = it }
-            transfer.endTime?.let { draftEnd = it }
-            transfer.allDay?.let { draftAllDay = it }
-            draftTaskHasDate = transfer.date != null
-            draftTaskUsesTime = transfer.allDay != true && transfer.startTime != null
+            editorSchedule = transfer.schedule ?: scheduleState(
+                date = transfer.date ?: editorSchedule.lastValidPreview?.date ?: calendarTime.today,
+                endDate = transfer.endDate ?: transfer.date ?: editorSchedule.lastValidPreview?.date ?: calendarTime.today,
+                start = transfer.startTime ?: editorSchedule.lastValidPreview?.start ?: LocalTime.of(15, 0),
+                end = transfer.endTime ?: editorSchedule.lastValidPreview?.end ?: LocalTime.of(16, 0),
+                hasStartDate = transfer.date != null,
+                hasEndDate = transfer.endDate != null,
+                hasStartTime = transfer.startTime != null,
+                hasEndTime = transfer.endTime != null,
+                allDay = transfer.allDay == true,
+            )
         }
 
         fun openEventCreation(date: LocalDate) {
-            draftDate = date
-            draftStart = LocalTime.now().nextDraftStart()
-            draftEnd = draftStart.defaultDraftEnd(state.defaultEventDurationMinutes)
-            draftAllDay = false
-            draftTaskUsesTime = true
+            val start = LocalTime.now().nextDraftStart()
+            editorSchedule = scheduleState(
+                date = date,
+                start = start,
+                end = start.defaultDraftEnd(state.defaultEventDurationMinutes),
+            )
             draftWireframeColor = state.collections
                 .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
@@ -763,12 +831,20 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         }
 
         fun openTaskCreation(date: LocalDate, scheduledForDay: Boolean, useTaskDefaults: Boolean = false) {
-            draftDate = date
-            draftStart = LocalTime.now().nextDraftStart()
-            draftEnd = draftStart.defaultDraftEnd(state.defaultEventDurationMinutes)
-            draftTaskHasDate = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate)
-            draftAllDay = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate && !state.defaultTaskHasTime)
-            draftTaskUsesTime = !scheduledForDay && useTaskDefaults && state.defaultTaskHasTime
+            val start = LocalTime.now().nextDraftStart()
+            val hasDate = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate)
+            val allDay = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate && !state.defaultTaskHasTime)
+            val usesTime = !scheduledForDay && useTaskDefaults && state.defaultTaskHasTime
+            editorSchedule = scheduleState(
+                date = date,
+                start = start,
+                end = start.defaultDraftEnd(state.defaultEventDurationMinutes),
+                hasStartDate = hasDate,
+                hasEndDate = usesTime,
+                hasStartTime = usesTime,
+                hasEndTime = usesTime,
+                allDay = allDay,
+            )
             draftWireframeColor = state.collections
                 .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() }
                 .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
@@ -951,13 +1027,15 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             val centeredStartMinute = (start.minuteOfDay() - duration / 2)
                                 .snapDraftMinute()
                                 .coerceIn(minStartMinute, maxStartMinute)
-                            draftDate = date
-                            draftStart = centeredStartMinute.toDraftLocalTime()
-                            draftEnd = (centeredStartMinute + duration)
-                                .coerceAtMost((DayEndHour + 1) * 60 - 1)
-                                .toDraftLocalTime()
-                            draftAllDay = false
-                            draftTaskUsesTime = true
+                            editorSchedule = editorSchedule.applyTimelineChange(
+                                EditorSchedulePreview(
+                                    date = date,
+                                    start = centeredStartMinute.toDraftLocalTime(),
+                                    end = (centeredStartMinute + duration)
+                                        .coerceAtMost((DayEndHour + 1) * 60 - 1)
+                                        .toDraftLocalTime(),
+                                ),
+                            )
                             draftWireframeColor = state.collections
                                 .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
@@ -970,9 +1048,14 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onAllDaySlotSelected = { date ->
                             editorWireframeMode = true
                             if (creationSheet != null) creationCollapseRequest++
-                            draftDate = date
-                            draftAllDay = true
-                            draftTaskUsesTime = false
+                            editorSchedule = editorSchedule.applyTimelineChange(
+                                EditorSchedulePreview(
+                                    date = date,
+                                    start = LocalTime.MIDNIGHT,
+                                    end = LocalTime.of(23, 59),
+                                    allDay = true,
+                                ),
+                            )
                             draftWireframeColor = state.collections
                                 .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
@@ -982,20 +1065,24 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             editorTransferDraft = null
                             creationSheet = CreationSheet.EventLow
                         },
-                        draftEvent = when (creationSheet) {
+                        draftEvent = editorSchedule.lastValidPreview?.let { preview -> when (creationSheet) {
                             CreationSheet.EventLow,
                             CreationSheet.EventFull,
-                            -> DraftEventSelection(draftDate, draftStart, draftEnd, draftWireframeColor, draftAllDay)
                             CreationSheet.TaskLow,
                             CreationSheet.Task,
-                            -> DraftEventSelection(draftDate, draftStart, draftEnd, draftWireframeColor, draftAllDay).takeIf { draftTaskUsesTime || draftAllDay }
+                            -> DraftEventSelection(
+                                preview.date,
+                                preview.start,
+                                preview.end,
+                                draftWireframeColor,
+                                preview.allDay,
+                            )
                             else -> null
-                        },
+                        } },
                         onDraftEventChanged = { draft ->
-                            draftDate = draft.date
-                            draftStart = draft.start
-                            draftEnd = draft.end
-                            draftAllDay = draft.allDay
+                            editorSchedule = editorSchedule.applyTimelineChange(
+                                EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay),
+                            )
                         },
                         onDraftInteraction = {
                             editorWireframeMode = true
@@ -1132,20 +1219,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 when (creationSheet) {
                     CreationSheet.EventLow -> EventEditorSheet(
                         state = state,
-                        selectedDate = draftDate,
-                        selectedStart = draftStart,
-                        selectedEnd = draftEnd,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         expanded = false,
                         initialEvent = null,
-                        defaultAllDay = draftAllDay,
                         transferDraft = editorTransferDraft,
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
-                        onDraftScheduleChanged = { draft ->
-                            draftDate = draft.date
-                            draftStart = draft.start
-                            draftEnd = draft.end
-                            draftAllDay = draft.allDay
-                        },
                         requestTitleFocus = state.focusTitleOnCreate,
                         onSave = { payload ->
                             viewModel.createEvent(payload)
@@ -1158,7 +1237,6 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             editorTransferDraft = taskTransfer
                             applyTransferScheduleToDraft(taskTransfer)
                             conversionSource = null
-                            draftTaskUsesTime = taskTransfer.allDay != true && taskTransfer.startTime != null
                             creationSheet = CreationSheet.TaskLow
                         },
                         onOpenCalendarSources = { openAddCalendarSources() },
@@ -1166,30 +1244,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     CreationSheet.TaskLow -> TaskEditorSheet(
                         state = state,
-                        selectedDate = draftDate,
-                        selectedStart = draftStart,
-                        selectedEnd = draftEnd,
-                        defaultTimed = draftTaskUsesTime,
-                        defaultHasEndTime = draftTaskUsesTime,
-                        defaultHasDate = true,
-                        defaultAllDay = draftAllDay,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = state.focusTitleOnCreate,
                         initialTask = null,
                         transferDraft = editorTransferDraft,
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
-                        onDraftScheduleChanged = { draft ->
-                            draftTaskUsesTime = draft != null
-                            draft?.let {
-                                draftDate = it.date
-                                draftStart = it.start
-                                draftEnd = it.end
-                                draftAllDay = it.allDay
-                                draftTaskHasDate = true
-                            } ?: run {
-                                draftAllDay = false
-                                draftTaskHasDate = false
-                            }
-                        },
                         onSave = { payload ->
                             viewModel.createTask(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
@@ -1239,20 +1299,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     CreationSheet.EventFull,
                     -> EventEditorSheet(
                         state = state,
-                        selectedDate = draftDate,
-                        selectedStart = draftStart,
-                        selectedEnd = draftEnd,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         expanded = sheet == CreationSheet.EventFull,
                         initialEvent = null,
-                        defaultAllDay = draftAllDay,
                         transferDraft = editorTransferDraft,
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
-                        onDraftScheduleChanged = { draft ->
-                            draftDate = draft.date
-                            draftStart = draft.start
-                            draftEnd = draft.end
-                            draftAllDay = draft.allDay
-                        },
                         requestTitleFocus = state.focusTitleOnCreate,
                         onSave = { payload ->
                             when (val source = conversionSource) {
@@ -1268,7 +1320,6 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             editorTransferDraft = taskTransfer
                             applyTransferScheduleToDraft(taskTransfer)
                             conversionSource = null
-                            draftTaskUsesTime = taskTransfer.allDay != true && taskTransfer.startTime != null
                             creationSheet = CreationSheet.Task
                         },
                         onOpenCalendarSources = { openAddCalendarSources() },
@@ -1276,9 +1327,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.EditEvent -> EventEditorSheet(
                         state = state,
-                        selectedDate = sheet.event.startsAtMillis.toDate(),
-                        selectedStart = sheet.event.startsAtMillis.toTime(),
-                        selectedEnd = sheet.event.endsAtMillis.toTime(),
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         expanded = true,
                         initialEvent = sheet.event,
                         readOnlyRemote = state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyForUi() == true,
@@ -1309,9 +1359,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.DuplicateEvent -> EventEditorSheet(
                         state = state,
-                        selectedDate = sheet.event.startsAtMillis.toDate(),
-                        selectedStart = sheet.event.startsAtMillis.toTime(),
-                        selectedEnd = sheet.event.endsAtMillis.toTime(),
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         expanded = true,
                         initialEvent = sheet.event,
                         transferDraft = null,
@@ -1335,30 +1384,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     CreationSheet.Task -> TaskEditorSheet(
                         state = state,
-                        selectedDate = draftDate,
-                        selectedStart = draftStart,
-                        selectedEnd = draftEnd,
-                        defaultTimed = draftTaskUsesTime,
-                        defaultHasEndTime = draftTaskUsesTime,
-                        defaultHasDate = draftTaskHasDate || draftTaskUsesTime || draftAllDay,
-                        defaultAllDay = draftAllDay,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = state.focusTitleOnCreate,
                         initialTask = null,
                         transferDraft = editorTransferDraft,
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
-                        onDraftScheduleChanged = { draft ->
-                            draftTaskUsesTime = draft != null
-                            draft?.let {
-                                draftDate = it.date
-                                draftStart = it.start
-                                draftEnd = it.end
-                                draftAllDay = it.allDay
-                                draftTaskHasDate = true
-                            } ?: run {
-                                draftAllDay = false
-                                draftTaskHasDate = false
-                            }
-                        },
                         onSave = { payload ->
                             when (val source = conversionSource) {
                                 is ConversionSource.Event -> viewModel.convertEventToTask(source.event.resourceHref, payload)
@@ -1380,11 +1411,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.TaskForParent -> TaskEditorSheet(
                         state = state,
-                        selectedDate = sheet.parent.taskDate() ?: state.selectedDate,
-                        selectedStart = LocalTime.now().nextDraftStart(),
-                        selectedEnd = LocalTime.now().nextDraftStart().defaultDraftEnd(),
-                        defaultTimed = false,
-                        defaultHasDate = false,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = state.focusTitleOnCreate,
                         initialTask = null,
                         forcedParentTask = sheet.parent,
@@ -1400,11 +1428,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.EditTask -> TaskEditorSheet(
                         state = state,
-                        selectedDate = state.selectedDate,
-                        selectedStart = sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart(),
-                        selectedEnd = sheet.task.dueAtMillis?.toTime() ?: (sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart()).defaultDraftEnd(),
-                        defaultTimed = false,
-                        defaultHasDate = true,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = false,
                         initialTask = sheet.task,
                         readOnlyRemote = state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyForUi() == true,
@@ -1434,11 +1459,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     )
                     is CreationSheet.DuplicateTask -> TaskEditorSheet(
                         state = state,
-                        selectedDate = sheet.task.taskDate() ?: calendarTime.today,
-                        selectedStart = sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart(),
-                        selectedEnd = sheet.task.dueAtMillis?.toTime() ?: (sheet.task.startAtMillis?.toTime() ?: LocalTime.now().nextDraftStart()).defaultDraftEnd(),
-                        defaultTimed = sheet.task.startAtMillis != null && sheet.task.startHasTime,
-                        defaultHasDate = sheet.task.taskDate() != null,
+                        schedule = editorSchedule,
+                        onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = state.focusTitleOnCreate,
                         initialTask = sheet.task,
                         transferDraft = null,
@@ -1581,10 +1603,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onTaskProgressChanged = viewModel::setTaskProgress,
                         onEventParticipationChanged = viewModel::setEventParticipation,
                     onEditEvent = {
+                        editorSchedule = scheduleForEvent(it)
                         creationSheet = CreationSheet.EditEvent(it)
                         detailSheet = null
                     },
                     onDuplicateEvent = {
+                        editorSchedule = scheduleForEvent(it)
                         creationSheet = CreationSheet.DuplicateEvent(it)
                         detailSheet = null
                     },
@@ -1601,11 +1625,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = null
                     },
                     onEditTask = {
+                        editorSchedule = scheduleForTask(it)
                         creationSheet = CreationSheet.EditTask(it)
                         detailSheet = null
                         detailTaskBackStack.clear()
                     },
                     onDuplicateTask = {
+                        editorSchedule = scheduleForTask(it)
                         creationSheet = CreationSheet.DuplicateTask(it)
                         detailSheet = null
                         detailTaskBackStack.clear()
@@ -1640,6 +1666,16 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = DetailSheet.Task(parent)
                     },
                     onAddSubtask = { parent ->
+                        val start = LocalTime.now().nextDraftStart()
+                        editorSchedule = scheduleState(
+                            date = parent.taskDate() ?: state.selectedDate,
+                            start = start,
+                            end = start.defaultDraftEnd(),
+                            hasStartDate = false,
+                            hasEndDate = false,
+                            hasStartTime = false,
+                            hasEndTime = false,
+                        )
                         detailTaskBackStack.clear()
                         detailSheet = null
                         creationSheet = CreationSheet.TaskForParent(parent)
@@ -6225,7 +6261,7 @@ private fun DayHeader(day: LocalDate, selected: Boolean, modifier: Modifier = Mo
  * index order by default.
  */
 private val LocalTimedDragReporter = compositionLocalOf<(LocalDate, Boolean) -> Unit> { { _, _ -> } }
-private val LocalSheetHeaderDragModifier = compositionLocalOf<Modifier> { Modifier }
+internal val LocalSheetHeaderDragModifier = compositionLocalOf<Modifier> { Modifier }
 private val LocalPendingMutations = compositionLocalOf<List<PendingMutationEntity>> { emptyList() }
 
 /**
@@ -7645,10 +7681,15 @@ private fun DayTimedColumn(
         }
         draftEvent?.takeIf { !it.allDay }?.let { draft ->
             DraftEventWireframe(
-                draft = draft,
+                draft = EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay),
+                color = draft.color,
                 hourHeightDp = hourHeightDp,
                 dayWidthPx = dayWidthPx,
-                onDraftChanged = onDraftEventChanged,
+                onDraftChanged = { changed ->
+                    onDraftEventChanged(
+                        DraftEventSelection(changed.date, changed.start, changed.end, draft.color, changed.allDay),
+                    )
+                },
                 onInteraction = onDraftInteraction,
                 onTap = onDraftTap,
                 timeScroll = timeScroll,
@@ -8305,11 +8346,12 @@ private fun Modifier.taskPriorityMotion(
 }
 
 @Composable
-private fun DraftEventWireframe(
-    draft: DraftEventSelection,
+internal fun DraftEventWireframe(
+    draft: EditorSchedulePreview,
+    color: Int,
     hourHeightDp: Float,
     dayWidthPx: Float,
-    onDraftChanged: (DraftEventSelection) -> Unit,
+    onDraftChanged: (EditorSchedulePreview) -> Unit,
     onInteraction: () -> Unit,
     onTap: () -> Unit,
     timeScroll: androidx.compose.foundation.ScrollState,
@@ -8327,7 +8369,7 @@ private fun DraftEventWireframe(
     val touchHeightDp = max(44f, visualHeightDp)
     val visualTopInsetDp = (touchHeightDp - visualHeightDp) / 2f
     val shape = RoundedCornerShape(8.dp)
-    val wireframeColor = Color(draft.color)
+    val wireframeColor = Color(color)
     var dragX by remember { mutableFloatStateOf(0f) }
     var draggingBody by remember { mutableStateOf(false) }
     val dayStepPx = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
@@ -8451,6 +8493,7 @@ private fun DraftEventWireframe(
                     indication = null,
                     onClick = onTap,
                 )
+                .testTag("editor-wireframe-body")
                 .draftDrag(DraftDragMode.Move),
         )
         Box(
@@ -8469,6 +8512,7 @@ private fun DraftEventWireframe(
                 .align(Alignment.TopStart)
                 .offset(x = (-6).dp, y = (visualTopInsetDp - 20f).dp)
                 .size(40.dp)
+                .testTag("editor-wireframe-start-handle")
                 .draftDrag(DraftDragMode.Start),
             contentAlignment = Alignment.Center,
         ) {
@@ -8485,6 +8529,7 @@ private fun DraftEventWireframe(
                 .align(Alignment.TopEnd)
                 .offset(x = 6.dp, y = (visualTopInsetDp + visualHeightDp - 20f).dp)
                 .size(40.dp)
+                .testTag("editor-wireframe-end-handle")
                 .draftDrag(DraftDragMode.End),
             contentAlignment = Alignment.Center,
         ) {
@@ -8904,3961 +8949,6 @@ private fun CreateMenuButton(icon: ImageVector, text: String, onClick: () -> Uni
 }
 
 @Composable
-private fun EventEditorSheet(
-    state: CalendarUiState,
-    selectedDate: LocalDate,
-    selectedStart: LocalTime,
-    selectedEnd: LocalTime,
-    expanded: Boolean,
-    initialEvent: EventEntity?,
-    defaultAllDay: Boolean = false,
-    transferDraft: EditorTransferDraft? = null,
-    headerTitle: String? = null,
-    requestTitleFocus: Boolean = false,
-    readOnlyRemote: Boolean = false,
-    onDraftCollectionColorChanged: (Int) -> Unit = {},
-    onDraftScheduleChanged: (DraftEventSelection) -> Unit = {},
-    onSave: (EventEditPayload) -> Unit,
-    onSwitchToTask: (EditorTransferDraft) -> Unit,
-    onOpenCalendarSources: () -> Unit = {},
-    onClose: () -> Unit,
-) {
-    val eventCollections = remember(state.collections, state.defaultEventCollectionHref, initialEvent?.collectionHref, readOnlyRemote) {
-        if (readOnlyRemote && initialEvent != null) {
-            state.collections.filter { it.href == initialEvent.collectionHref }
-        } else {
-            state.collections
-                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
-                .sortedWithDefaultFirst(state.defaultEventCollectionHref)
-        }
-    }
-    val initialDate = initialEvent?.startsAtMillis?.toDate() ?: transferDraft?.date ?: selectedDate
-    val initialEndDate = initialEvent?.let {
-        if (it.allDay) (it.endsAtMillis - 1).toDate() else it.endsAtMillis.toDate()
-    } ?: transferDraft?.endDate ?: initialDate
-    var title by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.title ?: transferDraft?.title.orEmpty()) }
-    var selectedCollectionHref by remember(initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
-        val preferred = state.defaultEventCollectionHref
-            ?.takeIf { href -> eventCollections.any { it.href == href } }
-        mutableStateOf(
-            initialEvent?.collectionHref
-                ?: preferred
-                ?: eventCollections.firstOrNull()?.href,
-        )
-    }
-    val selectedCollectionIndex = remember(eventCollections, selectedCollectionHref) {
-        eventCollections.indexOfFirst { it.href == selectedCollectionHref }
-    }
-    var dateText by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialDate.toString()) }
-    var endDateText by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEndDate.toString()) }
-    var startText by remember(initialEvent?.uid, transferDraft) {
-        mutableStateOf(initialEvent?.startsAtMillis?.toTimeText() ?: transferDraft?.startTime?.toString()?.take(5) ?: selectedStart.toString().take(5))
-    }
-    var endText by remember(initialEvent?.uid, transferDraft) {
-        mutableStateOf(initialEvent?.endsAtMillis?.toTimeText() ?: transferDraft?.endTime?.toString()?.take(5) ?: selectedEnd.toString().take(5))
-    }
-    var allDay by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.allDay ?: transferDraft?.allDay ?: defaultAllDay) }
-    var location by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.manualColor ?: transferDraft?.manualColor) }
-    var description by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.description ?: transferDraft?.notes.orEmpty()) }
-    var recurrenceRule by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var eventStatus by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.status ?: EventStatusOption.Confirmed.value) }
-    var eventClassification by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.classification ?: EventClassOption.Public.value) }
-    var eventTransparency by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.transparency ?: EventTransparencyOption.Busy.value) }
-    var categories by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.categories ?: transferDraft?.categories.orEmpty()) }
-    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
-        state.allKnownCategoryTags()
-    }
-    var reminderMinutes by remember(initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
-        mutableStateOf(
-            when {
-                initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
-                transferDraft != null -> transferDraft.reminderMinutes
-                else -> state.defaultEventReminderMinutes
-            },
-        )
-    }
-    val organizerJson = initialEvent?.organizerJson ?: remember(selectedCollectionHref, state.accounts, eventCollections) {
-        val accountId = eventCollections.firstOrNull { it.href == selectedCollectionHref }?.accountId
-        val account = state.accounts.firstOrNull { it.id == accountId }
-        val email = account?.username?.trim()?.takeIf { it.isLikelyEmailAddress() }
-        email?.let {
-            JSONObject()
-                .put("name", account.displayName?.takeIf { name -> name.isNotBlank() } ?: email)
-                .put("email", email)
-                .toString()
-        }
-    }
-    var attendeesJson by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
-    var locationPickerOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
-    var invalidRangeDialogOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
-    val invalidTimeRange = eventDateTimeRangeInvalid(
-        startDateText = dateText,
-        endDateText = endDateText,
-        startTimeText = startText,
-        endTimeText = endText,
-        allDay = allDay,
-    )
-
-    fun currentTransferDraft(): EditorTransferDraft =
-        EditorTransferDraft(
-            title = title,
-            notes = description,
-            location = location,
-            locationMapVerified = locationMapVerified,
-            manualColor = manualColor,
-            categories = categories,
-            recurrenceRule = recurrenceRule,
-            reminderMinutes = reminderMinutes,
-            sourceDefaultReminderMinutes = transferDraft?.sourceDefaultReminderMinutes
-                ?: if (initialEvent == null) state.defaultEventReminderMinutes else emptySet(),
-            date = runCatching { LocalDate.parse(dateText) }.getOrNull(),
-            endDate = runCatching { LocalDate.parse(endDateText) }.getOrNull(),
-            startTime = if (allDay) null else runCatching { LocalTime.parse(startText) }.getOrNull(),
-            endTime = if (allDay) null else runCatching { LocalTime.parse(endText) }.getOrNull(),
-            allDay = allDay,
-        )
-
-    LaunchedEffect(initialEvent?.uid, selectedCollectionHref, eventCollections) {
-        if (initialEvent == null) {
-            eventCollections.firstOrNull { it.href == selectedCollectionHref }
-                ?.let { onDraftCollectionColorChanged(it.color) }
-        }
-    }
-
-    LaunchedEffect(initialEvent?.uid, transferDraft) {
-        if (initialEvent == null && transferDraft == null) {
-            dateText = selectedDate.toString()
-            endDateText = selectedDate.toString()
-            startText = selectedStart.toString().take(5)
-            endText = selectedEnd.toString().take(5)
-        }
-    }
-
-    LaunchedEffect(initialEvent?.uid, dateText, startText, endText, allDay) {
-        if (initialEvent == null) {
-            runCatching {
-                onDraftScheduleChanged(
-                    DraftEventSelection(
-                        date = LocalDate.parse(dateText),
-                        start = LocalTime.parse(startText),
-                        end = LocalTime.parse(endText),
-                        allDay = allDay,
-                    ),
-                )
-            }
-        }
-    }
-
-    AnimatedContent(
-        targetState = locationPickerOpen,
-        transitionSpec = {
-            (slideInHorizontally(animationSpec = tween(MotionMedium, easing = MotionStandard)) { width -> width / 3 } + fadeIn(tween(MotionShort))) togetherWith
-                (slideOutHorizontally(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) { width -> -width / 3 } + fadeOut(tween(MotionShort)))
-        },
-        label = "eventLocationPicker",
-    ) { pickingLocation ->
-        if (pickingLocation) {
-            LocationPickerPage(
-                initialQuery = location,
-                onSelected = { selection ->
-                    location = selection.value
-                    locationMapVerified = selection.mapVerified
-                    locationPickerOpen = false
-                },
-                onClose = { locationPickerOpen = false },
-            )
-        } else {
-            if (!readOnlyRemote && eventCollections.isEmpty()) {
-                EditorContainer(
-                    title = headerTitle ?: stringResource(if (initialEvent == null) R.string.new_event else R.string.edit_event),
-                    action = stringResource(R.string.save),
-                    onAction = {},
-                    onClose = onClose,
-                    actionEnabled = false,
-                ) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(stringResource(R.string.event), selected = true)
-                        TypeChip(
-                            stringResource(R.string.task),
-                            selected = false,
-                            onClick = {
-                                onSwitchToTask(currentTransferDraft())
-                            },
-                        )
-                    }
-                    NoWritableSourceNotice(
-                        title = stringResource(R.string.no_writable_event_calendar_title),
-                        body = stringResource(R.string.no_writable_event_calendar_body),
-                        action = stringResource(R.string.add_calendar_source),
-                        onAction = onOpenCalendarSources,
-                    )
-                }
-            } else {
-                EditorContainer(
-                title = headerTitle ?: stringResource(if (initialEvent == null) R.string.new_event else R.string.edit_event),
-                action = stringResource(R.string.save),
-                onAction = {
-                    if (invalidTimeRange) {
-                        invalidRangeDialogOpen = true
-                        return@EditorContainer
-                    }
-                    onSave(
-                        EventEditPayload(
-                            title = title,
-                            collectionHref = selectedCollectionHref,
-                            date = LocalDate.parse(dateText),
-                            endDate = LocalDate.parse(endDateText),
-                            startTime = if (allDay) null else LocalTime.parse(startText),
-                            endTime = if (allDay) null else LocalTime.parse(endText),
-                            allDay = allDay,
-                            description = description,
-                            location = location,
-                            locationMapVerified = locationMapVerified,
-                            manualColor = manualColor,
-                            recurrenceRule = recurrenceRule.ifBlank { null },
-                            reminderMinutes = reminderMinutes.normalizedReminderOffsets(),
-                            status = eventStatus,
-                            classification = eventClassification,
-                            transparency = eventTransparency,
-                            categories = categories.ifBlank { null },
-                            organizerJson = organizerJson,
-                            attendeesJson = attendeesJson,
-                        ),
-                    )
-                },
-                onClose = onClose,
-            ) {
-                if (!readOnlyRemote) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(stringResource(R.string.event), selected = true)
-                        TypeChip(
-                            stringResource(R.string.task),
-                            selected = false,
-                            onClick = {
-                                onSwitchToTask(currentTransferDraft())
-                            },
-                        )
-                    }
-                }
-                EditorSection {
-                    if (readOnlyRemote) {
-                        ReadOnlyEditorNotice(title = title)
-                    } else {
-                        EventTitleField(
-                            value = title,
-                            onValueChange = { title = it },
-                            requestFocus = requestTitleFocus && initialEvent == null,
-                        )
-                    }
-                }
-                if (!readOnlyRemote) {
-                    Text(
-                        stringResource(R.string.calendar),
-                        color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.editorInset(),
-                    )
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        initialScrollIndex = selectedCollectionIndex.takeIf { initialEvent != null && it >= 0 },
-                        initialScrollKey = initialEvent?.resourceHref,
-                    ) {
-                        eventCollections.forEach { collection ->
-                            CalendarSelectorChip(
-                                collection = collection,
-                                selected = collection.href == selectedCollectionHref,
-                                onClick = { selectedCollectionHref = collection.href },
-                                hidden = collection.href in state.hiddenCollectionHrefs,
-                            )
-                        }
-                    }
-                    EditorSection {
-                        EditorLine(Icons.Default.AccessTime) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.all_day), fontSize = 17.sp, lineHeight = 20.sp)
-                                Switch(allDay, { allDay = it })
-                            }
-                        }
-                        EventScheduleEditor(
-                            allDay = allDay,
-                            dateText = dateText,
-                            onDateTextChange = { dateText = it },
-                            endDateText = endDateText,
-                            onEndDateTextChange = { endDateText = it },
-                            startText = startText,
-                            onStartTextChange = { startText = it },
-                            endText = endText,
-                            onEndTextChange = { endText = it },
-                            endIsError = invalidTimeRange,
-                        )
-                    }
-                }
-                val selectedCollection = eventCollections.firstOrNull { it.href == selectedCollectionHref }
-                val eventCapabilities = selectedCollection?.eventEditorCapabilities() ?: EventEditorCapabilities.Full
-                val editableFields = if (readOnlyRemote) {
-                    listOf("color")
-                } else {
-                    state.eventFieldOrder.filterNot { it == "time" }.filter { eventCapabilities.allows(it) }
-                }
-                editableFields.forEach { field ->
-                    when (field) {
-                        "recurrence" -> CompactRecurrenceEditor(recurrenceRule = recurrenceRule, onRecurrenceRuleChange = { recurrenceRule = it.orEmpty() })
-                        "reminders" -> CompactReminderEditor(selected = reminderMinutes, onSelectedChange = { reminderMinutes = it })
-                        "location" -> Box(Modifier.editorInset()) {
-                            LocationSelectorField(location = location, onClick = { locationPickerOpen = true })
-                        }
-                        "notes" -> OutlinedTextField(
-                            description,
-                            { description = it },
-                            label = { Text(stringResource(R.string.notes)) },
-                            minLines = 3,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.editorInset().fillMaxWidth(),
-                        )
-                        "status" -> EditorSection {
-                            MetadataDropdownLine(stringResource(R.string.event_status), EventStatusOption.entries, eventStatus) { eventStatus = it }
-                            HorizontalDivider(color = WarmLine.copy(alpha = 0.7f))
-                            MetadataDropdownLine(stringResource(R.string.sharing_visibility), EventClassOption.entries, eventClassification) { eventClassification = it }
-                            HorizontalDivider(color = WarmLine.copy(alpha = 0.7f))
-                            MetadataDropdownLine(stringResource(R.string.availability), EventTransparencyOption.entries, eventTransparency) { eventTransparency = it }
-                        }
-                        "categories" -> TagEditor(stringResource(R.string.categories), categories.toCategoryTags(), knownCategories) { categories = it.toCategoriesCsv() }
-                        "color" -> ColorOverrideEditor(
-                            selectedColor = manualColor,
-                            automaticColor = eventCollections.firstOrNull { it.href == selectedCollectionHref }?.color ?: WarmBrown.toArgb(),
-                            onColorSelected = { manualColor = it },
-                        )
-                        "participants" -> EditorSection {
-                            SharedEventEditor(organizerJson, attendeesJson) { attendeesJson = it }
-                        }
-                    }
-                }
-            }
-            }
-        }
-    }
-    if (invalidRangeDialogOpen) {
-        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
-    }
-}
-
-@Composable
-private fun EventTitleField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier, requestFocus: Boolean = false) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(requestFocus) {
-        if (requestFocus) {
-            delay(220)
-            focusRequester.requestFocus()
-        }
-    }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = { Text(stringResource(R.string.add_title)) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.titleLarge.copy(
-            color = WarmInk,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 22.sp,
-            lineHeight = 25.sp,
-        ),
-        shape = RoundedCornerShape(18.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .focusRequester(focusRequester),
-    )
-}
-
-@Composable
-private fun ReadOnlyEditorNotice(title: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            title.ifBlank { stringResource(R.string.no_title) },
-            color = WarmInk,
-            fontSize = 22.sp,
-            lineHeight = 25.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            stringResource(R.string.read_only_editor_notice),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-        )
-    }
-}
-
-@Composable
-private fun NoWritableSourceNotice(
-    title: String,
-    body: String,
-    action: String,
-    onAction: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .editorInset()
-            .fillMaxWidth()
-            .padding(top = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            title,
-            color = WarmInk,
-            fontSize = 20.sp,
-            lineHeight = 24.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            body,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
-            lineHeight = 19.sp,
-        )
-        TextButton(
-            onClick = onAction,
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
-        ) {
-            Text(
-                action,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = TextDecoration.Underline,
-            )
-        }
-    }
-}
-
-@Composable
-private fun InvalidTimeRangeDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(appString(R.string.invalid_time_range_title)) },
-        text = { Text(appString(R.string.invalid_time_range_message)) },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(appString(R.string.ok))
-            }
-        },
-        shape = RoundedCornerShape(26.dp),
-        containerColor = popupSurfaceColor(),
-    )
-}
-
-@Composable
-private fun EventScheduleEditor(
-    allDay: Boolean,
-    dateText: String,
-    onDateTextChange: (String) -> Unit,
-    endDateText: String,
-    onEndDateTextChange: (String) -> Unit,
-    startText: String,
-    onStartTextChange: (String) -> Unit,
-    endText: String,
-    onEndTextChange: (String) -> Unit,
-    endIsError: Boolean = false,
-) {
-    Column(
-        modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DatePickerField(
-                value = dateText,
-                onValueChange = onDateTextChange,
-                label = { Text(stringResource(R.string.start_date)) },
-                modifier = Modifier.weight(1f),
-            )
-            AnimatedVisibility(
-                visible = !allDay,
-                enter = fadeIn(animationSpec = tween(MotionMedium, easing = MotionStandard)) +
-                    expandHorizontally(animationSpec = tween(MotionMedium, easing = MotionStandard), expandFrom = Alignment.Start),
-                exit = fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) +
-                    shrinkHorizontally(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate), shrinkTowards = Alignment.Start),
-            ) {
-                TimePickerField(
-                    value = startText,
-                    onValueChange = onStartTextChange,
-                    label = { Text(stringResource(R.string.start)) },
-                    modifier = Modifier.width(112.dp),
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DatePickerField(
-                value = endDateText,
-                onValueChange = onEndDateTextChange,
-                label = { Text(stringResource(R.string.end_date)) },
-                isError = endIsError,
-                modifier = Modifier.weight(1f),
-            )
-            AnimatedVisibility(
-                visible = !allDay,
-                enter = fadeIn(animationSpec = tween(MotionMedium, easing = MotionStandard)) +
-                    expandHorizontally(animationSpec = tween(MotionMedium, easing = MotionStandard), expandFrom = Alignment.Start),
-                exit = fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) +
-                    shrinkHorizontally(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate), shrinkTowards = Alignment.Start),
-            ) {
-                TimePickerField(
-                    value = endText,
-                    onValueChange = onEndTextChange,
-                    label = { Text(stringResource(R.string.end)) },
-                    isError = endIsError,
-                    modifier = Modifier.width(112.dp),
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DatePickerField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    isError: Boolean = false,
-    supportingText: String? = null,
-) {
-    var dialogOpen by remember { mutableStateOf(false) }
-    PickerOutlinedField(
-        value = value,
-        label = label,
-        onClick = { dialogOpen = true },
-        isError = isError,
-        supportingText = supportingText,
-        modifier = modifier,
-    )
-    if (dialogOpen) {
-        val initialDate = runCatching { LocalDate.parse(value) }.getOrDefault(LocalCalendarTimeSnapshot.current.today)
-        val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
-        )
-        PickerPopupTheme {
-            DatePickerDialog(
-                onDismissRequest = { dialogOpen = false },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            pickerState.selectedDateMillis?.let { millis ->
-                                onValueChange(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                            }
-                            dialogOpen = false
-                        },
-                    ) {
-                        Text(stringResource(R.string.apply))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { dialogOpen = false }) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                },
-            ) {
-                DatePicker(state = pickerState)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TimePickerField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    isError: Boolean = false,
-    supportingText: String? = null,
-) {
-    var dialogOpen by remember { mutableStateOf(false) }
-    PickerOutlinedField(
-        value = value,
-        label = label,
-        onClick = { dialogOpen = true },
-        isError = isError,
-        supportingText = supportingText,
-        modifier = modifier,
-    )
-    if (dialogOpen) {
-        val initialTime = runCatching { LocalTime.parse(value) }.getOrDefault(LocalTime.now())
-        val pickerState = rememberTimePickerState(
-            initialHour = initialTime.hour,
-            initialMinute = initialTime.minute,
-            is24Hour = true,
-        )
-        Dialog(onDismissRequest = { dialogOpen = false }) {
-            PickerPopupTheme {
-                Surface(
-                    modifier = Modifier.widthIn(min = 328.dp, max = 360.dp),
-                    shape = RoundedCornerShape(26.dp),
-                    color = popupSurfaceColor(),
-                    tonalElevation = 6.dp,
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text(
-                            stringResource(R.string.choose_time),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 18.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        val accent = WarmBrown
-                        val accentContainer = accentContainerColor()
-                        val onAccent = if (accent.isDark()) Color.White else Color(0xFF1C1A18)
-                        val onAccentContainer = if (accentContainer.isDark()) Color.White else Color(0xFF1C1A18)
-                        TimePicker(
-                            state = pickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = popupControlSurfaceColor(),
-                                selectorColor = accent,
-                                containerColor = popupSurfaceColor(),
-                                periodSelectorBorderColor = MaterialTheme.colorScheme.outline,
-                                clockDialSelectedContentColor = onAccent,
-                                clockDialUnselectedContentColor = MaterialTheme.colorScheme.onSurface,
-                                periodSelectorSelectedContainerColor = accentContainer,
-                                periodSelectorUnselectedContainerColor = popupControlSurfaceColor(),
-                                periodSelectorSelectedContentColor = onAccentContainer,
-                                periodSelectorUnselectedContentColor = MaterialTheme.colorScheme.onSurface,
-                                timeSelectorSelectedContainerColor = accentContainer,
-                                timeSelectorUnselectedContainerColor = popupControlSurfaceColor(),
-                                timeSelectorSelectedContentColor = onAccentContainer,
-                                timeSelectorUnselectedContentColor = MaterialTheme.colorScheme.onSurface,
-                            ),
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TextButton(onClick = { dialogOpen = false }) {
-                                Text(stringResource(R.string.cancel))
-                            }
-                            TextButton(
-                                onClick = {
-                                    onValueChange(LocalTime.of(pickerState.hour, pickerState.minute).toString())
-                                    dialogOpen = false
-                                },
-                            ) {
-                                Text(stringResource(R.string.apply))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PickerPopupTheme(content: @Composable () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val popupSurface = popupSurfaceColor()
-    val controlSurface = popupControlSurfaceColor()
-    val accentContainer = accentContainerColor()
-    val onAccent = if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
-    val onAccentContainer = if (accentContainer.isDark()) Color.White else Color(0xFF1C1A18)
-    MaterialTheme(
-        colorScheme = colors.copy(
-            primary = WarmBrown,
-            onPrimary = onAccent,
-            primaryContainer = accentContainer,
-            onPrimaryContainer = onAccentContainer,
-            secondary = WarmBrown,
-            onSecondary = onAccent,
-            secondaryContainer = accentContainer,
-            onSecondaryContainer = onAccentContainer,
-            tertiary = WarmBrown,
-            onTertiary = onAccent,
-            tertiaryContainer = accentContainer,
-            onTertiaryContainer = onAccentContainer,
-            surface = popupSurface,
-            surfaceVariant = controlSurface,
-            surfaceContainerLowest = popupSurface,
-            surfaceContainerLow = popupSurface,
-            surfaceContainer = popupSurface,
-            surfaceContainerHigh = popupSurface,
-            surfaceContainerHighest = controlSurface,
-        ),
-        typography = MaterialTheme.typography,
-        content = content,
-    )
-}
-
-@Composable
-private fun popupSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF202124) else Color.White
-
-@Composable
-private fun popupControlSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF303134) else Color(0xFFF1F3F4)
-
-@Composable
-private fun PickerOutlinedField(
-    value: String,
-    label: @Composable () -> Unit,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isError: Boolean = false,
-    supportingText: String? = null,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    val supportingMessage = supportingText
-    val supportingContent: (@Composable () -> Unit)? =
-        if (supportingMessage == null) null else {
-            { Text(supportingMessage) }
-        }
-    Box(modifier = modifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            label = label,
-            singleLine = true,
-            readOnly = true,
-            shape = shape,
-            isError = isError,
-            supportingText = supportingContent,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(shape)
-                .clickable(onClick = onClick),
-        )
-    }
-}
-
-@Composable
-private fun EditorTopBar(
-    title: String,
-    onClose: () -> Unit,
-    onSave: () -> Unit,
-    modifier: Modifier = Modifier,
-    saveEnabled: Boolean = true,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .then(LocalSheetHeaderDragModifier.current)
-            .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        RoundEditorAction(
-            icon = Icons.Default.Close,
-            contentDescription = stringResource(R.string.close),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            contentColor = WarmInk,
-            onClick = onClose,
-        )
-        Text(
-            title,
-            color = WarmInk,
-            fontSize = 15.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            modifier = Modifier
-                .weight(1f),
-            textAlign = TextAlign.Center,
-        )
-        RoundEditorAction(
-            icon = Icons.Default.Check,
-            contentDescription = stringResource(R.string.save),
-            containerColor = if (saveEnabled) WarmBrown else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            contentColor = if (saveEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
-            enabled = saveEnabled,
-            onClick = onSave,
-        )
-    }
-}
-
-@Composable
-private fun RoundEditorAction(
-    icon: ImageVector,
-    contentDescription: String,
-    containerColor: Color,
-    contentColor: Color,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(containerColor)
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = contentDescription, tint = contentColor, modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
-private fun TypeChip(text: String, selected: Boolean, onClick: () -> Unit = {}) {
-    val shape = RoundedCornerShape(14.dp)
-    Surface(
-        modifier = Modifier
-            .clip(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = if (selected) WarmPeach else Color.Transparent,
-        border = if (selected) null else BorderStroke(1.dp, Color(0xFFD3C3BD)),
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            fontSize = 14.sp,
-            lineHeight = 17.sp,
-            maxLines = 1,
-            softWrap = false,
-            color = WarmInk,
-        )
-    }
-}
-
-@Composable
-private fun FadedHorizontalScrollRow(
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 0.dp),
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(8.dp),
-    viewportBleed: Dp = 0.dp,
-    initialScrollIndex: Int? = null,
-    initialScrollKey: Any? = initialScrollIndex,
-    content: @Composable RowScope.() -> Unit,
-) {
-    val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-    LaunchedEffect(initialScrollKey, initialScrollIndex) {
-        val index = initialScrollIndex?.takeIf { it > 0 } ?: return@LaunchedEffect
-        repeat(4) { withFrameNanos { } }
-        val target = with(density) { (132 * index).dp.roundToPx() }
-            .coerceIn(0, scrollState.maxValue)
-        scrollState.scrollTo(target)
-    }
-    val showStartFade = scrollState.value > 0
-    val showEndFade = scrollState.maxValue > scrollState.value
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalBleed(viewportBleed)
-            .horizontalEdgeFade(edgeWidth = 22.dp, fadeStart = showStartFade, fadeEnd = showEndFade),
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(scrollState)
-                .padding(contentPadding),
-            horizontalArrangement = horizontalArrangement,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun EditorSection(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Surface(
-        modifier = modifier
-            .editorInset()
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = EditorSectionHorizontalPadding, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
-private fun CalendarChip(title: String, color: Color) {
-    Surface(shape = RoundedCornerShape(12.dp), color = WarmPeach.copy(alpha = 0.66f)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(Modifier.size(18.dp).clip(CircleShape).background(color))
-            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun CalendarSelectorChip(
-    collection: CollectionEntity,
-    selected: Boolean,
-    hidden: Boolean,
-    onClick: () -> Unit,
-) {
-    val shape = RoundedCornerShape(12.dp)
-    Surface(
-        modifier = Modifier
-            .clip(shape)
-            .clickable(onClick = onClick)
-            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 12.dp) else Modifier),
-        shape = shape,
-        color = if (selected) WarmPeach else Color.Transparent,
-        border = if (hidden) {
-            null
-        } else {
-            BorderStroke(
-                width = 1.dp,
-                color = if (selected) WarmBrown.copy(alpha = 0.42f) else WarmLine.copy(alpha = 0.72f),
-            )
-        },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(Color(collection.color)),
-            )
-            Text(
-                collection.displayName,
-                maxLines = 1,
-                softWrap = false,
-                color = WarmInk,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun EditorLine(
-    icon: ImageVector?,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
-            icon?.let { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp)) }
-        }
-        Box(Modifier.weight(1f)) { content() }
-    }
-}
-
-@Composable
-private fun TaskEditorSheet(
-    state: CalendarUiState,
-    selectedDate: LocalDate,
-    selectedStart: LocalTime,
-    selectedEnd: LocalTime,
-    defaultTimed: Boolean,
-    defaultHasEndTime: Boolean = false,
-    defaultHasDate: Boolean = true,
-    defaultAllDay: Boolean = false,
-    requestTitleFocus: Boolean = false,
-    initialTask: TaskEntity?,
-    forcedParentTask: TaskEntity? = null,
-    transferDraft: EditorTransferDraft? = null,
-    headerTitle: String? = null,
-    readOnlyRemote: Boolean = false,
-    onDraftScheduleChanged: (DraftEventSelection?) -> Unit = {},
-    onDraftCollectionColorChanged: (Int) -> Unit = {},
-    onSave: (TaskEditPayload) -> Unit,
-    onSwitchToEvent: (EditorTransferDraft) -> Unit,
-    onOpenCalendarSources: () -> Unit = {},
-    onClose: () -> Unit,
-) {
-    val relationLocksCollection = initialTask?.let { task ->
-        task.parentUid != null || state.allTasks.any {
-            it.collectionHref == task.collectionHref && it.parentUid == task.uid
-        }
-    } == true
-    val lockedCollectionHref = forcedParentTask?.collectionHref
-        ?: initialTask?.collectionHref?.takeIf { relationLocksCollection }
-    val taskCollections = remember(state.collections, state.defaultTaskCollectionHref, initialTask?.collectionHref, readOnlyRemote, lockedCollectionHref) {
-        if (readOnlyRemote && initialTask != null) {
-            state.collections.filter { it.href == initialTask.collectionHref }
-        } else {
-            state.collections
-                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() }
-                .filter { lockedCollectionHref == null || it.href == lockedCollectionHref }
-                .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
-        }
-    }
-    var title by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.title ?: transferDraft?.title.orEmpty()) }
-    var notes by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.notes ?: transferDraft?.notes.orEmpty()) }
-    var location by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.manualColor ?: transferDraft?.manualColor) }
-    var url by remember(initialTask?.uid) { mutableStateOf(initialTask?.url.orEmpty()) }
-    var categories by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.categories ?: transferDraft?.categories.orEmpty()) }
-    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
-        state.allKnownCategoryTags()
-    }
-    var percentComplete by remember(initialTask?.uid) { mutableStateOf(initialTask?.percentComplete ?: 0) }
-    var parentUid by remember(initialTask?.resourceHref, forcedParentTask?.resourceHref) {
-        mutableStateOf(forcedParentTask?.uid ?: initialTask?.parentUid)
-    }
-    var selectedCollectionHref by remember(initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
-        val preferred = state.defaultTaskCollectionHref
-            ?.takeIf { href -> taskCollections.any { it.href == href } }
-        mutableStateOf(
-            initialTask?.collectionHref
-                ?: preferred
-                ?: taskCollections.firstOrNull()?.href,
-        )
-    }
-    val selectedCollectionIndex = remember(taskCollections, selectedCollectionHref) {
-        taskCollections.indexOfFirst { it.href == selectedCollectionHref }
-    }
-    val parentCandidates = remember(state.allTasks, selectedCollectionHref, initialTask?.uid) {
-        val excludedUids = initialTask?.let { state.allTasks.descendantUids(it) }.orEmpty() + listOfNotNull(initialTask?.uid)
-        state.allTasks
-            .filter { it.collectionHref == selectedCollectionHref }
-            .filterNot { it.uid in excludedUids }
-            .distinctBy { it.uid }
-            .sortedBy { it.title.lowercase(Locale.ROOT) }
-    }
-    var isCompleted by remember(initialTask?.uid) { mutableStateOf(initialTask?.isCompleted ?: false) }
-    var statusValue by remember(initialTask?.uid) {
-        mutableStateOf(
-            initialTask?.status?.uppercase()
-                ?: if (initialTask?.isCompleted == true) "COMPLETED" else "NEEDS-ACTION",
-        )
-    }
-    var hasStartDate by remember(initialTask?.uid, transferDraft) {
-        mutableStateOf(initialTask?.startAtMillis != null || (initialTask == null && (transferDraft?.date != null || defaultHasDate)))
-    }
-    var hasEndDate by remember(initialTask?.uid, transferDraft) {
-        mutableStateOf(initialTask?.dueAtMillis != null || (initialTask == null && (transferDraft?.endDate != null || defaultHasEndTime)))
-    }
-    var startDateText by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.startAtMillis?.toDate()?.toString() ?: transferDraft?.date?.toString() ?: selectedDate.toString()) }
-    var endDateText by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.dueAtMillis?.toDate()?.toString() ?: transferDraft?.endDate?.toString() ?: selectedDate.toString()) }
-    var hasStartTime by remember(initialTask?.uid, transferDraft) {
-        mutableStateOf((initialTask?.startAtMillis != null && initialTask.startHasTime) || (initialTask == null && transferDraft?.allDay != true && (transferDraft?.startTime != null || defaultTimed)))
-    }
-    var startTimeText by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.startAtMillis?.toTimeText() ?: transferDraft?.startTime?.toString()?.take(5) ?: selectedStart.toString().take(5)) }
-    var hasEndTime by remember(initialTask?.uid, transferDraft) {
-        mutableStateOf((initialTask?.dueAtMillis != null && initialTask.dueHasTime) || (initialTask == null && transferDraft?.allDay != true && (transferDraft?.endTime != null || defaultHasEndTime)))
-    }
-    var dueTimeText by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.dueAtMillis?.toTimeText() ?: transferDraft?.endTime?.toString()?.take(5) ?: selectedEnd.toString().take(5)) }
-    var allDay by remember(initialTask?.uid, transferDraft) {
-        mutableStateOf(
-            initialTask?.let { (hasStartDate || hasEndDate) && !hasStartTime && !hasEndTime }
-                ?: (transferDraft?.allDay ?: (defaultAllDay || ((hasStartDate || hasEndDate) && !hasStartTime && !hasEndTime && !defaultTimed))),
-        )
-    }
-    var priority by remember(initialTask?.uid) { mutableStateOf(initialTask?.priority ?: 9) }
-    var recurrenceRule by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var reminderMinutes by remember(initialTask?.uid, transferDraft, state.defaultTaskReminderMinutes) {
-        mutableStateOf(
-            when {
-                initialTask != null -> initialTask.remindersCsv.parseReminderMinutes()
-                transferDraft != null -> transferDraft.reminderMinutes
-                else -> state.defaultTaskReminderMinutes
-            },
-        )
-    }
-    var locationPickerOpen by remember(initialTask?.uid) { mutableStateOf(false) }
-    var invalidRangeDialogOpen by remember(initialTask?.uid) { mutableStateOf(false) }
-    val invalidTimeRange = taskDateTimeRangeInvalid(
-        hasStartDate = hasStartDate,
-        startDateText = startDateText,
-        hasStartTime = hasStartTime,
-        startTimeText = startTimeText,
-        hasEndDate = hasEndDate,
-        endDateText = endDateText,
-        hasEndTime = hasEndTime,
-        endTimeText = dueTimeText,
-        allDay = allDay,
-    )
-    val titleFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(initialTask?.uid, selectedCollectionHref, taskCollections, parentCandidates) {
-        if (parentUid != null && parentCandidates.none { it.uid == parentUid }) {
-            parentUid = null
-        }
-        if (initialTask == null) {
-            taskCollections.firstOrNull { it.href == selectedCollectionHref }
-                ?.let { onDraftCollectionColorChanged(it.color) }
-        }
-    }
-
-    LaunchedEffect(requestTitleFocus, initialTask?.uid) {
-        if (requestTitleFocus && initialTask == null) {
-            delay(220)
-            titleFocusRequester.requestFocus()
-        }
-    }
-
-    LaunchedEffect(initialTask?.uid, transferDraft) {
-        if (initialTask == null && transferDraft == null) {
-            startDateText = selectedDate.toString()
-            endDateText = selectedDate.toString()
-            startTimeText = selectedStart.toString().take(5)
-            dueTimeText = selectedEnd.toString().take(5)
-        }
-    }
-
-    fun currentTransferDraft(): EditorTransferDraft {
-        val parsedStartDate = if (hasStartDate) runCatching { LocalDate.parse(startDateText) }.getOrNull() else null
-        val parsedEndDate = if (hasEndDate) runCatching { LocalDate.parse(endDateText) }.getOrNull() else null
-        val parsedEndTime = if (hasEndTime && !allDay) runCatching { LocalTime.parse(dueTimeText) }.getOrNull() else null
-        val parsedStartTime = when {
-            allDay -> null
-            hasStartTime -> runCatching { LocalTime.parse(startTimeText) }.getOrNull()
-            parsedStartDate == null && parsedEndTime != null -> parsedEndTime.minusMinutes(30)
-            else -> null
-        }
-        return EditorTransferDraft(
-            title = title,
-            notes = notes,
-            location = location,
-            locationMapVerified = locationMapVerified,
-            manualColor = manualColor,
-            categories = categories,
-            recurrenceRule = recurrenceRule,
-            reminderMinutes = reminderMinutes,
-            sourceDefaultReminderMinutes = transferDraft?.sourceDefaultReminderMinutes
-                ?: if (initialTask == null) state.defaultTaskReminderMinutes else emptySet(),
-            date = parsedStartDate ?: parsedEndDate,
-            endDate = parsedEndDate ?: parsedStartDate,
-            startTime = parsedStartTime,
-            endTime = parsedEndTime,
-            allDay = allDay,
-        )
-    }
-
-    LaunchedEffect(
-        initialTask?.uid,
-        hasStartDate,
-        startDateText,
-        hasStartTime,
-        startTimeText,
-        hasEndDate,
-        endDateText,
-        hasEndTime,
-        dueTimeText,
-        allDay,
-    ) {
-        if (initialTask == null) {
-            val draft = runCatching {
-                when {
-                    allDay && (hasStartDate || hasEndDate) -> {
-                        val date = LocalDate.parse(if (hasStartDate) startDateText else endDateText)
-                        DraftEventSelection(date, LocalTime.MIDNIGHT, LocalTime.of(23, 59), allDay = true)
-                    }
-                    hasStartDate && hasStartTime -> {
-                        val date = LocalDate.parse(startDateText)
-                        val start = LocalTime.parse(startTimeText)
-                        val end = if (hasEndDate && hasEndTime && endDateText == startDateText) {
-                            LocalTime.parse(dueTimeText)
-                        } else {
-                            start.plusMinutes(30)
-                        }
-                        DraftEventSelection(date, start, end)
-                    }
-                    hasEndDate && hasEndTime -> {
-                        val date = LocalDate.parse(endDateText)
-                        val end = LocalTime.parse(dueTimeText)
-                        DraftEventSelection(date, end.minusMinutes(30), end)
-                    }
-                    else -> null
-                }
-            }.getOrNull()
-            onDraftScheduleChanged(draft)
-        }
-    }
-
-    AnimatedContent(
-        targetState = locationPickerOpen,
-        transitionSpec = {
-            (slideInHorizontally(animationSpec = tween(MotionMedium, easing = MotionStandard)) { width -> width / 3 } + fadeIn(tween(MotionShort))) togetherWith
-                (slideOutHorizontally(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) { width -> -width / 3 } + fadeOut(tween(MotionShort)))
-        },
-        label = "taskLocationPicker",
-    ) { pickingLocation ->
-        if (pickingLocation) {
-            LocationPickerPage(
-                initialQuery = location,
-                onSelected = { selection ->
-                    location = selection.value
-                    locationMapVerified = selection.mapVerified
-                    locationPickerOpen = false
-                },
-                onClose = { locationPickerOpen = false },
-            )
-        } else {
-            if (!readOnlyRemote && taskCollections.isEmpty()) {
-                EditorContainer(
-                    title = headerTitle ?: stringResource(if (initialTask == null) R.string.new_task else R.string.edit_task),
-                    action = stringResource(R.string.save),
-                    onAction = {},
-                    onClose = onClose,
-                    actionEnabled = false,
-                ) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(
-                            stringResource(R.string.event),
-                            selected = false,
-                            onClick = {
-                                onSwitchToEvent(currentTransferDraft())
-                            },
-                        )
-                        TypeChip(stringResource(R.string.task), selected = true)
-                    }
-                    NoWritableSourceNotice(
-                        title = stringResource(R.string.no_writable_task_list_title),
-                        body = stringResource(R.string.no_writable_task_list_body),
-                        action = stringResource(R.string.add_calendar_source),
-                        onAction = onOpenCalendarSources,
-                    )
-                }
-            } else {
-                EditorContainer(title = headerTitle ?: stringResource(if (initialTask == null) R.string.new_task else R.string.edit_task), action = stringResource(R.string.save), onAction = {
-                if (invalidTimeRange) {
-                    invalidRangeDialogOpen = true
-                    return@EditorContainer
-                }
-                val payload = runCatching {
-                    TaskEditPayload(
-                        title = title,
-                        collectionHref = selectedCollectionHref,
-                        notes = notes,
-                        location = location,
-                        locationMapVerified = locationMapVerified,
-                        manualColor = manualColor,
-                        url = url,
-                        categories = categories,
-                        startDate = if (hasStartDate) LocalDate.parse(startDateText) else null,
-                        startTime = if (hasStartDate && hasStartTime && !allDay) LocalTime.parse(startTimeText) else null,
-                        startHasTime = hasStartDate && hasStartTime && !allDay,
-                        dueDate = if (hasEndDate) LocalDate.parse(endDateText) else null,
-                        dueTime = if (hasEndDate && hasEndTime && !allDay) LocalTime.parse(dueTimeText) else null,
-                        dueHasTime = hasEndDate && hasEndTime && !allDay,
-                        priority = priority,
-                        percentComplete = percentComplete.coerceIn(0, 100),
-                        isCompleted = isCompleted,
-                        recurrenceRule = recurrenceRule.ifBlank { null },
-                        parentUid = parentUid,
-                        status = statusValue,
-                        reminderMinutes = reminderMinutes.normalizedReminderOffsets(),
-                    )
-                }.getOrNull() ?: return@EditorContainer
-                onSave(payload)
-            }, onClose = onClose) {
-                if (!readOnlyRemote && forcedParentTask == null) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(
-                            stringResource(R.string.event),
-                            selected = false,
-                            onClick = {
-                                onSwitchToEvent(currentTransferDraft())
-                            },
-                        )
-                        TypeChip(stringResource(R.string.task), selected = true)
-                    }
-                }
-                EditorSection {
-                    if (readOnlyRemote) {
-                        ReadOnlyEditorNotice(title = title)
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            // The editor opens the full status picker on tap.
-                            TaskStatusCheckbox(
-                                status = statusValue,
-                                tint = if (statusValue == "COMPLETED") WarmBrown else WarmInk,
-                                onStatusChange = {
-                                    statusValue = it
-                                    isCompleted = it == "COMPLETED"
-                                },
-                                tapOpensPicker = true,
-                                boxSize = 40.dp,
-                                iconSize = 26.dp,
-                            )
-                            OutlinedTextField(
-                                title,
-                                { title = it },
-                                placeholder = { Text(stringResource(R.string.add_title)) },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.titleLarge.copy(
-                                    color = WarmInk,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 22.sp,
-                                    lineHeight = 25.sp,
-                                ),
-                                shape = RoundedCornerShape(18.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(58.dp)
-                                    .focusRequester(titleFocusRequester),
-                            )
-                        }
-                        Text(
-                            stringResource(R.string.long_press_status_hint),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp,
-                        )
-                    }
-                }
-                if (!readOnlyRemote && taskCollections.isNotEmpty()) {
-                    Text(
-                        stringResource(R.string.task_list),
-                        color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.editorInset(),
-                    )
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        initialScrollIndex = selectedCollectionIndex.takeIf { initialTask != null && it >= 0 },
-                        initialScrollKey = initialTask?.resourceHref,
-                    ) {
-                        taskCollections.forEach { collection ->
-                            CalendarSelectorChip(
-                                collection = collection,
-                                selected = collection.href == selectedCollectionHref,
-                                onClick = { selectedCollectionHref = collection.href },
-                                hidden = collection.href in state.hiddenCollectionHrefs,
-                            )
-                        }
-                    }
-                }
-                if (!readOnlyRemote && selectedCollectionHref != null) {
-                    TaskParentSelector(
-                        selectedParentUid = parentUid,
-                        candidates = parentCandidates,
-                        taskColorMode = state.taskColorMode,
-                        onSelected = { parentUid = it },
-                    )
-                }
-                if (!readOnlyRemote) {
-                    EditorSection {
-                        TaskScheduleEditor(
-                            hasStartDate = hasStartDate,
-                            onHasStartDateChange = {
-                                if (it && !hasStartDate && !hasEndDate) allDay = true
-                                hasStartDate = it
-                                hasStartTime = it && !allDay
-                            },
-                            startDateText = startDateText,
-                            onStartDateTextChange = { startDateText = it },
-                            hasEndDate = hasEndDate,
-                            onHasEndDateChange = {
-                                if (it && !hasStartDate && !hasEndDate) allDay = true
-                                hasEndDate = it
-                                hasEndTime = it && !allDay
-                            },
-                            endDateText = endDateText,
-                            onEndDateTextChange = { endDateText = it },
-                            allDay = allDay,
-                            onAllDayChange = {
-                                allDay = it
-                                if (it) {
-                                    hasStartTime = false
-                                    hasEndTime = false
-                                } else {
-                                    hasStartTime = hasStartDate
-                                    hasEndTime = hasEndDate
-                                }
-                            },
-                            hasStartTime = hasStartTime,
-                            onHasStartTimeChange = { hasStartTime = it },
-                            startTimeText = startTimeText,
-                            onStartTimeTextChange = { startTimeText = it },
-                            hasEndTime = hasEndTime,
-                            onHasEndTimeChange = { hasEndTime = it },
-                            endTimeText = dueTimeText,
-                            onEndTimeTextChange = { dueTimeText = it },
-                            endIsError = invalidTimeRange,
-                        )
-                    }
-                }
-                val editableFields = if (readOnlyRemote) listOf("color") else state.taskFieldOrder.filterNot { it == "time" || it == "status" }
-                editableFields.forEach { field ->
-                    when (field) {
-                        "recurrence" -> CompactRecurrenceEditor(recurrenceRule = recurrenceRule, onRecurrenceRuleChange = { recurrenceRule = it.orEmpty() })
-                        "reminders" -> CompactReminderEditor(selected = reminderMinutes, onSelectedChange = { reminderMinutes = it })
-                        "location" -> Box(Modifier.editorInset()) { LocationSelectorField(location = location, onClick = { locationPickerOpen = true }) }
-                        "notes" -> OutlinedTextField(notes, { notes = it }, label = { Text(stringResource(R.string.note)) }, minLines = 3, shape = RoundedCornerShape(16.dp), modifier = Modifier.editorInset().fillMaxWidth())
-                        "url" -> OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.url)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.editorInset().fillMaxWidth())
-                        "priority" -> EditorSection { PrioritySlider(priority = priority, onPriorityChange = { priority = it }) }
-                        "progress" -> EditorSection { ProgressSlider(progress = percentComplete, onProgressChange = { percentComplete = it }) }
-                        "color" -> ColorOverrideEditor(
-                            selectedColor = manualColor,
-                            automaticColor = taskCollections.firstOrNull { it.href == selectedCollectionHref }?.color ?: WarmBrown.toArgb(),
-                            onColorSelected = { manualColor = it },
-                        )
-                        "tags" -> TagEditor(stringResource(R.string.categories), categories.toCategoryTags(), knownCategories) { categories = it.toCategoriesCsv() }
-                    }
-                }
-            }
-            }
-        }
-    }
-    if (invalidRangeDialogOpen) {
-        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
-    }
-}
-
-@Composable
-private fun TaskScheduleEditor(
-    hasStartDate: Boolean,
-    onHasStartDateChange: (Boolean) -> Unit,
-    startDateText: String,
-    onStartDateTextChange: (String) -> Unit,
-    hasEndDate: Boolean,
-    onHasEndDateChange: (Boolean) -> Unit,
-    endDateText: String,
-    onEndDateTextChange: (String) -> Unit,
-    allDay: Boolean,
-    onAllDayChange: (Boolean) -> Unit,
-    hasStartTime: Boolean,
-    onHasStartTimeChange: (Boolean) -> Unit,
-    startTimeText: String,
-    onStartTimeTextChange: (String) -> Unit,
-    hasEndTime: Boolean,
-    onHasEndTimeChange: (Boolean) -> Unit,
-    endTimeText: String,
-    onEndTimeTextChange: (String) -> Unit,
-    endIsError: Boolean = false,
-) {
-    val scheduled = hasStartDate || hasEndDate
-    Column(
-        modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (scheduled) {
-            EditorLine(Icons.Default.AccessTime) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.all_day), fontSize = 17.sp, lineHeight = 20.sp)
-                    Switch(allDay, onAllDayChange)
-                }
-            }
-        } else {
-            Text(stringResource(R.string.task_no_date), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, lineHeight = 17.sp)
-        }
-        TaskScheduleRow(
-            label = stringResource(R.string.start_date),
-            addLabel = stringResource(R.string.add_field, stringResource(R.string.start_date)),
-            removeLabel = stringResource(R.string.remove_field, stringResource(R.string.start_date)),
-            timeLabel = stringResource(R.string.start),
-            hasDate = hasStartDate,
-            onHasDateChange = onHasStartDateChange,
-            dateText = startDateText,
-            onDateTextChange = onStartDateTextChange,
-            hasTime = hasStartTime,
-            onHasTimeChange = onHasStartTimeChange,
-            timeText = startTimeText,
-            onTimeTextChange = onStartTimeTextChange,
-            allDay = allDay,
-        )
-        TaskScheduleRow(
-            label = stringResource(R.string.end_date),
-            addLabel = stringResource(R.string.add_field, stringResource(R.string.end_date)),
-            removeLabel = stringResource(R.string.remove_field, stringResource(R.string.end_date)),
-            timeLabel = stringResource(R.string.end),
-            hasDate = hasEndDate,
-            onHasDateChange = onHasEndDateChange,
-            dateText = endDateText,
-            onDateTextChange = onEndDateTextChange,
-            hasTime = hasEndTime,
-            onHasTimeChange = onHasEndTimeChange,
-            timeText = endTimeText,
-            onTimeTextChange = onEndTimeTextChange,
-            allDay = allDay,
-            isError = endIsError,
-        )
-    }
-}
-
-@Composable
-private fun TaskParentSelector(
-    selectedParentUid: String?,
-    candidates: List<TaskEntity>,
-    taskColorMode: TaskColorMode,
-    onSelected: (String?) -> Unit,
-) {
-    var pickerOpen by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    val selected = candidates.firstOrNull { it.uid == selectedParentUid }
-    LaunchedEffect(pickerOpen) {
-        if (pickerOpen) query = ""
-    }
-    Column(
-        modifier = Modifier.editorInset(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            stringResource(R.string.parent_task),
-            color = WarmInk,
-            fontSize = 14.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Box {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { pickerOpen = true },
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                border = BorderStroke(1.dp, WarmLine),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
-                    Text(
-                        selected?.title ?: stringResource(R.string.no_parent_task),
-                        color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = WarmInk, modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-    }
-    if (pickerOpen) {
-        TaskParentPickerDialog(
-            selectedParentUid = selectedParentUid,
-            candidates = candidates,
-            query = query,
-            onQueryChange = { query = it },
-            taskColorMode = taskColorMode,
-            onDismiss = { pickerOpen = false },
-            onSelected = {
-                onSelected(it)
-                pickerOpen = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun TaskParentPickerDialog(
-    selectedParentUid: String?,
-    candidates: List<TaskEntity>,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    taskColorMode: TaskColorMode,
-    onDismiss: () -> Unit,
-    onSelected: (String?) -> Unit,
-) {
-    val filteredCandidates = remember(candidates, query) { candidates.filterForParentPicker(query) }
-    val hierarchy = rememberTaskHierarchyPresentation(filteredCandidates, expandedByDefault = true)
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.parent_task),
-                        color = WarmInk,
-                        fontSize = 18.sp,
-                        lineHeight = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = WarmInk)
-                    }
-                }
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    placeholder = { Text(stringResource(R.string.search_ellipsis)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelected(null) },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (selectedParentUid == null) WarmPeach.copy(alpha = 0.62f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                    border = BorderStroke(1.dp, if (selectedParentUid == null) WarmBrown.copy(alpha = 0.5f) else WarmLine),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
-                        Text(
-                            stringResource(R.string.no_parent_task),
-                            color = WarmInk,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = if (selectedParentUid == null) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selectedParentUid == null) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-                if (filteredCandidates.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(116.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (candidates.isEmpty()) stringResource(R.string.no_parent_task) else stringResource(R.string.no_matches),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
-                        )
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 430.dp)
-                            .verticalScroll(rememberScrollState())
-                            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))
-                            .graphicsLayer { clip = false },
-                    ) {
-                        hierarchy.entries.forEach { entry ->
-                            AnimatedTaskHierarchyEntry(entry) {
-                                TaskRow(
-                                    task = entry.task,
-                                    taskColorMode = taskColorMode,
-                                    onTaskStatusChanged = { _, _ -> onSelected(entry.task.uid) },
-                                    prominent = true,
-                                    hierarchyDepth = entry.depth,
-                                    hierarchyContinuationLevels = entry.continuationLevels,
-                                    hierarchyLastSibling = entry.lastSibling,
-                                    hasSubtasks = entry.hasChildren,
-                                    subtasksExpanded = entry.expanded,
-                                    onToggleSubtasks = { hierarchy.toggle(entry.task) },
-                                    outerHorizontalPadding = 0.dp,
-                                    outerVerticalPadding = 3.dp,
-                                    connectorStemInset = TaskHierarchyStemInset,
-                                    onClick = { onSelected(entry.task.uid) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun List<TaskEntity>.filterForParentPicker(query: String): List<TaskEntity> {
-    val normalized = query.trim().lowercase(Locale.ROOT)
-    if (normalized.isBlank()) return this
-    val byCollectionUid = associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
-    val included = mutableSetOf<String>()
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun includeWithAncestors(task: TaskEntity) {
-        var cursor: TaskEntity? = task
-        val seen = mutableSetOf<String>()
-        while (cursor != null && seen.add(cursor.resourceHref)) {
-            included += cursor.resourceHref
-            cursor = parentOf(cursor)
-        }
-    }
-
-    fun TaskEntity.matchesSearch(): Boolean {
-        return listOf(title, notes.orEmpty(), categories.orEmpty(), location.orEmpty())
-            .any { it.lowercase(Locale.ROOT).contains(normalized) }
-    }
-
-    filter { it.matchesSearch() }.forEach(::includeWithAncestors)
-    return filter { it.resourceHref in included }
-}
-
-private data class TaskHierarchySubset(
-    val tasks: List<TaskEntity>,
-    val defaultExpandedResourceHrefs: Set<String> = emptySet(),
-)
-
-private fun List<TaskEntity>.searchHierarchySubsetForMatches(matches: List<TaskEntity>): TaskHierarchySubset {
-    if (matches.isEmpty()) return TaskHierarchySubset(emptyList())
-    val base = (this + matches).distinctBy { it.resourceHref }
-    val byResource = base.associateBy { it.resourceHref }
-    val byCollectionUid = base.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = base.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
-    val childrenByParent = base
-        .filter { !it.parentUid.isNullOrBlank() }
-        .groupBy { it.collectionHref to it.parentUid.orEmpty() }
-    val included = linkedSetOf<String>()
-    val expanded = linkedSetOf<String>()
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun rootOf(task: TaskEntity): TaskEntity {
-        var cursor = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(cursor) ?: return cursor
-            if (!seen.add(parent.resourceHref)) return cursor
-            cursor = parent
-        }
-    }
-
-    fun includeDescendants(task: TaskEntity) {
-        val queue = ArrayDeque<TaskEntity>()
-        val seen = mutableSetOf<String>()
-        queue.add(task)
-        while (queue.isNotEmpty()) {
-            val cursor = queue.removeFirst()
-            if (!seen.add(cursor.resourceHref)) continue
-            included += cursor.resourceHref
-            childrenByParent[cursor.collectionHref to cursor.uid].orEmpty().forEach(queue::add)
-        }
-    }
-
-    fun defaultOpenAncestorsOf(task: TaskEntity) {
-        var cursor = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(cursor) ?: return
-            if (!seen.add(parent.resourceHref)) return
-            expanded += parent.resourceHref
-            cursor = parent
-        }
-    }
-
-    matches.forEach { rawMatch ->
-        val match = byResource[rawMatch.resourceHref] ?: rawMatch
-        includeDescendants(rootOf(match))
-        defaultOpenAncestorsOf(match)
-    }
-    return TaskHierarchySubset(
-        tasks = base.filter { it.resourceHref in included },
-        defaultExpandedResourceHrefs = expanded,
-    )
-}
-
-private fun List<TaskEntity>.chainSubsetForTargets(
-    targets: List<TaskEntity>,
-    includeTargetDescendants: Boolean,
-): List<TaskEntity> {
-    if (targets.isEmpty()) return emptyList()
-    val base = (this + targets).distinctBy { it.resourceHref }
-    val byResource = base.associateBy { it.resourceHref }
-    val byCollectionUid = base.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = base.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
-    val childrenByParent = base
-        .filter { !it.parentUid.isNullOrBlank() }
-        .groupBy { it.collectionHref to it.parentUid.orEmpty() }
-    val included = linkedSetOf<String>()
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun includeAncestors(task: TaskEntity) {
-        var cursor: TaskEntity? = task
-        val seen = mutableSetOf<String>()
-        while (cursor != null && seen.add(cursor.resourceHref)) {
-            included += cursor.resourceHref
-            cursor = parentOf(cursor)
-        }
-    }
-
-    fun includeDescendants(task: TaskEntity) {
-        val queue = ArrayDeque<TaskEntity>()
-        queue.add(task)
-        val seen = mutableSetOf<String>()
-        while (queue.isNotEmpty()) {
-            val cursor = queue.removeFirst()
-            if (!seen.add(cursor.resourceHref)) continue
-            included += cursor.resourceHref
-            childrenByParent[cursor.collectionHref to cursor.uid].orEmpty().forEach(queue::add)
-        }
-    }
-
-    targets.forEach { rawTarget ->
-        val target = byResource[rawTarget.resourceHref] ?: rawTarget
-        includeAncestors(target)
-        if (includeTargetDescendants) includeDescendants(target)
-    }
-    return base.filter { it.resourceHref in included }
-}
-
-private fun List<TaskEntity>.descendantUids(task: TaskEntity): Set<String> {
-    val childrenByParent = filter { it.collectionHref == task.collectionHref && !it.parentUid.isNullOrBlank() }
-        .groupBy { it.parentUid }
-    val result = mutableSetOf<String>()
-    val queue = ArrayDeque<String>()
-    queue.add(task.uid)
-    while (queue.isNotEmpty()) {
-        val parent = queue.removeFirst()
-        childrenByParent[parent].orEmpty().forEach { child ->
-            if (result.add(child.uid)) queue.add(child.uid)
-        }
-    }
-    return result
-}
-
-private fun List<TaskEntity>.descendantsOf(task: TaskEntity): List<TaskEntity> {
-    val childrenByParent = filter { it.collectionHref == task.collectionHref && !it.parentUid.isNullOrBlank() }
-        .groupBy { it.parentUid }
-    val result = mutableListOf<TaskEntity>()
-    val seen = mutableSetOf(task.uid)
-
-    fun append(parentUid: String) {
-        childrenByParent[parentUid].orEmpty().forEach { child ->
-            if (seen.add(child.uid)) {
-                result += child
-                append(child.uid)
-            }
-        }
-    }
-
-    append(task.uid)
-    return result
-}
-
-private data class TaskRootActivityPartition(
-    val activeRootTasks: List<TaskEntity>,
-    val inactiveRootTasks: List<TaskEntity>,
-)
-
-private fun List<TaskEntity>.partitionByRootActivity(): TaskRootActivityPartition {
-    val distinctTasks = distinctBy { it.resourceHref }
-    val byCollectionUid = distinctTasks.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = distinctTasks.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun rootOf(task: TaskEntity): TaskEntity {
-        var current = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(current) ?: return current
-            if (!seen.add(parent.resourceHref)) return current
-            current = parent
-        }
-    }
-
-    val tasksByRoot = distinctTasks.groupBy { rootOf(it).resourceHref }
-    val fullyInactiveRoots = tasksByRoot
-        .filterValues { rootTasks -> rootTasks.isNotEmpty() && rootTasks.all { it.isInactive() } }
-        .keys
-    val active = tasksByRoot
-        .filterKeys { it !in fullyInactiveRoots }
-        .values
-        .flatten()
-    val inactive = distinctTasks.filter { it.isInactive() }
-    return TaskRootActivityPartition(
-        activeRootTasks = active,
-        inactiveRootTasks = inactive,
-    )
-}
-
-private fun List<TaskEntity>.partitionByRootSchedule(): Pair<List<TaskEntity>, List<TaskEntity>> {
-    val byCollectionUid = associateBy { it.collectionHref to it.uid }
-
-    fun rootOf(task: TaskEntity): TaskEntity {
-        var current = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (!current.parentUid.isNullOrBlank()) {
-            val parent = byCollectionUid[current.collectionHref to current.parentUid] ?: break
-            if (!seen.add(parent.resourceHref)) break
-            current = parent
-        }
-        return current
-    }
-
-    return partition { rootOf(it).taskDate() == null }
-}
-
-@Composable
-private fun TaskScheduleRow(
-    label: String,
-    addLabel: String,
-    removeLabel: String,
-    timeLabel: String,
-    hasDate: Boolean,
-    onHasDateChange: (Boolean) -> Unit,
-    dateText: String,
-    onDateTextChange: (String) -> Unit,
-    hasTime: Boolean,
-    onHasTimeChange: (Boolean) -> Unit,
-    timeText: String,
-    onTimeTextChange: (String) -> Unit,
-    allDay: Boolean,
-    isError: Boolean = false,
-) {
-    AnimatedContent(
-        targetState = hasDate,
-        transitionSpec = {
-            (fadeIn(tween(MotionMedium, easing = MotionStandard)) + expandVertically(tween(MotionMedium, easing = MotionStandard))) togetherWith
-                (fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) + shrinkVertically(tween(MotionShort, easing = MotionStandardAccelerate)))
-        },
-        label = "taskScheduleRow-$label",
-    ) { dateVisible ->
-        if (!dateVisible) {
-            AddEditorValueRow(addLabel) { onHasDateChange(true) }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DatePickerField(
-                    value = dateText,
-                    onValueChange = onDateTextChange,
-                    label = { Text(label) },
-                    isError = isError,
-                    modifier = Modifier.weight(1f),
-                )
-                AnimatedVisibility(
-                    visible = !allDay && hasTime,
-                    enter = fadeIn(tween(MotionMedium, easing = MotionStandard)) +
-                        expandHorizontally(tween(MotionMedium, easing = MotionStandard), expandFrom = Alignment.Start),
-                    exit = fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) +
-                        shrinkHorizontally(tween(MotionShort, easing = MotionStandardAccelerate), shrinkTowards = Alignment.Start),
-                ) {
-                    TimePickerField(
-                        value = timeText,
-                        onValueChange = onTimeTextChange,
-                        label = { Text(timeLabel) },
-                        isError = isError,
-                        modifier = Modifier.width(104.dp),
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        onHasDateChange(false)
-                        onHasTimeChange(false)
-                    },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = removeLabel, tint = WarmInk, modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AddEditorValueRow(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, WarmLine, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(Icons.Default.Add, contentDescription = label, tint = WarmBrown, modifier = Modifier.size(22.dp))
-        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp)
-    }
-}
-
-@Composable
-private fun TagEditor(
-    label: String,
-    tags: List<String>,
-    suggestions: List<String>,
-    onTagsChanged: (List<String>) -> Unit,
-) {
-    var query by remember { mutableStateOf("") }
-    val normalizedQuery = query.trim()
-    val availableSuggestions = remember(tags, suggestions, normalizedQuery) {
-        suggestions
-            .filterNot { existing -> tags.any { it.equals(existing, ignoreCase = true) } }
-            .filter { normalizedQuery.isBlank() || it.contains(normalizedQuery, ignoreCase = true) }
-            .take(6)
-    }
-    fun addTag(value: String) {
-        val cleaned = value.trim().trim(',')
-        if (cleaned.isBlank() || tags.any { it.equals(cleaned, ignoreCase = true) }) return
-        onTagsChanged(tags + cleaned)
-        query = ""
-    }
-    EditorSection {
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        if (tags.isNotEmpty()) {
-            FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                tags.forEach { tag ->
-                    TagPill(
-                        tag = tag,
-                        onRemove = { onTagsChanged(tags.filterNot { it == tag }) },
-                    )
-                }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text(stringResource(R.string.add_tag)) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(
-                onClick = { addTag(query) },
-                enabled = normalizedQuery.isNotBlank(),
-                modifier = Modifier.size(UniversalControlHeight),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_tag), tint = WarmBrown)
-            }
-        }
-        if (availableSuggestions.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                availableSuggestions.forEach { suggestion ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { addTag(suggestion) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-                        Text(suggestion, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagPill(tag: String, onRemove: (() -> Unit)? = null) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = WarmPeach.copy(alpha = 0.84f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 11.dp, end = if (onRemove == null) 11.dp else 4.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(tag, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1)
-            onRemove?.let {
-                IconButton(onClick = it, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.remove_tag, tag), tint = WarmInk, modifier = Modifier.size(15.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryDetailLine(label: String, categories: String) {
-    val tags = remember(categories) { categories.toCategoryTags() }
-    if (tags.isEmpty()) return
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                tags.forEach { TagPill(it) }
-            }
-        }
-    }
-}
-
-private val ReminderPresets = listOf(0, 5, 10, 15, 30, 60, 120, 1440)
-
-private interface EventIcalOption {
-    val value: String
-    val label: String
-}
-
-private enum class EventStatusOption(override val value: String, override val label: String) : EventIcalOption {
-    Confirmed("CONFIRMED", "Confirmed"),
-    Tentative("TENTATIVE", "Tentative"),
-    Cancelled("CANCELLED", "Cancelled"),
-}
-
-private enum class EventClassOption(override val value: String, override val label: String) : EventIcalOption {
-    Public("PUBLIC", "Full details"),
-    Confidential("CONFIDENTIAL", "Busy only"),
-    Private("PRIVATE", "Hidden"),
-}
-
-private enum class EventTransparencyOption(override val value: String, override val label: String) : EventIcalOption {
-    Busy("OPAQUE", "Busy"),
-    Free("TRANSPARENT", "Free"),
-}
-
-@Composable
-private fun EventIcalOption.localizedLabel(): String = when (value.uppercase(Locale.US)) {
-    "CONFIRMED" -> appString(R.string.confirmed)
-    "TENTATIVE" -> appString(R.string.tentative)
-    "CANCELLED" -> appString(R.string.cancelled)
-    "PUBLIC" -> appString(R.string.full_details)
-    "CONFIDENTIAL" -> appString(R.string.busy_only)
-    "PRIVATE" -> appString(R.string.hidden)
-    "OPAQUE" -> appString(R.string.busy)
-    "TRANSPARENT" -> appString(R.string.free)
-    else -> label
-}
-
-@Composable
-private fun EventMetadataChipRow(
-    options: List<out EventIcalOption>,
-    selected: String,
-    onSelected: (String) -> Unit,
-) {
-    FadedHorizontalScrollRow(contentPadding = PaddingValues(horizontal = 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { option ->
-            FilterChip(
-                selected = selected.equals(option.value, ignoreCase = true),
-                onClick = { onSelected(option.value) },
-                label = { Text(option.localizedLabel(), maxLines = 1, softWrap = false) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun SharedEventEditor(
-    organizerJson: String?,
-    attendeesJson: String?,
-    onAttendeesJsonChange: (String?) -> Unit,
-) {
-    val organizer = remember(organizerJson) { organizerJson.toCalendarParticipant() }
-    val attendees = remember(attendeesJson) { attendeesJson.toCalendarParticipants() }
-    var newEmail by remember { mutableStateOf("") }
-    fun addParticipant() {
-        val email = newEmail.trim()
-        if (!email.isLikelyEmailAddress()) return
-        if (attendees.none { it.email.equals(email, ignoreCase = true) }) {
-            onAttendeesJsonChange(
-                (attendees + CalendarParticipant(name = email, email = email, rsvp = true)).toAttendeesJson(),
-            )
-        }
-        newEmail = ""
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        EditorLine(Icons.Default.PersonAdd) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(stringResource(R.string.participants), fontSize = 15.sp, lineHeight = 18.sp, color = WarmInk, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (attendees.isEmpty()) stringResource(R.string.no_participants) else stringResource(R.string.participant_count, attendees.size),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        organizer?.let {
-            Text(stringResource(R.string.organized_by, it.displayName), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
-        }
-        attendees.forEachIndexed { index, attendee ->
-            ParticipantEditorRow(
-                attendee = attendee,
-                onChange = { changed ->
-                    onAttendeesJsonChange(attendees.toMutableList().also { it[index] = changed }.toAttendeesJson())
-                },
-                onRemove = {
-                    onAttendeesJsonChange(attendees.toMutableList().also { it.removeAt(index) }.toAttendeesJson())
-                },
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = newEmail,
-                onValueChange = { newEmail = it },
-                label = { Text(stringResource(R.string.email_address)) },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { addParticipant() }),
-                modifier = Modifier
-                    .weight(1f)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
-                            addParticipant()
-                            true
-                        } else {
-                            false
-                        }
-                    },
-            )
-            IconButton(
-                enabled = newEmail.trim().isLikelyEmailAddress(),
-                onClick = { addParticipant() },
-            ) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_participant), tint = WarmBrown)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ParticipantEditorRow(
-    attendee: CalendarParticipant,
-    onChange: (CalendarParticipant) -> Unit,
-    onRemove: () -> Unit,
-) {
-    var roleMenuOpen by remember(attendee.email) { mutableStateOf(false) }
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(attendee.displayName, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(attendee.email, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove_participant), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(19.dp))
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = attendee.rsvp,
-                    onCheckedChange = { onChange(attendee.copy(rsvp = it)) },
-                    modifier = Modifier.size(34.dp),
-                )
-                Text(stringResource(R.string.request_response), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp)
-            }
-            Box {
-                OutlinedButton(
-                    onClick = { roleMenuOpen = true },
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(attendee.role.localizedParticipantRoleLabel(), fontSize = 13.sp, lineHeight = 16.sp)
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(17.dp))
-                }
-                DropdownMenu(
-                    expanded = roleMenuOpen,
-                    onDismissRequest = { roleMenuOpen = false },
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    ParticipantRoleOption.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.localizedLabel()) },
-                            onClick = {
-                                roleMenuOpen = false
-                                onChange(attendee.copy(role = option.value))
-                            },
-                        )
-                    }
-                }
-            }
-            attendee.localizedDeliveryStatusLabel()?.let {
-                Text(it, color = attendee.deliveryStatusColor(), fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun reminderMinuteLabel(minutes: Int): String = when {
-    minutes == REMINDER_AT_END -> appString(R.string.at_end)
-    minutes == REMINDER_AT_START -> appString(R.string.at_start)
-    minutes % 1440 == 0 -> appString(R.string.days_before, minutes / 1440)
-    minutes % 60 == 0 -> appString(R.string.hours_before, minutes / 60)
-    else -> appString(R.string.minutes_before, minutes)
-}
-
-@Composable
-private fun ReminderUnit.localizedLabel(): String = when (this) {
-    ReminderUnit.Minutes -> appString(R.string.minutes)
-    ReminderUnit.Hours -> appString(R.string.hours)
-    ReminderUnit.Days -> appString(R.string.days)
-    ReminderUnit.Weeks -> appString(R.string.weeks)
-}
-
-@Composable
-private fun ReminderChoice.localizedLabel(): String = when (this) {
-    ReminderChoice.None -> appString(R.string.no_reminder)
-    ReminderChoice.AtStart -> appString(R.string.at_start)
-    ReminderChoice.AtEnd -> appString(R.string.at_end)
-    ReminderChoice.FifteenMinutes -> appString(R.string.fifteen_min_before)
-    ReminderChoice.TwoHours -> appString(R.string.two_hours_before)
-    ReminderChoice.OneDay -> appString(R.string.one_day_before)
-    ReminderChoice.OneWeek -> appString(R.string.one_week_before_full)
-    ReminderChoice.Custom -> appString(R.string.custom_reminder)
-}
-
-@Composable
-private fun ModalEditorDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(title, color = WarmInk, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
-                content()
-            }
-        }
-    }
-}
-
-@Composable
-private fun DialogActions(
-    onDismiss: () -> Unit,
-    onSave: () -> Unit,
-    saveEnabled: Boolean,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) }
-        Button(
-            onClick = onSave,
-            enabled = saveEnabled,
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
-        ) {
-            Text(appString(R.string.save))
-        }
-    }
-}
-
-@Composable
-private fun CompactEditorHeaderLine(
-    icon: ImageVector,
-    title: String,
-    value: String,
-    actionIcon: ImageVector,
-    actionDescription: String,
-    onAction: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
-            Icon(actionIcon, contentDescription = actionDescription, tint = WarmBrown, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
-@Composable
-private fun CompactValueRow(value: String, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .padding(start = 12.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
-        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-        }
-    }
-}
-
-@Composable
-private fun MetadataDropdownLine(
-    label: String,
-    options: List<out EventIcalOption>,
-    selected: String,
-    onSelected: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val current = options.firstOrNull { it.value.equals(selected, ignoreCase = true) } ?: options.first()
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
-        Box {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(15.dp))
-                    .clickable { expanded = true },
-                shape = RoundedCornerShape(15.dp),
-                color = WarmPeach.copy(alpha = 0.74f),
-                border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Text(current.localizedLabel(), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = WarmInk, modifier = Modifier.size(17.dp))
-                }
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                shape = RoundedCornerShape(18.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.localizedLabel()) },
-                        onClick = {
-                            onSelected(option.value)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PresetListRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(if (selected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)),
-            )
-            Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        }
-    }
-}
-
-@Composable
-private fun NumberUnitRow(
-    amount: String,
-    onAmountChange: (String) -> Unit,
-    unitLabel: String,
-    onUnitSelected: (String) -> Unit,
-    unitOptions: List<String>,
-    label: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            value = amount,
-            onValueChange = { onAmountChange(it.filter(Char::isDigit).take(4)) },
-            label = { Text(label) },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.weight(1f),
-        )
-        DropdownPill(
-            label = unitLabel,
-            options = unitOptions,
-            onSelected = onUnitSelected,
-            modifier = Modifier.width(122.dp),
-        )
-    }
-}
-
-@Composable
-private fun DropdownPill(
-    label: String,
-    options: List<String>,
-    onSelected: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { expanded = true },
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, WarmLine),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            }
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<Int>) -> Unit) {
-    var editingReminder by remember { mutableStateOf<Int?>(null) }
-    var addingReminder by remember { mutableStateOf(false) }
-    EditorSection {
-        CompactEditorHeaderLine(
-            icon = Icons.Default.Notifications,
-            title = appString(R.string.reminders),
-            value = if (selected.isEmpty()) appString(R.string.none) else selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", "),
-            actionIcon = Icons.Default.Add,
-            actionDescription = stringResource(R.string.add_reminder),
-            onAction = {
-                editingReminder = null
-                addingReminder = true
-            },
-        )
-        AnimatedVisibility(visible = selected.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                selected.normalizedReminderOffsets().forEach { minutes ->
-                    CompactValueRow(
-                        value = reminderMinuteLabel(minutes),
-                        onEdit = {
-                            editingReminder = minutes
-                            addingReminder = true
-                        },
-                        onDelete = { onSelectedChange(selected - minutes) },
-                    )
-                }
-            }
-        }
-    }
-    if (addingReminder) {
-        ReminderDialog(
-            initialMinutes = editingReminder,
-            onDismiss = { addingReminder = false },
-            onSave = { minutes ->
-                onSelectedChange(
-                    if (minutes == null) {
-                        selected - listOfNotNull(editingReminder).toSet()
-                    } else {
-                        (selected - listOfNotNull(editingReminder).toSet() + minutes).normalizedReminderOffsets().toSet()
-                    },
-                )
-                addingReminder = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun SettingsReminderEditor(
-    title: String,
-    selected: Set<Int>,
-    onSelectedChange: (Set<Int>) -> Unit,
-) {
-    var editingReminder by remember { mutableStateOf<Int?>(null) }
-    var addingReminder by remember { mutableStateOf(false) }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(SettingsControlShape),
-        shape = SettingsControlShape,
-        color = settingsControlColor(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CompactEditorHeaderLine(
-                icon = Icons.Default.Notifications,
-                title = title,
-                value = if (selected.isEmpty()) {
-                    stringResource(R.string.none)
-                } else {
-                    selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", ")
-                },
-                actionIcon = Icons.Default.Add,
-                actionDescription = stringResource(R.string.add_reminder),
-                onAction = {
-                    editingReminder = null
-                    addingReminder = true
-                },
-            )
-            AnimatedVisibility(visible = selected.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    selected.normalizedReminderOffsets().forEach { minutes ->
-                        CompactValueRow(
-                            value = reminderMinuteLabel(minutes),
-                            onEdit = {
-                                editingReminder = minutes
-                                addingReminder = true
-                            },
-                            onDelete = { onSelectedChange((selected - minutes).normalizedReminderOffsets().toSet()) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-    if (addingReminder) {
-        ReminderDialog(
-            initialMinutes = editingReminder,
-            onDismiss = { addingReminder = false },
-            onSave = { minutes ->
-                onSelectedChange(
-                    if (minutes == null) {
-                        (selected - listOfNotNull(editingReminder).toSet()).normalizedReminderOffsets().toSet()
-                    } else {
-                        (selected - listOfNotNull(editingReminder).toSet() + minutes).normalizedReminderOffsets().toSet()
-                    },
-                )
-                addingReminder = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave: (Int?) -> Unit) {
-    val initialChoice = remember(initialMinutes) {
-        ReminderChoice.entries.firstOrNull { it.minutes == initialMinutes } ?: if (initialMinutes == null) ReminderChoice.None else ReminderChoice.Custom
-    }
-    val initial = remember(initialMinutes) { (initialMinutes ?: 15).toReminderAmountUnit() }
-    var selectedChoice by rememberSaveable(initialMinutes) { mutableStateOf(initialChoice) }
-    var amountText by rememberSaveable(initialMinutes) { mutableStateOf(initial.first.toString()) }
-    var unit by rememberSaveable(initialMinutes) { mutableStateOf(initial.second) }
-    val minuteUnitLabel = ReminderUnit.Minutes.localizedLabel()
-    val hourUnitLabel = ReminderUnit.Hours.localizedLabel()
-    val dayUnitLabel = ReminderUnit.Days.localizedLabel()
-    val weekUnitLabel = ReminderUnit.Weeks.localizedLabel()
-    val unitLabels = listOf(
-        ReminderUnit.Minutes to minuteUnitLabel,
-        ReminderUnit.Hours to hourUnitLabel,
-        ReminderUnit.Days to dayUnitLabel,
-        ReminderUnit.Weeks to weekUnitLabel,
-    )
-    ModalEditorDialog(title = appString(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder), onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ReminderChoice.entries.forEach { choice ->
-                    PresetListRow(
-                        label = choice.localizedLabel(),
-                        selected = selectedChoice == choice,
-                        onClick = {
-                            selectedChoice = choice
-                            choice.minutes?.takeIf { it > 0 }?.let { minutes ->
-                                val (amount, presetUnit) = minutes.toReminderAmountUnit()
-                                amountText = amount.toString()
-                                unit = presetUnit
-                            }
-                        },
-                    )
-                }
-            }
-            AnimatedVisibility(visible = selectedChoice == ReminderChoice.Custom) {
-                NumberUnitRow(
-                    amount = amountText,
-                    onAmountChange = {
-                        amountText = it
-                        selectedChoice = ReminderChoice.Custom
-                    },
-                    unitLabel = unitLabels.firstOrNull { it.first == unit }?.second ?: minuteUnitLabel,
-                    onUnitSelected = { label ->
-                        unitLabels.firstOrNull { it.second == label }?.let { unit = it.first }
-                        selectedChoice = ReminderChoice.Custom
-                    },
-                    unitOptions = unitLabels.map { it.second },
-                    label = stringResource(R.string.custom_reminder),
-                )
-            }
-            DialogActions(
-                onDismiss = onDismiss,
-                onSave = {
-                    when (selectedChoice) {
-                        ReminderChoice.None -> onSave(null)
-                        ReminderChoice.Custom -> amountText.toIntOrNull()?.let { onSave((it * unit.minutes).coerceIn(0, MAX_REMINDER_MINUTES)) }
-                        else -> onSave(selectedChoice.minutes)
-                    }
-                },
-                saveEnabled = selectedChoice != ReminderChoice.Custom || amountText.toIntOrNull() != null,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ReminderEditor(selected: Set<Int>, onToggle: (Int) -> Unit) {
-    var customMinutesText by rememberSaveable { mutableStateOf("") }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(appString(R.string.reminders), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        }
-        FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReminderPresets.forEach { minutes ->
-                FilterChip(
-                    selected = minutes in selected,
-                    onClick = { onToggle(minutes) },
-                    label = { Text(reminderMinuteLabel(minutes)) },
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = customMinutesText,
-                onValueChange = { value -> customMinutesText = value.filter { it.isDigit() }.take(5) },
-                label = { Text(appString(R.string.own_minutes_before)) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f),
-            )
-            Button(
-                onClick = {
-                    customMinutesText.toIntOrNull()?.let { onToggle(it.coerceIn(0, 60 * 24 * 30)) }
-                    customMinutesText = ""
-                },
-                enabled = customMinutesText.toIntOrNull() != null,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
-            ) {
-                Text(appString(R.string.add))
-            }
-        }
-        selected
-            .filterNot { preset -> preset in ReminderPresets }
-            .sorted()
-            .takeIf { it.isNotEmpty() }
-            ?.let { values ->
-                Text(
-                    "${appString(R.string.custom)}: ${values.map { reminderMinuteLabel(it) }.joinToString(", ")}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.editorInset(),
-                )
-            }
-    }
-}
-
-@Composable
-private fun CompactRecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (String?) -> Unit) {
-    var dialogOpen by remember { mutableStateOf(false) }
-    EditorSection {
-        CompactEditorHeaderLine(
-            icon = Icons.Default.Repeat,
-            title = appString(R.string.recurrence),
-            value = recurrenceRule.takeIf { it.isNotBlank() }?.toLocalizedRecurrenceLabel() ?: appString(R.string.none),
-            actionIcon = if (recurrenceRule.isBlank()) Icons.Default.Add else Icons.Default.Edit,
-            actionDescription = if (recurrenceRule.isBlank()) stringResource(R.string.add_recurrence) else stringResource(R.string.edit_recurrence),
-            onAction = { dialogOpen = true },
-        )
-    }
-    if (dialogOpen) {
-        RecurrenceDialog(
-            recurrenceRule = recurrenceRule,
-            onDismiss = { dialogOpen = false },
-            onSave = {
-                onRecurrenceRuleChange(it)
-                dialogOpen = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun RecurrenceDialog(
-    recurrenceRule: String,
-    onDismiss: () -> Unit,
-    onSave: (String?) -> Unit,
-) {
-    var draft by remember(recurrenceRule) { mutableStateOf(RecurrenceDraft.fromRule(recurrenceRule)) }
-    fun update(next: RecurrenceDraft) {
-        draft = next
-    }
-    val dailyUnitLabel = RecurrenceOption.Daily.localizedIntervalUnitLabel()
-    val weeklyUnitLabel = RecurrenceOption.Weekly.localizedIntervalUnitLabel()
-    val monthlyUnitLabel = RecurrenceOption.Monthly.localizedIntervalUnitLabel()
-    val yearlyUnitLabel = RecurrenceOption.Yearly.localizedIntervalUnitLabel()
-    val recurrenceUnitLabels = listOf(
-        RecurrenceOption.Daily to dailyUnitLabel,
-        RecurrenceOption.Weekly to weeklyUnitLabel,
-        RecurrenceOption.Monthly to monthlyUnitLabel,
-        RecurrenceOption.Yearly to yearlyUnitLabel,
-    )
-    ModalEditorDialog(title = appString(R.string.recurrence), onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            RepeatModeSegmented(
-                repeated = draft.option != RecurrenceOption.Once,
-                onRepeatedChange = { repeated ->
-                    update(if (repeated) draft.copy(option = RecurrenceOption.Weekly, interval = draft.interval.coerceAtLeast(1)) else RecurrenceDraft())
-                },
-            )
-            AnimatedVisibility(visible = draft.option != RecurrenceOption.Once) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumberUnitRow(
-                        amount = draft.interval.toString(),
-                        onAmountChange = { value ->
-                            update(draft.copy(interval = value.toIntOrNull()?.coerceIn(1, 999) ?: 1))
-                        },
-                        unitLabel = draft.option.localizedIntervalUnitLabel(),
-                        onUnitSelected = { label ->
-                            val option = recurrenceUnitLabels.firstOrNull { it.second == label }?.first ?: draft.option
-                            update(draft.copy(option = option))
-                        },
-                        unitOptions = recurrenceUnitLabels.map { it.second },
-                        label = stringResource(R.string.every),
-                    )
-                    Text(stringResource(R.string.ends), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-                    RecurrenceEndSegmented(
-                        selected = draft.endMode,
-                        onSelected = { update(draft.copy(endMode = it)) },
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp),
-                        contentAlignment = Alignment.TopStart,
-                    ) {
-                        AnimatedContent(
-                            targetState = draft.endMode,
-                            transitionSpec = {
-                                (fadeIn(tween(MotionShort, easing = MotionStandard)) + scaleIn(tween(MotionShort, easing = MotionStandard), initialScale = 0.98f)) togetherWith
-                                    (fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) + scaleOut(tween(MotionShort, easing = MotionStandardAccelerate), targetScale = 0.98f))
-                            },
-                            label = "recurrenceEndInput",
-                        ) { endMode ->
-                            when (endMode) {
-                                RecurrenceEndMode.Never -> Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f),
-                                    border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.62f)),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.repeat_never_ends),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 14.sp,
-                                        lineHeight = 17.sp,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                                    )
-                                }
-                                RecurrenceEndMode.Count -> OutlinedTextField(
-                                    value = draft.count?.toString().orEmpty(),
-                                    onValueChange = { value ->
-                                        update(draft.copy(count = value.filter(Char::isDigit).toIntOrNull()?.coerceIn(1, 999)))
-                                    },
-                                    label = { Text(stringResource(R.string.repeat_after_count)) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                RecurrenceEndMode.Until -> DatePickerField(
-                                    value = draft.untilDate.orEmpty(),
-                                    onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                                    label = { Text(stringResource(R.string.end_date)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            AnimatedVisibility(visible = draft.option == RecurrenceOption.Once) {
-                Text(
-                    stringResource(R.string.does_not_repeat),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                )
-            }
-            DialogActions(
-                onDismiss = onDismiss,
-                onSave = { onSave(draft.toRule()) },
-                saveEnabled = true,
-            )
-        }
-    }
-}
-
-@Composable
-private fun RepeatModeSegmented(
-    repeated: Boolean,
-    onRepeatedChange: (Boolean) -> Unit,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, WarmLine.copy(alpha = 0.72f), shape),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        listOf(false to stringResource(R.string.once), true to stringResource(R.string.multiple_times)).forEachIndexed { index, (value, label) ->
-            val selected = repeated == value
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .background(if (selected) WarmPeach else MaterialTheme.colorScheme.surface)
-                    .clickable { onRepeatedChange(value) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    color = WarmInk,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
-            }
-            if (index == 0) {
-                Box(Modifier.width(1.dp).height(42.dp).background(WarmLine.copy(alpha = 0.72f)))
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecurrenceEndSegmented(
-    selected: RecurrenceEndMode,
-    onSelected: (RecurrenceEndMode) -> Unit,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, WarmLine.copy(alpha = 0.72f), shape),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RecurrenceEndMode.entries.forEachIndexed { index, mode ->
-            val selectedMode = selected == mode
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .background(if (selectedMode) WarmPeach else MaterialTheme.colorScheme.surface)
-                    .clickable { onSelected(mode) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    when (mode) {
-                        RecurrenceEndMode.Never -> stringResource(R.string.never)
-                        RecurrenceEndMode.Count -> stringResource(R.string.count)
-                        RecurrenceEndMode.Until -> stringResource(R.string.date)
-                    },
-                    color = WarmInk,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = if (selectedMode) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
-            }
-            if (index < RecurrenceEndMode.entries.lastIndex) {
-                Box(Modifier.width(1.dp).height(42.dp).background(WarmLine.copy(alpha = 0.72f)))
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (String?) -> Unit) {
-    val draft = remember(recurrenceRule) { RecurrenceDraft.fromRule(recurrenceRule) }
-    fun update(next: RecurrenceDraft) {
-        onRecurrenceRuleChange(next.toRule())
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Default.Repeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(stringResource(R.string.recurrence), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        }
-        FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RecurrenceOption.entries.filterNot { it == RecurrenceOption.Custom }.forEach { option ->
-                FilterChip(
-                    selected = draft.option == option,
-                    onClick = {
-                        update(
-                            if (option == RecurrenceOption.Once) {
-                                RecurrenceDraft()
-                            } else {
-                                draft.copy(option = option, interval = draft.interval.coerceAtLeast(1))
-                            },
-                        )
-                    },
-                    label = { Text(option.localizedLabel()) },
-                )
-            }
-        }
-        AnimatedVisibility(visible = draft.option != RecurrenceOption.Once) {
-            Column(
-                modifier = Modifier.editorInset(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft.interval.toString(),
-                    onValueChange = { value ->
-                        update(draft.copy(interval = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999) ?: 1))
-                    },
-                    label = { Text(appString(R.string.every_x, draft.option.localizedIntervalUnitLabel())) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(stringResource(R.string.ends), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-                FadedHorizontalScrollRow(contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    RecurrenceEndMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = draft.endMode == mode,
-                            onClick = { update(draft.copy(endMode = mode)) },
-                            label = { Text(mode.localizedLabel()) },
-                        )
-                    }
-                }
-                AnimatedVisibility(visible = draft.endMode == RecurrenceEndMode.Count) {
-                    OutlinedTextField(
-                        value = draft.count?.toString().orEmpty(),
-                        onValueChange = { value ->
-                            update(draft.copy(count = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999)))
-                        },
-                        label = { Text(stringResource(R.string.repeat_after_count)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                AnimatedVisibility(visible = draft.endMode == RecurrenceEndMode.Until) {
-                    DatePickerField(
-                        value = draft.untilDate.orEmpty(),
-                        onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                        label = { Text(stringResource(R.string.end_date)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Text(
-                    draft.toRule()?.toLocalizedRecurrenceLabel() ?: stringResource(R.string.one_time),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                )
-            }
-        }
-    }
-}
-
-private enum class RecurrenceEndMode(val label: String) {
-    Never("Never"),
-    Count("After count"),
-    Until("Until date"),
-}
-
-@Composable
-private fun RecurrenceEndMode.localizedLabel(): String = when (this) {
-    RecurrenceEndMode.Never -> appString(R.string.never)
-    RecurrenceEndMode.Count -> appString(R.string.after_count)
-    RecurrenceEndMode.Until -> appString(R.string.until_date)
-}
-
-private data class RecurrenceDraft(
-    val option: RecurrenceOption = RecurrenceOption.Once,
-    val interval: Int = 1,
-    val endMode: RecurrenceEndMode = RecurrenceEndMode.Never,
-    val count: Int? = null,
-    val untilDate: String? = null,
-) {
-    fun toRule(): String? {
-        if (option == RecurrenceOption.Once) return null
-        val freq = option.rule?.substringAfter("FREQ=")?.substringBefore(';') ?: return null
-        val parts = mutableListOf("FREQ=$freq")
-        if (interval > 1) parts += "INTERVAL=${interval.coerceAtLeast(1)}"
-        when (endMode) {
-            RecurrenceEndMode.Never -> Unit
-            RecurrenceEndMode.Count -> count?.coerceAtLeast(1)?.let { parts += "COUNT=$it" }
-            RecurrenceEndMode.Until -> untilDate?.toRecurrenceUntilValue()?.let { parts += "UNTIL=$it" }
-        }
-        return parts.joinToString(";")
-    }
-
-    companion object {
-        fun fromRule(rule: String): RecurrenceDraft {
-            val freq = rule.recurrenceFrequency()
-            val option = when (freq) {
-                "DAILY" -> RecurrenceOption.Daily
-                "WEEKLY" -> RecurrenceOption.Weekly
-                "MONTHLY" -> RecurrenceOption.Monthly
-                "YEARLY" -> RecurrenceOption.Yearly
-                else -> RecurrenceOption.Once
-            }
-            val interval = rule.recurrencePart("INTERVAL")?.toIntOrNull()?.coerceIn(1, 999) ?: 1
-            val count = rule.recurrencePart("COUNT")?.toIntOrNull()?.coerceIn(1, 999)
-            val until = rule.recurrencePart("UNTIL")?.toIsoUntilDate()
-            val endMode = when {
-                count != null -> RecurrenceEndMode.Count
-                until != null -> RecurrenceEndMode.Until
-                else -> RecurrenceEndMode.Never
-            }
-            return RecurrenceDraft(option = option, interval = interval, endMode = endMode, count = count, untilDate = until)
-        }
-    }
-}
-
-@Composable
-private fun LocationSelectorField(location: String, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, WarmLine),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(21.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(R.string.location), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    location.ifBlank { stringResource(R.string.add_location) },
-                    color = if (location.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else WarmInk,
-                    fontSize = 16.sp,
-                    lineHeight = 19.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationPickerPage(
-    initialQuery: String,
-    onSelected: (LocationSelection) -> Unit,
-    onClose: () -> Unit,
-) {
-    var query by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
-    var suggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
-    var searchedQuery by rememberSaveable { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    val normalizedQuery = query.trim()
-    val focusRequester = remember { FocusRequester() }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var locationAnchor by remember { mutableStateOf<LocationAnchor?>(null) }
-    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            locationAnchor = context.lastKnownLocationAnchor()
-        }
-    }
-
-    fun searchLocations() {
-        val searchQuery = normalizedQuery
-        if (loading || searchQuery.length < 3) {
-            suggestions = emptyList()
-            searchedQuery = searchQuery
-            failed = false
-            return
-        }
-        loading = true
-        failed = false
-        searchedQuery = searchQuery
-        scope.launch {
-            runCatching { LocationLookup.search(searchQuery, anchor = locationAnchor) }
-                .onSuccess {
-                    if (query.trim() == searchQuery) {
-                        suggestions = it
-                        failed = false
-                    }
-                }
-                .onFailure {
-                    if (query.trim() == searchQuery) {
-                        suggestions = emptyList()
-                        failed = true
-                    }
-                }
-            loading = false
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        delay(180)
-        focusRequester.requestFocus()
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationAnchor = context.lastKnownLocationAnchor()
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .editorInset()
-                .height(64.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            RoundEditorAction(
-                icon = Icons.Default.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-                contentColor = WarmInk,
-                onClick = onClose,
-            )
-            OutlinedTextField(
-                value = query,
-                onValueChange = {
-                    query = it
-                    suggestions = emptyList()
-                    searchedQuery = ""
-                    failed = false
-                },
-                placeholder = { Text(stringResource(R.string.search_location)) },
-                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                singleLine = true,
-                shape = RoundedCornerShape(22.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { searchLocations() }),
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-            )
-            IconButton(
-                onClick = { searchLocations() },
-                enabled = normalizedQuery.length >= 3 && !loading,
-            ) {
-                Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search), tint = WarmBrown)
-            }
-        }
-        Column(
-            modifier = Modifier.padding(horizontal = EditorHorizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.location_search_privacy_notice),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
-            )
-            if (locationAnchor == null && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                OutlinedButton(onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }) {
-                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.use_nearby_location))
-                }
-            }
-        }
-        if (loading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = EditorHorizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (normalizedQuery.isNotBlank()) {
-                LocationChoiceRow(
-                    title = normalizedQuery,
-                    subtitle = stringResource(R.string.use_custom_location),
-                    onClick = { onSelected(LocationSelection(normalizedQuery, mapVerified = false)) },
-                )
-            }
-            suggestions.forEach { suggestion ->
-                LocationChoiceRow(
-                    title = suggestion.primaryName,
-                    subtitle = suggestion.displayName,
-                    onClick = { onSelected(LocationSelection(suggestion.displayName, mapVerified = true)) },
-                )
-            }
-            if (failed) {
-                Text(
-                    stringResource(R.string.location_search_unavailable),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                )
-            } else if (!loading && searchedQuery == normalizedQuery && normalizedQuery.length >= 3 && suggestions.isEmpty()) {
-                Text(
-                    stringResource(R.string.no_matching_locations),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationChoiceRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(Icons.Default.LocationOn, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(21.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrioritySlider(
-    priority: Int,
-    onPriorityChange: (Int) -> Unit,
-    onPriorityChangeFinished: (Int) -> Unit = {},
-) {
-    val trackColor = WarmLine
-    var widthPx by remember { mutableStateOf(0) }
-    val sliderInset = 8.dp
-    val density = LocalDensity.current
-    fun priorityFromX(x: Float): Int {
-        val insetPx = with(density) { sliderInset.toPx() }
-        val usable = (widthPx.toFloat() - insetPx * 2f).coerceAtLeast(1f)
-        val fraction = ((x - insetPx) / usable).coerceIn(0f, 1f)
-        return (9 - (fraction * 8f).roundToInt()).coerceIn(1, 9)
-    }
-    val thumbFraction = (9 - priority.coerceIn(1, 9)) / 8f
-    Column(
-        modifier = Modifier.padding(horizontal = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.priority), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("$priority", color = priorityColor(priority), fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(42.dp)
-                .onSizeChanged { widthPx = it.width }
-                .pointerInput(widthPx) {
-                    detectTapGestures { offset ->
-                        val next = priorityFromX(offset.x)
-                        onPriorityChange(next)
-                        onPriorityChangeFinished(next)
-                    }
-                }
-                .pointerInput(widthPx) {
-                    var dragPriority = priority.coerceIn(1, 9)
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            dragPriority = priorityFromX(offset.x)
-                            onPriorityChange(dragPriority)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            dragPriority = priorityFromX(change.position.x)
-                            onPriorityChange(dragPriority)
-                        },
-                        onDragEnd = { onPriorityChangeFinished(dragPriority) },
-                    )
-                },
-        ) {
-            Canvas(Modifier.matchParentSize()) {
-                val barHeight = 14.dp.toPx()
-                val radius = barHeight / 2f
-                val centerY = size.height / 2f
-                val insetPx = sliderInset.toPx()
-                val trackWidth = (size.width - insetPx * 2f).coerceAtLeast(1f)
-                // Inset the dots (and the fill/thumb endpoints that align with them) by the bar's
-                // corner radius so the first and last dot sit centred inside the rounded caps
-                // instead of poking out past the ends of the grey bar.
-                val dotSpanStart = insetPx + radius
-                val dotSpanWidth = (trackWidth - radius * 2f).coerceAtLeast(1f)
-                val thumbX = dotSpanStart + dotSpanWidth * thumbFraction
-                drawRoundRect(
-                    color = trackColor.copy(alpha = 0.62f),
-                    topLeft = Offset(insetPx, centerY - barHeight / 2f),
-                    size = Size(trackWidth, barHeight),
-                    cornerRadius = CornerRadius(radius, radius),
-                )
-                (1..9).forEach { level ->
-                    val x = dotSpanStart + dotSpanWidth * ((9 - level) / 8f)
-                    drawCircle(
-                        color = priorityColor(level),
-                        radius = 4.dp.toPx(),
-                        center = Offset(x, centerY),
-                    )
-                }
-                drawRoundRect(
-                    color = priorityColor(priority),
-                    topLeft = Offset(insetPx, centerY - barHeight / 2f),
-                    size = Size((thumbX - insetPx).coerceAtLeast(0f), barHeight),
-                    cornerRadius = CornerRadius(radius, radius),
-                )
-                drawRoundRect(
-                    color = priorityColor(priority),
-                    topLeft = Offset(thumbX - 8.dp.toPx(), centerY - 12.dp.toPx()),
-                    size = Size(16.dp.toPx(), 24.dp.toPx()),
-                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
-                )
-            }
-        }
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.low), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text(stringResource(R.string.high), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-private fun ProgressSlider(
-    progress: Int,
-    onProgressChange: (Int) -> Unit,
-    onProgressChangeFinished: (Int) -> Unit = {},
-) {
-    val trackColor = WarmLine
-    val accentColor = WarmBrown
-    var widthPx by remember { mutableStateOf(0) }
-    val sliderInset = 12.dp
-    val density = LocalDensity.current
-    fun progressFromX(x: Float): Int {
-        val insetPx = with(density) { sliderInset.toPx() }
-        val usable = (widthPx.toFloat() - insetPx * 2f).coerceAtLeast(1f)
-        return (((x - insetPx) / usable).coerceIn(0f, 1f) * 100f).roundToInt().coerceIn(0, 100)
-    }
-    val normalized = progress.coerceIn(0, 100)
-    val fraction = normalized / 100f
-    Column(
-        modifier = Modifier.padding(horizontal = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.progress), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("$normalized%", color = WarmBrown, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .onSizeChanged { widthPx = it.width }
-                .pointerInput(widthPx) {
-                    detectTapGestures { offset ->
-                        val next = progressFromX(offset.x)
-                        onProgressChange(next)
-                        onProgressChangeFinished(next)
-                    }
-                }
-                .pointerInput(widthPx) {
-                    var dragProgress = progress.coerceIn(0, 100)
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            dragProgress = progressFromX(offset.x)
-                            onProgressChange(dragProgress)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            dragProgress = progressFromX(change.position.x)
-                            onProgressChange(dragProgress)
-                        },
-                        onDragEnd = { onProgressChangeFinished(dragProgress) },
-                    )
-                },
-        ) {
-            Canvas(Modifier.matchParentSize()) {
-                val barHeight = 12.dp.toPx()
-                val radius = barHeight / 2f
-                val centerY = size.height / 2f
-                val insetPx = sliderInset.toPx()
-                val trackWidth = (size.width - insetPx * 2f).coerceAtLeast(1f)
-                drawRoundRect(
-                    color = trackColor.copy(alpha = 0.68f),
-                    topLeft = Offset(insetPx, centerY - barHeight / 2f),
-                    size = Size(trackWidth, barHeight),
-                    cornerRadius = CornerRadius(radius, radius),
-                )
-                drawRoundRect(
-                    color = accentColor.copy(alpha = 0.52f),
-                    topLeft = Offset(insetPx, centerY - barHeight / 2f),
-                    size = Size(trackWidth * fraction, barHeight),
-                    cornerRadius = CornerRadius(radius, radius),
-                )
-                val thumbX = insetPx + trackWidth * fraction
-                drawCircle(
-                    color = Color.White,
-                    radius = 12.dp.toPx(),
-                    center = Offset(thumbX, centerY),
-                )
-                drawCircle(
-                    color = accentColor,
-                    radius = 8.dp.toPx(),
-                    center = Offset(thumbX, centerY),
-                )
-            }
-        }
-    }
-}
-
-private fun priorityColor(priority: Int): Color = when (priority.coerceIn(1, 9)) {
-    1 -> Color(0xFFD93025)
-    2 -> Color(0xFFE7602A)
-    3 -> Color(0xFFF29900)
-    4 -> Color(0xFFF8C542)
-    5 -> Color(0xFFFFD84D)
-    6 -> Color(0xFF55A8F5)
-    7 -> Color(0xFF2E8FD8)
-    8 -> Color(0xFF20A386)
-    else -> Color(0xFF2E7D32)
-}
-
-@Composable
-private fun ColorOverrideEditor(
-    selectedColor: Int?,
-    automaticColor: Int,
-    onColorSelected: (Int?) -> Unit,
-) {
-    var colorPickerOpen by remember { mutableStateOf(false) }
-    EditorSection {
-        Text(stringResource(R.string.color), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        FadedHorizontalScrollRow(
-            contentPadding = PaddingValues(horizontal = EditorSectionHorizontalPadding),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            viewportBleed = EditorSectionHorizontalPadding,
-        ) {
-            ColorChoiceChip(
-                label = stringResource(R.string.auto),
-                color = Color(automaticColor),
-                selected = selectedColor == null,
-                onClick = { onColorSelected(null) },
-            )
-            ItemColorPalette.forEach { color ->
-                ColorChoiceChip(
-                    label = null,
-                    color = Color(color),
-                    selected = selectedColor == color,
-                    onClick = { onColorSelected(color) },
-                )
-            }
-            ColorEditChip(onClick = { colorPickerOpen = true })
-        }
-    }
-    if (colorPickerOpen) {
-        ColorPickerDialog(
-            initialColor = selectedColor ?: automaticColor,
-            onDismiss = { colorPickerOpen = false },
-            onSave = {
-                onColorSelected(it)
-                colorPickerOpen = false
-            },
-        )
-    }
-}
-
-@Composable
-private fun ColorChoiceChip(label: String?, color: Color, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(17.dp)
-    Surface(
-        modifier = Modifier
-            .height(34.dp)
-            .clip(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) color else WarmLine),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = if (label == null) 8.dp else 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Box(Modifier.size(18.dp).clip(CircleShape).background(color))
-            label?.let { Text(it, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium) }
-        }
-    }
-}
-
-@Composable
-private fun ColorEditChip(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(17.dp)
-    Surface(
-        modifier = Modifier
-            .height(34.dp)
-            .clip(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, WarmLine),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Icon(Icons.Default.Palette, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-            Text(stringResource(R.string.custom), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun ColorPickerDialog(initialColor: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
-    val initialHsv = remember(initialColor) {
-        FloatArray(3).also { android.graphics.Color.colorToHSV(initialColor, it) }
-    }
-    var hue by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[0]) }
-    var saturation by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[1]) }
-    var brightness by rememberSaveable(initialColor) { mutableFloatStateOf(initialHsv[2]) }
-    val selected = Color.hsv(hue, saturation, brightness)
-    fun selectPreset(color: Int) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(color, hsv)
-        hue = hsv[0]
-        saturation = hsv[1]
-        brightness = hsv[2]
-    }
-    ModalEditorDialog(title = appString(R.string.choose_color), onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(selected),
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(ItemColorPalette) { color ->
-                    val c = Color(color)
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(c)
-                            .border(2.dp, if (c.toArgb() == selected.toArgb()) WarmInk else Color.White.copy(alpha = 0.9f), CircleShape)
-                            .clickable { selectPreset(color) },
-                    )
-                }
-            }
-            Text(
-                stringResource(R.string.custom_color),
-                color = WarmInk,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            SaturationBrightnessPicker(
-                hue = hue,
-                saturation = saturation,
-                brightness = brightness,
-                onChanged = { nextSaturation, nextBrightness ->
-                    saturation = nextSaturation
-                    brightness = nextBrightness
-                },
-            )
-            HuePicker(
-                hue = hue,
-                onHueChanged = { hue = it },
-            )
-            DialogActions(
-                onDismiss = onDismiss,
-                onSave = { onSave(selected.toArgb()) },
-                saveEnabled = true,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SaturationBrightnessPicker(
-    hue: Float,
-    saturation: Float,
-    brightness: Float,
-    onChanged: (Float, Float) -> Unit,
-) {
-    var widthPx by remember { mutableFloatStateOf(1f) }
-    var heightPx by remember { mutableFloatStateOf(1f) }
-    fun update(position: Offset) {
-        onChanged(
-            (position.x / widthPx).coerceIn(0f, 1f),
-            (1f - position.y / heightPx).coerceIn(0f, 1f),
-        )
-    }
-    val shape = RoundedCornerShape(16.dp)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(154.dp)
-            .clip(shape)
-            .background(Brush.horizontalGradient(listOf(Color.White, Color.hsv(hue, 1f, 1f))))
-            .drawWithContent {
-                drawContent()
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
-            }
-            .onSizeChanged {
-                widthPx = it.width.toFloat().coerceAtLeast(1f)
-                heightPx = it.height.toFloat().coerceAtLeast(1f)
-            }
-            .pointerInput(widthPx, heightPx) {
-                detectTapGestures { update(it) }
-            }
-            .pointerInput(widthPx, heightPx) {
-                detectDragGestures(
-                    onDragStart = ::update,
-                    onDrag = { change, _ ->
-                        change.consume()
-                        update(change.position)
-                    },
-                )
-            },
-    ) {
-        Box(
-            modifier = Modifier
-                .offset {
-                    IntOffset(
-                        x = (saturation * widthPx - 9.dp.toPx()).roundToInt(),
-                        y = ((1f - brightness) * heightPx - 9.dp.toPx()).roundToInt(),
-                    )
-                }
-                .size(18.dp)
-                .border(2.dp, Color.White, CircleShape)
-                .border(1.dp, Color.Black.copy(alpha = 0.48f), CircleShape),
-        )
-    }
-}
-
-@Composable
-private fun HuePicker(hue: Float, onHueChanged: (Float) -> Unit) {
-    var widthPx by remember { mutableFloatStateOf(1f) }
-    fun update(position: Offset) {
-        onHueChanged((position.x / widthPx * 360f).coerceIn(0f, 359.99f))
-    }
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(30.dp)
-            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
-            .pointerInput(widthPx) {
-                detectTapGestures { update(it) }
-            }
-            .pointerInput(widthPx) {
-                detectDragGestures(
-                    onDragStart = ::update,
-                    onDrag = { change, _ ->
-                        change.consume()
-                        update(change.position)
-                    },
-                )
-            },
-    ) {
-        val trackHeight = 14.dp.toPx()
-        val centerY = size.height / 2f
-        val radius = trackHeight / 2f
-        drawRoundRect(
-            brush = Brush.horizontalGradient((0..6).map { Color.hsv(it * 60f, 1f, 1f) }),
-            topLeft = Offset(0f, centerY - trackHeight / 2f),
-            size = Size(size.width, trackHeight),
-            cornerRadius = CornerRadius(radius, radius),
-        )
-        val thumbX = (hue / 360f * size.width).coerceIn(0f, size.width)
-        drawCircle(Color.White, radius = 10.dp.toPx(), center = Offset(thumbX, centerY))
-        drawCircle(Color.hsv(hue, 1f, 1f), radius = 7.dp.toPx(), center = Offset(thumbX, centerY))
-    }
-}
-
-@Composable
 private fun CompletionBurst(playKey: Int, color: Color, modifier: Modifier = Modifier) {
     val progress = remember { Animatable(1f) }
     LaunchedEffect(playKey) {
@@ -12925,88 +9015,6 @@ private fun TaskCardCompletionBurst(playKey: Int, color: Color, modifier: Modifi
                 radius = size.minDimension.coerceAtLeast(18f) * (0.045f + (1f - p) * 0.045f),
                 center = particleCenter,
             )
-        }
-    }
-}
-
-@Composable
-private fun TaskDateTimeEditor(
-    label: String,
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    dateText: String,
-    onDateTextChange: (String) -> Unit,
-    hasTime: Boolean,
-    onHasTimeChange: (Boolean) -> Unit,
-    timeText: String,
-    onTimeTextChange: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.titleMedium)
-            Switch(enabled, onEnabledChange)
-        }
-        if (enabled) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    dateText,
-                    onDateTextChange,
-                    label = { Text(stringResource(R.string.date)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.weight(1f),
-                )
-                if (hasTime) {
-                    OutlinedTextField(
-                        timeText,
-                        onTimeTextChange,
-                        label = { Text(stringResource(R.string.time)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.width(104.dp),
-                    )
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.time), color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp)
-                Switch(hasTime, onHasTimeChange)
-            }
-        }
-    }
-}
-
-@Composable
-private fun EditorContainer(
-    title: String,
-    action: String,
-    onAction: () -> Unit,
-    onClose: () -> Unit,
-    actionEnabled: Boolean = true,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val editorScrollState = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-    ) {
-        EditorTopBar(
-            title = title,
-            onClose = onClose,
-            onSave = onAction,
-            modifier = Modifier.editorInset(),
-            saveEnabled = actionEnabled,
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(editorScrollState),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Spacer(Modifier.height(10.dp))
-            content()
-            Spacer(Modifier.height(56.dp))
         }
     }
 }
@@ -13710,7 +9718,7 @@ private fun EventRow(event: EventEntity, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TaskRow(
+internal fun TaskRow(
     task: TaskEntity,
     taskColorMode: TaskColorMode,
     onTaskStatusChanged: (String, String) -> Unit,
@@ -14666,7 +10674,7 @@ private fun SyncIssueDetailBanner(syncError: String) {
     }
 }
 
-private data class TaskHierarchyEntry(
+internal data class TaskHierarchyEntry(
     val task: TaskEntity,
     val depth: Int,
     val hasChildren: Boolean,
@@ -14676,12 +10684,12 @@ private data class TaskHierarchyEntry(
     val lastSibling: Boolean,
 )
 
-private data class TaskHierarchyPresentation(
+internal data class TaskHierarchyPresentation(
     val entries: List<TaskHierarchyEntry>,
     val toggle: (TaskEntity) -> Unit,
 )
 
-private val TaskHierarchyStemInset = 10.dp
+internal val TaskHierarchyStemInset = 10.dp
 private val TaskHierarchyLineOverlap = 4.dp
 
 private fun taskHierarchyLayerZ(depth: Int): Float = 100f - depth.coerceAtLeast(0)
@@ -14693,7 +10701,7 @@ private fun taskPriorityLayerZ(task: TaskEntity, animationsEnabled: Boolean): Fl
 }
 
 @Composable
-private fun rememberTaskHierarchyPresentation(
+internal fun rememberTaskHierarchyPresentation(
     tasks: List<TaskEntity>,
     expandedByDefault: Boolean,
     defaultExpandedResourceHrefs: Set<String> = emptySet(),
@@ -14888,7 +10896,7 @@ private fun TaskHierarchyConnectorStrip(
 }
 
 @Composable
-private fun AnimatedTaskHierarchyEntry(
+internal fun AnimatedTaskHierarchyEntry(
     entry: TaskHierarchyEntry,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
@@ -18197,11 +14205,11 @@ private fun SettingsSection(
 }
 
 @Composable
-private fun settingsControlColor(): Color =
+internal fun settingsControlColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) MaterialTheme.colorScheme.surface else Color.White
 
 @Composable
-private fun accentContainerColor(): Color =
+internal fun accentContainerColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) {
         WarmBrown.blendWith(Color.White, 0.18f)
     } else {
@@ -18882,7 +14890,7 @@ private fun CalendarViewMode.settingsIcon(): ImageVector = when (this) {
     CalendarViewMode.Tasks -> Icons.Default.TaskAlt
 }
 
-private fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
+internal fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
     drawContent()
     val stroke = 1.8.dp.toPx()
     drawRoundRect(
@@ -18897,7 +14905,7 @@ private fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
     )
 }
 
-private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawWithContent {
+internal fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawWithContent {
     drawContent()
     val stroke = 1.8.dp.toPx()
     drawRoundRect(
@@ -18924,7 +14932,7 @@ private fun DayOfWeek.localizedWeekdayLabel(): String =
         DayOfWeek.SUNDAY -> appString(R.string.week_sunday)
     }
 
-private fun Modifier.horizontalEdgeFade(
+internal fun Modifier.horizontalEdgeFade(
     edgeWidth: Dp = 14.dp,
     fadeStart: Boolean = true,
     fadeEnd: Boolean = true,
@@ -18959,7 +14967,7 @@ private fun Modifier.horizontalEdgeFade(
     }
 }
 
-private fun Modifier.horizontalBleed(bleed: Dp): Modifier =
+internal fun Modifier.horizontalBleed(bleed: Dp): Modifier =
     if (bleed == 0.dp) {
         this
     } else {
@@ -18993,7 +15001,7 @@ private fun Modifier.bottomEdgeFade(color: Color, edgeHeight: Dp = 32.dp): Modif
     )
 }
 
-private fun Modifier.editorInset(): Modifier = padding(horizontal = EditorHorizontalPadding)
+internal fun Modifier.editorInset(): Modifier = padding(horizontal = EditorHorizontalPadding)
 
 private fun Modifier.verticalClipAllowHorizontalOverflow(): Modifier = drawWithContent {
     clipRect(
@@ -19006,7 +15014,7 @@ private fun Modifier.verticalClipAllowHorizontalOverflow(): Modifier = drawWithC
     }
 }
 
-private data class LocationAnchor(val latitude: Double, val longitude: Double) {
+internal data class LocationAnchor(val latitude: Double, val longitude: Double) {
     val cacheKey: String = "${(latitude * 100).roundToInt()}_${(longitude * 100).roundToInt()}"
 
     fun nominatimViewboxParam(): String {
@@ -19021,7 +15029,7 @@ private data class LocationAnchor(val latitude: Double, val longitude: Double) {
 }
 
 @SuppressLint("MissingPermission")
-private fun Context.lastKnownLocationAnchor(): LocationAnchor? {
+internal fun Context.lastKnownLocationAnchor(): LocationAnchor? {
     val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
     return listOf(
         LocationManager.NETWORK_PROVIDER,
@@ -19032,19 +15040,19 @@ private fun Context.lastKnownLocationAnchor(): LocationAnchor? {
         ?.let { LocationAnchor(it.latitude, it.longitude) }
 }
 
-private data class LocationSuggestion(
+internal data class LocationSuggestion(
     val displayName: String,
     val primaryName: String,
     val latitude: Double,
     val longitude: Double,
 )
 
-private data class LocationSelection(
+internal data class LocationSelection(
     val value: String,
     val mapVerified: Boolean,
 )
 
-private object LocationLookup {
+internal object LocationLookup {
     private const val USER_AGENT = "KGSCalendar/1.0 Android (com.kgs501.kgscalendar)"
 
     private val client = OkHttpClient.Builder()
@@ -19337,7 +15345,7 @@ private fun TaskEntity.localizedStatusLabel(): String = when (status?.uppercase(
     else -> status!!
 }
 
-private fun String?.toCategoryTags(): List<String> =
+internal fun String?.toCategoryTags(): List<String> =
     this
         ?.split(',')
         ?.map { it.trim() }
@@ -19345,13 +15353,13 @@ private fun String?.toCategoryTags(): List<String> =
         ?.distinctBy { it.lowercase(Locale.ROOT) }
         .orEmpty()
 
-private fun List<String>.toCategoriesCsv(): String =
+internal fun List<String>.toCategoriesCsv(): String =
     map { it.trim() }
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase(Locale.ROOT) }
         .joinToString(",")
 
-private fun CalendarUiState.allKnownCategoryTags(): List<String> =
+internal fun CalendarUiState.allKnownCategoryTags(): List<String> =
     buildList {
         events.forEach { addAll(it.categories.toCategoryTags()) }
         datedTasks.forEach { addAll(it.categories.toCategoryTags()) }
@@ -19566,7 +15574,7 @@ private fun PendingMutationBadge(
     }
 }
 
-private data class CalendarParticipant(
+internal data class CalendarParticipant(
     val name: String,
     val email: String,
     val partstat: String = "NEEDS-ACTION",
@@ -19577,7 +15585,7 @@ private data class CalendarParticipant(
     val displayName: String = name.ifBlank { email }
 }
 
-private enum class ParticipantRoleOption(val value: String, val label: String) {
+internal enum class ParticipantRoleOption(val value: String, val label: String) {
     Chair("CHAIR", "Chair"),
     Required("REQ-PARTICIPANT", "Required participant"),
     Optional("OPT-PARTICIPANT", "Optional participant"),
@@ -19585,7 +15593,7 @@ private enum class ParticipantRoleOption(val value: String, val label: String) {
 }
 
 @Composable
-private fun ParticipantRoleOption.localizedLabel(): String = when (this) {
+internal fun ParticipantRoleOption.localizedLabel(): String = when (this) {
     ParticipantRoleOption.Chair -> appString(R.string.chair)
     ParticipantRoleOption.Required -> appString(R.string.required_participant)
     ParticipantRoleOption.Optional -> appString(R.string.optional_participant)
@@ -19593,7 +15601,7 @@ private fun ParticipantRoleOption.localizedLabel(): String = when (this) {
 }
 
 @Composable
-private fun String.localizedParticipantRoleLabel(): String =
+internal fun String.localizedParticipantRoleLabel(): String =
     ParticipantRoleOption.entries.firstOrNull { it.value.equals(this, ignoreCase = true) }?.localizedLabel() ?: this
 
 @Composable
@@ -19770,7 +15778,7 @@ private fun CalendarParticipant.avatarColor(): Color {
 private fun Color.participantMuted(muted: Boolean, alpha: Float): Color =
     if (muted) greyedOut(0.78f).copy(alpha = alpha) else this
 
-private fun String?.toCalendarParticipant(): CalendarParticipant? =
+internal fun String?.toCalendarParticipant(): CalendarParticipant? =
     runCatching {
         if (isNullOrBlank()) return@runCatching null
         val obj = JSONObject(this)
@@ -19785,7 +15793,7 @@ private fun String?.toCalendarParticipant(): CalendarParticipant? =
         )
     }.getOrNull()
 
-private fun String?.toCalendarParticipants(): List<CalendarParticipant> =
+internal fun String?.toCalendarParticipants(): List<CalendarParticipant> =
     runCatching {
         if (isNullOrBlank()) return@runCatching emptyList()
         val array = JSONArray(this)
@@ -19808,7 +15816,7 @@ private fun String?.toCalendarParticipants(): List<CalendarParticipant> =
         }
     }.getOrDefault(emptyList())
 
-private fun List<CalendarParticipant>.toAttendeesJson(): String? =
+internal fun List<CalendarParticipant>.toAttendeesJson(): String? =
     takeIf { it.isNotEmpty() }?.let { participants ->
         JSONArray().apply {
             participants.forEach { attendee ->
@@ -19826,7 +15834,7 @@ private fun List<CalendarParticipant>.toAttendeesJson(): String? =
         }.toString()
     }
 
-private fun String.isLikelyEmailAddress(): Boolean =
+internal fun String.isLikelyEmailAddress(): Boolean =
     matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
 
 private fun String.participantRoleLabel(): String =
@@ -19922,7 +15930,7 @@ private fun CalendarParticipant.deliveryStatusLabel(): String? {
 }
 
 @Composable
-private fun CalendarParticipant.deliveryStatusColor(): Color =
+internal fun CalendarParticipant.deliveryStatusColor(): Color =
     when {
         scheduleStatus.orEmpty().startsWith("1.") -> Color(0xFF4DA3FF)
         else -> Color(0xFFE53935)
@@ -19951,7 +15959,7 @@ private fun TaskEntity.effectiveStatus(): String = status?.uppercase()
  * A task is "inactive" when it's done OR cancelled — both should be greyed out and have
  * their priority animation suppressed.
  */
-private fun TaskEntity.isInactive(): Boolean = isCompleted || effectiveStatus() == "CANCELLED"
+internal fun TaskEntity.isInactive(): Boolean = isCompleted || effectiveStatus() == "CANCELLED"
 
 /** Sort weight for the "Status" sort: In Bearbeitung first, then Offen, then others. */
 private fun TaskEntity.statusSortRank(): Int = when (effectiveStatus()) {
@@ -19986,7 +15994,7 @@ private fun PlannedTaskSort.localizedLabel(): String = when (this) {
  *   (in progress), filled check (completed) and an X (cancelled).
  */
 @Composable
-private fun TaskStatusCheckbox(
+internal fun TaskStatusCheckbox(
     status: String,
     tint: Color,
     onStatusChange: (String) -> Unit,
@@ -20126,7 +16134,7 @@ private fun TaskStatusPickerDialog(
  * front, keeping the relative order of the remaining items. Used wherever the user
  * picks a calendar for a new entry so the chosen default is always the first chip.
  */
-private fun List<CollectionEntity>.sortedWithDefaultFirst(defaultHref: String?): List<CollectionEntity> {
+internal fun List<CollectionEntity>.sortedWithDefaultFirst(defaultHref: String?): List<CollectionEntity> {
     if (defaultHref.isNullOrBlank()) return this
     val default = firstOrNull { it.href == defaultHref } ?: return this
     return listOf(default) + filter { it.href != defaultHref }
@@ -20134,7 +16142,7 @@ private fun List<CollectionEntity>.sortedWithDefaultFirst(defaultHref: String?):
 
 private fun String.isReadOnlyCollectionHrefUi(): Boolean = startsWith(UiReadOnlyCollectionPrefix)
 
-private fun CollectionEntity.isReadOnlyForUi(): Boolean = readOnly || href.isReadOnlyCollectionHrefUi()
+internal fun CollectionEntity.isReadOnlyForUi(): Boolean = readOnly || href.isReadOnlyCollectionHrefUi()
 
 private fun CollectionEntity.canDeleteFromServerForUi(): Boolean =
     sourceType == SourceType.CalDav &&
@@ -20149,7 +16157,7 @@ private fun CollectionEntity.isAndroidProviderForUi(): Boolean =
 private fun AccountEntity.isAndroidProviderForUi(): Boolean =
     sourceType == SourceType.AndroidProvider || id == UiAndroidAccountId
 
-private data class EventEditorCapabilities(
+internal data class EventEditorCapabilities(
     val recurrence: Boolean,
     val reminders: Boolean,
     val location: Boolean,
@@ -20313,7 +16321,7 @@ private fun JSONObject.optIntOrNull(name: String): Int? =
 private fun JSONObject.optStringOrNull(name: String): String? =
     if (has(name) && !isNull(name)) optString(name) else null
 
-private fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities =
+internal fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities =
     if (!isAndroidProviderForUi()) {
         EventEditorCapabilities.Full
     } else {
@@ -20411,7 +16419,7 @@ private fun String.trimHtmlDataPrefixForDisplay(): String {
 }
 
 @Composable
-private fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
+internal fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
     val code = scheduleStatus
         ?.substringBefore(',')
         ?.substringBefore(';')
@@ -20428,7 +16436,7 @@ private fun CalendarParticipant.localizedDeliveryStatusLabel(): String? {
 }
 
 @Composable
-private fun String.toLocalizedRecurrenceLabel(): String {
+internal fun String.toLocalizedRecurrenceLabel(): String {
     val rule = trim()
     if (rule.isBlank()) return appString(R.string.one_time)
     val freqLabel = when (rule.recurrenceFrequency()) {
@@ -20530,7 +16538,7 @@ private fun LocalTime.minuteOfDay(): Int = hour * 60 + minute
 private fun LocalDate.startOfDayMillis(): Long =
     atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-private fun eventDateTimeRangeInvalid(
+internal fun eventDateTimeRangeInvalid(
     startDateText: String,
     endDateText: String,
     startTimeText: String,
@@ -20545,7 +16553,7 @@ private fun eventDateTimeRangeInvalid(
     return !endDate.atTime(endTime).isAfter(startDate.atTime(startTime))
 }
 
-private fun taskDateTimeRangeInvalid(
+internal fun taskDateTimeRangeInvalid(
     hasStartDate: Boolean,
     startDateText: String,
     hasStartTime: Boolean,
@@ -20581,12 +16589,12 @@ private fun Int.toDraftLocalTime(): LocalTime {
 private fun Int.snapDraftMinute(): Int =
     ((this + DraftSnapMinutes / 2) / DraftSnapMinutes) * DraftSnapMinutes
 
-private fun DraftEventSelection.withDraggedMinutes(
+private fun EditorSchedulePreview.withDraggedMinutes(
     mode: DraftDragMode,
     originalStartMinute: Int,
     originalEndMinute: Int,
     deltaMinutes: Int,
-): DraftEventSelection {
+): EditorSchedulePreview {
     val minMinute = DayStartHour * 60
     val maxMinute = (DayEndHour + 1) * 60 - 1
     val originalStart = originalStartMinute.coerceIn(minMinute, maxMinute - DraftMinDurationMinutes)
@@ -20925,7 +16933,7 @@ private fun EventEntity.estimatedParticipantsDetailHeight(): Int {
     return surfacePadding + header + organizerHeight + attendeeRows + ownParticipationControls + spacingCount * 10
 }
 
-private data class DraftEventSelection(
+internal data class DraftEventSelection(
     val date: LocalDate,
     val start: LocalTime,
     val end: LocalTime,
@@ -20945,7 +16953,7 @@ private enum class DraftDragMode {
 }
 
 @Composable
-private fun RecurrenceOption.localizedLabel(): String = when (this) {
+internal fun RecurrenceOption.localizedLabel(): String = when (this) {
     RecurrenceOption.Once -> appString(R.string.one_time)
     RecurrenceOption.Daily -> appString(R.string.daily)
     RecurrenceOption.Weekly -> appString(R.string.weekly)
@@ -20955,7 +16963,7 @@ private fun RecurrenceOption.localizedLabel(): String = when (this) {
 }
 
 @Composable
-private fun RecurrenceOption.localizedIntervalUnitLabel(): String = when (this) {
+internal fun RecurrenceOption.localizedIntervalUnitLabel(): String = when (this) {
     RecurrenceOption.Daily -> appString(R.string.days)
     RecurrenceOption.Weekly -> appString(R.string.weeks)
     RecurrenceOption.Monthly -> appString(R.string.months)
@@ -20968,7 +16976,7 @@ sealed interface DetailSheet {
     data class Task(val task: TaskEntity) : DetailSheet
 }
 
-private data class EditorTransferDraft(
+internal data class EditorTransferDraft(
     val title: String = "",
     val notes: String = "",
     val location: String = "",
@@ -20983,9 +16991,10 @@ private data class EditorTransferDraft(
     val startTime: LocalTime? = null,
     val endTime: LocalTime? = null,
     val allDay: Boolean? = null,
+    val schedule: EditorScheduleState? = null,
 )
 
-private fun EditorTransferDraft.withDestinationReminderDefaults(destinationDefaultReminderMinutes: Set<Int>): EditorTransferDraft {
+internal fun EditorTransferDraft.withDestinationReminderDefaults(destinationDefaultReminderMinutes: Set<Int>): EditorTransferDraft {
     val sourceDefaults = sourceDefaultReminderMinutes.normalizedReminderOffsets().toSet()
     val customReminders = reminderMinutes
         .normalizedReminderOffsets()
@@ -21147,7 +17156,7 @@ private fun TaskEntity.localizedTaskTimeLabel(): String {
     }
 }
 
-private fun Color.isDark(): Boolean {
+internal fun Color.isDark(): Boolean {
     val luminance = 0.299f * red + 0.587f * green + 0.114f * blue
     return luminance < 0.55f
 }
