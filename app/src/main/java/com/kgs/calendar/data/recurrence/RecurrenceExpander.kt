@@ -2,6 +2,8 @@ package com.kgs.calendar.data.recurrence
 
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.domain.model.CalendarOccurrenceEnvelope
 import net.fortuna.ical4j.model.DateTime
 import net.fortuna.ical4j.model.Recur
 import net.fortuna.ical4j.model.TimeZoneRegistryFactory
@@ -130,6 +132,26 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
                 master.copy(startsAtMillis = start, endsAtMillis = start + duration)
             }
         return applyOverrides(master, out + rDates)
+    }
+
+    fun expandWithIdentity(
+        master: EventEntity,
+        rangeStartMillis: Long,
+        rangeEndMillis: Long,
+    ): List<CalendarOccurrenceEnvelope<EventEntity>> {
+        val overrides = RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson)
+            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+        return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
+            val recurrenceIdMillis = overrides.firstOrNull { override ->
+                override.startsAtMillis == occurrence.startsAtMillis &&
+                    override.endsAtMillis == occurrence.endsAtMillis &&
+                    override.title == occurrence.title
+            }?.recurrenceIdMillis ?: occurrence.startsAtMillis
+            CalendarOccurrenceEnvelope(
+                occurrenceId = CalendarOccurrenceId.Event(master.resourceHref, recurrenceIdMillis),
+                item = occurrence,
+            )
+        }
     }
 
     private fun expandRuleWithIcal4j(

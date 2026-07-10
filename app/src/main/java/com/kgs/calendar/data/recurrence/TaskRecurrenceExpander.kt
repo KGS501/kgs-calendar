@@ -3,6 +3,8 @@ package com.kgs.calendar.data.recurrence
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.domain.model.CalendarOccurrenceEnvelope
 
 /**
  * Reuses the RFC 5545 recurrence-set implementation for VTODO. DTSTART is the
@@ -51,6 +53,26 @@ class TaskRecurrenceExpander(
                 override != null -> override.applyTo(expanded)
                 else -> expanded
             }
+        }
+    }
+
+    fun expandWithIdentity(
+        master: TaskEntity,
+        rangeStartMillis: Long,
+        rangeEndMillis: Long,
+    ): List<CalendarOccurrenceEnvelope<TaskEntity>> {
+        val overrides = RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
+            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+        return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
+            val recurrenceIdMillis = overrides.firstOrNull { override ->
+                override.startAtMillis == occurrence.startAtMillis &&
+                    override.dueAtMillis == occurrence.dueAtMillis &&
+                    override.title == occurrence.title
+            }?.recurrenceIdMillis ?: occurrence.startAtMillis ?: occurrence.dueAtMillis ?: 0L
+            CalendarOccurrenceEnvelope(
+                occurrenceId = CalendarOccurrenceId.Task(master.resourceHref, recurrenceIdMillis),
+                item = occurrence,
+            )
         }
     }
 

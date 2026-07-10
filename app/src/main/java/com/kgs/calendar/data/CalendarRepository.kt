@@ -2452,8 +2452,14 @@ class CalendarRepository(
     fun expandEventReminders(master: EventEntity, fromMillis: Long, toMillis: Long): List<EventEntity> =
         recurrenceExpander.expand(master, fromMillis, toMillis)
 
+    fun expandEventReminderOccurrences(master: EventEntity, fromMillis: Long, toMillis: Long) =
+        recurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
+
     fun expandTaskReminders(master: TaskEntity, fromMillis: Long, toMillis: Long): List<TaskEntity> =
         taskRecurrenceExpander.expand(master, fromMillis, toMillis)
+
+    fun expandTaskReminderOccurrences(master: TaskEntity, fromMillis: Long, toMillis: Long) =
+        taskRecurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
 
     private fun newUid(): String = "${UUID.randomUUID()}@kgs-calendar"
 

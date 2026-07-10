@@ -1,6 +1,9 @@
 package com.kgs.calendar.data.recurrence
 
+import com.kgs.calendar.data.ical.EventRecurrenceOverride
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -226,5 +229,32 @@ class RecurrenceExpanderTest {
         val out = expander.expand(master, s, e)
 
         assertEquals(listOf(9, 9, 9), out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
+    }
+
+    @Test
+    fun movedOverrideKeepsOriginalRecurrenceIdentity() {
+        val master = masterEvent(
+            startDate = LocalDate.of(2026, 7, 9),
+            startTime = LocalTime.of(9, 0),
+            rrule = "FREQ=DAILY;COUNT=2",
+        )
+        val originalSecondStart = LocalDate.of(2026, 7, 10).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val movedStart = LocalDate.of(2026, 7, 10).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        val withOverride = master.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(
+                listOf(
+                    EventRecurrenceOverride.fromEvent(
+                        originalSecondStart,
+                        master.copy(startsAtMillis = movedStart, endsAtMillis = movedStart + 60 * 60 * 1000),
+                    ),
+                ),
+            ),
+        )
+        val (rangeStart, rangeEnd) = rangeMillis(LocalDate.of(2026, 7, 9), LocalDate.of(2026, 7, 12))
+
+        val occurrences = expander.expandWithIdentity(withOverride, rangeStart, rangeEnd)
+
+        val moved = occurrences.single { it.item.startsAtMillis == movedStart }
+        assertEquals(CalendarOccurrenceId.Event(master.resourceHref, originalSecondStart), moved.occurrenceId)
     }
 }

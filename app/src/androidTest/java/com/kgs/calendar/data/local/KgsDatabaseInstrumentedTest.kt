@@ -93,4 +93,51 @@ class KgsDatabaseInstrumentedTest {
         assertEquals(null, database.taskDao().byResource(firstHref)!!.status)
         assertEquals("COMPLETED", database.taskDao().byResource(secondHref)!!.status)
     }
+
+    @Test
+    fun reminderQueryExcludesCancelledTasks() = runBlocking {
+        database.accountDao().upsert(
+            AccountEntity(serverUrl = "https://nextcloud.test", username = "fromb", displayName = "fromb", lastSyncAtMillis = null),
+        )
+        val collectionHref = "/remote.php/dav/calendars/fromb/tasks/"
+        database.collectionDao().upsertAll(
+            listOf(CollectionEntity(collectionHref, AccountEntity.PRIMARY_ID, "Tasks", 0xff176b5d.toInt(), false, true, null, null)),
+        )
+        database.taskDao().upsert(
+            TaskEntity(
+                uid = "active",
+                collectionHref = collectionHref,
+                resourceHref = "${collectionHref}active.ics",
+                title = "Active",
+                notes = null,
+                dueAtMillis = 2_000_000L,
+                startAtMillis = null,
+                completedAtMillis = null,
+                isCompleted = false,
+                status = "NEEDS-ACTION",
+                priority = null,
+                remindersCsv = "10",
+                color = 0xff176b5d.toInt(),
+            ),
+        )
+        database.taskDao().upsert(
+            TaskEntity(
+                uid = "cancelled",
+                collectionHref = collectionHref,
+                resourceHref = "${collectionHref}cancelled.ics",
+                title = "Cancelled",
+                notes = null,
+                dueAtMillis = 2_000_000L,
+                startAtMillis = null,
+                completedAtMillis = null,
+                isCompleted = false,
+                status = "CANCELLED",
+                priority = null,
+                remindersCsv = "10",
+                color = 0xff176b5d.toInt(),
+            ),
+        )
+
+        assertEquals(listOf("active"), database.taskDao().withReminders().map { it.uid })
+    }
 }

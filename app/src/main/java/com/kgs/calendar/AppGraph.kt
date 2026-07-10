@@ -13,10 +13,9 @@ import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.settings.SettingsStore
-import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.reminder.ReminderRegistry
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
-import com.kgs.calendar.reminder.TaskNotificationReconciler
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
@@ -85,20 +84,12 @@ class AppGraph(context: Context) {
         },
     )
 
-    private val taskNotificationReconciler = object : TaskNotificationReconciler {
-        override suspend fun cancelOccurrence(occurrenceId: CalendarOccurrenceId.Task) {
-            ReminderScheduler.cancelTaskNotifications(appContext, occurrenceId.resourceHref)
-        }
-
-        override suspend fun cancelResource(resourceHref: String) {
-            ReminderScheduler.cancelTaskNotifications(appContext, resourceHref)
-        }
-    }
+    val reminderRegistry = ReminderRegistry.create(appContext)
 
     val taskMutationCoordinator = TaskMutationCoordinator(
         persistStatus = repository::setTaskStatus,
         pushPendingChanges = repository::pushPendingChangesCreatedSince,
-        notificationReconciler = taskNotificationReconciler,
+        notificationReconciler = reminderRegistry,
         rescheduleReminders = { ReminderScheduler.reschedule(appContext) },
         updateWidgets = { KgsWidgetUpdateScheduler.updateAll(appContext) },
     )

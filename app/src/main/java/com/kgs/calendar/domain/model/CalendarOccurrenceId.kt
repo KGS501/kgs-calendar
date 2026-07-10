@@ -22,3 +22,8 @@ sealed interface CalendarOccurrenceId {
         override val kind: String = "task"
     }
 }
+
+data class CalendarOccurrenceEnvelope<out T>(
+    val occurrenceId: CalendarOccurrenceId,
+    val item: T,
+)
