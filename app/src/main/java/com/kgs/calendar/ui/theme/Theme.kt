@@ -12,6 +12,8 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -126,6 +128,7 @@ private val FreshDarkColors: ColorScheme = darkColorScheme(
 fun KgsCalendarTheme(
     themeMode: AppThemeMode = AppThemeMode.KgsBlue,
     darkTheme: Boolean = isSystemInDarkTheme(),
+    priorityAnimationsEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -138,11 +141,15 @@ fun KgsCalendarTheme(
         themeMode == AppThemeMode.KgsBlue -> if (darkTheme) BlueDarkColors else BlueLightColors
         else -> LightColors
     }.withNeutralPopupSurfaces(darkTheme)
+    val calendarUiTokens = remember(colors, themeMode, priorityAnimationsEnabled) {
+        CalendarUiTokens.forTheme(colors, themeMode, priorityAnimationsEnabled)
+    }
     MaterialTheme(
         colorScheme = colors,
         typography = Typography(),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalCalendarUiTokens provides calendarUiTokens, content = content)
+    }
 }
 
 private fun ColorScheme.withNeutralPopupSurfaces(darkTheme: Boolean): ColorScheme {

@@ -42,7 +42,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.LinearEasing
@@ -382,6 +381,8 @@ import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
+import com.kgs.calendar.ui.theme.CalendarUiTokens
+import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import com.kgs.calendar.ui.time.rememberCalendarTimeState
 import kotlinx.coroutines.Dispatchers
@@ -424,53 +425,42 @@ import kotlin.random.Random
 import kotlin.math.ln
 import kotlin.math.tan
 
-private var WarmBrown = Color(0xFF2563A8)
-private var WarmPeach = Color(0xFFDCEBFF)
-private var WarmGrid = Color(0xFFFAFCFF)
-private var WarmLine = Color(0xFFD2E0EF)
-private var TaskHierarchyLine = Color(0xFF707780)
-private var WarmInk = Color(0xFF17202A)
-private var CurrentDarkPalette = false
-private var PriorityAnimationsEnabled = true
-private val SyncPendingOrange = Color(0xFFFF9800)
-private val DraftAccent = Color(0xFFF6D35A)
-private val ItemColorPalette = listOf(
-    0xFF1E88E5.toInt(),
-    0xFF00ACC1.toInt(),
-    0xFF43A047.toInt(),
-    0xFF7CB342.toInt(),
-    0xFFFDD835.toInt(),
-    0xFFFFB300.toInt(),
-    0xFFFB8C00.toInt(),
-    0xFFE53935.toInt(),
-    0xFF8E24AA.toInt(),
-    0xFF6D4C41.toInt(),
-)
-private val MotionStandard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-private val MotionStandardAccelerate = CubicBezierEasing(0.3f, 0f, 1f, 1f)
-private val MotionEmphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-// Ease-in-out for the view morph: starts gently (slow start) instead of snapping fast.
-private val MorphEasing = CubicBezierEasing(0.45f, 0f, 0.25f, 1f)
-private const val MotionShort = 150
-private const val MotionMedium = 300
-private const val MotionLong = 450
-private const val PENDING_BADGE_DELAY_MILLIS = 30_000L
-private const val DefaultHourRowHeightDp = 46f
-private const val AbsoluteMinHourRowHeightDp = 18f
-private const val MaxHourRowHeightDp = 92f
-private const val DraftSnapMinutes = 15
-private const val DraftMinDurationMinutes = 15
-private val TimeSidebarWidth = 42.dp
-private val DayHeaderHeight = 56.dp
-private val DayColumnSpacing = 4.dp
-private val HourCellGap = 2.dp
-private val EditorHorizontalPadding = 22.dp
-private val EditorSectionHorizontalPadding = 14.dp
-private val UniversalControlHeight = 56.dp
-private val SettingsControlHeight = 70.dp
-private val SettingsControlShape = RoundedCornerShape(25.dp)
-private val EditorTinyVisibleHeight = 74.dp
-private val EditorSmallVisibleHeight = 310.dp
+private val DefaultUiTokens = CalendarUiTokens.Default
+private val WarmBrown: Color @Composable get() = LocalCalendarUiTokens.current.warmBrown
+private val WarmPeach: Color @Composable get() = LocalCalendarUiTokens.current.warmPeach
+private val WarmGrid: Color @Composable get() = LocalCalendarUiTokens.current.warmGrid
+private val WarmLine: Color @Composable get() = LocalCalendarUiTokens.current.warmLine
+private val TaskHierarchyLine: Color @Composable get() = LocalCalendarUiTokens.current.taskHierarchyLine
+private val WarmInk: Color @Composable get() = LocalCalendarUiTokens.current.warmInk
+private val CurrentDarkPalette: Boolean @Composable get() = LocalCalendarUiTokens.current.darkPalette
+private val PriorityAnimationsEnabled: Boolean @Composable get() = LocalCalendarUiTokens.current.priorityAnimationsEnabled
+private val SyncPendingOrange = DefaultUiTokens.syncPendingOrange
+private val DraftAccent = DefaultUiTokens.draftAccent
+private val ItemColorPalette = DefaultUiTokens.itemColorPalette
+private val MotionStandard = DefaultUiTokens.motionStandard
+private val MotionStandardAccelerate = DefaultUiTokens.motionStandardAccelerate
+private val MotionEmphasized = DefaultUiTokens.motionEmphasized
+private val MorphEasing = DefaultUiTokens.morphEasing
+private val MotionShort = DefaultUiTokens.motionShortMillis
+private val MotionMedium = DefaultUiTokens.motionMediumMillis
+private val MotionLong = DefaultUiTokens.motionLongMillis
+private val PENDING_BADGE_DELAY_MILLIS = DefaultUiTokens.pendingBadgeDelayMillis
+private val DefaultHourRowHeightDp = DefaultUiTokens.defaultHourRowHeightDp
+private val AbsoluteMinHourRowHeightDp = DefaultUiTokens.absoluteMinHourRowHeightDp
+private val MaxHourRowHeightDp = DefaultUiTokens.maxHourRowHeightDp
+private val DraftSnapMinutes = DefaultUiTokens.draftSnapMinutes
+private val DraftMinDurationMinutes = DefaultUiTokens.draftMinDurationMinutes
+private val TimeSidebarWidth = DefaultUiTokens.timeSidebarWidth
+private val DayHeaderHeight = DefaultUiTokens.dayHeaderHeight
+private val DayColumnSpacing = DefaultUiTokens.dayColumnSpacing
+private val HourCellGap = DefaultUiTokens.hourCellGap
+private val EditorHorizontalPadding = DefaultUiTokens.editorHorizontalPadding
+private val EditorSectionHorizontalPadding = DefaultUiTokens.editorSectionHorizontalPadding
+private val UniversalControlHeight = DefaultUiTokens.universalControlHeight
+private val SettingsControlHeight = DefaultUiTokens.settingsControlHeight
+private val SettingsControlShape = DefaultUiTokens.settingsControlShape
+private val EditorTinyVisibleHeight = DefaultUiTokens.editorTinyVisibleHeight
+private val EditorSmallVisibleHeight = DefaultUiTokens.editorSmallVisibleHeight
 private const val UiReadOnlyCollectionPrefix = "readonly-"
 private const val UiLocalAccountId = "local"
 private const val UiLocalCollectionPrefix = "local://"
@@ -571,29 +561,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LocalAppLocale provides appLocale,
         LocalCalendarTimeSnapshot provides calendarTime,
     ) {
-    KgsCalendarTheme(themeMode = state.themeMode, darkTheme = useDarkTheme) {
-        val scheme = MaterialTheme.colorScheme
-        val darkPalette = scheme.background.isDark()
-        CurrentDarkPalette = darkPalette
-        PriorityAnimationsEnabled = state.priorityAnimationsEnabled
-        WarmBrown = scheme.primary
-        WarmPeach = when {
-            darkPalette -> scheme.primary.copy(alpha = 0.28f)
-            state.themeMode == AppThemeMode.KgsWarm -> Color(0xFFFFD8C2)
-            state.themeMode == AppThemeMode.KgsFresh -> scheme.primary.copy(alpha = 0.24f)
-            state.themeMode == AppThemeMode.SystemDynamic -> scheme.primary.copy(alpha = 0.26f)
-            else -> scheme.primary.copy(alpha = 0.24f)
-        }
-        // In dark mode the timeslot grid cells (and month day rectangles) were scheme.surface,
-        // almost indistinguishable from the background. surfaceVariant is a clear step lighter.
-        WarmGrid = if (darkPalette) scheme.surfaceVariant else Color.White
-        WarmLine = scheme.outline.copy(alpha = if (darkPalette) 0.62f else 0.72f)
-        TaskHierarchyLine = if (darkPalette) {
-            scheme.outline.copy(alpha = 0.78f)
-        } else {
-            Color(0xFF707780)
-        }
-        WarmInk = scheme.onBackground
+    KgsCalendarTheme(
+        themeMode = state.themeMode,
+        darkTheme = useDarkTheme,
+        priorityAnimationsEnabled = state.priorityAnimationsEnabled,
+    ) {
+        val darkPalette = LocalCalendarUiTokens.current.darkPalette
+        val defaultWireframeColor = WarmBrown.toArgb()
         val context = LocalContext.current
         val view = LocalView.current
         SideEffect {
@@ -625,7 +599,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var draftDate by remember { mutableStateOf(calendarTime.today) }
         var draftStart by remember { mutableStateOf(LocalTime.of(15, 0)) }
         var draftEnd by remember { mutableStateOf(LocalTime.of(16, 0)) }
-        var draftWireframeColor by remember { mutableStateOf(WarmBrown.toArgb()) }
+        var draftWireframeColor by remember { mutableStateOf(defaultWireframeColor) }
         var draftAllDay by remember { mutableStateOf(false) }
         var draftTaskHasDate by remember { mutableStateOf(false) }
         var draftTaskUsesTime by remember { mutableStateOf(false) }
@@ -773,7 +747,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                 .firstOrNull()
                 ?.color
-                ?: WarmBrown.toArgb()
+                ?: defaultWireframeColor
             editorTransferDraft = null
             conversionSource = null
             createMenuOpen = false
@@ -800,7 +774,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
                 .firstOrNull()
                 ?.color
-                ?: WarmBrown.toArgb()
+                ?: defaultWireframeColor
             editorTransferDraft = null
             conversionSource = null
             createMenuOpen = false
@@ -989,7 +963,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                                 .firstOrNull()
                                 ?.color
-                                ?: WarmBrown.toArgb()
+                                ?: defaultWireframeColor
                             editorTransferDraft = null
                             creationSheet = CreationSheet.EventLow
                         },
@@ -1004,7 +978,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                                 .firstOrNull()
                                 ?.color
-                                ?: WarmBrown.toArgb()
+                                ?: defaultWireframeColor
                             editorTransferDraft = null
                             creationSheet = CreationSheet.EventLow
                         },
@@ -2325,6 +2299,7 @@ private fun KgsLogoBurstButton() {
         Color(0xFFFFD166),
         Color(0xFF7BDFF2),
     )
+    val ringColor = WarmBrown
 
     Box(
         modifier = Modifier
@@ -2350,7 +2325,7 @@ private fun KgsLogoBurstButton() {
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val ringAlpha = (1f - progress) * 0.34f
                 drawCircle(
-                    color = WarmBrown.copy(alpha = ringAlpha),
+                    color = ringColor.copy(alpha = ringAlpha),
                     radius = 15.dp.toPx() + 17.dp.toPx() * progress,
                     center = center,
                     style = Stroke(width = (2.4f * (1f - progress)).coerceAtLeast(0.5f).dp.toPx()),
@@ -3508,7 +3483,7 @@ private fun SearchResultCard(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        val visuals = event.cardVisuals(muted = isPast)
+        val visuals = event.cardVisuals(muted = isPast, darkPalette = CurrentDarkPalette)
         SearchDateColumn(
             date = displayDate,
             muted = isPast,
@@ -3593,7 +3568,7 @@ private fun SearchTaskResultCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .zIndex(taskHierarchyLayerZ(hierarchyDepth) + taskPriorityLayerZ(task))
+            .zIndex(taskHierarchyLayerZ(hierarchyDepth) + taskPriorityLayerZ(task, PriorityAnimationsEnabled))
             .graphicsLayer { clip = false },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
@@ -4235,19 +4210,20 @@ private fun CalendarToolbar(
 
 @Composable
 private fun TodayDateIcon(day: Int, modifier: Modifier = Modifier) {
+    val iconColor = WarmInk
     Box(
         modifier = modifier
             .drawBehind {
                 val stroke = 1.9.dp.toPx()
                 drawRoundRect(
-                    color = WarmInk,
+                    color = iconColor,
                     topLeft = Offset(stroke / 2, stroke / 2),
                     size = Size(size.width - stroke, size.height - stroke),
                     cornerRadius = CornerRadius(4.5.dp.toPx(), 4.5.dp.toPx()),
                     style = Stroke(width = stroke),
                 )
                 drawLine(
-                    color = WarmInk,
+                    color = iconColor,
                     start = Offset(stroke * 2.2f, size.height * 0.28f),
                     end = Offset(size.width - stroke * 2.2f, size.height * 0.28f),
                     strokeWidth = stroke,
@@ -6176,6 +6152,7 @@ private fun TimedGridViewportLayer(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val gridColor = WarmGrid
     Canvas(modifier) {
         val topOffsetPx = with(density) { topOffset.toPx() }
         val rowHeight = with(density) { hourHeightDp.dp.toPx() }
@@ -6190,7 +6167,7 @@ private fun TimedGridViewportLayer(
                     val top = topOffsetPx - scrollOffsetPx + index * rowHeight + cellInset
                     if (top > size.height || top + cellHeight < topOffsetPx) return@repeat
                     drawRoundRect(
-                        color = WarmGrid,
+                        color = gridColor,
                         topLeft = Offset(left, top),
                         size = Size(width = pageWidthPx, height = cellHeight),
                         cornerRadius = CornerRadius(radius, radius),
@@ -7076,8 +7053,9 @@ private fun AllDayContinuationChip(
     sideReachFraction: Float,
     modifier: Modifier,
 ) {
-    val eventVisuals = remember(segment.item.event?.status, segment.item.event?.manualColor, segment.item.event?.color, CurrentDarkPalette) {
-        segment.item.event?.cardVisuals()
+    val darkPalette = CurrentDarkPalette
+    val eventVisuals = remember(segment.item.event?.status, segment.item.event?.manualColor, segment.item.event?.color, darkPalette) {
+        segment.item.event?.cardVisuals(darkPalette = darkPalette)
     }
     val base = eventVisuals?.background ?: Color(segment.item.color)
     val itemAlpha = if (segment.item.completed) 0.42f else 1f
@@ -7195,7 +7173,10 @@ private fun AllDayViewportChip(
     onMoveToAllDay: (AllDayOverlayItem, LocalDate) -> Unit,
     onDragStateChanged: (Boolean) -> Unit,
 ) {
-    val eventVisuals = remember(item.event?.status, item.event?.manualColor, item.event?.color, CurrentDarkPalette) { item.event?.cardVisuals() }
+    val darkPalette = CurrentDarkPalette
+    val eventVisuals = remember(item.event?.status, item.event?.manualColor, item.event?.color, darkPalette) {
+        item.event?.cardVisuals(darkPalette = darkPalette)
+    }
     val color = eventVisuals?.background ?: Color(item.color)
     val textColor = eventVisuals?.contentColor ?: if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val eventTextStyle = tentativeReadableTextStyle(item.event?.isTentative() == true)
@@ -7527,6 +7508,7 @@ private fun Modifier.verticalPinchZoom(
 private fun TimeSidebar(hours: IntRange, hourHeightDp: Float, onZoom: (Float, Float) -> Unit) {
     val currentOnZoom by rememberUpdatedState(onZoom)
     val hourCount = hours.count()
+    val textColor = WarmInk
     Box(
         modifier = Modifier
             .width(TimeSidebarWidth)
@@ -7540,7 +7522,7 @@ private fun TimeSidebar(hours: IntRange, hourHeightDp: Float, onZoom: (Float, Fl
         Canvas(Modifier.matchParentSize()) {
             val rowHeight = hourHeightDp.dp.toPx()
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = WarmInk.toArgb()
+                color = textColor.toArgb()
                 textSize = 10.sp.toPx()
                 textAlign = Paint.Align.CENTER
                 isFakeBoldText = true
@@ -7583,6 +7565,7 @@ private fun DayTimedColumn(
     drawGrid: Boolean = true,
 ) {
     val hourCount = DayEndHour - DayStartHour + 1
+    val gridColor = WarmGrid
     val timedItems = remember(day, events, tasks, hourHeightDp) {
         layoutTimedItemsForDay(
             day = day,
@@ -7606,7 +7589,7 @@ private fun DayTimedColumn(
                             val cellSize = Size(width = size.width, height = cellHeight)
                             val cornerRadius = CornerRadius(radius, radius)
                             drawRoundRect(
-                                color = WarmGrid,
+                                color = gridColor,
                                 topLeft = Offset(0f, top),
                                 size = cellSize,
                                 cornerRadius = cornerRadius,
@@ -7795,7 +7778,10 @@ private fun TimedEventBlock(
     onMoveAllDay: (LocalDate) -> Unit,
     onClick: () -> Unit,
 ) {
-    val visuals = remember(event.status, event.manualColor, event.color, color, CurrentDarkPalette) { event.cardVisuals() }
+    val darkPalette = CurrentDarkPalette
+    val visuals = remember(event.status, event.manualColor, event.color, color, darkPalette) {
+        event.cardVisuals(darkPalette = darkPalette)
+    }
     val background = visuals.background
     val textColor = visuals.contentColor
     val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
@@ -8602,7 +8588,10 @@ private fun AllDayChip(
     onClick: () -> Unit,
     morphDay: Boolean = false,
 ) {
-    val visuals = remember(event?.status, event?.manualColor, event?.color, CurrentDarkPalette) { event?.cardVisuals() }
+    val darkPalette = CurrentDarkPalette
+    val visuals = remember(event?.status, event?.manualColor, event?.color, darkPalette) {
+        event?.cardVisuals(darkPalette = darkPalette)
+    }
     val chipColor = visuals?.background ?: color
     val textColor = visuals?.contentColor ?: if (chipColor.isDark()) Color.White else Color(0xFF1C1A18)
     val shape = continuationShape(continuesFromPrevious, continuesToNext)
@@ -12422,6 +12411,7 @@ private fun PrioritySlider(
     onPriorityChange: (Int) -> Unit,
     onPriorityChangeFinished: (Int) -> Unit = {},
 ) {
+    val trackColor = WarmLine
     var widthPx by remember { mutableStateOf(0) }
     val sliderInset = 8.dp
     val density = LocalDensity.current
@@ -12481,7 +12471,7 @@ private fun PrioritySlider(
                 val dotSpanWidth = (trackWidth - radius * 2f).coerceAtLeast(1f)
                 val thumbX = dotSpanStart + dotSpanWidth * thumbFraction
                 drawRoundRect(
-                    color = WarmLine.copy(alpha = 0.62f),
+                    color = trackColor.copy(alpha = 0.62f),
                     topLeft = Offset(insetPx, centerY - barHeight / 2f),
                     size = Size(trackWidth, barHeight),
                     cornerRadius = CornerRadius(radius, radius),
@@ -12521,6 +12511,8 @@ private fun ProgressSlider(
     onProgressChange: (Int) -> Unit,
     onProgressChangeFinished: (Int) -> Unit = {},
 ) {
+    val trackColor = WarmLine
+    val accentColor = WarmBrown
     var widthPx by remember { mutableStateOf(0) }
     val sliderInset = 12.dp
     val density = LocalDensity.current
@@ -12574,13 +12566,13 @@ private fun ProgressSlider(
                 val insetPx = sliderInset.toPx()
                 val trackWidth = (size.width - insetPx * 2f).coerceAtLeast(1f)
                 drawRoundRect(
-                    color = WarmLine.copy(alpha = 0.68f),
+                    color = trackColor.copy(alpha = 0.68f),
                     topLeft = Offset(insetPx, centerY - barHeight / 2f),
                     size = Size(trackWidth, barHeight),
                     cornerRadius = CornerRadius(radius, radius),
                 )
                 drawRoundRect(
-                    color = WarmBrown.copy(alpha = 0.52f),
+                    color = accentColor.copy(alpha = 0.52f),
                     topLeft = Offset(insetPx, centerY - barHeight / 2f),
                     size = Size(trackWidth * fraction, barHeight),
                     cornerRadius = CornerRadius(radius, radius),
@@ -12592,7 +12584,7 @@ private fun ProgressSlider(
                     center = Offset(thumbX, centerY),
                 )
                 drawCircle(
-                    color = WarmBrown,
+                    color = accentColor,
                     radius = 8.dp.toPx(),
                     center = Offset(thumbX, centerY),
                 )
@@ -13142,7 +13134,10 @@ private fun AgendaDateColumn(date: LocalDate) {
 private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
     // Render exactly like the 3-day / 1-day cards (cardVisuals with no muting): the old
     // muted=isPast greyed past events into washed-out cards with dark text in dark mode.
-    val visuals = remember(event.status, event.manualColor, event.color, CurrentDarkPalette) { event.cardVisuals() }
+    val darkPalette = CurrentDarkPalette
+    val visuals = remember(event.status, event.manualColor, event.color, darkPalette) {
+        event.cardVisuals(darkPalette = darkPalette)
+    }
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val eventTextStyle = tentativeReadableTextStyle(event.isTentative())
     val shape = RoundedCornerShape(12.dp)
@@ -13737,6 +13732,7 @@ private fun TaskRow(
     detailMorphFromHeader: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val hierarchyLineColor = TaskHierarchyLine
     val detailMorphProgress = if (detailMorphFromHeader) rememberTaskDetailMorphProgress() else 1f
     val subtaskArrowRotation by animateFloatAsState(
         targetValue = if (subtasksExpanded) 0f else -90f,
@@ -13829,7 +13825,10 @@ private fun TaskRow(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .zIndex(taskHierarchyLayerZ(hierarchyDepth) + (priorityMotionTask?.let(::taskPriorityLayerZ) ?: 0f))
+            .zIndex(
+                taskHierarchyLayerZ(hierarchyDepth) +
+                    (priorityMotionTask?.let { taskPriorityLayerZ(it, PriorityAnimationsEnabled) } ?: 0f),
+            )
             .graphicsLayer { clip = false },
     ) {
         Box(
@@ -13843,12 +13842,14 @@ private fun TaskRow(
                     branchEndInset = motionPadding,
                     stemInset = resolvedConnectorStemInset,
                     progress = hierarchyConnectorProgress,
+                    lineColor = hierarchyLineColor,
                 )
                 .taskHierarchyParentTail(
                     depth = hierarchyDepth,
                     stemInset = resolvedConnectorStemInset,
                     verticalPadding = renderedVerticalMotionPadding,
                     progress = parentTailProgress,
+                    lineColor = hierarchyLineColor,
                 ),
         )
         Card(
@@ -14032,6 +14033,7 @@ private fun ParentTaskPeek(
     taskColorMode: TaskColorMode,
     onClick: () -> Unit,
 ) {
+    val hierarchyLineColor = TaskHierarchyLine
     val morphProgress = rememberTaskDetailMorphProgress()
     val morphCornerRadius = rememberTaskDetailMorphCornerRadius(
         enabled = true,
@@ -14054,7 +14056,7 @@ private fun ParentTaskPeek(
                     val x = TaskHierarchyStemInset.toPx()
                     val overlap = TaskHierarchyLineOverlap.toPx()
                     drawLine(
-                        color = TaskHierarchyLine,
+                        color = hierarchyLineColor,
                         start = Offset(x, size.height - 16.dp.toPx() * morphProgress),
                         end = Offset(x, size.height + overlap),
                         strokeWidth = 1.65.dp.toPx(),
@@ -14684,8 +14686,8 @@ private val TaskHierarchyLineOverlap = 4.dp
 
 private fun taskHierarchyLayerZ(depth: Int): Float = 100f - depth.coerceAtLeast(0)
 
-private fun taskPriorityLayerZ(task: TaskEntity): Float {
-    if (!PriorityAnimationsEnabled || task.isInactive()) return 0f
+private fun taskPriorityLayerZ(task: TaskEntity, animationsEnabled: Boolean): Float {
+    if (!animationsEnabled || task.isInactive()) return 0f
     val intensity = taskPriorityIntensity(task.priority)
     return if (intensity > 0f) 1_000f + intensity * 100f else 0f
 }
@@ -14791,6 +14793,7 @@ private fun Modifier.taskHierarchyConnector(
     branchEndInset: Dp = 0.dp,
     stemInset: Dp = 9.dp,
     progress: Float = 1f,
+    lineColor: Color,
 ): Modifier {
     if (depth <= 0 || progress <= 0.001f) return this
     return drawBehind {
@@ -14799,7 +14802,7 @@ private fun Modifier.taskHierarchyConnector(
         val resolvedProgress = progress.coerceIn(0f, 1f)
         val overlapPx = TaskHierarchyLineOverlap.toPx() * resolvedProgress
         val centerY = size.height / 2f
-        val color = TaskHierarchyLine.copy(alpha = resolvedProgress)
+        val color = lineColor.copy(alpha = resolvedProgress)
         val stroke = 1.65.dp.toPx()
         continuationLevels.forEach { level ->
             val x = (level * indent) + stemInsetPx
@@ -14837,6 +14840,7 @@ private fun Modifier.taskHierarchyParentTail(
     stemInset: Dp,
     verticalPadding: Dp,
     progress: Float,
+    lineColor: Color,
 ): Modifier {
     if (progress <= 0.001f) return this
     return drawBehind {
@@ -14847,7 +14851,7 @@ private fun Modifier.taskHierarchyParentTail(
         val startY = (size.height - verticalPadding.toPx() - TaskHierarchyLineOverlap.toPx()).coerceIn(0f, size.height)
         val endY = startY + (size.height - startY) * resolvedProgress
         drawLine(
-            TaskHierarchyLine.copy(alpha = resolvedProgress),
+            lineColor.copy(alpha = resolvedProgress),
             Offset(x, startY),
             Offset(x, endY),
             strokeWidth = stroke,
@@ -14863,6 +14867,7 @@ private fun TaskHierarchyConnectorStrip(
     height: Dp = 3.dp,
     progress: Float = 1f,
 ) {
+    val lineColor = TaskHierarchyLine
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -14872,7 +14877,7 @@ private fun TaskHierarchyConnectorStrip(
                 val overlapPx = TaskHierarchyLineOverlap.toPx()
                 val stroke = 1.65.dp.toPx()
                 drawLine(
-                    TaskHierarchyLine,
+                    lineColor,
                     Offset(x, size.height + overlapPx - (size.height + overlapPx * 2f) * progress.coerceIn(0f, 1f)),
                     Offset(x, size.height + overlapPx),
                     strokeWidth = stroke,
@@ -14912,7 +14917,7 @@ private fun AnimatedTaskHierarchyEntry(
                 if (exiting) {
                     -1f + entry.depth * 0.01f
                 } else {
-                    taskHierarchyLayerZ(entry.depth) + taskPriorityLayerZ(entry.task)
+                    taskHierarchyLayerZ(entry.depth) + taskPriorityLayerZ(entry.task, PriorityAnimationsEnabled)
                 },
             )
             .graphicsLayer {
@@ -15555,6 +15560,7 @@ private fun ReadOnlyProgressBar(progress: Int, modifier: Modifier = Modifier) {
 private fun ReadOnlyPriorityBar(priority: Int, modifier: Modifier = Modifier) {
     val normalizedPriority = priority.coerceIn(1, 9)
     val thumbFraction = (9 - normalizedPriority) / 8f
+    val trackColor = WarmLine
     Canvas(
         modifier = modifier
             .height(34.dp)
@@ -15569,7 +15575,7 @@ private fun ReadOnlyPriorityBar(priority: Int, modifier: Modifier = Modifier) {
         val dotSpanWidth = (size.width - radius * 2f).coerceAtLeast(1f)
         val fillEnd = dotSpanStart + dotSpanWidth * thumbFraction
         drawRoundRect(
-            color = WarmLine.copy(alpha = 0.62f),
+            color = trackColor.copy(alpha = 0.62f),
             topLeft = Offset(0f, centerY - barHeight / 2f),
             size = Size(size.width, barHeight),
             cornerRadius = CornerRadius(radius, radius),
@@ -15718,6 +15724,7 @@ private fun OpenStreetMapPreview(suggestion: LocationSuggestion, modifier: Modif
 private fun LinkableSelectableText(value: String, onClick: (() -> Unit)? = null) {
     val textColor = WarmInk
     val linkColor = MaterialTheme.colorScheme.primary
+    val highlightColor = WarmPeach.copy(alpha = 0.64f).toArgb()
     AndroidView(
         modifier = Modifier.fillMaxWidth(),
         factory = { context ->
@@ -15728,7 +15735,7 @@ private fun LinkableSelectableText(value: String, onClick: (() -> Unit)? = null)
                 movementMethod = LinkMovementMethod.getInstance()
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 setLineSpacing(0f, 1.08f)
-                highlightColor = WarmPeach.copy(alpha = 0.64f).toArgb()
+                this.highlightColor = highlightColor
             }
         },
         update = { textView ->
@@ -19205,7 +19212,7 @@ private data class EventCardVisuals(
     val textDecoration: TextDecoration?,
 )
 
-private fun EventEntity.cardVisuals(muted: Boolean = false): EventCardVisuals {
+private fun EventEntity.cardVisuals(muted: Boolean = false, darkPalette: Boolean): EventCardVisuals {
     val base = Color(displayColor())
     val tentative = isTentative()
     val cancelled = isCancelled()
@@ -19216,7 +19223,7 @@ private fun EventEntity.cardVisuals(muted: Boolean = false): EventCardVisuals {
         else -> base
     }
     val normalText = when {
-        tentative -> if (CurrentDarkPalette) Color.White else Color(0xFF17202A)
+        tentative -> if (darkPalette) Color.White else Color(0xFF17202A)
         base.isDark() && !muted && !cancelled -> Color.White
         else -> Color(0xFF1C1A18)
     }
