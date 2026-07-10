@@ -78,15 +78,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -256,6 +257,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -387,6 +389,7 @@ import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.timeline.AllDayReservation
 import com.kgs.calendar.ui.timeline.NoOpTimelineTimedDragReporter
+import com.kgs.calendar.ui.timeline.PinchSnapshot
 import com.kgs.calendar.ui.timeline.TimelineDragPoint
 import com.kgs.calendar.ui.timeline.TimelineDragReducer
 import com.kgs.calendar.ui.timeline.TimelineDragSession
@@ -395,6 +398,8 @@ import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
 import com.kgs.calendar.ui.timeline.TimelineDropTarget
 import com.kgs.calendar.ui.timeline.TimelineTimedDragReporter
 import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
+import com.kgs.calendar.ui.timeline.TimelineViewportState
+import com.kgs.calendar.ui.timeline.updateVerticalPinch
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -457,6 +462,12 @@ private data class ActiveTimelineTimedDrag(
     val session: TimelineDragSession,
     val layout: TimelineRootDragLayout,
 )
+
+private interface TimelineVerticalPinchOwner {
+    fun begin(upperY: Float, lowerY: Float): PinchSnapshot?
+    fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float)
+    fun end()
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -696,23 +707,60 @@ internal fun TimelineView(
             onInitialTimeScrollApplied()
         }
     }
-    val applyTimelineZoom: (Float, Float) -> Unit = { zoom, centroidY ->
-        val oldHourHeightDp = hourHeightDp
-        val newHourHeightDp = (oldHourHeightDp * zoom).coerceIn(minHourHeightDp, MaxHourRowHeightDp)
-        if (newHourHeightDp != oldHourHeightDp) {
-            val oldRowPx = with(density) { oldHourHeightDp.dp.toPx() }.coerceAtLeast(1f)
-            val newRowPx = with(density) { newHourHeightDp.dp.toPx() }.coerceAtLeast(1f)
-            val contentYBefore = timeScroll.value + centroidY
-            val anchoredContentRatio = contentYBefore / oldRowPx
-            val maxScrollPx = max(0f, ((DayEndHour - DayStartHour + 1) * newRowPx) - gridViewportHeightPx)
-            val nextScroll = (anchoredContentRatio * newRowPx - centroidY).coerceIn(0f, maxScrollPx)
-            onHourHeightChange(newHourHeightDp)
-            scope.launch { timeScroll.scrollTo(nextScroll.roundToInt()) }
+    var pinchTargetScrollPx by remember(timeScroll) { mutableFloatStateOf(Float.NaN) }
+    val currentPinchBegin = rememberUpdatedState<(Float, Float) -> PinchSnapshot?>(
+        newValue = pinchBegin@ { upperY, lowerY ->
+            if (gridViewportHeightPx <= 0) return@pinchBegin null
+            scope.launch { timeScroll.stopScroll() }
+            pinchTargetScrollPx = timeScroll.value.toFloat()
+            PinchSnapshot.begin(
+                upperY = upperY,
+                lowerY = lowerY,
+                viewport = TimelineViewportState(
+                    hourHeightPx = with(density) { hourHeightDp.dp.toPx() },
+                    scrollPx = timeScroll.value.toFloat(),
+                ),
+                contentStartMinute = DayStartHour * 60,
+                contentEndMinute = (DayEndHour + 1) * 60,
+                viewportHeightPx = gridViewportHeightPx.toFloat(),
+                minHourHeightPx = with(density) { minHourHeightDp.dp.toPx() },
+                maxHourHeightPx = with(density) { MaxHourRowHeightDp.dp.toPx() },
+                contentTopY = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
+            )
+        },
+    )
+    val currentPinchUpdate = rememberUpdatedState<(PinchSnapshot, Float, Float) -> Unit>(
+        newValue = { snapshot, upperY, lowerY ->
+            val update = updateVerticalPinch(snapshot, upperY, lowerY)
+            pinchTargetScrollPx = update.viewport.scrollPx
+            onHourHeightChange(with(density) { update.viewport.hourHeightPx.toDp().value })
+            timeScroll.dispatchRawDelta(update.viewport.scrollPx - timeScroll.value)
+        },
+    )
+    val verticalPinchOwner = remember {
+        object : TimelineVerticalPinchOwner {
+            override fun begin(upperY: Float, lowerY: Float): PinchSnapshot? =
+                currentPinchBegin.value(upperY, lowerY)
+
+            override fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float) {
+                currentPinchUpdate.value(snapshot, upperY, lowerY)
+            }
+
+            override fun end() {
+                val targetScrollPx = pinchTargetScrollPx
+                if (!targetScrollPx.isFinite()) return
+                scope.launch {
+                    withFrameNanos { }
+                    timeScroll.scrollTo(targetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue))
+                    pinchTargetScrollPx = Float.NaN
+                }
+            }
         }
     }
-    val currentApplyTimelineZoom = rememberUpdatedState(applyTimelineZoom)
-    val timelinePinchZoom = remember {
-        { zoom: Float, centroidY: Float -> currentApplyTimelineZoom.value(zoom, centroidY) }
+    LaunchedEffect(pinchTargetScrollPx, timeScroll.maxValue) {
+        if (!pinchTargetScrollPx.isFinite()) return@LaunchedEffect
+        val target = pinchTargetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue)
+        timeScroll.dispatchRawDelta((target - timeScroll.value).toFloat())
     }
     var previousTimelineInsetPx by remember { mutableStateOf(0) }
     LaunchedEffect(timelineBottomInset, gridViewportHeightPx) {
@@ -953,6 +1001,8 @@ internal fun TimelineView(
         Modifier
             .fillMaxSize()
             .onGloballyPositioned { timelineRootOffset = it.positionInRoot() }
+            .timelineVerticalPinch(verticalPinchOwner)
+            .testTag("timeline-gesture-surface")
             // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
             // element for the month-cell <-> day morph, so the entire view scales up out of (and
             // back into) the tapped month cell as one unit. Only enabled in 1-day mode: 3-day uses
@@ -999,7 +1049,6 @@ internal fun TimelineView(
                         TimeSidebar(
                             hours = DayStartHour..DayEndHour,
                             hourHeightDp = hourHeightDp,
-                            onZoom = timelinePinchZoom,
                         )
                         if (timelineBottomInset > 0.dp) {
                             Spacer(Modifier.height(timelineBottomInset + 20.dp))
@@ -1011,11 +1060,6 @@ internal fun TimelineView(
                 modifier = Modifier
                     .fillMaxSize()
                     .onSizeChanged { dayViewportWidthPx = it.width }
-                    .verticalPinchZoom(
-                        topOffsetPx = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
-                        viewportHeightPx = gridViewportHeightPx,
-                        onZoom = timelinePinchZoom,
-                    )
                     // While the affine morph plays, clip to this area so the columns sliding off the
                     // left edge disappear BEHIND the time bar instead of drawing over it. (Left
                     // un-clipped in steady state so a card can still be dragged across day edges.)
@@ -1559,55 +1603,44 @@ private fun DayPagerColumn(
     }
 }
 
-private fun Modifier.verticalPinchZoom(
-    topOffsetPx: Float = 0f,
-    viewportHeightPx: Int = 0,
-    onZoom: (Float, Float) -> Unit,
-): Modifier = pointerInput(topOffsetPx, viewportHeightPx, onZoom) {
-    awaitPointerEventScope {
-        var previousSpanY: Float? = null
-        while (true) {
-            val event = awaitPointerEvent()
-            val pressed = event.changes.filter { it.pressed }
-            if (pressed.size < 2) {
-                previousSpanY = null
-                continue
-            }
-
-            val top = pressed.minOf { it.position.y }
-            val bottom = pressed.maxOf { it.position.y }
-            val spanY = (bottom - top).coerceAtLeast(1f)
-            val centroidY = pressed.sumOf { it.position.y.toDouble() }.toFloat() / pressed.size
-            val previous = previousSpanY
-            if (previous != null) {
-                val zoom = spanY / previous
-                if (zoom.isFinite() && zoom > 0f && abs(zoom - 1f) > 0.01f) {
-                    val gridCentroidY = (centroidY - topOffsetPx).let { y ->
-                        if (viewportHeightPx > 0) y.coerceIn(0f, viewportHeightPx.toFloat()) else y.coerceAtLeast(0f)
-                    }
-                    onZoom(zoom, gridCentroidY)
-                    pressed.forEach { it.consume() }
+private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): Modifier =
+    pointerInput(owner) {
+        awaitEachGesture {
+            var snapshot: PinchSnapshot? = null
+            var ownsGesture = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val pressed = event.changes.filter { it.pressed }
+                if (!ownsGesture && pressed.size >= 2) {
+                    val upperY = pressed.minOf { it.position.y }
+                    val lowerY = pressed.maxOf { it.position.y }
+                    snapshot = owner.begin(upperY, lowerY)
+                    ownsGesture = snapshot != null
                 }
+                val currentSnapshot = snapshot
+                if (ownsGesture && currentSnapshot != null && pressed.size >= 2) {
+                    val upperY = pressed.minOf { it.position.y }
+                    val lowerY = pressed.maxOf { it.position.y }
+                    owner.update(currentSnapshot, upperY, lowerY)
+                    event.changes.forEach { it.consume() }
+                } else if (ownsGesture && pressed.size < 2) {
+                    owner.end()
+                    ownsGesture = false
+                    snapshot = null
+                }
+                if (event.changes.none { it.pressed }) break
             }
-            previousSpanY = spanY
         }
     }
-}
 
 @Composable
-private fun TimeSidebar(hours: IntRange, hourHeightDp: Float, onZoom: (Float, Float) -> Unit) {
-    val currentOnZoom by rememberUpdatedState(onZoom)
+private fun TimeSidebar(hours: IntRange, hourHeightDp: Float) {
     val hourCount = hours.count()
     val textColor = WarmInk
     Box(
         modifier = Modifier
             .width(TimeSidebarWidth)
-            .height((hourHeightDp * hourCount).dp)
-            .pointerInput(Unit) {
-                detectTransformGestures { centroid, _, zoom, _ ->
-                    currentOnZoom(zoom, centroid.y)
-                }
-            },
+            .height((hourHeightDp * hourCount).dp),
     ) {
         Canvas(Modifier.matchParentSize()) {
             val rowHeight = hourHeightDp.dp.toPx()
