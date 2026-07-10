@@ -15,6 +15,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.WidgetDataGeneration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,6 +59,7 @@ class KgsCalendarApplication : Application() {
         "pending_mutations",
     ) {
         override fun onInvalidated(tables: Set<String>) {
+            WidgetDataGeneration.increment()
             scheduleWidgetRefresh()
         }
     }
@@ -131,7 +133,10 @@ class KgsCalendarApplication : Application() {
                 appGraph.settingsStore.languageMode,
             ) { values -> values.toList() }
                 .distinctUntilChanged()
-                .collect { scheduleWidgetRefresh() }
+                .collect {
+                    WidgetDataGeneration.increment()
+                    scheduleWidgetRefresh()
+                }
         }
         scheduleWidgetRefresh()
     }

@@ -131,5 +131,6 @@
         android:layout_height="11dp"
         android:layout_gravity="bottom"
         android:background="@drawable/widget_month_cell_bottom_fade"
-        android:text="" />
+        android:text=""
+        android:visibility="gone" />
 </FrameLayout>

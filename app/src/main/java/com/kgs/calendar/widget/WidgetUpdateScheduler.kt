@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 internal object KgsWidgetUpdateScheduler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pendingResizeJobs = mutableMapOf<String, Job>()
+    private val latestJobs = mutableMapOf<String, Job>()
 
     fun update(
         context: Context,
@@ -57,5 +58,25 @@ internal object KgsWidgetUpdateScheduler {
 
     internal fun launch(block: suspend () -> Unit) {
         scope.launch { block() }
+    }
+
+    internal fun launchLatest(
+        key: String,
+        onCompletion: () -> Unit = {},
+        block: suspend () -> Unit,
+    ) {
+        synchronized(latestJobs) {
+            latestJobs.remove(key)?.cancel()
+            val job = scope.launch { block() }
+            latestJobs[key] = job
+            job.invokeOnCompletion {
+                onCompletion()
+                synchronized(latestJobs) {
+                    if (latestJobs[key] == job) {
+                        latestJobs.remove(key)
+                    }
+                }
+            }
+        }
     }
 }

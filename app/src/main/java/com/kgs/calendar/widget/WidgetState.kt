@@ -1,11 +1,11 @@
 package com.kgs.calendar.widget
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.SystemClock
-import kotlinx.coroutines.CancellationException
+import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
 
 internal object KgsWidgetMonthState {
     private const val PREFS_NAME = "kgs_widget_state"
@@ -14,51 +14,80 @@ internal object KgsWidgetMonthState {
     private const val DIRECTION_PREFIX = "month_direction_"
     private const val REVISION_PREFIX = "month_revision_"
 
-    fun month(context: Context, appWidgetId: Int, fallback: YearMonth): YearMonth {
-        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString("$MONTH_PREFIX$appWidgetId", null)
-        return raw?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: fallback
-    }
+    fun apply(
+        context: Context,
+        appWidgetId: Int,
+        command: MonthCommand,
+        clock: Clock = Clock.systemDefaultZone(),
+    ): MonthNavSnapshot =
+        WidgetMonthNavigation(PreferencesMonthNavStorage(preferences(context)), clock)
+            .navigate(appWidgetId, command)
 
-    fun offset(context: Context, appWidgetId: Int, months: Int) {
-        val current = month(context, appWidgetId, YearMonth.now())
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val currentPage = prefs.getInt("$PAGE_PREFIX$appWidgetId", 0)
-        val currentRevision = prefs.getLong("$REVISION_PREFIX$appWidgetId", 0L)
-        prefs.edit()
-            .putString("$MONTH_PREFIX$appWidgetId", current.plusMonths(months.toLong()).toString())
-            .putInt("$PAGE_PREFIX$appWidgetId", 1 - currentPage.coerceIn(0, 1))
-            .putInt("$DIRECTION_PREFIX$appWidgetId", months.coerceIn(-1, 1))
-            .putLong("$REVISION_PREFIX$appWidgetId", currentRevision + 1L)
-            .commit()
-    }
+    fun isCurrent(context: Context, snapshot: MonthNavSnapshot): Boolean =
+        WidgetMonthNavigation(
+            storage = PreferencesMonthNavStorage(preferences(context)),
+            clock = Clock.systemDefaultZone(),
+        ).isCurrent(snapshot)
 
-    fun resetToCurrent(context: Context, appWidgetId: Int) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val currentRevision = prefs.getLong("$REVISION_PREFIX$appWidgetId", 0L)
-        prefs.edit()
-            .putString("$MONTH_PREFIX$appWidgetId", YearMonth.now().toString())
-            .putInt("$DIRECTION_PREFIX$appWidgetId", 0)
-            .putLong("$REVISION_PREFIX$appWidgetId", currentRevision + 1L)
-            .commit()
-    }
-
-    fun page(context: Context, appWidgetId: Int): Int =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getInt("$PAGE_PREFIX$appWidgetId", 0)
-            .coerceIn(0, 1)
+    fun month(context: Context, appWidgetId: Int, fallback: YearMonth): YearMonth =
+        PreferencesMonthNavStorage(preferences(context)).read(appWidgetId)?.month ?: fallback
 
     fun revision(context: Context, appWidgetId: Int): Long =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getLong("$REVISION_PREFIX$appWidgetId", 0L)
+        PreferencesMonthNavStorage(preferences(context)).read(appWidgetId)?.revision ?: 0L
 
-    fun consumeDirection(context: Context, appWidgetId: Int): Int {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val direction = prefs.getInt("$DIRECTION_PREFIX$appWidgetId", 0)
-        if (direction != 0) {
-            prefs.edit().putInt("$DIRECTION_PREFIX$appWidgetId", 0).apply()
+    fun clear(context: Context, appWidgetId: Int) {
+        synchronized(PreferencesMonthNavStorage.lock) {
+            preferences(context).edit()
+                .remove("$MONTH_PREFIX$appWidgetId")
+                .remove("$PAGE_PREFIX$appWidgetId")
+                .remove("$DIRECTION_PREFIX$appWidgetId")
+                .remove("$REVISION_PREFIX$appWidgetId")
+                .commit()
         }
-        return direction
+    }
+
+    private fun preferences(context: Context): SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private class PreferencesMonthNavStorage(
+        private val preferences: SharedPreferences,
+    ) : MonthNavStorage {
+        override fun update(
+            widgetId: Int,
+            transform: (MonthNavSnapshot?) -> MonthNavSnapshot,
+        ): MonthNavSnapshot = synchronized(lock) {
+            val updated = transform(readLocked(widgetId))
+            check(
+                preferences.edit()
+                    .putString("$MONTH_PREFIX$widgetId", updated.month.toString())
+                    .putInt("$PAGE_PREFIX$widgetId", updated.page.coerceIn(0, 1))
+                    .putInt("$DIRECTION_PREFIX$widgetId", updated.direction.coerceIn(-1, 1))
+                    .putLong("$REVISION_PREFIX$widgetId", updated.revision)
+                    .commit(),
+            ) { "Failed to commit month widget navigation state" }
+            updated
+        }
+
+        override fun read(widgetId: Int): MonthNavSnapshot? = synchronized(lock) {
+            readLocked(widgetId)
+        }
+
+        private fun readLocked(widgetId: Int): MonthNavSnapshot? {
+            val month = preferences.getString("$MONTH_PREFIX$widgetId", null)
+                ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
+                ?: return null
+            return MonthNavSnapshot(
+                widgetId = widgetId,
+                month = month,
+                page = preferences.getInt("$PAGE_PREFIX$widgetId", 0).coerceIn(0, 1),
+                direction = preferences.getInt("$DIRECTION_PREFIX$widgetId", 0).coerceIn(-1, 1),
+                revision = preferences.getLong("$REVISION_PREFIX$widgetId", 0L),
+            )
+        }
+
+        companion object {
+            val lock = Any()
+        }
     }
 }
 
@@ -190,12 +219,23 @@ internal object KgsWidgetMonthPageCache {
     private const val MAX_ENTRIES = 18
     private val pages = LinkedHashMap<String, WidgetMonthPage>(MAX_ENTRIES, 0.75f, true)
 
-    fun get(month: YearMonth, settings: WidgetRenderSettings): WidgetMonthPage? =
-        synchronized(pages) { pages[cacheKey(month, settings)] }
+    fun get(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+        generation: Long = WidgetDataGeneration.current(),
+    ): WidgetMonthPage? =
+        synchronized(pages) { pages[cacheKey(month, settings, zoneId, generation)] }
 
-    fun put(month: YearMonth, settings: WidgetRenderSettings, page: WidgetMonthPage) {
+    fun put(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+        page: WidgetMonthPage,
+        generation: Long = WidgetDataGeneration.current(),
+    ) {
         synchronized(pages) {
-            pages[cacheKey(month, settings)] = page
+            pages[cacheKey(month, settings, zoneId, generation)] = page
             while (pages.size > MAX_ENTRIES) {
                 val firstKey = pages.entries.firstOrNull()?.key ?: break
                 pages.remove(firstKey)
@@ -203,26 +243,12 @@ internal object KgsWidgetMonthPageCache {
         }
     }
 
-    fun warm(context: Context, zoneId: ZoneId, centerMonth: YearMonth, settings: WidgetRenderSettings) {
-        val appContext = context.applicationContext
-        val months = listOf(centerMonth.minusMonths(1), centerMonth.plusMonths(1))
-            .filter { get(it, settings) == null }
-        if (months.isEmpty()) return
-        KgsWidgetUpdateScheduler.launch {
-            val source = KgsWidgetDataSource(appContext, zoneId)
-            months.forEach { month ->
-                runCatching {
-                    source.monthPage(month, settings).also { put(month, settings, it) }
-                }.onFailure { error ->
-                    if (error !is CancellationException) {
-                        WidgetLog.d(appContext, "Failed to warm Month widget cache", error)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun cacheKey(month: YearMonth, settings: WidgetRenderSettings): String =
+    private fun cacheKey(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+        generation: Long,
+    ): String =
         buildString {
             append(month)
             append('|')
@@ -237,7 +263,11 @@ internal object KgsWidgetMonthPageCache {
             append(settings.showCompletedTasks)
             append('|')
             append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
-    }
+            append('|')
+            append(zoneId)
+            append('|')
+            append(generation)
+        }
 }
 
 internal object KgsWidgetMonthUpdateSignatures {
