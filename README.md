@@ -59,10 +59,10 @@ The public privacy policy is available in [index.html](index.html). It describes
 
 ## License
 
-This repository is published without an open-source license.
+KGS Calendar is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
 
-Copyright © 2026 KGS501. All rights reserved.
+Copyright (c) 2026 KGS501.
 
-No permission is granted to copy, modify, distribute, sublicense, or use the source code except with explicit written permission from KGS501 or as otherwise permitted by applicable law.
+This is a source-available, non-commercial license, not an open-source license. It permits non-commercial use, modification, and distribution, subject to its terms. Commercial use requires explicit written permission from KGS501.
 
-See [NO-LICENSE.md](NO-LICENSE.md) for the repository notice. Third-party dependencies, libraries, services, and assets retain their own licenses and attribution requirements.
+Third-party dependencies, libraries, services, and assets retain their own licenses and attribution requirements.
