@@ -32,6 +32,55 @@ class WidgetMonthCacheTest {
     }
 
     @Test
+    fun navigationLookupPrefersCurrentGenerationThenFallsBackToLatestKnown() {
+        val month = YearMonth.of(2027, 2)
+        val settings = WidgetRenderSettings(firstDayOfWeek = DayOfWeek.MONDAY)
+        val page = WidgetMonthPage(month, 5, emptyList())
+        KgsWidgetMonthPageCache.put(month, settings, "cache-test-a", page, generation = 7)
+
+        val current = KgsWidgetMonthPageCache.getForNavigation(
+            month,
+            settings,
+            "cache-test-a",
+            generation = 7,
+        )
+        val latest = KgsWidgetMonthPageCache.getForNavigation(
+            month,
+            settings,
+            "cache-test-a",
+            generation = 8,
+        )
+
+        assertEquals(page, current?.page)
+        assertEquals(WidgetMonthPageFreshness.CurrentGeneration, current?.freshness)
+        assertEquals(page, latest?.page)
+        assertEquals(WidgetMonthPageFreshness.LatestKnown, latest?.freshness)
+    }
+
+    @Test
+    fun latestKnownNavigationPageDoesNotCrossModelNamespace() {
+        val month = YearMonth.of(2027, 3)
+        val monday = WidgetRenderSettings(firstDayOfWeek = DayOfWeek.MONDAY)
+        val sunday = monday.copy(firstDayOfWeek = DayOfWeek.SUNDAY)
+        KgsWidgetMonthPageCache.put(
+            month,
+            monday,
+            "cache-test-b",
+            WidgetMonthPage(month, 5, emptyList()),
+            generation = 4,
+        )
+
+        assertEquals(
+            null,
+            KgsWidgetMonthPageCache.getForNavigation(month, sunday, "cache-test-b", generation = 5),
+        )
+        assertEquals(
+            null,
+            KgsWidgetMonthPageCache.getForNavigation(month, monday, "cache-test-c", generation = 5),
+        )
+    }
+
+    @Test
     fun warmerRechecksCacheImmediatelyBeforeEachLoad() = runTest {
         val may = YearMonth.of(2026, 5)
         val june = may.plusMonths(1)

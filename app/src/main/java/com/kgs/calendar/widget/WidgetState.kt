@@ -258,6 +258,16 @@ internal object KgsWidgetInteractionTokens {
         synchronized(tokens) { tokens[key] == token }
 }
 
+internal enum class WidgetMonthPageFreshness {
+    CurrentGeneration,
+    LatestKnown,
+}
+
+internal data class WidgetMonthPageLookup(
+    val page: WidgetMonthPage,
+    val freshness: WidgetMonthPageFreshness,
+)
+
 internal object KgsWidgetMonthPageCache {
     private const val MAX_ENTRIES = 64
     private val pages = LinkedHashMap<String, WidgetMonthPage>(MAX_ENTRIES, 0.75f, true)
@@ -268,7 +278,27 @@ internal object KgsWidgetMonthPageCache {
         zoneId: String,
         generation: Long = WidgetDataGeneration.current(),
     ): WidgetMonthPage? =
-        synchronized(pages) { pages[cacheKey(month, settings, zoneId, generation)] }
+        synchronized(pages) { pages[generationKey(month, settings, zoneId, generation)] }
+
+    fun getForNavigation(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+        generation: Long = WidgetDataGeneration.current(),
+    ): WidgetMonthPageLookup? = synchronized(pages) {
+        pages[generationKey(month, settings, zoneId, generation)]?.let { page ->
+            return@synchronized WidgetMonthPageLookup(
+                page = page,
+                freshness = WidgetMonthPageFreshness.CurrentGeneration,
+            )
+        }
+        pages[latestKey(month, settings, zoneId)]?.let { page ->
+            WidgetMonthPageLookup(
+                page = page,
+                freshness = WidgetMonthPageFreshness.LatestKnown,
+            )
+        }
+    }
 
     fun put(
         month: YearMonth,
@@ -278,7 +308,8 @@ internal object KgsWidgetMonthPageCache {
         generation: Long = WidgetDataGeneration.current(),
     ) {
         synchronized(pages) {
-            pages[cacheKey(month, settings, zoneId, generation)] = page
+            pages[generationKey(month, settings, zoneId, generation)] = page
+            pages[latestKey(month, settings, zoneId)] = page
             while (pages.size > MAX_ENTRIES) {
                 val firstKey = pages.entries.firstOrNull()?.key ?: break
                 pages.remove(firstKey)
@@ -286,12 +317,24 @@ internal object KgsWidgetMonthPageCache {
         }
     }
 
-    private fun cacheKey(
+    private fun generationKey(
         month: YearMonth,
         settings: WidgetRenderSettings,
         zoneId: String,
         generation: Long,
-    ): String = "${widgetMonthPageModelNamespace(settings, zoneId)}|$generation|$month"
+    ): String = "${monthKey(month, settings, zoneId)}|generation=$generation"
+
+    private fun latestKey(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+    ): String = "${monthKey(month, settings, zoneId)}|latest"
+
+    private fun monthKey(
+        month: YearMonth,
+        settings: WidgetRenderSettings,
+        zoneId: String,
+    ): String = "${widgetMonthPageModelNamespace(settings, zoneId)}|month=$month"
 }
 
 internal fun widgetMonthPageModelNamespace(
