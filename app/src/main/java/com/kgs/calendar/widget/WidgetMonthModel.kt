@@ -186,6 +186,31 @@ internal data class WidgetMonthPage(
         month.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))
 }
 
+internal fun WidgetMonthPage.loadingSkeleton(color: Int): WidgetMonthPage = copy(
+    cells = cells.map { cell ->
+        if (!cell.inCurrentMonth) {
+            cell.copy(items = emptyList(), totalItemCount = 0)
+        } else {
+            val laneCount = if (cell.date.dayOfMonth % 4 == 0) 2 else 1
+            val placeholders = (0 until laneCount).map { lane ->
+                WidgetMonthItem(
+                    id = "month-skeleton:${cell.date}:$lane",
+                    title = "",
+                    color = color,
+                    sortMillis = Long.MAX_VALUE,
+                    lane = lane,
+                    continuesFromPrevious = false,
+                    continuesToNext = false,
+                    fadesFromPrevious = false,
+                    fadesToNext = false,
+                    completed = false,
+                )
+            }
+            cell.copy(items = placeholders, totalItemCount = placeholders.size)
+        }
+    },
+)
+
 internal data class WidgetMonthCellContent(
     val date: LocalDate,
     val inCurrentMonth: Boolean,

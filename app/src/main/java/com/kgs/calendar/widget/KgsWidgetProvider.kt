@@ -95,7 +95,6 @@ private const val WIDGET_MONTH_SPAN_FADE_OVERLAP_DP = 1f
 private const val WIDGET_MONTH_SPAN_FADE_TEXT_INSET_DP = 3f
 private const val WIDGET_MONTH_SPAN_BITMAP_SCALE = 3.0f
 private const val WIDGET_MONTH_RESIZE_DEBOUNCE_MS = 320L
-private const val WIDGET_MONTH_NAVIGATION_COALESCE_MS = 300L
 internal const val WIDGET_MONTH_RENDER_SIGNATURE_VERSION = 40
 private const val WIDGET_DAY_RENDER_SIGNATURE_VERSION = 10
 private const val WIDGET_DAY_START_HOUR = 0
@@ -1242,7 +1241,7 @@ object KgsWidgetUpdater {
             if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return false
             return runCatching {
                 if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return false
-                if (kind == KgsWidgetKind.Multi || !result.hasCompleteData) {
+                if (kind == KgsWidgetKind.Multi) {
                     manager.partiallyUpdateAppWidget(appWidgetId, result.views)
                 } else {
                     manager.updateAppWidget(appWidgetId, result.views)
@@ -1256,22 +1255,25 @@ object KgsWidgetUpdater {
             }.getOrDefault(false)
         }
 
-        val emptyPage = pageSource.empty(snapshot.month, settings)
-        if (!applyIfCurrent(renderer.render(kind, snapshot, options, settings, emptyPage, hasCompleteData = false))) {
+        var generation = WidgetDataGeneration.current()
+        val cachedPage = KgsWidgetMonthPageCache.get(snapshot.month, settings, zoneId.id, generation)
+        val skeletonPage = pageSource.empty(snapshot.month, settings)
+        val initialPage = selectMonthNavigationInitialPage(cachedPage, skeletonPage)
+
+        if (!applyIfCurrent(
+                renderer.render(
+                    kind = kind,
+                    snapshot = snapshot,
+                    options = options,
+                    settings = settings,
+                    page = initialPage.page,
+                    hasCompleteData = initialPage.stage == MonthNavigationPageStage.Complete,
+                ),
+            )
+        ) {
             return
         }
         onAcknowledged()
-
-        delay(WIDGET_MONTH_NAVIGATION_COALESCE_MS)
-        if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
-
-        var generation = WidgetDataGeneration.current()
-        val cachedPage = KgsWidgetMonthPageCache.get(snapshot.month, settings, zoneId.id, generation)
-        cachedPage?.let { page ->
-            if (!applyIfCurrent(renderer.render(kind, snapshot, options, settings, page, hasCompleteData = true))) {
-                return
-            }
-        }
 
         if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
         var authoritativePage = try {
@@ -1298,6 +1300,7 @@ object KgsWidgetUpdater {
             }
         }
         if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
+        if (WidgetDataGeneration.current() != generation) return
         KgsWidgetMonthPageCache.put(
             month = snapshot.month,
             settings = settings,
@@ -2850,26 +2853,23 @@ internal class KgsWidgetRenderer(
         page: WidgetMonthPage,
         hasCompleteData: Boolean,
     ): MonthWidgetRenderResult {
-        if (!hasCompleteData) {
-            return MonthWidgetRenderResult(
-                views = renderMonthNavigationAcknowledgement(kind, options, settings, page),
-                hasCompleteData = false,
-                signature = null,
-            )
-        }
         return when (kind) {
             KgsWidgetKind.Month -> renderMonthPageResult(
-            appWidgetId = snapshot.widgetId,
-            options = options,
-            settings = settings,
-            page = page,
-            hasCompleteData = true,
-        )
-            KgsWidgetKind.Multi -> MonthWidgetRenderResult(
-                views = renderMultiMonthNavigationPage(snapshot.widgetId, options, settings, page),
-                hasCompleteData = true,
-                signature = null,
+                appWidgetId = snapshot.widgetId,
+                options = options,
+                settings = settings,
+                page = page,
+                hasCompleteData = hasCompleteData,
             )
+            KgsWidgetKind.Multi -> {
+                val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
+                val renderedPage = if (hasCompleteData) page else page.loadingSkeleton(palette.muted)
+                MonthWidgetRenderResult(
+                    views = renderMultiMonthNavigationPage(snapshot.widgetId, options, settings, renderedPage),
+                    hasCompleteData = hasCompleteData,
+                    signature = null,
+                )
+            }
             else -> error("Month navigation is unsupported for ${kind.name}")
         }
     }
@@ -3605,77 +3605,6 @@ internal class KgsWidgetRenderer(
         return renderMonthPageResult(appWidgetId, options, settings, page, hasCompleteData = true)
     }
 
-    private fun renderMonthNavigationAcknowledgement(
-        kind: KgsWidgetKind,
-        options: Bundle,
-        settings: WidgetRenderSettings,
-        page: WidgetMonthPage,
-    ): RemoteViews {
-        val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
-        return when (kind) {
-            KgsWidgetKind.Month -> {
-                val size = WidgetSize.from(context, options, kind)
-                val renderSpec = WidgetMonthRenderSpec.from(size, page.rowCount)
-                val title = page.title(settings.locale)
-                val hideTitle = shouldHideWidgetTitle(
-                    renderSpec.totalWidthDp,
-                    title,
-                    reservedDp = 178f,
-                    textSp = renderSpec.titleTextSp,
-                )
-                RemoteViews(packageName, monthRenderedLayout()).apply {
-                    setTextViewText(R.id.widget_title, title)
-                    setTextColor(R.id.widget_title, palette.text)
-                    setTextViewTextSize(R.id.widget_title, TypedValue.COMPLEX_UNIT_SP, renderSpec.titleTextSp)
-                    setViewVisibility(R.id.widget_title, if (hideTitle) View.GONE else View.VISIBLE)
-                    setInt(R.id.widget_header, "setGravity", if (hideTitle) Gravity.CENTER else Gravity.CENTER_VERTICAL)
-                    setViewVisibility(
-                        R.id.widget_day_today,
-                        if (page.month == YearMonth.now(zoneId)) View.GONE else View.VISIBLE,
-                    )
-                }
-            }
-            KgsWidgetKind.Multi -> {
-                val size = WidgetSize.from(context, options, kind)
-                val contentHeightDp = (size.heightDp - 12).coerceAtLeast(2)
-                val monthPanelHeightDp = (
-                    contentHeightDp * SettingsStore.normalizeMultiWidgetMonthPercent(settings.multiWidgetMonthPercent) / 100f
-                    ).roundToInt().coerceIn(1, contentHeightDp - 1)
-                val renderSpec = WidgetMonthRenderSpec.from(
-                    WidgetSize(size.widthDp, monthPanelHeightDp),
-                    page.rowCount,
-                )
-                val title = page.title(settings.locale)
-                val hideTitle = shouldHideWidgetTitle(
-                    size.widthDp - 24,
-                    title,
-                    reservedDp = 150f,
-                    textSp = renderSpec.titleTextSp,
-                )
-                RemoteViews(packageName, R.layout.widget_calendar_multi).apply {
-                    setTextViewText(R.id.widget_multi_month_title, title)
-                    setTextColor(R.id.widget_multi_month_title, palette.text)
-                    setTextViewTextSize(
-                        R.id.widget_multi_month_title,
-                        TypedValue.COMPLEX_UNIT_SP,
-                        renderSpec.titleTextSp,
-                    )
-                    setViewVisibility(R.id.widget_multi_month_title, if (hideTitle) View.GONE else View.VISIBLE)
-                    setInt(
-                        R.id.widget_multi_month_header,
-                        "setGravity",
-                        if (hideTitle) Gravity.CENTER else Gravity.CENTER_VERTICAL,
-                    )
-                    setViewVisibility(
-                        R.id.widget_day_today,
-                        if (page.month == YearMonth.now(zoneId)) View.GONE else View.VISIBLE,
-                    )
-                }
-            }
-            else -> error("Month navigation is unsupported for ${kind.name}")
-        }
-    }
-
     private fun renderMonthPageResult(
         appWidgetId: Int,
         options: Bundle,
@@ -3685,14 +3614,15 @@ internal class KgsWidgetRenderer(
     ): MonthWidgetRenderResult {
         val today = LocalDate.now(zoneId)
         val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
+        val renderedPage = if (hasCompleteData) page else page.loadingSkeleton(palette.muted)
         val currentSize = WidgetSize.from(context, options, KgsWidgetKind.Month)
-        val renderSpec = WidgetMonthRenderSpec.from(currentSize, page.rowCount)
+        val renderSpec = WidgetMonthRenderSpec.from(currentSize, renderedPage.rowCount)
 
         var itemCount = 0
-        for (cell in page.cells) itemCount += cell.items.size
+        for (cell in renderedPage.cells) itemCount += cell.items.size
         WidgetLog.d(
             context,
-            "Month widget $appWidgetId bucket=${renderSpec.bucket.name} rows=${page.rowCount} weekHeight=${renderSpec.weekCellHeightDp} items=$itemCount complete=$hasCompleteData",
+            "Month widget $appWidgetId bucket=${renderSpec.bucket.name} rows=${renderedPage.rowCount} weekHeight=${renderSpec.weekCellHeightDp} items=$itemCount complete=$hasCompleteData",
         )
 
         return MonthWidgetRenderResult(
@@ -3701,7 +3631,7 @@ internal class KgsWidgetRenderer(
                 settings = settings,
                 palette = palette,
                 today = today,
-                page = page,
+                page = renderedPage,
                 renderSpec = renderSpec,
             ),
             hasCompleteData = hasCompleteData,

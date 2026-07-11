@@ -47,6 +47,39 @@ class WidgetMonthNavigationTest {
         assertTrue(coordinator.isCurrent(today))
     }
 
+    @Test
+    fun cachedTargetUsesCompletePageWithoutSkeleton() {
+        val cached = page(YearMonth.of(2026, 2))
+        val skeleton = page(YearMonth.of(2026, 2))
+
+        val initial = selectMonthNavigationInitialPage(cached, skeleton)
+
+        assertEquals(MonthNavigationPageStage.Complete, initial.stage)
+        assertTrue(initial.page === cached)
+    }
+
+    @Test
+    fun cacheMissUsesTargetSkeleton() {
+        val skeleton = page(YearMonth.of(2026, 2))
+
+        val initial = selectMonthNavigationInitialPage(null, skeleton)
+
+        assertEquals(MonthNavigationPageStage.Skeleton, initial.stage)
+        assertTrue(initial.page === skeleton)
+    }
+
+    @Test
+    fun warmWindowCoversSixMonthsInBothDirections() {
+        val center = YearMonth.of(2026, 7)
+        val months = monthCacheWindow(center)
+
+        assertEquals(13, months.size)
+        assertEquals(center.minusMonths(6), months.first())
+        assertEquals(center.plusMonths(6), months.last())
+    }
+
+    private fun page(month: YearMonth): WidgetMonthPage = WidgetMonthPage(month, 5, emptyList())
+
     private class InMemoryMonthNavStorage : MonthNavStorage {
         private val snapshots = mutableMapOf<Int, MonthNavSnapshot>()
 

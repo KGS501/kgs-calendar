@@ -109,22 +109,24 @@ internal fun warmWidgetMonthPageCache(
     settings: WidgetRenderSettings,
 ) {
     val generation = WidgetDataGeneration.current()
-    val months = listOf(centerMonth.minusMonths(1), centerMonth.plusMonths(1))
+    val months = monthCacheWindow(centerMonth)
         .filter { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) == null }
     if (months.isEmpty()) return
     val appContext = context.applicationContext
-    KgsWidgetUpdateScheduler.launch {
+    KgsWidgetUpdateScheduler.launchLatest(
+        key = "month-cache:${zoneId.id}:${settings.hashCode()}",
+    ) {
         val source = WidgetMonthPageSource(appContext, zoneId)
-        months.forEach { month ->
+        for (month in months) {
+            if (WidgetDataGeneration.current() != generation) return@launchLatest
             try {
                 val page = source.load(month, settings)
-                if (WidgetDataGeneration.current() == generation) {
-                    KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
-                }
+                if (WidgetDataGeneration.current() != generation) return@launchLatest
+                KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                WidgetLog.d(appContext, "Failed to warm Month widget cache", error)
+                WidgetLog.d(appContext, "Failed to warm Month widget cache for $month", error)
             }
         }
     }

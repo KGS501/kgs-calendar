@@ -216,7 +216,7 @@ internal object KgsWidgetInteractionTokens {
 }
 
 internal object KgsWidgetMonthPageCache {
-    private const val MAX_ENTRIES = 18
+    private const val MAX_ENTRIES = 64
     private val pages = LinkedHashMap<String, WidgetMonthPage>(MAX_ENTRIES, 0.75f, true)
 
     fun get(

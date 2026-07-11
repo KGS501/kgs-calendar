@@ -494,6 +494,23 @@ class WidgetMonthModelTest {
         assertTrue(semesterJuly25.lane > schoolJuly23.lane)
     }
 
+    @Test
+    fun loadingSkeletonUsesOnlyCurrentMonthCells() {
+        val month = YearMonth.of(2026, 2)
+        val source = WidgetMonthModel.page(
+            month = month,
+            start = WidgetMonthModel.gridStart(month, java.time.DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, java.time.DayOfWeek.MONDAY),
+            monthLayout = WidgetMonthLayout(emptyMap(), emptyMap()),
+        )
+
+        val skeleton = source.loadingSkeleton(0xFF777777.toInt())
+
+        assertTrue(skeleton.cells.filter { it.inCurrentMonth }.all { it.items.isNotEmpty() })
+        assertTrue(skeleton.cells.filterNot { it.inCurrentMonth }.all { it.items.isEmpty() })
+        assertTrue(skeleton.cells.flatMap { it.items }.all { it.id.startsWith("month-skeleton:") })
+    }
+
     private fun rowWithItems(count: Int): List<WidgetMonthCellContent> {
         val date = LocalDate.of(2026, 6, 1)
         return listOf(
