@@ -384,6 +384,8 @@ import com.kgs.calendar.ui.model.toTime
 import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
+import com.kgs.calendar.ui.month.MonthRowOrderComparator
+import com.kgs.calendar.ui.month.MonthRowOrderItem
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -4079,14 +4081,15 @@ private data class MonthRowPillCandidate(
     val id: String,
     val uid: String?,
     val resourceHref: String?,
-    val title: String,
+    override val title: String,
     val color: Int,
     val completed: Boolean,
     val eventStatus: String?,
-    val start: LocalDate,
+    override val start: LocalDate,
     val end: LocalDate,
-) {
-    val spanDays: Long = ChronoUnit.DAYS.between(start, end).coerceAtLeast(0) + 1
+    override val occurrenceSortMillis: Long,
+) : MonthRowOrderItem {
+    override val spanDays: Long = ChronoUnit.DAYS.between(start, end).coerceAtLeast(0) + 1
     val isMultiDay: Boolean = spanDays > 1
 }
 
@@ -4133,6 +4136,7 @@ private fun buildMonthRowPillSegments(
                         eventStatus = event.status,
                         start = start,
                         end = end,
+                        occurrenceSortMillis = event.startsAtMillis,
                     ),
                 )
             }
@@ -4154,6 +4158,7 @@ private fun buildMonthRowPillSegments(
                         eventStatus = null,
                         start = start,
                         end = end,
+                        occurrenceSortMillis = task.startAtMillis ?: task.dueAtMillis ?: Long.MAX_VALUE,
                     ),
                 )
             }
@@ -4175,11 +4180,7 @@ private fun buildMonthRowPillSegments(
     // starts later in the same row (for example a holiday beginning on Monday). Duration-first
     // packing keeps the visually important continuous bars visible while still stacking unrelated
     // same-day items in additional lanes.
-    val sortedCandidates = candidates.sortedWith(
-        compareByDescending<MonthRowPillCandidate> { it.spanDays }
-            .thenBy { it.start }
-            .thenBy { it.title },
-    )
+    val sortedCandidates = candidates.sortedWith(MonthRowOrderComparator)
     sortedCandidates.forEach { candidate ->
         val visualStart = maxOf(candidate.start, rowStart)
         val visualEnd = minOf(candidate.end, rowEnd)
