@@ -134,6 +134,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -8001,6 +8002,13 @@ private fun SettingsPage(
                                     navigateTo(SettingsDestination.Privacy)
                                 }
                                 SettingsMenuRow(
+                                    title = stringResource(R.string.sponsor_project),
+                                    value = stringResource(R.string.sponsor_project_summary),
+                                    leadingIcon = Icons.Default.Favorite,
+                                ) {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SponsorProjectUrl)))
+                                }
+                                SettingsMenuRow(
                                     title = stringResource(R.string.report_bug),
                                     value = stringResource(R.string.report_bug_summary),
                                     leadingIcon = Icons.Default.BugReport,
@@ -10048,6 +10056,7 @@ private fun PrivacyPolicyPage() {
 
 private const val PrivacyPolicyUrl = "https://kgs501.github.io/kgs-calendar/"
 private const val BugReportIssuesUrl = "https://github.com/KGS501/kgs-calendar/issues"
+internal const val SponsorProjectUrl = "https://github.com/sponsors/KGS501"
 private const val GoogleCalendarSyncSelectUrl = "https://calendar.google.com/calendar/syncselect"
 
 @Composable

@@ -222,6 +222,8 @@
     <string name="design">Design</string>
     <string name="privacy">Privacy</string>
     <string name="privacy_summary">Data storage, sync, and map services</string>
+    <string name="sponsor_project">Sponsor this project</string>
+    <string name="sponsor_project_summary">Open GitHub Sponsors</string>
     <string name="report_bug">Report a bug</string>
     <string name="report_bug_summary">Open GitHub issues</string>
     <string name="open_privacy_policy">Open full privacy policy</string>
