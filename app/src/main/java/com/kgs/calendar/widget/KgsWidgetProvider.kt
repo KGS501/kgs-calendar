@@ -50,6 +50,8 @@ import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -87,14 +89,11 @@ private const val COLLECTION_ACTION_OPEN = "open"
 private const val COLLECTION_ACTION_TOGGLE_TASK = "toggle_task"
 private const val COLLECTION_ACTION_TOGGLE_SUBTASKS = "toggle_subtasks"
 private const val WIDGET_MONTH_DOT_SIZE_DP = 3.5f
-private const val WIDGET_MONTH_SPAN_CHIP_HEIGHT_DP = 14f
-private const val WIDGET_MONTH_SPAN_CHIP_HORIZONTAL_INSET_DP = 2f
 private const val WIDGET_MONTH_SPAN_FADE_WIDTH_DP = 14f
-private const val WIDGET_MONTH_SPAN_FADE_OVERLAP_DP = 1f
 private const val WIDGET_MONTH_SPAN_FADE_TEXT_INSET_DP = 3f
-private const val WIDGET_MONTH_SPAN_BITMAP_SCALE = 3.0f
 private const val WIDGET_MONTH_RESIZE_DEBOUNCE_MS = 320L
-internal const val WIDGET_MONTH_RENDER_SIGNATURE_VERSION = 40
+private const val WIDGET_MULTI_CONTENT_PADDING_DP = 12
+internal const val WIDGET_MONTH_RENDER_SIGNATURE_VERSION = 41
 private const val WIDGET_DAY_RENDER_SIGNATURE_VERSION = 10
 private const val WIDGET_DAY_START_HOUR = 0
 private const val WIDGET_DAY_END_HOUR = 23
@@ -205,7 +204,7 @@ abstract class KgsWidgetProvider(
     private val kind: KgsWidgetKind,
 ) : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        KgsWidgetUpdateScheduler.update(context, kind, appWidgetIds)
+        KgsWidgetUpdateScheduler.update(context, kind, appWidgetIds, cause = WidgetUpdateCause.Periodic)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -214,7 +213,13 @@ abstract class KgsWidgetProvider(
         appWidgetId: Int,
         newOptions: Bundle,
     ) {
-        KgsWidgetUpdateScheduler.update(context, kind, intArrayOf(appWidgetId), debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160)
+        KgsWidgetUpdateScheduler.update(
+            context,
+            kind,
+            intArrayOf(appWidgetId),
+            debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160,
+            cause = WidgetUpdateCause.Resize,
+        )
     }
 
     override fun onEnabled(context: Context) {
@@ -301,6 +306,7 @@ abstract class KgsWidgetProvider(
                     appWidgetIds = appWidgetId
                         .takeIf { it != AppWidgetManager.INVALID_APPWIDGET_ID }
                         ?.let { intArrayOf(it) },
+                    cause = WidgetUpdateCause.Manual,
                 )
             }
 
@@ -308,6 +314,7 @@ abstract class KgsWidgetProvider(
                 updateAsync(
                     context = context,
                     forceFullDayUpdate = kind == KgsWidgetKind.Day,
+                    cause = WidgetUpdateCause.Configuration,
                 )
             }
 
@@ -315,13 +322,20 @@ abstract class KgsWidgetProvider(
                 updateAsync(
                     context = context,
                     appWidgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS),
+                    cause = WidgetUpdateCause.Periodic,
                 )
             }
 
             AppWidgetManager.ACTION_APPWIDGET_OPTIONS_CHANGED -> {
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    KgsWidgetUpdateScheduler.update(context, kind, intArrayOf(appWidgetId), debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160)
+                    KgsWidgetUpdateScheduler.update(
+                        context,
+                        kind,
+                        intArrayOf(appWidgetId),
+                        debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160,
+                        cause = WidgetUpdateCause.Resize,
+                    )
                 } else {
                     super.onReceive(context, intent)
                 }
@@ -335,49 +349,42 @@ abstract class KgsWidgetProvider(
         context: Context,
         appWidgetIds: IntArray? = null,
         forceFullDayUpdate: Boolean = false,
+        cause: WidgetUpdateCause = WidgetUpdateCause.Unknown,
     ) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launch {
-            try {
-                if (appWidgetIds == null) {
-                    KgsWidgetUpdater.updateKind(
-                        context.applicationContext,
-                        kind,
-                        forceFullDayUpdate = forceFullDayUpdate,
-                    )
-                } else {
-                    KgsWidgetUpdater.update(
-                        context.applicationContext,
-                        kind,
-                        appWidgetIds,
-                        forceFullDayUpdate = forceFullDayUpdate,
-                    )
-                }
-            } finally {
-                pendingResult.finish()
-            }
-        }
+        KgsWidgetUpdateScheduler.update(
+            context = context.applicationContext,
+            kind = kind,
+            appWidgetIds = appWidgetIds,
+            forceFullDayUpdate = forceFullDayUpdate,
+            cause = cause,
+            onCompletion = pendingResult::finish,
+        )
     }
 
     private fun navigateDayAsync(context: Context, appWidgetId: Int) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launch {
-            try {
-                KgsWidgetUpdater.navigateDay(context.applicationContext, appWidgetId)
-            } finally {
-                pendingResult.finish()
-            }
+        KgsWidgetUpdateScheduler.launchWidgetLatest(
+            context = context.applicationContext,
+            kind = KgsWidgetKind.Day,
+            appWidgetId = appWidgetId,
+            cause = WidgetUpdateCause.Navigation,
+            onCompletion = pendingResult::finish,
+        ) {
+            KgsWidgetUpdater.navigateDay(context.applicationContext, appWidgetId)
         }
     }
 
     private fun toggleDayAllDayAsync(context: Context, appWidgetId: Int) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launch {
-            try {
-                KgsWidgetUpdater.toggleDayAllDay(context.applicationContext, appWidgetId)
-            } finally {
-                pendingResult.finish()
-            }
+        KgsWidgetUpdateScheduler.launchWidgetLatest(
+            context = context.applicationContext,
+            kind = KgsWidgetKind.Day,
+            appWidgetId = appWidgetId,
+            cause = WidgetUpdateCause.Interaction,
+            onCompletion = pendingResult::finish,
+        ) {
+            KgsWidgetUpdater.toggleDayAllDay(context.applicationContext, appWidgetId)
         }
     }
 
@@ -460,10 +467,12 @@ abstract class KgsWidgetProvider(
         snapshot: MonthNavSnapshot,
     ) {
         val pendingResult = goAsync()
-        val completion = OnceCompletion(pendingResult::finish)
-        KgsWidgetUpdateScheduler.launchLatest(
-            key = "month-navigation:${kind.name}:$appWidgetId",
-            onCompletion = completion::complete,
+        KgsWidgetUpdateScheduler.launchWidgetLatest(
+            context = context.applicationContext,
+            kind = kind,
+            appWidgetId = appWidgetId,
+            cause = WidgetUpdateCause.Navigation,
+            onCompletion = pendingResult::finish,
         ) {
             KgsWidgetUpdater.navigateMonth(
                 context = context.applicationContext,
@@ -539,7 +548,7 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                             .resolveSubtasksExpandedByDefault(graph.settingsStore.subtasksExpandedByDefault.first())
                         val renderer = KgsWidgetRenderer(context.applicationContext)
                         val before = if (KgsWidgetKind.Tasks.usesDirectCollectionItems()) {
-                            runCatching { renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId) }.getOrNull()
+                            KgsWidgetCollectionRowsCache.get(KgsWidgetKind.Tasks, appWidgetId)
                         } else {
                             null
                         }
@@ -550,9 +559,13 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                             KgsWidgetKind.Tasks.usesDirectCollectionItems()
                         ) {
-                            val target = runCatching { renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId) }.getOrNull()
-                            target?.let {
-                                animateTasksSubtaskToggle(context.applicationContext, before, it, taskId)
+                            val snapshots = loadSubtaskTransitionSnapshots(before) {
+                                runCatching {
+                                    renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)
+                                }.getOrNull()
+                            }
+                            snapshots.target?.let { target ->
+                                animateTasksSubtaskToggle(context.applicationContext, before, target, taskId)
                             } == true
                         } else {
                             false
@@ -1077,15 +1090,20 @@ private fun widgetTodayDateIconBitmap(context: Context, tint: Int, day: Int): Bi
 object KgsWidgetUpdater {
     suspend fun updateAll(context: Context) {
         KgsWidgetKind.entries.forEach { kind ->
-            updateKind(context, kind)
+            updateKind(context, kind, cause = WidgetUpdateCause.DataChange)
         }
     }
 
-    suspend fun updateKind(context: Context, kind: KgsWidgetKind, forceFullDayUpdate: Boolean = false) {
+    suspend fun updateKind(
+        context: Context,
+        kind: KgsWidgetKind,
+        forceFullDayUpdate: Boolean = false,
+        cause: WidgetUpdateCause = WidgetUpdateCause.Unknown,
+    ) {
         val manager = AppWidgetManager.getInstance(context)
         val ids = manager.getAppWidgetIds(ComponentName(context, kind.providerClass))
         if (ids.isNotEmpty()) {
-            update(context, kind, ids, forceFullDayUpdate = forceFullDayUpdate)
+            update(context, kind, ids, forceFullDayUpdate = forceFullDayUpdate, cause = cause)
         }
     }
 
@@ -1094,11 +1112,13 @@ object KgsWidgetUpdater {
         kind: KgsWidgetKind,
         appWidgetIds: IntArray,
         forceFullDayUpdate: Boolean = false,
+        cause: WidgetUpdateCause = WidgetUpdateCause.Unknown,
     ) {
         if (appWidgetIds.isEmpty()) return
         val manager = AppWidgetManager.getInstance(context)
         val renderer = KgsWidgetRenderer(context)
         appWidgetIds.forEach { appWidgetId ->
+            WidgetPerformanceMonitor.trace(context, kind, appWidgetId, cause) { metrics ->
             val options = manager.getAppWidgetOptions(appWidgetId)
             val targetMonthRevision = if (kind == KgsWidgetKind.Month || kind == KgsWidgetKind.Multi) {
                 KgsWidgetMonthState.revision(context, appWidgetId)
@@ -1110,23 +1130,65 @@ object KgsWidgetUpdater {
                     !forceFullDayUpdate &&
                     KgsWidgetDayState.isInitialized(context, appWidgetId)
             var monthResult: MonthWidgetRenderResult? = null
+            val preparedMulti = if (kind == KgsWidgetKind.Multi) {
+                val dataLoadStarted = SystemClock.elapsedRealtime()
+                runCatching {
+                    renderer.prepareMultiUpdate(appWidgetId, options)
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to calculate Multi widget $appWidgetId snapshot", error)
+                }.getOrNull().also { prepared ->
+                    metrics.recordDataLoad(
+                        durationMillis = SystemClock.elapsedRealtime() - dataLoadStarted,
+                        rowsBuilt = prepared?.itemCount ?: 0,
+                    )
+                }
+            } else {
+                null
+            }
             val collectionSnapshot = if (kind.usesCollectionList && kind != KgsWidgetKind.Multi) {
+                val dataLoadStarted = SystemClock.elapsedRealtime()
                 runCatching {
                     renderer.collectionSnapshot(kind, appWidgetId)
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to calculate ${kind.name} widget $appWidgetId snapshot", error)
-                }.getOrNull()
+                }.getOrNull().also { snapshot ->
+                    metrics.recordDataLoad(
+                        durationMillis = SystemClock.elapsedRealtime() - dataLoadStarted,
+                        rowsBuilt = snapshot?.rows?.size ?: 0,
+                    )
+                }
+            } else {
+                preparedMulti?.collectionSnapshot
+            }
+            val preparedMonth = if (kind == KgsWidgetKind.Month) {
+                val dataLoadStarted = SystemClock.elapsedRealtime()
+                renderer.prepareMonthUpdate(appWidgetId, options).also { prepared ->
+                    metrics.recordDataLoad(
+                        durationMillis = SystemClock.elapsedRealtime() - dataLoadStarted,
+                        rowsBuilt = prepared.itemCount,
+                    )
+                }
             } else {
                 null
             }
-            val collectionSignature = collectionSnapshot?.signature
+            val collectionSignature = preparedMulti?.signature ?: collectionSnapshot?.signature
             if (collectionSignature != null && KgsWidgetCollectionUpdateSignatures.matches(kind, appWidgetId, collectionSignature)) {
                 WidgetLog.d(context, "Skipped unchanged ${kind.name} widget $appWidgetId")
-                return@forEach
+                return@trace
             }
+            if (
+                preparedMonth != null &&
+                !shouldBuildMonthRemoteViews(preparedMonth.signature) { signature ->
+                    KgsWidgetMonthUpdateSignatures.matches(appWidgetId, signature)
+                }
+            ) {
+                WidgetLog.d(context, "Skipped unchanged Month widget $appWidgetId before RemoteViews build")
+                return@trace
+            }
+            val renderStarted = SystemClock.elapsedRealtime()
             val views = try {
                 if (kind == KgsWidgetKind.Month) {
-                    renderer.renderMonthUpdate(appWidgetId, options)
+                    renderer.renderMonthUpdate(requireNotNull(preparedMonth))
                         .also { monthResult = it }
                         .views
                 } else if (incrementalDayUpdate) {
@@ -1135,7 +1197,13 @@ object KgsWidgetUpdater {
                         options = options,
                     )
                 } else {
-                    renderer.render(kind, appWidgetId, options)
+                    renderer.render(
+                        kind = kind,
+                        appWidgetId = appWidgetId,
+                        options = options,
+                        collectionSnapshot = collectionSnapshot,
+                        preparedMulti = preparedMulti,
+                    )
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -1143,16 +1211,17 @@ object KgsWidgetUpdater {
                 Log.e(TAG, "Failed to render ${kind.name} widget $appWidgetId", error)
                 renderer.error(kind, appWidgetId, error.message ?: "Widget update failed.")
             }
+            metrics.recordRemoteViewsBuild(SystemClock.elapsedRealtime() - renderStarted)
             val signature = monthResult?.signature
             if (
                 targetMonthRevision != null &&
                 KgsWidgetMonthState.revision(context, appWidgetId) != targetMonthRevision
             ) {
-                return@forEach
+                return@trace
             }
             if (signature != null && KgsWidgetMonthUpdateSignatures.matches(appWidgetId, signature)) {
                 WidgetLog.d(context, "Skipped unchanged Month widget $appWidgetId")
-                return@forEach
+                return@trace
             }
             runCatching {
                 if (collectionSnapshot != null) {
@@ -1160,11 +1229,13 @@ object KgsWidgetUpdater {
                 }
 
                 val applyUpdate = {
+                    val applyStarted = SystemClock.elapsedRealtime()
                     if (incrementalDayUpdate) {
                         manager.partiallyUpdateAppWidget(appWidgetId, views)
                     } else {
                         manager.updateAppWidget(appWidgetId, views)
                     }
+                    metrics.recordBinderApply(SystemClock.elapsedRealtime() - applyStarted)
                     if (
                         (kind.usesCollectionList && !kind.usesDirectCollectionItems() && kind != KgsWidgetKind.Day) ||
                         (kind == KgsWidgetKind.Day && !usesDirectDayGridItems())
@@ -1203,6 +1274,8 @@ object KgsWidgetUpdater {
                             appWidgetId = appWidgetId,
                             options = options,
                             forceServiceCollection = true,
+                            collectionSnapshot = collectionSnapshot,
+                            preparedMulti = preparedMulti,
                         )
                         val applyFallback = {
                             manager.updateAppWidget(appWidgetId, fallbackViews)
@@ -1222,6 +1295,7 @@ object KgsWidgetUpdater {
                         Log.e(TAG, "Failed to update ${kind.name} widget $appWidgetId with service collection fallback", fallbackError)
                     }
                 }
+            }
             }
         }
     }
@@ -1259,24 +1333,37 @@ object KgsWidgetUpdater {
             }.getOrDefault(false)
 
         var generation = WidgetDataGeneration.current()
-        val cachedPage = KgsWidgetMonthPageCache.get(snapshot.month, settings, zoneId.id, generation)
-        val skeletonPage = pageSource.empty(snapshot.month, settings)
-        val initialPage = selectMonthNavigationInitialPage(cachedPage, skeletonPage)
+        val cachedLookup = KgsWidgetMonthPageCache.getForNavigation(
+            snapshot.month,
+            settings,
+            zoneId.id,
+            generation,
+        )
+        val initialPage = selectMonthNavigationInitialPage(cachedLookup?.page)
 
-        if (!applyIfCurrent(
-                renderer.render(
-                    kind = kind,
-                    snapshot = snapshot,
-                    options = options,
-                    settings = settings,
-                    page = initialPage.page,
-                    hasCompleteData = initialPage.stage == MonthNavigationPageStage.Complete,
-                ),
-            )
-        ) {
-            return
+        if (initialPage != null) {
+            if (!applyIfCurrent(
+                    renderer.render(
+                        kind = kind,
+                        snapshot = snapshot,
+                        options = options,
+                        settings = settings,
+                        page = initialPage,
+                        hasCompleteData = true,
+                    ),
+                )
+            ) {
+                return
+            }
         }
         if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
+        if (
+            cachedLookup?.freshness == WidgetMonthPageFreshness.CurrentGeneration &&
+            WidgetDataGeneration.current() == generation
+        ) {
+            warmWidgetMonthPageCache(context, zoneId, snapshot.month, settings)
+            return
+        }
         var authoritativePage = try {
             pageSource.load(snapshot.month, settings)
         } catch (error: CancellationException) {
@@ -1296,21 +1383,24 @@ object KgsWidgetUpdater {
                 Log.e(TAG, "Failed to reload ${kind.name} month page $appWidgetId", error)
                 return
             }
-            if (WidgetDataGeneration.current() != generation) {
-                return
-            }
         }
-        if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
-        if (WidgetDataGeneration.current() != generation) return
-        KgsWidgetMonthPageCache.put(
-            month = snapshot.month,
-            settings = settings,
-            zoneId = zoneId.id,
-            page = authoritativePage,
-            generation = generation,
+        val authoritativeDecision = authoritativeMonthPageDecision(
+            navigationCurrent = KgsWidgetMonthState.isCurrent(context, snapshot),
+            loadedGeneration = generation,
+            currentGeneration = WidgetDataGeneration.current(),
         )
-        warmWidgetMonthPageCache(context, zoneId, snapshot.month, settings)
-        if (cachedPage != authoritativePage) {
+        if (!authoritativeDecision.apply) return
+        if (authoritativeDecision.cache) {
+            KgsWidgetMonthPageCache.put(
+                month = snapshot.month,
+                settings = settings,
+                zoneId = zoneId.id,
+                page = authoritativePage,
+                generation = generation,
+            )
+            warmWidgetMonthPageCache(context, zoneId, snapshot.month, settings)
+        }
+        if (cachedLookup?.page != authoritativePage) {
             applyIfCurrent(
                 renderer.render(
                     kind = kind,
@@ -1588,13 +1678,13 @@ internal data class WidgetDayGridRow(
             viewId = artId,
             cacheKey = imageCacheKey(palette, widthDp, "art"),
             useImageUri = useImageUris,
-            bitmap = dayGridRowBitmap(
+            bitmapProvider = { dayGridRowBitmap(
                 context = context,
                 palette = palette,
                 widthDp = widthDp,
                 heightDp = rowHeightDp,
                 omitPriorityCards = hasPriorityMotion,
-            ),
+            ) },
         )
         bindPriorityMotion(
             target = target,
@@ -1657,7 +1747,7 @@ internal data class WidgetDayGridRow(
                 viewId = viewId,
                 cacheKey = imageCacheKey(palette, widthDp, "priority-$frame-$frameIntervalMillis"),
                 useImageUri = useImageUris,
-                bitmap = dayPriorityMotionBitmap(
+                bitmapProvider = { dayPriorityMotionBitmap(
                     context = context,
                     palette = palette,
                     widthDp = widthDp,
@@ -1666,7 +1756,7 @@ internal data class WidgetDayGridRow(
                     frameCount = frameIds.size,
                     frameIntervalMillis = frameIntervalMillis,
                     motionBounds = motionBounds,
-                ),
+                ) },
             )
         }
         target.setInt(
@@ -1704,12 +1794,12 @@ internal data class WidgetDayGridRow(
             viewId = nowOverlayId,
             cacheKey = imageCacheKey(palette, widthDp, "now-line-$nowMinute"),
             useImageUri = useImageUris,
-            bitmap = dayNowLineOverlayBitmap(
+            bitmapProvider = { dayNowLineOverlayBitmap(
                 context = context,
                 palette = palette,
                 widthDp = widthDp,
                 heightDp = rowHeightDp,
-            ),
+            ) },
         )
         target.setViewVisibility(nowOverlayId, View.VISIBLE)
     }
@@ -1753,12 +1843,25 @@ internal data class WidgetDayGridRow(
         viewId: Int,
         cacheKey: String,
         useImageUri: Boolean,
-        bitmap: Bitmap,
+        bitmapProvider: () -> Bitmap,
     ) {
         if (!useImageUri) {
+            val bitmap = bitmapProvider()
+            WidgetPerformanceMonitor.current()?.recordBitmapRendered()
             setImageViewBitmap(viewId, bitmap)
             return
         }
+        val cachedUri = runCatching {
+            KgsWidgetBitmapUriStore.getIfPresent(context, appWidgetId, cacheKey)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read cached Day widget image", error)
+        }.getOrNull()
+        if (cachedUri != null) {
+            setImageViewUri(viewId, cachedUri)
+            return
+        }
+        val bitmap = bitmapProvider()
+        WidgetPerformanceMonitor.current()?.recordBitmapRendered()
         val uri = runCatching {
             KgsWidgetBitmapUriStore.put(context, appWidgetId, cacheKey, bitmap)
         }.onFailure { error ->
@@ -2763,13 +2866,26 @@ internal class KgsWidgetRenderer(
         appWidgetId: Int,
         options: Bundle,
         forceServiceCollection: Boolean = false,
+        collectionSnapshot: WidgetCollectionSnapshot? = null,
+        preparedMulti: PreparedMultiWidgetRender? = null,
     ): RemoteViews {
         val start = SystemClock.elapsedRealtime()
         val result = when (kind) {
             KgsWidgetKind.Month -> renderMonthUpdate(appWidgetId, options).views
             KgsWidgetKind.Day -> renderDayWidget(appWidgetId, options, forceServiceCollection = forceServiceCollection)
-            KgsWidgetKind.Multi -> renderMultiWidget(appWidgetId, options, forceServiceCollection = forceServiceCollection)
-            else -> renderCollectionWidget(kind, appWidgetId, options, forceServiceCollection)
+            KgsWidgetKind.Multi -> renderMultiWidget(
+                appWidgetId = appWidgetId,
+                options = options,
+                forceServiceCollection = forceServiceCollection,
+                prepared = preparedMulti,
+            )
+            else -> renderCollectionWidget(
+                kind = kind,
+                appWidgetId = appWidgetId,
+                options = options,
+                forceServiceCollection = forceServiceCollection,
+                collectionSnapshot = collectionSnapshot,
+            )
         }
         WidgetLog.d(context, "Rendered ${kind.name} widget $appWidgetId in ${SystemClock.elapsedRealtime() - start}ms")
         return result
@@ -2843,8 +2959,17 @@ internal class KgsWidgetRenderer(
         )
     }
 
+    suspend fun prepareMonthUpdate(appWidgetId: Int, options: Bundle): PreparedMonthWidgetRender =
+        prepareMonthWidget(appWidgetId, options)
+
+    suspend fun prepareMultiUpdate(appWidgetId: Int, options: Bundle): PreparedMultiWidgetRender =
+        prepareMultiWidget(appWidgetId, options)
+
+    fun renderMonthUpdate(prepared: PreparedMonthWidgetRender): MonthWidgetRenderResult =
+        renderPreparedMonthPage(prepared)
+
     suspend fun renderMonthUpdate(appWidgetId: Int, options: Bundle): MonthWidgetRenderResult =
-        renderMonthWidget(appWidgetId, options)
+        renderPreparedMonthPage(prepareMonthWidget(appWidgetId, options))
 
     internal fun renderMonthNavigationPage(
         kind: KgsWidgetKind,
@@ -3576,9 +3701,22 @@ internal class KgsWidgetRenderer(
             renderSize = renderSize,
             taskArtWidthDp = taskArtWidthDp,
             rows = rows,
-            signature = "$dataSignature\nrender|$WIDGET_COLLECTION_RENDER_SIGNATURE_VERSION|${renderSize.widthDp}x${renderSize.heightDp}|$taskArtWidthDp|$priorityFrameCount|$WIDGET_TASK_PRIORITY_OVERDRAW_DP|$WIDGET_TASK_PRIORITY_BITMAP_SCALE|$WIDGET_AGENDA_LIST_SIDE_BLEED_DP",
+            signature = collectionRenderSignature(
+                dataSignature = dataSignature,
+                renderSize = renderSize,
+                taskArtWidthDp = taskArtWidthDp,
+                priorityFrameCount = priorityFrameCount,
+            ),
         )
     }
+
+    private fun collectionRenderSignature(
+        dataSignature: String,
+        renderSize: WidgetSize,
+        taskArtWidthDp: Float,
+        priorityFrameCount: Int,
+    ): String =
+        "$dataSignature\nrender|$WIDGET_COLLECTION_RENDER_SIGNATURE_VERSION|${renderSize.widthDp}x${renderSize.heightDp}|$taskArtWidthDp|$priorityFrameCount|$WIDGET_TASK_PRIORITY_OVERDRAW_DP|$WIDGET_TASK_PRIORITY_BITMAP_SCALE|$WIDGET_AGENDA_LIST_SIDE_BLEED_DP"
 
     fun error(kind: KgsWidgetKind, appWidgetId: Int, message: String): RemoteViews {
         val settings = WidgetRenderSettings(locale = Locale.getDefault())
@@ -3591,19 +3729,111 @@ internal class KgsWidgetRenderer(
         return views
     }
 
-    private suspend fun renderMonthWidget(
+    private suspend fun prepareMonthWidget(
         appWidgetId: Int,
         options: Bundle,
-    ): MonthWidgetRenderResult {
+    ): PreparedMonthWidgetRender {
+        val settingsStarted = SystemClock.elapsedRealtime()
         val settings = dataSource.loadSettings(KgsWidgetKind.Month)
+        val settingsMillis = SystemClock.elapsedRealtime() - settingsStarted
         val month = KgsWidgetMonthState.month(context, appWidgetId, YearMonth.now(zoneId))
         val generation = WidgetDataGeneration.current()
-        val page = monthPageSource.load(month, settings)
+        val cachedPage = KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation)
+        val pageStarted = SystemClock.elapsedRealtime()
+        val page = preparedWidgetValue(cachedPage) {
+            monthPageSource.load(month, settings)
+        }
+        WidgetLog.d(
+            context,
+            "MonthPrepare widget=$appWidgetId settingsMs=$settingsMillis pageMs=${SystemClock.elapsedRealtime() - pageStarted} " +
+                "pageCacheHit=${cachedPage != null} generation=$generation currentGeneration=${WidgetDataGeneration.current()}",
+        )
         if (WidgetDataGeneration.current() == generation) {
             KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
             warmWidgetMonthPageCache(context, zoneId, month, settings)
         }
-        return renderMonthPageResult(appWidgetId, options, settings, page, hasCompleteData = true)
+        return prepareMonthPage(appWidgetId, options, settings, page, hasCompleteData = true)
+    }
+
+    private suspend fun prepareMultiWidget(
+        appWidgetId: Int,
+        options: Bundle,
+    ): PreparedMultiWidgetRender {
+        val settings = dataSource.loadSettings(KgsWidgetKind.Multi)
+        val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
+        val today = LocalDate.now(zoneId)
+        val size = WidgetSize.from(context, options, KgsWidgetKind.Multi)
+        val contentHeightDp = (size.heightDp - WIDGET_MULTI_CONTENT_PADDING_DP).coerceAtLeast(2)
+        val monthPercent = SettingsStore.normalizeMultiWidgetMonthPercent(settings.multiWidgetMonthPercent)
+        val monthPanelHeightDp = ((contentHeightDp * monthPercent) / 100f)
+            .roundToInt()
+            .coerceIn(1, contentHeightDp - 1)
+        val agendaPanelHeightDp = (contentHeightDp - monthPanelHeightDp).coerceAtLeast(1)
+        val month = KgsWidgetMonthState.month(context, appWidgetId, YearMonth.from(today))
+        val generation = WidgetDataGeneration.current()
+        val cachedPage = KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation)
+        val page = coroutineScope {
+            val pageDeferred = async {
+                preparedWidgetValue(cachedPage) { monthPageSource.load(month, settings) }
+            }
+            val rowsDeferred = async {
+                dataSource.listRows(KgsWidgetKind.Multi, settings, appWidgetId)
+            }
+            pageDeferred.await() to rowsDeferred.await()
+        }
+        val monthPage = page.first
+        val rows = page.second
+        if (WidgetDataGeneration.current() == generation) {
+            KgsWidgetMonthPageCache.put(month, settings, zoneId.id, monthPage, generation)
+            warmWidgetMonthPageCache(context, zoneId, month, settings)
+        }
+        val monthSpec = WidgetMonthRenderSpec.from(
+            WidgetSize(widthDp = size.widthDp, heightDp = monthPanelHeightDp),
+            monthPage.rowCount,
+        )
+        val taskArtWidthDp = size.collectionArtWidthDp(KgsWidgetKind.Multi)
+        val dataSignature = dataSource.collectionSignature(KgsWidgetKind.Multi, settings, appWidgetId, rows)
+        val collectionSnapshot = WidgetCollectionSnapshot(
+            kind = KgsWidgetKind.Multi,
+            appWidgetId = appWidgetId,
+            settings = settings,
+            palette = palette,
+            renderSize = size,
+            taskArtWidthDp = taskArtWidthDp,
+            rows = rows,
+            signature = collectionRenderSignature(
+                dataSignature = dataSignature,
+                renderSize = size,
+                taskArtWidthDp = taskArtWidthDp,
+                priorityFrameCount = KgsWidgetKind.Multi.priorityMotionFrameCount(),
+            ),
+        )
+        val monthSignature = monthRenderSignature(
+            today = today,
+            settings = settings,
+            palette = palette,
+            currentSize = size,
+            renderSpec = monthSpec,
+            page = monthPage,
+        )
+        return PreparedMultiWidgetRender(
+            appWidgetId = appWidgetId,
+            settings = settings,
+            palette = palette,
+            today = today,
+            page = monthPage,
+            size = size,
+            monthSpec = monthSpec,
+            monthPanelHeightDp = monthPanelHeightDp,
+            agendaPanelHeightDp = agendaPanelHeightDp,
+            collectionSnapshot = collectionSnapshot,
+            signature = multiWidgetRenderSignature(
+                collectionSignature = collectionSnapshot.signature,
+                monthSignature = monthSignature,
+                monthPanelHeightDp = monthPanelHeightDp,
+                agendaPanelHeightDp = agendaPanelHeightDp,
+            ),
+        )
     }
 
     private fun renderMonthPageResult(
@@ -3612,29 +3842,31 @@ internal class KgsWidgetRenderer(
         settings: WidgetRenderSettings,
         page: WidgetMonthPage,
         hasCompleteData: Boolean,
-    ): MonthWidgetRenderResult {
+    ): MonthWidgetRenderResult = renderPreparedMonthPage(
+        prepareMonthPage(appWidgetId, options, settings, page, hasCompleteData),
+    )
+
+    private fun prepareMonthPage(
+        appWidgetId: Int,
+        options: Bundle,
+        settings: WidgetRenderSettings,
+        page: WidgetMonthPage,
+        hasCompleteData: Boolean,
+    ): PreparedMonthWidgetRender {
         val today = LocalDate.now(zoneId)
         val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
         val renderedPage = if (hasCompleteData) page else page.loadingSkeleton(palette.muted)
         val currentSize = WidgetSize.from(context, options, KgsWidgetKind.Month)
         val renderSpec = WidgetMonthRenderSpec.from(currentSize, renderedPage.rowCount)
 
-        var itemCount = 0
-        for (cell in renderedPage.cells) itemCount += cell.items.size
-        WidgetLog.d(
-            context,
-            "Month widget $appWidgetId bucket=${renderSpec.bucket.name} rows=${renderedPage.rowCount} weekHeight=${renderSpec.weekCellHeightDp} items=$itemCount complete=$hasCompleteData",
-        )
-
-        return MonthWidgetRenderResult(
-            views = renderMonthRoot(
-                appWidgetId = appWidgetId,
-                settings = settings,
-                palette = palette,
-                today = today,
-                page = renderedPage,
-                renderSpec = renderSpec,
-            ),
+        return PreparedMonthWidgetRender(
+            appWidgetId = appWidgetId,
+            settings = settings,
+            palette = palette,
+            today = today,
+            page = renderedPage,
+            currentSize = currentSize,
+            renderSpec = renderSpec,
             hasCompleteData = hasCompleteData,
             signature = if (hasCompleteData) {
                 monthRenderSignature(
@@ -3648,6 +3880,27 @@ internal class KgsWidgetRenderer(
             } else {
                 null
             },
+        )
+    }
+
+    private fun renderPreparedMonthPage(prepared: PreparedMonthWidgetRender): MonthWidgetRenderResult {
+        WidgetLog.d(
+            context,
+            "Month widget ${prepared.appWidgetId} bucket=${prepared.renderSpec.bucket.name} rows=${prepared.page.rowCount} " +
+                "weekHeight=${prepared.renderSpec.weekCellHeightDp} items=${prepared.itemCount} complete=${prepared.hasCompleteData}",
+        )
+
+        return MonthWidgetRenderResult(
+            views = renderMonthRoot(
+                appWidgetId = prepared.appWidgetId,
+                settings = prepared.settings,
+                palette = prepared.palette,
+                today = prepared.today,
+                page = prepared.page,
+                renderSpec = prepared.renderSpec,
+            ),
+            hasCompleteData = prepared.hasCompleteData,
+            signature = prepared.signature,
         )
     }
 
@@ -3834,26 +4087,31 @@ internal class KgsWidgetRenderer(
                 val span = segment.columnSpan.coerceIn(1, 7)
                 val chip = RemoteViews(packageName, monthSpanChipLayout(span))
                 val style = segment.item.color.monthChipStyle()
-                chip.setMonthSpanChipImage(
-                    appWidgetId = appWidgetId,
-                    viewId = R.id.widget_month_span_chip_background,
-                    cacheKey = monthSpanChipCacheKey(
-                        segment = segment,
-                        style = style,
-                        widthDp = renderSpec.spanChipWidthDp(span),
-                        textSp = renderSpec.chipTextSp,
-                    ),
-                    bitmap = monthSpanChipBitmap(
-                        context = context,
-                        style = style,
-                        item = segment.item,
-                        title = segment.title,
-                        widthDp = renderSpec.spanChipWidthDp(span),
-                        textSp = renderSpec.chipTextSp,
-                    ),
+                chip.setImageViewResource(
+                    R.id.widget_month_span_chip_background,
+                    segment.item.monthChipMaskRes(),
                 )
-                chip.setTextViewText(R.id.widget_month_span_chip_text, "")
-                chip.setViewVisibility(R.id.widget_month_span_chip_text, View.GONE)
+                chip.setInt(R.id.widget_month_span_chip_background, "setColorFilter", style.fillColor)
+                chip.setTextViewText(R.id.widget_month_span_chip_text, segment.title)
+                chip.setTextColor(R.id.widget_month_span_chip_text, style.textColor)
+                chip.setTextViewTextSize(
+                    R.id.widget_month_span_chip_text,
+                    TypedValue.COMPLEX_UNIT_SP,
+                    renderSpec.chipTextSp,
+                )
+                chip.setViewPadding(
+                    R.id.widget_month_span_chip_text,
+                    context.dpToPx(segment.item.monthSpanTextStartPaddingDp()).roundToInt(),
+                    0,
+                    context.dpToPx(
+                        if (segment.item.fadesToNext) WIDGET_MONTH_SPAN_FADE_WIDTH_DP else 4f,
+                    ).roundToInt(),
+                    0,
+                )
+                chip.setViewVisibility(
+                    R.id.widget_month_span_chip_text,
+                    if (segment.title.isBlank()) View.GONE else View.VISIBLE,
+                )
                 val chipPendingIntent = openAppPendingIntent(
                     KgsWidgetKind.Day,
                     dayPendingIntentRequestCode(appWidgetId, rowCells[segment.startColumn].date),
@@ -3869,29 +4127,6 @@ internal class KgsWidgetRenderer(
                 laneRow.addDaySpacers(7 - column)
             }
             addView(R.id.widget_month_week_chip_layers, laneRow)
-        }
-    }
-
-    private fun RemoteViews.setMonthSpanChipImage(
-        appWidgetId: Int,
-        viewId: Int,
-        cacheKey: String,
-        bitmap: Bitmap,
-    ) {
-        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            setImageViewBitmap(viewId, bitmap)
-            return
-        }
-        val uri = runCatching {
-            KgsWidgetBitmapUriStore.put(context, appWidgetId, cacheKey, bitmap)
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to cache Month widget chip image; falling back to an inline bitmap", error)
-        }.getOrNull()
-        if (uri != null) {
-            setImageViewUri(viewId, uri)
-            bitmap.recycle()
-        } else {
-            setImageViewBitmap(viewId, bitmap)
         }
     }
 
@@ -4264,30 +4499,22 @@ internal class KgsWidgetRenderer(
         appWidgetId: Int,
         options: Bundle,
         forceServiceCollection: Boolean = false,
+        prepared: PreparedMultiWidgetRender? = null,
     ): RemoteViews {
-        val today = LocalDate.now(zoneId)
-        val settings = dataSource.loadSettings(KgsWidgetKind.Multi)
-        val textContext = context.withWidgetLocale(settings.locale)
-        val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
-        val size = WidgetSize.from(context, options, KgsWidgetKind.Multi)
-        val contentPaddingDp = 12
-        val contentHeightDp = (size.heightDp - contentPaddingDp).coerceAtLeast(2)
-        val monthPercent = SettingsStore.normalizeMultiWidgetMonthPercent(settings.multiWidgetMonthPercent)
-        val monthPanelHeightDp = ((contentHeightDp * monthPercent) / 100f)
-            .roundToInt()
-            .coerceIn(1, contentHeightDp - 1)
-        val agendaPanelHeightDp = (contentHeightDp - monthPanelHeightDp).coerceAtLeast(1)
-        val month = KgsWidgetMonthState.month(context, appWidgetId, YearMonth.from(today))
-        val generation = WidgetDataGeneration.current()
-        val page = monthPageSource.load(month, settings)
-        if (WidgetDataGeneration.current() == generation) {
-            KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
-            warmWidgetMonthPageCache(context, zoneId, month, settings)
+        val renderData = preparedWidgetValue(prepared) {
+            prepareMultiWidget(appWidgetId, options)
         }
-        val monthSpec = WidgetMonthRenderSpec.from(
-            WidgetSize(widthDp = size.widthDp, heightDp = monthPanelHeightDp),
-            page.rowCount,
-        )
+        require(renderData.appWidgetId == appWidgetId)
+        val today = renderData.today
+        val settings = renderData.settings
+        val textContext = context.withWidgetLocale(settings.locale)
+        val palette = renderData.palette
+        val size = renderData.size
+        val contentPaddingDp = WIDGET_MULTI_CONTENT_PADDING_DP
+        val monthPanelHeightDp = renderData.monthPanelHeightDp
+        val agendaPanelHeightDp = renderData.agendaPanelHeightDp
+        val page = renderData.page
+        val monthSpec = renderData.monthSpec
         val views = RemoteViews(packageName, R.layout.widget_calendar_multi)
         val contentPadding = context.dpToPx(contentPaddingDp)
         val openApp = openMainAppPendingIntent(appWidgetId)
@@ -4302,7 +4529,7 @@ internal class KgsWidgetRenderer(
 
         val multiMonthTitle = page.title(settings.locale)
         val hideMultiMonthTitle = shouldHideWidgetTitle(size.widthDp - contentPaddingDp * 2, multiMonthTitle, reservedDp = 150f, textSp = monthSpec.titleTextSp)
-        val showingCurrentMonth = month == YearMonth.from(today)
+        val showingCurrentMonth = page.month == YearMonth.from(today)
         views.setTextViewText(R.id.widget_multi_month_title, multiMonthTitle)
         views.setTextColor(R.id.widget_multi_month_title, palette.text)
         views.setTextViewTextSize(R.id.widget_multi_month_title, TypedValue.COMPLEX_UNIT_SP, monthSpec.titleTextSp)
@@ -4325,7 +4552,7 @@ internal class KgsWidgetRenderer(
         views.setOnClickPendingIntent(R.id.widget_month_next, monthNavigationPendingIntent(appWidgetId, previous = false, targetKind = KgsWidgetKind.Multi))
         views.setOnClickPendingIntent(
             R.id.widget_multi_month_title,
-            openAppPendingIntent(KgsWidgetKind.Month, 66_000 + appWidgetId, month.atDay(1)),
+            openAppPendingIntent(KgsWidgetKind.Month, 66_000 + appWidgetId, page.month.atDay(1)),
         )
         views.bindMonthPage(
             pageContainerId = R.id.widget_month_section,
@@ -4348,10 +4575,10 @@ internal class KgsWidgetRenderer(
                 context = textContext,
                 packageName = packageName,
                 palette = palette,
-                rows = dataSource.listRows(KgsWidgetKind.Multi, settings, appWidgetId),
+                rows = renderData.collectionSnapshot.rows,
                 sourceKind = KgsWidgetKind.Multi,
                 appWidgetId = appWidgetId,
-                renderOptions = WidgetCollectionRenderOptions(taskArtWidthDp = size.collectionArtWidthDp(KgsWidgetKind.Multi)),
+                renderOptions = WidgetCollectionRenderOptions(taskArtWidthDp = renderData.collectionSnapshot.taskArtWidthDp),
             )
         } else {
             views.setRemoteAdapter(R.id.widget_list, collectionAdapterIntent(KgsWidgetKind.Multi, appWidgetId))
@@ -4366,12 +4593,19 @@ internal class KgsWidgetRenderer(
         appWidgetId: Int,
         options: Bundle,
         forceServiceCollection: Boolean = false,
+        collectionSnapshot: WidgetCollectionSnapshot? = null,
     ): RemoteViews {
+        collectionSnapshot?.let { snapshot ->
+            require(snapshot.kind == kind && snapshot.appWidgetId == appWidgetId)
+        }
         val today = LocalDate.now(zoneId)
-        val settings = dataSource.loadSettings(kind)
+        val settings = preparedWidgetValue(collectionSnapshot?.settings) {
+            dataSource.loadSettings(kind)
+        }
         val textContext = context.withWidgetLocale(settings.locale)
-        val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
-        val size = WidgetSize.from(context, options, kind)
+        val palette = collectionSnapshot?.palette
+            ?: WidgetPalette.from(context, settings.themeMode, settings.colorMode)
+        val size = collectionSnapshot?.renderSize ?: WidgetSize.from(context, options, kind)
         val views = RemoteViews(packageName, if (kind == KgsWidgetKind.Tasks) R.layout.widget_calendar_tasks else R.layout.widget_calendar)
         views.bindBaseShell(kind, appWidgetId, settings, palette, today, size)
         if (kind == KgsWidgetKind.Multi) {
@@ -4400,11 +4634,14 @@ internal class KgsWidgetRenderer(
         views.setTextViewText(R.id.widget_empty, kind.emptyText(textContext))
         views.setTextColor(R.id.widget_empty, palette.muted)
         if (kind.usesDirectCollectionItems() && !forceServiceCollection) {
+            val rows = preparedWidgetValue(collectionSnapshot?.rows) {
+                dataSource.listRows(kind, settings, appWidgetId)
+            }
             views.bindDirectCollectionItems(
                 context = textContext,
                 packageName = packageName,
                 palette = palette,
-                rows = dataSource.listRows(kind, settings, appWidgetId),
+                rows = rows,
                 sourceKind = kind,
                 appWidgetId = appWidgetId,
                 renderOptions = WidgetCollectionRenderOptions(taskArtWidthDp = size.collectionArtWidthDp(kind)),
@@ -4828,48 +5065,67 @@ internal class KgsWidgetDataSource(
     private fun textContext(locale: Locale): Context =
         context.withWidgetLocale(locale)
 
-    suspend fun loadSettings(kind: KgsWidgetKind): WidgetRenderSettings {
+    suspend fun loadSettings(kind: KgsWidgetKind): WidgetRenderSettings = coroutineScope {
         val graph = KgsCalendarApplication.graph(context)
-        val appThemeMode = graph.settingsStore.themeMode.first()
-        val appColorMode = graph.settingsStore.colorMode.first()
-        val monthWidgetThemeMode = graph.settingsStore.monthWidgetThemeMode.first()
-        val monthWidgetColorMode = graph.settingsStore.monthWidgetColorMode.first()
-        val widgetThemeMode = when (kind) {
-            KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetThemeMode.first()
-            KgsWidgetKind.Month -> monthWidgetThemeMode
-            KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetThemeMode.first()
-            KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetThemeMode.first()
-            KgsWidgetKind.Day -> graph.settingsStore.dayWidgetThemeMode.first()
+        val appThemeMode = async { graph.settingsStore.themeMode.first() }
+        val appColorMode = async { graph.settingsStore.colorMode.first() }
+        val widgetThemeMode = async {
+            when (kind) {
+                KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetThemeMode.first()
+                KgsWidgetKind.Month -> graph.settingsStore.monthWidgetThemeMode.first()
+                KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetThemeMode.first()
+                KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetThemeMode.first()
+                KgsWidgetKind.Day -> graph.settingsStore.dayWidgetThemeMode.first()
+            }
         }
-        val widgetColorMode = when (kind) {
-            KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetColorMode.first()
-            KgsWidgetKind.Month -> monthWidgetColorMode
-            KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetColorMode.first()
-            KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetColorMode.first()
-            KgsWidgetKind.Day -> graph.settingsStore.dayWidgetColorMode.first()
+        val widgetColorMode = async {
+            when (kind) {
+                KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetColorMode.first()
+                KgsWidgetKind.Month -> graph.settingsStore.monthWidgetColorMode.first()
+                KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetColorMode.first()
+                KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetColorMode.first()
+                KgsWidgetKind.Day -> graph.settingsStore.dayWidgetColorMode.first()
+            }
         }
+        val languageMode = async { graph.settingsStore.languageMode.first() }
+        val firstDayOfWeek = async { graph.settingsStore.firstDayOfWeek.first() }
+        val hiddenCollectionHrefs = async { graph.settingsStore.hiddenCollectionHrefs.first() }
+        val showCompletedTasks = async { graph.settingsStore.showCompletedTasksInCalendar.first() }
+        val taskColorMode = async { graph.settingsStore.taskColorMode.first() }
+        val priorityAnimationsEnabled = async { graph.settingsStore.priorityAnimationsEnabled.first() }
+        val subtasksExpandedByDefault = async { graph.settingsStore.subtasksExpandedByDefault.first() }
+        val tasksWidgetDisplayMode = async { graph.settingsStore.tasksWidgetDisplayMode.first() }
+        val tasksWidgetIncludeOverdue = async { graph.settingsStore.tasksWidgetIncludeOverdue.first() }
+        val tasksWidgetSortMode = async { graph.settingsStore.tasksWidgetSortMode.first() }
+        val tasksWidgetCreateMode = async { graph.settingsStore.tasksWidgetCreateMode.first() }
+        val tasksWidgetSubtaskDefaultMode = async { graph.settingsStore.tasksWidgetSubtaskDefaultMode.first() }
+        val maxVisibleAllDayItems = async { graph.settingsStore.maxVisibleAllDayItems.first() }
+        val dayWidgetScalePercent = async { graph.settingsStore.dayWidgetScalePercent.first() }
+        val dayWidgetStartHour = async { graph.settingsStore.dayWidgetStartHour.first() }
+        val dayWidgetStartAtCurrentHour = async { graph.settingsStore.dayWidgetStartAtCurrentHour.first() }
+        val multiWidgetMonthPercent = async { graph.settingsStore.multiWidgetMonthPercent.first() }
         val systemNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        return WidgetRenderSettings(
-            locale = graph.settingsStore.languageMode.first().toLocale(context),
-            firstDayOfWeek = graph.settingsStore.firstDayOfWeek.first(),
-            hiddenCollectionHrefs = graph.settingsStore.hiddenCollectionHrefs.first(),
-            showCompletedTasks = graph.settingsStore.showCompletedTasksInCalendar.first(),
-            themeMode = widgetThemeMode.resolve(appThemeMode),
-            colorMode = widgetColorMode.resolve(appColorMode),
+        WidgetRenderSettings(
+            locale = languageMode.await().toLocale(context),
+            firstDayOfWeek = firstDayOfWeek.await(),
+            hiddenCollectionHrefs = hiddenCollectionHrefs.await(),
+            showCompletedTasks = showCompletedTasks.await(),
+            themeMode = widgetThemeMode.await().resolve(appThemeMode.await()),
+            colorMode = widgetColorMode.await().resolve(appColorMode.await()),
             systemNightMode = systemNightMode,
-            taskColorMode = graph.settingsStore.taskColorMode.first(),
-            priorityAnimationsEnabled = graph.settingsStore.priorityAnimationsEnabled.first(),
-            subtasksExpandedByDefault = graph.settingsStore.subtasksExpandedByDefault.first(),
-            tasksWidgetDisplayMode = graph.settingsStore.tasksWidgetDisplayMode.first(),
-            tasksWidgetIncludeOverdue = graph.settingsStore.tasksWidgetIncludeOverdue.first(),
-            tasksWidgetSortMode = graph.settingsStore.tasksWidgetSortMode.first(),
-            tasksWidgetCreateMode = graph.settingsStore.tasksWidgetCreateMode.first(),
-            tasksWidgetSubtaskDefaultMode = graph.settingsStore.tasksWidgetSubtaskDefaultMode.first(),
-            maxVisibleAllDayItems = graph.settingsStore.maxVisibleAllDayItems.first(),
-            dayWidgetScalePercent = graph.settingsStore.dayWidgetScalePercent.first(),
-            dayWidgetStartHour = graph.settingsStore.dayWidgetStartHour.first(),
-            dayWidgetStartAtCurrentHour = graph.settingsStore.dayWidgetStartAtCurrentHour.first(),
-            multiWidgetMonthPercent = graph.settingsStore.multiWidgetMonthPercent.first(),
+            taskColorMode = taskColorMode.await(),
+            priorityAnimationsEnabled = priorityAnimationsEnabled.await(),
+            subtasksExpandedByDefault = subtasksExpandedByDefault.await(),
+            tasksWidgetDisplayMode = tasksWidgetDisplayMode.await(),
+            tasksWidgetIncludeOverdue = tasksWidgetIncludeOverdue.await(),
+            tasksWidgetSortMode = tasksWidgetSortMode.await(),
+            tasksWidgetCreateMode = tasksWidgetCreateMode.await(),
+            tasksWidgetSubtaskDefaultMode = tasksWidgetSubtaskDefaultMode.await(),
+            maxVisibleAllDayItems = maxVisibleAllDayItems.await(),
+            dayWidgetScalePercent = dayWidgetScalePercent.await(),
+            dayWidgetStartHour = dayWidgetStartHour.await(),
+            dayWidgetStartAtCurrentHour = dayWidgetStartAtCurrentHour.await(),
+            multiWidgetMonthPercent = multiWidgetMonthPercent.await(),
         )
     }
 
@@ -5582,25 +5838,24 @@ private fun WidgetMonthItem.monthSpanTextStartPaddingDp(): Float =
         4f
     }
 
-private fun monthSpanChipCacheKey(
-    segment: WidgetMonthWeekSegment,
-    style: WidgetMonthChipStyle,
-    widthDp: Float,
-    textSp: Float,
-): String = buildString {
-    append("month-chip|").append(WIDGET_MONTH_RENDER_SIGNATURE_VERSION)
-    append('|').append(segment.startColumn).append('-').append(segment.endColumn)
-    append('|').append(widthDp)
-    append('|').append(textSp)
-    append('|').append(segment.title)
-    append('|').append(style.fillColor).append('/').append(style.textColor)
-    append('|').append(segment.item.id)
-    append('|').append(segment.item.color)
-    append('|').append(segment.item.lane)
-    append('|').append(segment.item.continuesFromPrevious)
-    append('|').append(segment.item.continuesToNext)
-    append('|').append(segment.item.fadesFromPrevious)
-    append('|').append(segment.item.fadesToNext)
+private fun WidgetMonthItem.monthChipMaskRes(): Int {
+    val edges = monthChipEdges(
+        continuesFromPrevious = continuesFromPrevious,
+        continuesToNext = continuesToNext,
+        fadesFromPrevious = fadesFromPrevious,
+        fadesToNext = fadesToNext,
+    )
+    return when (monthChipMask(edges)) {
+        WidgetMonthChipMask.RoundRound -> R.drawable.widget_month_chip_mask_round_round
+        WidgetMonthChipMask.RoundSquare -> R.drawable.widget_month_chip_mask_round_square
+        WidgetMonthChipMask.RoundFade -> R.drawable.widget_month_chip_mask_round_fade
+        WidgetMonthChipMask.SquareRound -> R.drawable.widget_month_chip_mask_square_round
+        WidgetMonthChipMask.SquareSquare -> R.drawable.widget_month_chip_mask_square_square
+        WidgetMonthChipMask.SquareFade -> R.drawable.widget_month_chip_mask_square_fade
+        WidgetMonthChipMask.FadeRound -> R.drawable.widget_month_chip_mask_fade_round
+        WidgetMonthChipMask.FadeSquare -> R.drawable.widget_month_chip_mask_fade_square
+        WidgetMonthChipMask.FadeFade -> R.drawable.widget_month_chip_mask_fade_fade
+    }
 }
 
 private fun monthTodayLabel(text: String, isToday: Boolean): CharSequence =
@@ -5624,160 +5879,6 @@ private fun monthDotBitmap(context: Context, color: Int): Bitmap {
     }
     canvas.drawCircle(radius, radius, radius, paint)
     return bitmap
-}
-
-private fun monthSpanChipBitmap(
-    context: Context,
-    style: WidgetMonthChipStyle,
-    item: WidgetMonthItem,
-    title: String,
-    widthDp: Float,
-    textSp: Float,
-): Bitmap {
-    val density = context.resources.displayMetrics.density * WIDGET_MONTH_SPAN_BITMAP_SCALE
-    val heightDp = WIDGET_MONTH_SPAN_CHIP_HEIGHT_DP
-    val actualWidthDp = (widthDp - WIDGET_MONTH_SPAN_CHIP_HORIZONTAL_INSET_DP * 2f).coerceAtLeast(1f)
-    val bitmap = Bitmap.createBitmap(
-        (actualWidthDp * density).roundToInt().coerceAtLeast(1),
-        (heightDp * density).roundToInt().coerceAtLeast(1),
-        Bitmap.Config.ARGB_8888,
-    ).apply {
-        setDensity((context.resources.displayMetrics.densityDpi * WIDGET_MONTH_SPAN_BITMAP_SCALE).roundToInt())
-    }
-    val canvas = Canvas(bitmap)
-    canvas.scale(density, density)
-
-    val fillColor = style.fillColor
-    val radius = heightDp / 2f
-    val fadeWidth = WIDGET_MONTH_SPAN_FADE_WIDTH_DP.coerceAtMost(actualWidthDp / 2f)
-    val fadeOverlap = WIDGET_MONTH_SPAN_FADE_OVERLAP_DP.coerceAtMost(fadeWidth)
-    val solidLeft = if (item.fadesFromPrevious) (fadeWidth - fadeOverlap).coerceAtLeast(0f) else 0f
-    val solidRight = actualWidthDp - if (item.fadesToNext) (fadeWidth - fadeOverlap).coerceAtLeast(0f) else 0f
-    val solidPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = fillColor
-        this.style = Paint.Style.FILL
-    }
-    if (solidRight > solidLeft) {
-        canvas.drawMonthChipRect(
-            rect = RectF(solidLeft, 0f, solidRight, heightDp),
-            radius = radius,
-            roundStart = !item.continuesFromPrevious && !item.fadesFromPrevious,
-            roundEnd = !item.continuesToNext && !item.fadesToNext,
-            paint = solidPaint,
-        )
-    }
-    if (item.fadesFromPrevious && fadeWidth > 0f) {
-        val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                0f,
-                0f,
-                fadeWidth,
-                0f,
-                fillColor.withAlpha(0f),
-                fillColor,
-                Shader.TileMode.CLAMP,
-            )
-        }
-        canvas.drawRect(0f, 0f, fadeWidth + fadeOverlap, heightDp, fadePaint)
-    }
-    if (item.fadesToNext && fadeWidth > 0f) {
-        val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                actualWidthDp - fadeWidth,
-                0f,
-                actualWidthDp,
-                0f,
-                fillColor,
-                fillColor.withAlpha(0f),
-                Shader.TileMode.CLAMP,
-            )
-        }
-        canvas.drawRect(actualWidthDp - fadeWidth - fadeOverlap, 0f, actualWidthDp, heightDp, fadePaint)
-    }
-    if (title.isNotBlank()) {
-        val textStart = item.monthSpanTextStartPaddingDp()
-        val textEndPadding = if (item.fadesToNext) WIDGET_MONTH_SPAN_FADE_WIDTH_DP else 4f
-        val textRight = (actualWidthDp - textEndPadding).coerceAtLeast(textStart)
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
-            color = style.textColor
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            textSize = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_SP,
-                textSp,
-                context.resources.displayMetrics,
-            ) / context.resources.displayMetrics.density
-            isDither = true
-            isLinearText = false
-            isSubpixelText = true
-            setHinting(Paint.HINTING_ON)
-        }
-        val metrics = textPaint.fontMetrics
-        val baseline = heightDp / 2f - (metrics.ascent + metrics.descent) / 2f
-        canvas.drawMonthChipTitle(
-            title = title,
-            paint = textPaint,
-            startX = textStart,
-            baseline = baseline,
-            rightEdge = textRight,
-            heightDp = heightDp,
-        )
-    }
-    return bitmap
-}
-
-private fun Canvas.drawMonthChipTitle(
-    title: String,
-    paint: Paint,
-    startX: Float,
-    baseline: Float,
-    rightEdge: Float,
-    heightDp: Float,
-) {
-    if (rightEdge <= startX) return
-    val save = saveLayer(startX, 0f, rightEdge, heightDp, null)
-    drawText(title, startX, baseline, paint)
-    val availableWidth = rightEdge - startX
-    val fadeWidth = min(WIDGET_MONTH_SPAN_FADE_WIDTH_DP * 0.72f, availableWidth * 0.42f)
-    if (fadeWidth > 0f && paint.measureText(title) > availableWidth) {
-        val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                rightEdge - fadeWidth,
-                0f,
-                rightEdge,
-                0f,
-                0xFFFFFFFF.toInt(),
-                0x00FFFFFF,
-                Shader.TileMode.CLAMP,
-            )
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        }
-        drawRect(rightEdge - fadeWidth, 0f, rightEdge, heightDp, fadePaint)
-    }
-    restoreToCount(save)
-}
-
-private fun Canvas.drawMonthChipRect(
-    rect: RectF,
-    radius: Float,
-    roundStart: Boolean,
-    roundEnd: Boolean,
-    paint: Paint,
-) {
-    if (rect.width() <= 0f || rect.height() <= 0f) return
-    val radii = floatArrayOf(
-        if (roundStart) radius else 0f,
-        if (roundStart) radius else 0f,
-        if (roundEnd) radius else 0f,
-        if (roundEnd) radius else 0f,
-        if (roundEnd) radius else 0f,
-        if (roundEnd) radius else 0f,
-        if (roundStart) radius else 0f,
-        if (roundStart) radius else 0f,
-    )
-    val path = Path().apply {
-        addRoundRect(rect, radii, Path.Direction.CW)
-    }
-    drawPath(path, paint)
 }
 
 internal data class WidgetRenderSettings(
@@ -5993,7 +6094,7 @@ internal data class WidgetListRow(
                         frameCount = priorityFrameCount,
                         subtaskExpansionProgress = subtaskExpansionProgress,
                     ),
-                    bitmap = taskPriorityMotionBitmap(
+                    bitmapProvider = { taskPriorityMotionBitmap(
                         context = context,
                         palette = palette,
                         taskArtWidthDp = taskArtWidthDp,
@@ -6006,7 +6107,7 @@ internal data class WidgetListRow(
                         subtaskExpansionProgress = subtaskExpansionProgress,
                         baseSpec = baseSpec,
                         cardMeta = cardMeta,
-                    ),
+                    ) },
                 )
             }
             views.setInt(
@@ -6075,12 +6176,25 @@ internal data class WidgetListRow(
         appWidgetId: Int,
         viewId: Int,
         cacheKey: String,
-        bitmap: Bitmap,
+        bitmapProvider: () -> Bitmap,
     ) {
         if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val bitmap = bitmapProvider()
+            WidgetPerformanceMonitor.current()?.recordBitmapRendered()
             setImageViewBitmap(viewId, bitmap)
             return
         }
+        val cachedUri = runCatching {
+            KgsWidgetBitmapUriStore.getIfPresent(context, appWidgetId, cacheKey)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read cached widget row image", error)
+        }.getOrNull()
+        if (cachedUri != null) {
+            setImageViewUri(viewId, cachedUri)
+            return
+        }
+        val bitmap = bitmapProvider()
+        WidgetPerformanceMonitor.current()?.recordBitmapRendered()
         val uri = runCatching {
             KgsWidgetBitmapUriStore.put(context, appWidgetId, cacheKey, bitmap)
         }.onFailure { error ->
@@ -6146,14 +6260,14 @@ internal data class WidgetListRow(
                 dayCard = dayRow,
                 muted = muted,
             ),
-            bitmap = agendaEventCardBitmap(
+            bitmapProvider = { agendaEventCardBitmap(
                 context = context,
                 palette = palette,
                 cardWidthDp = cardWidthDp,
                 rowHeightDp = rowHeightDp,
                 dayCard = dayRow,
                 muted = muted,
-            ),
+            ) },
         )
         views.setOnClickFillInIntent(R.id.widget_agenda_event_root, openFillInIntent(openTask = false))
         views.setOnClickFillInIntent(R.id.widget_agenda_event_art, openFillInIntent(openTask = false))

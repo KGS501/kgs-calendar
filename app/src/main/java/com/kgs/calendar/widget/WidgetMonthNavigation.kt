@@ -18,21 +18,23 @@ internal data class MonthNavSnapshot(
     val revision: Long,
 )
 
-internal enum class MonthNavigationPageStage { Complete, Skeleton }
-
-internal data class MonthNavigationInitialPage(
-    val page: WidgetMonthPage,
-    val stage: MonthNavigationPageStage,
-)
-
 internal fun selectMonthNavigationInitialPage(
     cached: WidgetMonthPage?,
-    skeleton: WidgetMonthPage,
-): MonthNavigationInitialPage = if (cached != null) {
-    MonthNavigationInitialPage(cached, MonthNavigationPageStage.Complete)
-} else {
-    MonthNavigationInitialPage(skeleton, MonthNavigationPageStage.Skeleton)
-}
+): WidgetMonthPage? = cached
+
+internal data class MonthAuthoritativePageDecision(
+    val apply: Boolean,
+    val cache: Boolean,
+)
+
+internal fun authoritativeMonthPageDecision(
+    navigationCurrent: Boolean,
+    loadedGeneration: Long,
+    currentGeneration: Long,
+): MonthAuthoritativePageDecision = MonthAuthoritativePageDecision(
+    apply = navigationCurrent,
+    cache = navigationCurrent && loadedGeneration == currentGeneration,
+)
 
 internal fun monthCacheWindow(center: YearMonth): List<YearMonth> =
     (-6L..6L).map(center::plusMonths)

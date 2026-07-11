@@ -208,24 +208,53 @@ class WidgetMonthNavigationTest {
     }
 
     @Test
-    fun cachedTargetUsesCompletePageWithoutSkeleton() {
+    fun cachedTargetUsesCompletePageImmediately() {
         val cached = page(YearMonth.of(2026, 2))
-        val skeleton = page(YearMonth.of(2026, 2))
 
-        val initial = selectMonthNavigationInitialPage(cached, skeleton)
+        val initial = selectMonthNavigationInitialPage(cached)
 
-        assertEquals(MonthNavigationPageStage.Complete, initial.stage)
-        assertTrue(initial.page === cached)
+        assertTrue(initial === cached)
     }
 
     @Test
-    fun cacheMissUsesTargetSkeleton() {
-        val skeleton = page(YearMonth.of(2026, 2))
+    fun cacheMissKeepsCurrentWidgetUntilCompleteTargetIsLoaded() {
+        assertEquals(null, selectMonthNavigationInitialPage(null))
+    }
 
-        val initial = selectMonthNavigationInitialPage(null, skeleton)
+    @Test
+    fun currentNavigationAppliesLatestPageWithoutCachingDuringDataChurn() {
+        assertEquals(
+            MonthAuthoritativePageDecision(apply = true, cache = false),
+            authoritativeMonthPageDecision(
+                navigationCurrent = true,
+                loadedGeneration = 12,
+                currentGeneration = 13,
+            ),
+        )
+    }
 
-        assertEquals(MonthNavigationPageStage.Skeleton, initial.stage)
-        assertTrue(initial.page === skeleton)
+    @Test
+    fun stableCurrentNavigationAppliesAndCachesLatestPage() {
+        assertEquals(
+            MonthAuthoritativePageDecision(apply = true, cache = true),
+            authoritativeMonthPageDecision(
+                navigationCurrent = true,
+                loadedGeneration = 13,
+                currentGeneration = 13,
+            ),
+        )
+    }
+
+    @Test
+    fun supersededNavigationNeitherAppliesNorCachesLoadedPage() {
+        assertEquals(
+            MonthAuthoritativePageDecision(apply = false, cache = false),
+            authoritativeMonthPageDecision(
+                navigationCurrent = false,
+                loadedGeneration = 13,
+                currentGeneration = 13,
+            ),
+        )
     }
 
     @Test

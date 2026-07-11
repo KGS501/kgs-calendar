@@ -35,17 +35,6 @@ internal class WidgetMonthPageSource(
         )
     }
 
-    fun empty(month: YearMonth, settings: WidgetRenderSettings): WidgetMonthPage {
-        val start = WidgetMonthModel.gridStart(month, settings.firstDayOfWeek)
-        val rowCount = WidgetMonthModel.rowCount(month, settings.firstDayOfWeek)
-        return WidgetMonthModel.page(
-            month = month,
-            start = start,
-            rowCount = rowCount,
-            monthLayout = WidgetMonthLayout(emptyMap(), emptyMap()),
-        )
-    }
-
     private suspend fun loadLayout(
         month: YearMonth,
         start: LocalDate,
