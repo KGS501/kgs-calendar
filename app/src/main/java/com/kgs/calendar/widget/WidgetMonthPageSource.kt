@@ -3,6 +3,7 @@ package com.kgs.calendar.widget
 import android.content.Context
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
+import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -76,8 +77,7 @@ internal class WidgetMonthPageSource(
             }
         graph.repository.datedTasksSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
-            .filter { settings.showCompletedTasks || !it.isCompleted }
+            .filter { task -> isMonthSurfaceTaskVisible(task.isCompleted, task.status) }
             .forEach { task ->
                 val itemStart = task.startAtMillis?.toDate(zoneId)
                     ?: task.dueAtMillis?.toDate(zoneId)

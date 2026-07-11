@@ -330,6 +330,7 @@ import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
@@ -466,6 +467,11 @@ internal fun MonthOverview(
     var settleJob by remember { mutableStateOf<Job?>(null) }
     val locale = LocalAppLocale.current
     val monthFormatter = remember(locale) { DateTimeFormatter.ofPattern("MMM", locale) }
+    val calendarTasks = remember(state.datedTasks) {
+        state.datedTasks.filter { task ->
+            isMonthSurfaceTaskVisible(task.isCompleted, task.status)
+        }
+    }
 
     LaunchedEffect(month) {
         if (month.toString() == displayedMonthText) return@LaunchedEffect
@@ -650,11 +656,7 @@ internal fun MonthOverview(
                             markersByDay = monthMarkersFor(
                                 visibleMonth,
                                 state.events,
-                                if (state.showCompletedTasksInCalendar) {
-                                    state.datedTasks
-                                } else {
-                                    state.datedTasks.filterNot { it.isCompleted }
-                                },
+                                calendarTasks,
                                 state.taskColorMode,
                             ),
                             firstDayOfWeek = firstDayOfWeek,

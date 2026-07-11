@@ -330,6 +330,7 @@ import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
@@ -3810,8 +3811,10 @@ internal fun MonthView(
     val initialIndex = remember { YearMonth.from(state.selectedDate).toMonthViewPage() }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
 
-    val calendarTasks = remember(state.datedTasks, state.showCompletedTasksInCalendar) {
-        if (state.showCompletedTasksInCalendar) state.datedTasks else state.datedTasks.filterNot { it.isCompleted }
+    val calendarTasks = remember(state.datedTasks) {
+        state.datedTasks.filter { task ->
+            isMonthSurfaceTaskVisible(task.isCompleted, task.status)
+        }
     }
     val eventsByDay = remember(state.events) { state.events.indexEventsByDay() }
     val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
