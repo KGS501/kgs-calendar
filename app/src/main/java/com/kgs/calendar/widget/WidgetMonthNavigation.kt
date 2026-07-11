@@ -43,6 +43,11 @@ internal interface MonthNavStorage {
     ): MonthNavSnapshot
 
     fun read(widgetId: Int): MonthNavSnapshot?
+
+    fun applyIfCurrent(
+        snapshot: MonthNavSnapshot,
+        block: () -> Unit,
+    ): Boolean
 }
 
 internal class WidgetMonthNavigation(
@@ -73,4 +78,9 @@ internal class WidgetMonthNavigation(
 
     fun isCurrent(snapshot: MonthNavSnapshot): Boolean =
         storage.read(snapshot.widgetId)?.revision == snapshot.revision
+
+    fun applyIfCurrent(
+        snapshot: MonthNavSnapshot,
+        block: () -> Unit,
+    ): Boolean = storage.applyIfCurrent(snapshot, block)
 }

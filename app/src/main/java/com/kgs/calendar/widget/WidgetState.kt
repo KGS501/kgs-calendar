@@ -29,6 +29,16 @@ internal object KgsWidgetMonthState {
             clock = Clock.systemDefaultZone(),
         ).isCurrent(snapshot)
 
+    fun applyIfCurrent(
+        context: Context,
+        snapshot: MonthNavSnapshot,
+        block: () -> Unit,
+    ): Boolean =
+        WidgetMonthNavigation(
+            storage = PreferencesMonthNavStorage(preferences(context)),
+            clock = Clock.systemDefaultZone(),
+        ).applyIfCurrent(snapshot, block)
+
     fun month(context: Context, appWidgetId: Int, fallback: YearMonth): YearMonth =
         PreferencesMonthNavStorage(preferences(context)).read(appWidgetId)?.month ?: fallback
 
@@ -70,6 +80,18 @@ internal object KgsWidgetMonthState {
 
         override fun read(widgetId: Int): MonthNavSnapshot? = synchronized(lock) {
             readLocked(widgetId)
+        }
+
+        override fun applyIfCurrent(
+            snapshot: MonthNavSnapshot,
+            block: () -> Unit,
+        ): Boolean = synchronized(lock) {
+            if (readLocked(snapshot.widgetId)?.revision != snapshot.revision) {
+                false
+            } else {
+                block()
+                true
+            }
         }
 
         private fun readLocked(widgetId: Int): MonthNavSnapshot? {

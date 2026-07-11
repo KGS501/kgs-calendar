@@ -1237,23 +1237,21 @@ object KgsWidgetUpdater {
         val options = manager.getAppWidgetOptions(appWidgetId)
         val settings = dataSource.loadSettings(kind)
 
-        fun applyIfCurrent(result: MonthWidgetRenderResult): Boolean {
-            if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return false
-            return runCatching {
-                if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return false
-                if (kind == KgsWidgetKind.Multi) {
-                    manager.partiallyUpdateAppWidget(appWidgetId, result.views)
-                } else {
-                    manager.updateAppWidget(appWidgetId, result.views)
+        fun applyIfCurrent(result: MonthWidgetRenderResult): Boolean =
+            runCatching {
+                KgsWidgetMonthState.applyIfCurrent(context, snapshot) {
+                    if (kind == KgsWidgetKind.Multi) {
+                        manager.partiallyUpdateAppWidget(appWidgetId, result.views)
+                    } else {
+                        manager.updateAppWidget(appWidgetId, result.views)
+                    }
+                    result.signature?.let { signature ->
+                        KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
+                    }
                 }
-                result.signature?.let { signature ->
-                    KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
-                }
-                true
             }.onFailure { error ->
                 Log.e(TAG, "Failed to apply ${kind.name} month page $appWidgetId", error)
             }.getOrDefault(false)
-        }
 
         var generation = WidgetDataGeneration.current()
         val cachedPage = KgsWidgetMonthPageCache.get(snapshot.month, settings, zoneId.id, generation)

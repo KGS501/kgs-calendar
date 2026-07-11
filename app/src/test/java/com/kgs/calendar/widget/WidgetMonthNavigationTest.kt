@@ -4,6 +4,10 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.YearMonth
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,6 +28,47 @@ class WidgetMonthNavigationTest {
         assertTrue(coordinator.isCurrent(march))
         assertEquals(YearMonth.of(2026, 3), march.month)
         assertEquals(2L, march.revision)
+    }
+
+    @Test
+    fun newerNavigationCannotCommitDuringCurrentApply() {
+        val current = coordinator.navigate(widgetId, MonthCommand.Next)
+        val applyEntered = CountDownLatch(1)
+        val releaseApply = CountDownLatch(1)
+        val navigationStarted = CountDownLatch(1)
+        val navigationCommitted = CountDownLatch(1)
+        val order = Collections.synchronizedList(mutableListOf<String>())
+        val executor = Executors.newFixedThreadPool(2)
+
+        try {
+            val applyResult = executor.submit<Boolean> {
+                coordinator.applyIfCurrent(current) {
+                    applyEntered.countDown()
+                    assertTrue(releaseApply.await(5, TimeUnit.SECONDS))
+                    order += "apply"
+                }
+            }
+            assertTrue(applyEntered.await(5, TimeUnit.SECONDS))
+
+            val navigationResult = executor.submit<MonthNavSnapshot> {
+                navigationStarted.countDown()
+                coordinator.navigate(widgetId, MonthCommand.Next).also {
+                    order += "navigate"
+                    navigationCommitted.countDown()
+                }
+            }
+            assertTrue(navigationStarted.await(5, TimeUnit.SECONDS))
+            assertFalse(navigationCommitted.await(200, TimeUnit.MILLISECONDS))
+
+            releaseApply.countDown()
+
+            assertTrue(applyResult.get(5, TimeUnit.SECONDS))
+            assertEquals(2L, navigationResult.get(5, TimeUnit.SECONDS).revision)
+            assertEquals(listOf("apply", "navigate"), order)
+        } finally {
+            releaseApply.countDown()
+            executor.shutdownNow()
+        }
     }
 
     @Test
@@ -92,5 +137,17 @@ class WidgetMonthNavigationTest {
 
         override fun read(widgetId: Int): MonthNavSnapshot? =
             synchronized(snapshots) { snapshots[widgetId] }
+
+        override fun applyIfCurrent(
+            snapshot: MonthNavSnapshot,
+            block: () -> Unit,
+        ): Boolean = synchronized(snapshots) {
+            if (snapshots[snapshot.widgetId]?.revision != snapshot.revision) {
+                false
+            } else {
+                block()
+                true
+            }
+        }
     }
 }
