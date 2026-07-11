@@ -110,18 +110,20 @@ internal fun warmWidgetMonthPageCache(
 ) {
     val generation = WidgetDataGeneration.current()
     val months = monthCacheWindow(centerMonth)
-        .filter { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) == null }
-    if (months.isEmpty()) return
+    if (months.all { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) != null }) return
     val appContext = context.applicationContext
     KgsWidgetUpdateScheduler.launchLatest(
-        key = "month-cache:${zoneId.id}:${settings.hashCode()}",
+        key = "month-cache:${widgetMonthPageModelNamespace(settings, zoneId.id)}",
     ) {
         val source = WidgetMonthPageSource(appContext, zoneId)
-        for (month in months) {
-            if (WidgetDataGeneration.current() != generation) return@launchLatest
+        forEachUncachedWidgetMonth(
+            months = months,
+            isCached = { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) != null },
+            shouldContinue = { WidgetDataGeneration.current() == generation },
+        ) { month ->
             try {
                 val page = source.load(month, settings)
-                if (WidgetDataGeneration.current() != generation) return@launchLatest
+                if (WidgetDataGeneration.current() != generation) return@forEachUncachedWidgetMonth
                 KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
             } catch (error: CancellationException) {
                 throw error
@@ -129,5 +131,17 @@ internal fun warmWidgetMonthPageCache(
                 WidgetLog.d(appContext, "Failed to warm Month widget cache for $month", error)
             }
         }
+    }
+}
+
+internal suspend fun forEachUncachedWidgetMonth(
+    months: Iterable<YearMonth>,
+    isCached: (YearMonth) -> Boolean,
+    shouldContinue: () -> Boolean = { true },
+    load: suspend (YearMonth) -> Unit,
+) {
+    for (month in months) {
+        if (!shouldContinue()) return
+        if (!isCached(month)) load(month)
     }
 }

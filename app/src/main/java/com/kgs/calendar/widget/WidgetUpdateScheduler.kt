@@ -7,6 +7,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
+
+internal class OnceCompletion(private val onComplete: () -> Unit) {
+    private val completed = AtomicBoolean(false)
+
+    fun complete() {
+        if (completed.compareAndSet(false, true)) {
+            onComplete()
+        }
+    }
+}
 
 internal object KgsWidgetUpdateScheduler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

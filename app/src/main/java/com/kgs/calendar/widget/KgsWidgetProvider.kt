@@ -64,7 +64,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.PI
@@ -461,22 +460,16 @@ abstract class KgsWidgetProvider(
         snapshot: MonthNavSnapshot,
     ) {
         val pendingResult = goAsync()
-        val finished = AtomicBoolean(false)
-        val finishBroadcast = {
-            if (finished.compareAndSet(false, true)) {
-                pendingResult.finish()
-            }
-        }
+        val completion = OnceCompletion(pendingResult::finish)
         KgsWidgetUpdateScheduler.launchLatest(
             key = "month-navigation:${kind.name}:$appWidgetId",
-            onCompletion = finishBroadcast,
+            onCompletion = completion::complete,
         ) {
             KgsWidgetUpdater.navigateMonth(
                 context = context.applicationContext,
                 kind = kind,
                 appWidgetId = appWidgetId,
                 snapshot = snapshot,
-                onAcknowledged = finishBroadcast,
             )
         }
     }
@@ -1162,34 +1155,41 @@ object KgsWidgetUpdater {
                 return@forEach
             }
             runCatching {
-                if (
-                    targetMonthRevision != null &&
-                    KgsWidgetMonthState.revision(context, appWidgetId) != targetMonthRevision
-                ) {
-                    return@runCatching
-                }
                 if (collectionSnapshot != null) {
                     KgsWidgetCollectionRowsCache.put(collectionSnapshot)
                 }
-                if (incrementalDayUpdate) {
-                    manager.partiallyUpdateAppWidget(appWidgetId, views)
+
+                val applyUpdate = {
+                    if (incrementalDayUpdate) {
+                        manager.partiallyUpdateAppWidget(appWidgetId, views)
+                    } else {
+                        manager.updateAppWidget(appWidgetId, views)
+                    }
+                    if (
+                        (kind.usesCollectionList && !kind.usesDirectCollectionItems() && kind != KgsWidgetKind.Day) ||
+                        (kind == KgsWidgetKind.Day && !usesDirectDayGridItems())
+                    ) {
+                        manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+                    }
+                    if (kind == KgsWidgetKind.Day) {
+                        KgsWidgetDayState.markInitialized(context, appWidgetId)
+                    }
+                    if (signature != null) {
+                        KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
+                    }
+                    if (collectionSignature != null) {
+                        KgsWidgetCollectionUpdateSignatures.markApplied(kind, appWidgetId, collectionSignature)
+                    }
+                }
+                if (targetMonthRevision != null) {
+                    KgsWidgetMonthState.applyIfRevisionCurrent(
+                        context = context,
+                        appWidgetId = appWidgetId,
+                        revision = targetMonthRevision,
+                        block = applyUpdate,
+                    )
                 } else {
-                    manager.updateAppWidget(appWidgetId, views)
-                }
-                if (
-                    (kind.usesCollectionList && !kind.usesDirectCollectionItems() && kind != KgsWidgetKind.Day) ||
-                    (kind == KgsWidgetKind.Day && !usesDirectDayGridItems())
-                ) {
-                    manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
-                }
-                if (kind == KgsWidgetKind.Day) {
-                    KgsWidgetDayState.markInitialized(context, appWidgetId)
-                }
-                if (signature != null) {
-                    KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
-                }
-                if (collectionSignature != null) {
-                    KgsWidgetCollectionUpdateSignatures.markApplied(kind, appWidgetId, collectionSignature)
+                    applyUpdate()
                 }
             }.onFailure { error ->
                 Log.e(TAG, "Failed to update ${kind.name} widget $appWidgetId", error)
@@ -1198,20 +1198,26 @@ object KgsWidgetUpdater {
                     error.isRemoteViewsBitmapMemoryError()
                 ) {
                     runCatching {
-                        if (
-                            targetMonthRevision != null &&
-                            KgsWidgetMonthState.revision(context, appWidgetId) != targetMonthRevision
-                        ) {
-                            return@runCatching
-                        }
                         val fallbackViews = renderer.render(
                             kind = kind,
                             appWidgetId = appWidgetId,
                             options = options,
                             forceServiceCollection = true,
                         )
-                        manager.updateAppWidget(appWidgetId, fallbackViews)
-                        manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+                        val applyFallback = {
+                            manager.updateAppWidget(appWidgetId, fallbackViews)
+                            manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+                        }
+                        if (targetMonthRevision != null) {
+                            KgsWidgetMonthState.applyIfRevisionCurrent(
+                                context = context,
+                                appWidgetId = appWidgetId,
+                                revision = targetMonthRevision,
+                                block = applyFallback,
+                            )
+                        } else {
+                            applyFallback()
+                        }
                     }.onFailure { fallbackError ->
                         Log.e(TAG, "Failed to update ${kind.name} widget $appWidgetId with service collection fallback", fallbackError)
                     }
@@ -1225,7 +1231,6 @@ object KgsWidgetUpdater {
         kind: KgsWidgetKind,
         appWidgetId: Int,
         snapshot: MonthNavSnapshot,
-        onAcknowledged: () -> Unit = {},
     ) {
         require(kind == KgsWidgetKind.Month || kind == KgsWidgetKind.Multi)
         require(snapshot.widgetId == appWidgetId)
@@ -1271,8 +1276,6 @@ object KgsWidgetUpdater {
         ) {
             return
         }
-        onAcknowledged()
-
         if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
         var authoritativePage = try {
             pageSource.load(snapshot.month, settings)

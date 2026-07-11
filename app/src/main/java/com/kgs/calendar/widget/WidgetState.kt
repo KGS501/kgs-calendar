@@ -13,6 +13,7 @@ internal object KgsWidgetMonthState {
     private const val PAGE_PREFIX = "month_page_"
     private const val DIRECTION_PREFIX = "month_direction_"
     private const val REVISION_PREFIX = "month_revision_"
+    private val synchronization = MonthNavSynchronizationDomain()
 
     fun apply(
         context: Context,
@@ -39,6 +40,17 @@ internal object KgsWidgetMonthState {
             clock = Clock.systemDefaultZone(),
         ).applyIfCurrent(snapshot, block)
 
+    fun applyIfRevisionCurrent(
+        context: Context,
+        appWidgetId: Int,
+        revision: Long,
+        block: () -> Unit,
+    ): Boolean =
+        WidgetMonthNavigation(
+            storage = PreferencesMonthNavStorage(preferences(context)),
+            clock = Clock.systemDefaultZone(),
+        ).applyIfRevisionCurrent(appWidgetId, revision, block)
+
     fun month(context: Context, appWidgetId: Int, fallback: YearMonth): YearMonth =
         PreferencesMonthNavStorage(preferences(context)).read(appWidgetId)?.month ?: fallback
 
@@ -46,7 +58,7 @@ internal object KgsWidgetMonthState {
         PreferencesMonthNavStorage(preferences(context)).read(appWidgetId)?.revision ?: 0L
 
     fun clear(context: Context, appWidgetId: Int) {
-        synchronized(PreferencesMonthNavStorage.lock) {
+        synchronization.withWidgetLock(appWidgetId) {
             preferences(context).edit()
                 .remove("$MONTH_PREFIX$appWidgetId")
                 .remove("$PAGE_PREFIX$appWidgetId")
@@ -65,7 +77,7 @@ internal object KgsWidgetMonthState {
         override fun update(
             widgetId: Int,
             transform: (MonthNavSnapshot?) -> MonthNavSnapshot,
-        ): MonthNavSnapshot = synchronized(lock) {
+        ): MonthNavSnapshot = synchronization.withWidgetLock(widgetId) {
             val updated = transform(readLocked(widgetId))
             check(
                 preferences.edit()
@@ -78,15 +90,28 @@ internal object KgsWidgetMonthState {
             updated
         }
 
-        override fun read(widgetId: Int): MonthNavSnapshot? = synchronized(lock) {
+        override fun read(widgetId: Int): MonthNavSnapshot? = synchronization.withWidgetLock(widgetId) {
             readLocked(widgetId)
         }
 
         override fun applyIfCurrent(
             snapshot: MonthNavSnapshot,
             block: () -> Unit,
-        ): Boolean = synchronized(lock) {
+        ): Boolean = synchronization.withWidgetLock(snapshot.widgetId) {
             if (readLocked(snapshot.widgetId)?.revision != snapshot.revision) {
+                false
+            } else {
+                block()
+                true
+            }
+        }
+
+        override fun applyIfRevisionCurrent(
+            widgetId: Int,
+            revision: Long,
+            block: () -> Unit,
+        ): Boolean = synchronization.withWidgetLock(widgetId) {
+            if ((readLocked(widgetId)?.revision ?: 0L) != revision) {
                 false
             } else {
                 block()
@@ -105,10 +130,6 @@ internal object KgsWidgetMonthState {
                 direction = preferences.getInt("$DIRECTION_PREFIX$widgetId", 0).coerceIn(-1, 1),
                 revision = preferences.getLong("$REVISION_PREFIX$widgetId", 0L),
             )
-        }
-
-        companion object {
-            val lock = Any()
         }
     }
 }
@@ -270,26 +291,20 @@ internal object KgsWidgetMonthPageCache {
         settings: WidgetRenderSettings,
         zoneId: String,
         generation: Long,
-    ): String =
-        buildString {
-            append(month)
-            append('|')
-            append(WIDGET_MONTH_RENDER_SIGNATURE_VERSION)
-            append('|')
-            append(settings.locale.toLanguageTag())
-            append('|')
-            append(settings.firstDayOfWeek.name)
-            append('|')
-            append(settings.taskColorMode.name)
-            append('|')
-            append(settings.showCompletedTasks)
-            append('|')
-            append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
-            append('|')
-            append(zoneId)
-            append('|')
-            append(generation)
-        }
+    ): String = "${widgetMonthPageModelNamespace(settings, zoneId)}|$generation|$month"
+}
+
+internal fun widgetMonthPageModelNamespace(
+    settings: WidgetRenderSettings,
+    zoneId: String,
+): String = buildString {
+    append(WIDGET_MONTH_RENDER_SIGNATURE_VERSION)
+    append('|').append(settings.locale.toLanguageTag())
+    append('|').append(settings.firstDayOfWeek.name)
+    append('|').append(settings.taskColorMode.name)
+    append('|').append(settings.showCompletedTasks)
+    append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+    append('|').append(zoneId)
 }
 
 internal object KgsWidgetMonthUpdateSignatures {

@@ -2,6 +2,7 @@ package com.kgs.calendar.widget
 
 import java.time.Clock
 import java.time.YearMonth
+import java.util.concurrent.ConcurrentHashMap
 
 internal enum class MonthCommand {
     Previous,
@@ -36,6 +37,15 @@ internal fun selectMonthNavigationInitialPage(
 internal fun monthCacheWindow(center: YearMonth): List<YearMonth> =
     (-6L..6L).map(center::plusMonths)
 
+internal class MonthNavSynchronizationDomain {
+    private val locks = ConcurrentHashMap<Int, Any>()
+
+    fun <T> withWidgetLock(widgetId: Int, block: () -> T): T =
+        synchronized(locks.computeIfAbsent(widgetId) { Any() }) {
+            block()
+        }
+}
+
 internal interface MonthNavStorage {
     fun update(
         widgetId: Int,
@@ -46,6 +56,12 @@ internal interface MonthNavStorage {
 
     fun applyIfCurrent(
         snapshot: MonthNavSnapshot,
+        block: () -> Unit,
+    ): Boolean
+
+    fun applyIfRevisionCurrent(
+        widgetId: Int,
+        revision: Long,
         block: () -> Unit,
     ): Boolean
 }
@@ -83,4 +99,10 @@ internal class WidgetMonthNavigation(
         snapshot: MonthNavSnapshot,
         block: () -> Unit,
     ): Boolean = storage.applyIfCurrent(snapshot, block)
+
+    fun applyIfRevisionCurrent(
+        widgetId: Int,
+        revision: Long,
+        block: () -> Unit,
+    ): Boolean = storage.applyIfRevisionCurrent(widgetId, revision, block)
 }
