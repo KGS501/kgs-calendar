@@ -392,6 +392,7 @@ import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import com.kgs.calendar.ui.time.rememberCalendarTimeState
+import com.kgs.calendar.widget.KgsWidgetKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -1605,16 +1606,16 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onViewSelected = viewModel::selectView,
                 onThemeSelected = viewModel::setThemeMode,
                 onColorModeSelected = viewModel::setColorMode,
-                onMonthWidgetThemeSelected = viewModel::setMonthWidgetThemeMode,
-                onMonthWidgetColorModeSelected = viewModel::setMonthWidgetColorMode,
-                onAgendaWidgetThemeSelected = viewModel::setAgendaWidgetThemeMode,
-                onAgendaWidgetColorModeSelected = viewModel::setAgendaWidgetColorMode,
-                onTasksWidgetThemeSelected = viewModel::setTasksWidgetThemeMode,
-                onTasksWidgetColorModeSelected = viewModel::setTasksWidgetColorMode,
-                onDayWidgetThemeSelected = viewModel::setDayWidgetThemeMode,
-                onDayWidgetColorModeSelected = viewModel::setDayWidgetColorMode,
-                onMultiWidgetThemeSelected = viewModel::setMultiWidgetThemeMode,
-                onMultiWidgetColorModeSelected = viewModel::setMultiWidgetColorMode,
+                onMonthWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Month, it) },
+                onMonthWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Month, it) },
+                onAgendaWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Agenda, it) },
+                onAgendaWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Agenda, it) },
+                onTasksWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Tasks, it) },
+                onTasksWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Tasks, it) },
+                onDayWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Day, it) },
+                onDayWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Day, it) },
+                onMultiWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Multi, it) },
+                onMultiWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Multi, it) },
                 onMultiWidgetMonthPercentChanged = viewModel::setMultiWidgetMonthPercent,
                 onTasksWidgetDisplayModeSelected = viewModel::setTasksWidgetDisplayMode,
                 onTasksWidgetIncludeOverdueChanged = viewModel::setTasksWidgetIncludeOverdue,

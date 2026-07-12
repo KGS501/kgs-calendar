@@ -540,73 +540,37 @@ class CalendarViewModel(
         }
     }
 
-    fun setMonthWidgetThemeMode(mode: WidgetThemeMode) {
+    fun setWidgetThemeMode(kind: KgsWidgetKind, mode: WidgetThemeMode) {
         viewModelScope.launch {
-            settingsStore.setMonthWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Month)
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.setMonthWidgetThemeMode(mode)
+                KgsWidgetKind.Agenda -> settingsStore.setAgendaWidgetThemeMode(mode)
+                KgsWidgetKind.Tasks -> settingsStore.setTasksWidgetThemeMode(mode)
+                KgsWidgetKind.Day -> settingsStore.setDayWidgetThemeMode(mode)
+                KgsWidgetKind.Multi -> settingsStore.setMultiWidgetThemeMode(mode)
+            }
+            KgsWidgetUpdateScheduler.update(
+                appContext,
+                kind,
+                forceFullDayUpdate = kind == KgsWidgetKind.Day,
+            )
         }
     }
 
-    fun setMonthWidgetColorMode(mode: WidgetColorMode) {
+    fun setWidgetColorMode(kind: KgsWidgetKind, mode: WidgetColorMode) {
         viewModelScope.launch {
-            settingsStore.setMonthWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Month)
-        }
-    }
-
-    fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setAgendaWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
-        }
-    }
-
-    fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setAgendaWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
-        }
-    }
-
-    fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setTasksWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
-        }
-    }
-
-    fun setTasksWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setTasksWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
-        }
-    }
-
-    fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setDayWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
-        }
-    }
-
-    fun setDayWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setDayWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
-        }
-    }
-
-    fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setMultiWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
-        }
-    }
-
-    fun setMultiWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setMultiWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.setMonthWidgetColorMode(mode)
+                KgsWidgetKind.Agenda -> settingsStore.setAgendaWidgetColorMode(mode)
+                KgsWidgetKind.Tasks -> settingsStore.setTasksWidgetColorMode(mode)
+                KgsWidgetKind.Day -> settingsStore.setDayWidgetColorMode(mode)
+                KgsWidgetKind.Multi -> settingsStore.setMultiWidgetColorMode(mode)
+            }
+            KgsWidgetUpdateScheduler.update(
+                appContext,
+                kind,
+                forceFullDayUpdate = kind == KgsWidgetKind.Day,
+            )
         }
     }
 
