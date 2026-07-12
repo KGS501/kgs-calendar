@@ -220,10 +220,50 @@ class TimelineAllDayDragInstrumentedTest {
         chip.performTouchInput { cancel() }
     }
 
+    @Test
+    fun allDayCardsKeepSingleAndMultiDayWidths() {
+        val single = event(
+            resourceHref = "events/single-day-width.ics",
+            title = "Single day width",
+            startHour = 0,
+            allDay = true,
+        )
+        val multi = event(
+            resourceHref = "events/multi-day-width.ics",
+            title = "Multi day width",
+            startHour = 0,
+            allDay = true,
+            allDayDayCount = 3,
+        )
+        setTimeline(
+            events = listOf(single, multi),
+            tasks = emptyList(),
+            selectedView = CalendarViewMode.ThreeDay,
+        )
+
+        val singleWidth = composeRule
+            .onNodeWithTag("timeline-all-day-item-event:${single.uid}:${single.startsAtMillis}")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .width
+        val multiWidth = composeRule
+            .onNodeWithTag("timeline-all-day-item-event:${multi.uid}:${multi.startsAtMillis}")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .width
+
+        assertTrue("Single-day card should retain a full day-column width", singleWidth > 100f)
+        assertTrue(
+            "Multi-day card should span its three day columns: single=$singleWidth, multi=$multiWidth",
+            multiWidth > singleWidth * 2.5f,
+        )
+    }
+
     private fun setTimeline(
         events: List<EventEntity>,
         tasks: List<TaskEntity>,
         defaultEventDurationMinutes: Int = 60,
+        selectedView: CalendarViewMode = CalendarViewMode.Day,
         onEventMoved: (String, LocalDate) -> Unit = { _, _ -> },
         onEventMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
         onTaskMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
@@ -239,13 +279,13 @@ class TimelineAllDayDragInstrumentedTest {
                 TimelineView(
                     state = CalendarUiState(
                         selectedDate = date,
-                        selectedView = CalendarViewMode.Day,
+                        selectedView = selectedView,
                         events = events,
                         datedTasks = tasks,
                         defaultEventDurationMinutes = defaultEventDurationMinutes,
                         priorityAnimationsEnabled = false,
                     ),
-                    selectedView = CalendarViewMode.Day,
+                    selectedView = selectedView,
                     onDateSelected = {},
                     onViewSelected = {},
                     onMultiDayCountChanged = {},
@@ -280,10 +320,11 @@ class TimelineAllDayDragInstrumentedTest {
         startHour: Int,
         allDay: Boolean = false,
         location: String? = null,
+        allDayDayCount: Int = 1,
     ): EventEntity {
         val start = date.atTime(startHour, 0).atZone(zone).toInstant().toEpochMilli()
         val end = if (allDay) {
-            date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            date.plusDays(allDayDayCount.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
         } else {
             date.atTime(startHour + 1, 0).atZone(zone).toInstant().toEpochMilli()
         }
