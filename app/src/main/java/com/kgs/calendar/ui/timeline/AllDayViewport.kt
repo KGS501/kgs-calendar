@@ -107,10 +107,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
@@ -661,8 +663,7 @@ internal fun AllDayViewportOverlay(
                             alpha = itemAlpha
                             scaleY = if (isOverflowItem) 0.94f + 0.06f * expansionProgress else 1f
                         }
-                        .width(with(density) { visibleWidth.toDp() })
-                        .height(24.dp),
+                        .width(with(density) { visibleWidth.toDp() }),
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
                     onMoveToTimed = ::moveAllDayItemToTimed,
@@ -724,7 +725,7 @@ internal fun AllDayViewportOverlay(
                                 )
                             }
                             .width(with(density) { visibleWidth.toDp() })
-                            .height(24.dp),
+                            ,
                     )
                 }
             }
@@ -765,8 +766,7 @@ internal fun AllDayViewportOverlay(
                                     y = with(density) { chipTopDp.roundToPx() },
                                 )
                             }
-                            .width(with(density) { visibleWidth.toDp() })
-                            .height(24.dp),
+                            .width(with(density) { visibleWidth.toDp() }),
                         onTaskStatusChanged = onTaskStatusChanged,
                         onDetail = onDetail,
                         onMoveToTimed = ::moveAllDayItemToTimed,
@@ -1049,6 +1049,12 @@ private fun AllDayViewportChip(
     val snappedPage = (anchorPage + snappedPageDelta).coerceIn(0, DayPagerPageCount - 1)
     val snappedLeftPx = anchorOffsetPx + (snappedPage - anchorPage) * dayStepPx
     val draggedIntoTimedGrid = rawFingerY >= allDayHeightPxForDrag && hourHeightPxForDrag > 0f && dayStepPx > 0f
+    val timedPreviewHeight = ((defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1) / 60f) * hourHeightDp).dp
+    val displayHeight by animateDpAsState(
+        targetValue = if (isDragging && draggedIntoTimedGrid) timedPreviewHeight else 24.dp,
+        animationSpec = tween(90, easing = MotionStandard),
+        label = "allDayDraggedPreviewHeight",
+    )
     val snappedDragX = snappedLeftPx - chipLeftPx
     val snappedDragY = if (draggedIntoTimedGrid) {
         val duration = defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
@@ -1131,6 +1137,9 @@ private fun AllDayViewportChip(
     }
     Box(
         modifier = modifier
+            .wrapContentSize(Alignment.TopStart, unbounded = true)
+            .requiredHeight(displayHeight)
+            .testTag("timeline-all-day-item-${item.id}")
             .zIndex(
                 when {
                     isDragging -> 80f

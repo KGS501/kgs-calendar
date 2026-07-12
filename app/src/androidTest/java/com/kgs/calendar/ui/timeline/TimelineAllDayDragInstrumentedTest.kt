@@ -12,6 +12,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -187,9 +189,41 @@ class TimelineAllDayDragInstrumentedTest {
         card.performTouchInput { cancel() }
     }
 
+    @Test
+    fun allDayEventPreviewUsesDefaultTimedDurationAfterLeavingAllDayBand() {
+        val event = event(
+            resourceHref = "events/all-day-duration.ics",
+            title = "Two hour preview",
+            startHour = 0,
+            allDay = true,
+        )
+        setTimeline(
+            events = listOf(event),
+            tasks = emptyList(),
+            defaultEventDurationMinutes = 120,
+        )
+
+        val chip = composeRule.onNodeWithText(event.title).onParent()
+        val preview = composeRule.onNodeWithTag("timeline-all-day-item-event:${event.uid}:${event.startsAtMillis}")
+        val dragDistance = with(composeRule.density) { 120.dp.toPx() }
+        chip.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(0f, dragDistance), delayMillis = 220)
+        }
+        val expectedHeight = with(composeRule.density) { 120.dp.toPx() }
+        val tolerance = with(composeRule.density) { 2.dp.toPx() }
+        composeRule.waitUntil(timeoutMillis = 1_000) {
+            abs(preview.fetchSemanticsNode().boundsInRoot.height - expectedHeight) <= tolerance
+        }
+
+        chip.performTouchInput { cancel() }
+    }
+
     private fun setTimeline(
         events: List<EventEntity>,
         tasks: List<TaskEntity>,
+        defaultEventDurationMinutes: Int = 60,
         onEventMoved: (String, LocalDate) -> Unit = { _, _ -> },
         onEventMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
         onTaskMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
@@ -208,6 +242,7 @@ class TimelineAllDayDragInstrumentedTest {
                         selectedView = CalendarViewMode.Day,
                         events = events,
                         datedTasks = tasks,
+                        defaultEventDurationMinutes = defaultEventDurationMinutes,
                         priorityAnimationsEnabled = false,
                     ),
                     selectedView = CalendarViewMode.Day,
