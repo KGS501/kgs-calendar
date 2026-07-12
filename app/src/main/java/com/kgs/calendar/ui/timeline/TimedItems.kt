@@ -780,6 +780,7 @@ private fun TimedEventBlock(
                                 resourceHref = event.resourceHref,
                                 occurrenceMillis = event.startsAtMillis,
                                 title = event.title,
+                                location = displayLocation,
                                 colorArgb = background.toArgb(),
                                 priority = null,
                                 completed = false,
@@ -817,7 +818,8 @@ private fun TimedEventBlock(
                 dragY = 0f
             },
             onDragEnd = {
-                if (rootOverlayDrag) {
+                val awaitingRootCommit = rootOverlayDrag
+                if (awaitingRootCommit) {
                     dragReporter.end()
                 } else {
                     val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
@@ -834,11 +836,18 @@ private fun TimedEventBlock(
                     }
                 }
                 isDragging = false
-                rootOverlayDrag = false
+                if (!awaitingRootCommit) rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
         )
+    }
+    LaunchedEffect(rootOverlayDrag, isDragging) {
+        if (rootOverlayDrag && !isDragging) {
+            delay(5_000)
+            dragReporter.cancel()
+            rootOverlayDrag = false
+        }
     }
     Row(
         modifier = Modifier
@@ -1017,14 +1026,14 @@ private fun TimedTaskBlock(
         animationSpec = tween(MotionMedium, easing = MotionStandard),
         label = "timedTaskAlpha",
     )
-    var dragX by remember(task.resourceHref) { mutableStateOf(0f) }
-    var dragY by remember(task.resourceHref) { mutableStateOf(0f) }
-    var isDragging by remember(task.resourceHref) { mutableStateOf(false) }
-    var rootOverlayDrag by remember(task.resourceHref) { mutableStateOf(false) }
-    var cardCoordinates by remember(task.resourceHref) { mutableStateOf<LayoutCoordinates?>(null) }
+    var dragX by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(0f) }
+    var dragY by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(0f) }
+    var isDragging by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(false) }
+    var rootOverlayDrag by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(false) }
+    var cardCoordinates by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
     val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
-    DisposableEffect(task.resourceHref, dragReporter) {
+    DisposableEffect(task.resourceHref, task.startAtMillis, task.dueAtMillis, dragReporter) {
         onDispose {
             if (latestRootOverlayDrag) dragReporter.cancel()
         }
@@ -1094,6 +1103,7 @@ private fun TimedTaskBlock(
                                 resourceHref = task.resourceHref,
                                 occurrenceMillis = task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(),
                                 title = task.title,
+                                location = displayLocation,
                                 colorArgb = background.toArgb(),
                                 priority = task.priority,
                                 completed = inactive,
@@ -1131,7 +1141,8 @@ private fun TimedTaskBlock(
                 dragY = 0f
             },
             onDragEnd = {
-                if (rootOverlayDrag) {
+                val awaitingRootCommit = rootOverlayDrag
+                if (awaitingRootCommit) {
                     dragReporter.end()
                 } else {
                     val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
@@ -1148,11 +1159,18 @@ private fun TimedTaskBlock(
                     }
                 }
                 isDragging = false
-                rootOverlayDrag = false
+                if (!awaitingRootCommit) rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
         )
+    }
+    LaunchedEffect(rootOverlayDrag, isDragging) {
+        if (rootOverlayDrag && !isDragging) {
+            delay(5_000)
+            dragReporter.cancel()
+            rootOverlayDrag = false
+        }
     }
     Row(
         modifier = Modifier

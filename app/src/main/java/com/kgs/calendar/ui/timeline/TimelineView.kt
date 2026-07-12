@@ -461,6 +461,7 @@ private data class ActiveTimelineTimedDrag(
     val item: TimelineDraggedItem,
     val session: TimelineDragSession,
     val layout: TimelineRootDragLayout,
+    val awaitingCommit: Boolean = false,
 )
 
 private interface TimelineVerticalPinchOwner {
@@ -907,6 +908,7 @@ internal fun TimelineView(
     val currentDragUpdate = rememberUpdatedState<(TimelineDragPoint) -> Unit>(
         newValue = dragUpdate@ { pointerInRoot ->
             val active = activeTimedDrag ?: return@dragUpdate
+            if (active.awaitingCommit) return@dragUpdate
             val layout = active.layout
             val pointerX = pointerInRoot.x - layout.rootOrigin.x
             val pointerY = pointerInRoot.y - layout.rootOrigin.y
@@ -950,7 +952,7 @@ internal fun TimelineView(
     val currentDragEnd = rememberUpdatedState<() -> Unit>(
         newValue = dragEnd@ {
             val active = activeTimedDrag ?: return@dragEnd
-            activeTimedDrag = null
+            activeTimedDrag = active.copy(awaitingCommit = true)
             when (val target = active.session.target) {
                 is TimelineDropTarget.AllDay -> when (active.item.kind) {
                     TimelineDraggedItemKind.Event -> onEventMovedAllDay(
@@ -1723,6 +1725,20 @@ private fun TimelineTimedDragOverlay(
     val color = Color(active.item.colorArgb)
     val contentColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val shape = RoundedCornerShape(if (target is TimelineDropTarget.AllDay) 8.dp else 10.dp)
+    val cardHeightDp = with(density) { targetHeight.toDp().value }
+    val timedTitleScale = ((cardHeightDp - if (active.item.kind == TimelineDraggedItemKind.Task) 18f else 13f) / 20f)
+        .coerceIn(0f, 1f)
+    val timedVerticalPadding = (1.5f + timedTitleScale * 1.5f).dp
+    val timedTitleMaxLines = if (cardHeightDp >= 43f) 2 else 1
+    val showLocation = target is TimelineDropTarget.Timed &&
+        cardHeightDp >= (if (active.item.kind == TimelineDraggedItemKind.Task) 42f else 40f) &&
+        active.item.location.isNotBlank()
+    val locationMaxLines = when {
+        cardHeightDp >= 86f -> 4
+        cardHeightDp >= 68f -> 3
+        cardHeightDp >= 52f -> 2
+        else -> 1
+    }
     Box(
         modifier = Modifier
             .offset { IntOffset(animatedX.roundToInt(), animatedY.roundToInt()) }
@@ -1740,30 +1756,73 @@ private fun TimelineTimedDragOverlay(
             .background(color, shape)
             .testTag("timeline-drag-overlay"),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = if (target is TimelineDropTarget.AllDay) 3.dp else 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (active.item.kind == TimelineDraggedItemKind.Task) {
-                Icon(
-                    imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(16.dp),
+        if (target is TimelineDropTarget.AllDay) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (active.item.kind == TimelineDraggedItemKind.Task) {
+                    Icon(
+                        imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    text = active.item.title,
+                    color = contentColor,
+                    fontSize = 12.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
                 )
-                Spacer(Modifier.width(4.dp))
             }
-            Text(
-                text = active.item.title,
-                color = contentColor,
-                fontSize = 12.sp,
-                lineHeight = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = if (target is TimelineDropTarget.AllDay) 1 else 2,
-                overflow = TextOverflow.Clip,
-            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(start = if (active.item.kind == TimelineDraggedItemKind.Task) 5.dp else 6.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                if (active.item.kind == TimelineDraggedItemKind.Task) {
+                    Icon(
+                        imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.padding(top = timedVerticalPadding).size(15.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(if (timedTitleMaxLines > 1 || showLocation) Modifier.bottomEdgeFadeMask() else Modifier)
+                        .padding(top = timedVerticalPadding),
+                ) {
+                    FadingTimedText(
+                        text = active.item.title,
+                        color = contentColor,
+                        fontSize = 12.sp,
+                        lineHeight = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = timedTitleMaxLines,
+                        textScale = 0.9f + timedTitleScale * 0.1f,
+                        modifier = Modifier.testTag("timeline-drag-overlay-title"),
+                    )
+                    if (showLocation) {
+                        FadingTimedText(
+                            text = active.item.location,
+                            color = contentColor.copy(alpha = 0.86f),
+                            fontSize = 11.sp,
+                            lineHeight = 12.sp,
+                            maxLines = locationMaxLines,
+                            modifier = Modifier.testTag("timeline-drag-overlay-location"),
+                        )
+                    }
+                }
+            }
         }
     }
 }

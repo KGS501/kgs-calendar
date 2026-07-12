@@ -46,6 +46,7 @@ internal data class TimelineDraggedItem(
     val resourceHref: String,
     val occurrenceMillis: Long,
     val title: String,
+    val location: String,
     val colorArgb: Int,
     val priority: Int?,
     val completed: Boolean,

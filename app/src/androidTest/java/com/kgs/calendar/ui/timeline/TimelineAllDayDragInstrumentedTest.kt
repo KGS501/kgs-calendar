@@ -26,6 +26,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -104,9 +105,63 @@ class TimelineAllDayDragInstrumentedTest {
         assertEquals(task.resourceHref to date, dropped.get())
     }
 
+    @Test
+    fun timedEventDragOverlayKeepsTitleAndLocationInCardLayout() {
+        val event = event(
+            resourceHref = "events/located.ics",
+            title = "Located event",
+            startHour = 9,
+            location = "Conference room",
+        )
+        setTimeline(events = listOf(event), tasks = emptyList())
+
+        val card = composeRule.onNodeWithTag("timeline-timed-event-${event.resourceHref}")
+        card.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(0f, 20f), delayMillis = 180)
+        }
+
+        composeRule.onNodeWithTag("timeline-drag-overlay-title").fetchSemanticsNode()
+        composeRule.onNodeWithTag("timeline-drag-overlay-location").fetchSemanticsNode()
+        val overlayBounds = composeRule.onNodeWithTag("timeline-drag-overlay").fetchSemanticsNode().boundsInRoot
+        val titleBounds = composeRule.onNodeWithTag("timeline-drag-overlay-title").fetchSemanticsNode().boundsInRoot
+        assertTrue(titleBounds.center.y < overlayBounds.center.y)
+
+        card.performTouchInput { cancel() }
+    }
+
+    @Test
+    fun droppedTimedEventStaysAtOptimisticTargetUntilStateCommits() {
+        val event = event(
+            resourceHref = "events/optimistic.ics",
+            title = "Optimistic event",
+            startHour = 9,
+        )
+        val dropped = AtomicReference<LocalDate?>()
+        setTimeline(
+            events = listOf(event),
+            tasks = emptyList(),
+            onEventMoved = { _, targetDate -> dropped.set(targetDate) },
+        )
+
+        val card = composeRule.onNodeWithTag("timeline-timed-event-${event.resourceHref}")
+        card.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(0f, 80f), delayMillis = 220)
+            up()
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(date, dropped.get())
+        composeRule.onNodeWithTag("timeline-drag-overlay").fetchSemanticsNode()
+    }
+
     private fun setTimeline(
         events: List<EventEntity>,
         tasks: List<TaskEntity>,
+        onEventMoved: (String, LocalDate) -> Unit = { _, _ -> },
         onEventMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
         onTaskMovedAllDay: (String, LocalDate) -> Unit = { _, _ -> },
     ) {
@@ -131,7 +186,7 @@ class TimelineAllDayDragInstrumentedTest {
                     onViewSelected = {},
                     onMultiDayCountChanged = {},
                     onTaskStatusChanged = { _, _ -> },
-                    onEventMoved = { _, _, _, _, _ -> },
+                    onEventMoved = { href, _, targetDate, _, _ -> onEventMoved(href, targetDate) },
                     onTaskMoved = { _, _, _, _, _ -> },
                     onEventMovedAllDay = { href, _, targetDate -> onEventMovedAllDay(href, targetDate) },
                     onTaskMovedAllDay = { href, _, targetDate -> onTaskMovedAllDay(href, targetDate) },
@@ -160,6 +215,7 @@ class TimelineAllDayDragInstrumentedTest {
         title: String,
         startHour: Int,
         allDay: Boolean = false,
+        location: String? = null,
     ): EventEntity {
         val start = date.atTime(startHour, 0).atZone(zone).toInstant().toEpochMilli()
         val end = if (allDay) {
@@ -173,7 +229,7 @@ class TimelineAllDayDragInstrumentedTest {
             resourceHref = resourceHref,
             title = title,
             description = null,
-            location = null,
+            location = location,
             startsAtMillis = start,
             endsAtMillis = end,
             allDay = allDay,
