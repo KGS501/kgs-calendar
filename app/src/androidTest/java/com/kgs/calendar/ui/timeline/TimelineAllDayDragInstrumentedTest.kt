@@ -25,6 +25,7 @@ import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -156,6 +157,34 @@ class TimelineAllDayDragInstrumentedTest {
 
         assertEquals(date, dropped.get())
         composeRule.onNodeWithTag("timeline-drag-overlay").fetchSemanticsNode()
+    }
+
+    @Test
+    fun timedDragPreservesTheFingerOffsetInsideTheCard() {
+        val event = event(
+            resourceHref = "events/anchored.ics",
+            title = "Anchored event",
+            startHour = 9,
+        )
+        setTimeline(events = listOf(event), tasks = emptyList())
+
+        val card = composeRule.onNodeWithTag("timeline-timed-event-${event.resourceHref}")
+        val sourceBounds = card.fetchSemanticsNode().boundsInRoot
+        card.performTouchInput {
+            val nearBottom = Offset(center.x, sourceBounds.height - 8f)
+            down(nearBottom)
+            advanceEventTime(700)
+            moveBy(Offset(0f, 1f), delayMillis = 180)
+        }
+        composeRule.waitForIdle()
+
+        val overlayTop = composeRule.onNodeWithTag("timeline-drag-overlay").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            "Drag overlay should retain its grab offset: source=${sourceBounds.top}, overlay=$overlayTop",
+            abs(overlayTop - sourceBounds.top) <= 3f,
+        )
+
+        card.performTouchInput { cancel() }
     }
 
     private fun setTimeline(

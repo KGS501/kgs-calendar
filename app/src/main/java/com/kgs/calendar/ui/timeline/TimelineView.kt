@@ -453,6 +453,9 @@ private data class TimelineRootDragLayout(
     val sidebarWidthPx: Float,
     val fixedAllDayBoundaryY: Float,
     val sourceInsetXPx: Float,
+    val initialPointerYPx: Float,
+    val initialTimeScrollPx: Int,
+    val sourceTopPx: Float,
     val sourceWidthPx: Float,
     val sourceHeightPx: Float,
 )
@@ -889,6 +892,9 @@ internal fun TimelineView(
                 sidebarWidthPx = sidebarWidthPx,
                 fixedAllDayBoundaryY = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
                 sourceInsetXPx = sourceLeft - sourcePageLeft,
+                initialPointerYPx = start.pointerInRoot.y - rootOrigin.y,
+                initialTimeScrollPx = timeScroll.value,
+                sourceTopPx = start.cardBoundsInRoot.top - rootOrigin.y,
                 sourceWidthPx = start.cardBoundsInRoot.width,
                 sourceHeightPx = start.cardBoundsInRoot.height,
             )
@@ -919,9 +925,9 @@ internal fun TimelineView(
             val duration = (active.item.endMinute - active.item.startMinute)
                 .coerceAtLeast(DraftMinDurationMinutes)
             val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }.coerceAtLeast(1f)
-            val gridY = pointerY - layout.fixedAllDayBoundaryY + timeScroll.value
-            val minuteOffset = ((gridY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
-            val startMinute = (DayStartHour * 60 + minuteOffset)
+            val pointerDeltaY = pointerY - layout.initialPointerYPx + (timeScroll.value - layout.initialTimeScrollPx)
+            val minuteDelta = ((pointerDeltaY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+            val startMinute = (active.item.startMinute + minuteDelta)
                 .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
             val timedTarget = TimelineDropTarget.Timed(
                 date = targetDate,
@@ -1307,7 +1313,6 @@ internal fun TimelineView(
         activeTimedDrag?.let { active ->
             TimelineTimedDragOverlay(
                 active = active,
-                animatedAllDayHeight = animatedAllDayHeight,
                 hourHeightDp = hourHeightDp,
                 timeScrollPx = timeScroll.value,
             )
@@ -1669,7 +1674,6 @@ private fun TimeSidebar(hours: IntRange, hourHeightDp: Float) {
 @Composable
 private fun TimelineTimedDragOverlay(
     active: ActiveTimelineTimedDrag,
-    animatedAllDayHeight: Dp,
     hourHeightDp: Float,
     timeScrollPx: Int,
 ) {
@@ -1688,11 +1692,9 @@ private fun TimelineTimedDragOverlay(
             (DayHeaderHeight + 7.dp + (target.lane * 29).dp).toPx()
         }
 
-        is TimelineDropTarget.Timed -> with(density) {
-            (DayHeaderHeight + animatedAllDayHeight).toPx() +
-                ((target.startMinute - DayStartHour * 60) / 60f) * hourHeightDp.dp.toPx() -
-                timeScrollPx
-        }
+        is TimelineDropTarget.Timed -> layout.sourceTopPx +
+            ((target.startMinute - active.item.startMinute) / 60f) * with(density) { hourHeightDp.dp.toPx() } -
+            (timeScrollPx - layout.initialTimeScrollPx)
     }
     val targetWidth = when (target) {
         is TimelineDropTarget.AllDay -> (layout.dayWidthPx - horizontalInsetPx * 2f).coerceAtLeast(1f)
