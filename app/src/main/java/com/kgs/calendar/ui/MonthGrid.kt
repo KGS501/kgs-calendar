@@ -511,6 +511,95 @@ internal fun MonthBlock(
     }
 }
 
+
+@Composable
+internal fun MonthView(
+    state: CalendarUiState,
+    onMonthChanged: (YearMonth) -> Unit,
+    onOpenDay: (LocalDate) -> Unit,
+    morphDay: LocalDate,
+    jumpRequest: YearMonth?,
+    onJumpConsumed: () -> Unit,
+    onDetail: (DetailSheet) -> Unit,
+) {
+    val firstDayOfWeek = state.firstDayOfWeek
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    // One LazyColumn item per month. Each month is a self-contained block with a big
+    // header and breathing room above it, so month boundaries are obvious.
+    val months = remember { (0 until MonthViewPageCount).map { MonthViewBase.plusMonths(it.toLong()) } }
+    val initialIndex = remember { YearMonth.from(state.selectedDate).toMonthViewPage() }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+
+    val calendarTasks = remember(state.datedTasks) {
+        state.datedTasks.filter { task ->
+            isMonthSurfaceTaskVisible(task.isCompleted, task.status)
+        }
+    }
+    val eventsByDay = remember(state.events) { state.events.indexEventsByDay() }
+    val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
+
+    // Recenter the loaded data window on the month at the top of the viewport.
+    LaunchedEffect(listState, months) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .map { months.getOrNull(it) ?: YearMonth.from(state.selectedDate) }
+            .distinctUntilChanged()
+            .collect { onMonthChanged(it) }
+    }
+    // Consume explicit jump requests (year strip / Today). For long jumps, stage close to the
+    // target first, then animate the final few months so Today feels fluid without sweeping the
+    // viewport through years of intermediate state.
+    LaunchedEffect(jumpRequest) {
+        val target = jumpRequest?.toMonthViewPage() ?: return@LaunchedEffect
+        val distance = target - listState.firstVisibleItemIndex
+        if (abs(distance) > 5) {
+            listState.scrollToItem(target - distance.coerceIn(-3, 3))
+        }
+        listState.animateScrollToItem(target)
+        onJumpConsumed()
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            weekHeaderLabels(firstDayOfWeek).forEach { label ->
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = navBottom + 24.dp),
+        ) {
+            items(months, key = { it.toString() }) { month ->
+                MonthBlock(
+                    month = month,
+                    firstDayOfWeek = firstDayOfWeek,
+                    eventsByDay = eventsByDay,
+                    tasksByDay = tasksByDay,
+                    taskColorMode = state.taskColorMode,
+                    morphDay = morphDay,
+                    onOpenDay = onOpenDay,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun MonthDayCard(
     day: LocalDate,
@@ -1041,4 +1130,3 @@ private fun MonthPillChip(pill: MonthPill, morphEnabled: Boolean = false) {
         }
     }
 }
-
