@@ -788,4 +788,3 @@ internal fun KgsModalBottomSheet(
             }
         }
 }
-
