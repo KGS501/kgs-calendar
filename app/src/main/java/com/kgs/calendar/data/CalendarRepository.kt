@@ -2216,18 +2216,6 @@ class CalendarRepository(
         )
     }
 
-    private fun normalizeServer(serverUrl: String): String {
-        val trimmed = serverUrl.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            else -> "https://$trimmed"
-        }
-    }
-
-    private fun accountId(serverUrl: String, username: String): String =
-        "account-" + UUID.nameUUIDFromBytes("$serverUrl\n$username".toByteArray(StandardCharsets.UTF_8)).toString()
-
     private fun readOnlyAccountId(url: String): String =
         READ_ONLY_PREFIX + UUID.nameUUIDFromBytes(url.toByteArray(StandardCharsets.UTF_8)).toString()
 
@@ -2399,17 +2387,8 @@ class CalendarRepository(
         )
     }
 
-    private fun String?.hasTimedIcalProperty(name: String): Boolean =
-        this?.lineSequence()?.any { line ->
-            (line.startsWith("$name:", ignoreCase = true) && line.substringAfter(':').contains('T')) ||
-                (line.startsWith("$name;", ignoreCase = true) && line.substringAfter(':', "").contains('T'))
-        } == true
-
     private fun Long?.sameLocalDateOrMissing(other: Long?): Boolean =
         other == null || (this != null && Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate() == Instant.ofEpochMilli(other).atZone(zoneId).toLocalDate())
-
-    private fun String?.toMinutesList(): List<Int> =
-        this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty()
 
     private fun String?.updateAttendeePartstat(attendeeEmails: List<String>, partstat: String): String? {
         val normalizedPartstat = partstat.trim().uppercase()
@@ -2478,13 +2457,6 @@ class CalendarRepository(
             ?.toIntOrNull()
             ?: return false
         return statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
-    }
-
-    private fun String.looksLikeHtmlResponse(contentType: String?): Boolean {
-        if (contentType?.contains("text/html", ignoreCase = true) == true) return true
-        val prefix = trimStart().take(256)
-        return prefix.startsWith("<!DOCTYPE html", ignoreCase = true) ||
-            prefix.startsWith("<html", ignoreCase = true)
     }
 
     private fun AccountEntity.describeSyncError(error: Throwable): String {
