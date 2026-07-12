@@ -38,9 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 import java.net.URI
 import java.net.UnknownHostException
 import java.net.URLEncoder
@@ -2390,27 +2388,6 @@ class CalendarRepository(
     private fun Long?.sameLocalDateOrMissing(other: Long?): Boolean =
         other == null || (this != null && Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate() == Instant.ofEpochMilli(other).atZone(zoneId).toLocalDate())
 
-    private fun String?.updateAttendeePartstat(attendeeEmails: List<String>, partstat: String): String? {
-        val normalizedPartstat = partstat.trim().uppercase()
-        if (normalizedPartstat !in setOf("ACCEPTED", "DECLINED", "TENTATIVE", "NEEDS-ACTION")) return null
-        val matches = attendeeEmails
-            .map { it.trim().lowercase() }
-            .filter { it.isNotBlank() }
-            .toSet()
-        if (matches.isEmpty()) return null
-        val attendees = runCatching { JSONArray(this.orEmpty()) }.getOrNull() ?: return null
-        var changed = false
-        repeat(attendees.length()) { index ->
-            val obj = attendees.optJSONObject(index) ?: return@repeat
-            val email = obj.optString("email").trim().lowercase()
-            if (email in matches) {
-                obj.put("partstat", normalizedPartstat)
-                changed = true
-            }
-        }
-        return attendees.takeIf { changed }?.toString()
-    }
-
     /**
      * Returns all events and tasks (master rows) that carry at least one reminder, used
      * by the reminder scheduler. Recurrence expansion for reminders is handled by the
@@ -2444,21 +2421,6 @@ class CalendarRepository(
 
     suspend fun taskByResource(resourceHref: String): TaskEntity? = database.taskDao().byResource(resourceHref)
 
-    private fun newUid(): String = "${UUID.randomUUID()}@kgs-calendar"
-
-    private fun CollectionEntity.resolvedAutomaticColor(): Int =
-        automaticColor ?: sourceColor ?: color
-
-    private fun Throwable.isTransientReadOnlySyncFailure(): Boolean {
-        if (findCause<IOException>() != null) return true
-        val statusCode = message
-            ?.substringAfter("URL returned HTTP ", "")
-            ?.takeWhile(Char::isDigit)
-            ?.toIntOrNull()
-            ?: return false
-        return statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
-    }
-
     private fun AccountEntity.describeSyncError(error: Throwable): String {
         val source = displayName?.takeIf { it.isNotBlank() } ?: username
         error.message?.takeIf { it.startsWith("Source \"$source\":") }?.let { return it }
@@ -2472,15 +2434,6 @@ class CalendarRepository(
             return "Source \"$source\": DNS lookup for \"$host\" failed. Check the internet connection, Private DNS/VPN, and server address."
         }
         return "Source \"$source\": ${error.message ?: "Sync failed."}"
-    }
-
-    private inline fun <reified T : Throwable> Throwable.findCause(): T? {
-        var current: Throwable? = this
-        while (current != null) {
-            if (current is T) return current
-            current = current.cause
-        }
-        return null
     }
 
     private fun LocalDate?.toTaskMillis(time: LocalTime?, hasTime: Boolean, defaultTime: LocalTime): Long? {
