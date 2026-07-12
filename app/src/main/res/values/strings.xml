@@ -222,6 +222,8 @@
     <string name="design">Design</string>
     <string name="privacy">Privacy</string>
     <string name="privacy_summary">Data storage, sync, and map services</string>
+    <string name="sponsor_project">Sponsor this project</string>
+    <string name="sponsor_project_summary">Open GitHub Sponsors</string>
     <string name="report_bug">Report a bug</string>
     <string name="report_bug_summary">Open GitHub issues</string>
     <string name="open_privacy_policy">Open full privacy policy</string>
@@ -538,4 +540,6 @@
     <string name="tasks_widget_settings_help">These controls only affect the tasks widget. Task rows can open a task in the app, and the status circle toggles open/completed from the home screen.</string>
     <string name="follow_app">Follow app</string>
     <string name="follow_os">Follow OS</string>
+    <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
+    <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
 </resources>

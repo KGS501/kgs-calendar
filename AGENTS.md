@@ -17,7 +17,7 @@
 - If Java is not 17, set `JAVA_HOME` to a JDK 17 install in the same shell before running Gradle.
 - `local.properties` is local-only and should point `sdk.dir` at an Android SDK. Do not commit machine-specific SDK changes.
 - Release signing uses root `keystore.properties` when present. Do not print, edit, or depend on release signing for debug work.
-- Run Gradle tasks sequentially in this workspace. Parallel `assemble`/`test` invocations can contend for Gradle/Kotlin daemons and hang.
+- The Gradle daemon is enabled; still run Gradle tasks sequentially - parallel invocations can contend and hang.
 - Cold Kotlin/Compose compilation can be slow, especially around the large `KgsCalendarApp.kt` file.
 - Existing project-wide Kotlin/deprecation warnings are noisy; do not treat warning output alone as a failed build.
 

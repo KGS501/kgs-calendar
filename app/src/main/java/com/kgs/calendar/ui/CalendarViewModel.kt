@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.kgs.calendar.AppGraph
 import com.kgs.calendar.KgsCalendarApplication
+import com.kgs.calendar.R
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.AppColorMode
@@ -19,13 +20,23 @@ import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.reminder.ReminderScheduler
+import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.navigation.CalendarLaunchResolution
+import com.kgs.calendar.navigation.CalendarLaunchResolver
+import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.sync.CalendarStructuralMutation
+import com.kgs.calendar.sync.PostMutationStage
+import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.sync.StructuralMutationResult
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -60,26 +72,35 @@ data class CalendarWidgetLaunchTarget(
 class CalendarViewModel(
     private val repository: CalendarRepository,
     private val settingsStore: SettingsStore,
+    private val sourceCalendarMutationCoordinator: SourceCalendarMutationCoordinator,
+    private val taskMutationCoordinator: TaskMutationCoordinator,
+    private val calendarLaunchResolver: CalendarLaunchResolver,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
+    initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
 ) : ViewModel() {
-    private val initialSelectedDate = initialWidgetLaunchTarget?.date ?: LocalDate.now()
-    private val initialSelectedView = initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
+    private val initialSelectedDate = initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date ?: LocalDate.now()
+    private val initialSelectedView = initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
     private val initialWidgetCreatesEvent = initialWidgetLaunchTarget?.createEvent == true
     private val initialWidgetCreatesTask = initialWidgetLaunchTarget?.createTaskScheduled != null
     private val initialWidgetOpenEventUid = initialWidgetLaunchTarget?.openEventUid?.takeIf { it.isNotBlank() }
     private val initialWidgetOpenTaskUid = initialWidgetLaunchTarget?.openTaskUid?.takeIf { it.isNotBlank() }
-    private val initialWidgetSerial = if (initialWidgetLaunchTarget != null) 1 else 0
+    private val initialWidgetSerial = if (initialWidgetLaunchTarget != null || initialCalendarLaunchTarget != null) 1 else 0
     private val busy = MutableStateFlow(false)
     private val manualSyncing = MutableStateFlow(false)
     private val message = MutableStateFlow<String?>(null)
     private val externalLoginUrl = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
     private val hiddenAndroidProviderCalendarNames = MutableStateFlow<List<String>>(emptyList())
-    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(initialWidgetLaunchTarget?.viewMode)
-    private val selectedDateOverride = MutableStateFlow<LocalDate?>(initialWidgetLaunchTarget?.date)
+    private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
+        initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode,
+    )
+    private val selectedDateOverride = MutableStateFlow<LocalDate?>(
+        initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date,
+    )
     private val dateNavigationSerial = MutableStateFlow(initialWidgetSerial)
+    private val foregroundRecenterSerial = MutableStateFlow(0)
     private val widgetCreateEventDate = MutableStateFlow(if (initialWidgetCreatesEvent) initialSelectedDate else null)
     private val widgetCreateEventSerial = MutableStateFlow(if (initialWidgetCreatesEvent) initialWidgetSerial else 0)
     private val widgetCreateTaskDate = MutableStateFlow(if (initialWidgetCreatesTask) initialSelectedDate else null)
@@ -89,8 +110,18 @@ class CalendarViewModel(
     private val widgetOpenEventSerial = MutableStateFlow(if (initialWidgetOpenEventUid != null) initialWidgetSerial else 0)
     private val widgetOpenTaskUid = MutableStateFlow(initialWidgetOpenTaskUid)
     private val widgetOpenTaskSerial = MutableStateFlow(if (initialWidgetOpenTaskUid != null) initialWidgetSerial else 0)
+    private val resolvedCalendarLaunch = MutableStateFlow<ResolvedCalendarLaunch?>(null)
+    private var nextCalendarLaunchSerial = 0
     private val initialDataReady = MutableStateFlow(false)
     private var selectedDatePersistJob: Job? = null
+    private val foregroundRecenterPolicy = ForegroundRecenterPolicy()
+    private var explicitLaunchSuppressionUntilMillis = if (
+        initialWidgetLaunchTarget != null || initialCalendarLaunchTarget != null
+    ) {
+        System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
+    } else {
+        Long.MIN_VALUE
+    }
 
     init {
         viewModelScope.launch {
@@ -98,6 +129,7 @@ class CalendarViewModel(
                 .onSuccess { message.value = null }
                 .onFailure { message.value = it.message ?: "Could not prepare local calendar." }
         }
+        initialCalendarLaunchTarget?.let(::openFromCalendarLaunch)
         viewModelScope.launch {
             val blockInitialUi = runCatching {
                 repository.shouldBlockInitialAndroidProviderRefresh()
@@ -121,6 +153,23 @@ class CalendarViewModel(
         }
         if (initialWidgetLaunchTarget != null) {
             persistWidgetSelection(initialWidgetLaunchTarget.date, initialWidgetLaunchTarget.viewMode)
+        }
+        (appContext.applicationContext as? KgsCalendarApplication)?.processForegroundedAt?.let { foregroundEvents ->
+            viewModelScope.launch {
+                foregroundEvents.collect { foregroundedAt ->
+                    val backgroundedAt = settingsStore.lastBackgroundedAtMillis.first()
+                    settingsStore.setLastBackgroundedAtMillis(null)
+                    if (
+                        foregroundRecenterPolicy.shouldRecenter(
+                            backgroundedAt = backgroundedAt,
+                            foregroundedAt = foregroundedAt,
+                            explicitLaunchPending = foregroundedAt <= explicitLaunchSuppressionUntilMillis,
+                        )
+                    ) {
+                        recenterToToday(LocalDate.now(zoneId))
+                    }
+                }
+            }
         }
     }
 
@@ -352,8 +401,6 @@ class CalendarViewModel(
             dateNavigationSerial = values[53] as Int,
             widgetCreateEventDate = values[54] as LocalDate?,
             widgetCreateEventSerial = values[55] as Int,
-            monthWidgetColorMode = values[56] as WidgetColorMode,
-            monthWidgetThemeMode = values[57] as WidgetThemeMode,
             widgetCreateTaskDate = values[58] as LocalDate?,
             widgetCreateTaskScheduled = values[59] as Boolean,
             widgetCreateTaskSerial = values[60] as Int,
@@ -361,27 +408,41 @@ class CalendarViewModel(
             widgetOpenEventSerial = values[62] as Int,
             widgetOpenTaskUid = values[63] as String?,
             widgetOpenTaskSerial = values[64] as Int,
-            tasksWidgetDisplayMode = values[65] as WidgetTaskDisplayMode,
-            tasksWidgetIncludeOverdue = values[66] as Boolean,
-            tasksWidgetSortMode = values[67] as WidgetTaskSortMode,
-            tasksWidgetCreateMode = values[68] as WidgetTaskCreateMode,
-            tasksWidgetSubtaskDefaultMode = values[69] as WidgetTaskSubtaskDefaultMode,
-            dayWidgetScalePercent = values[70] as Int,
-            dayWidgetStartHour = values[71] as Int,
-            dayWidgetStartAtCurrentHour = values[72] as Boolean,
-            agendaWidgetColorMode = values[73] as WidgetColorMode,
-            agendaWidgetThemeMode = values[74] as WidgetThemeMode,
-            tasksWidgetColorMode = values[75] as WidgetColorMode,
-            tasksWidgetThemeMode = values[76] as WidgetThemeMode,
-            dayWidgetColorMode = values[77] as WidgetColorMode,
-            dayWidgetThemeMode = values[78] as WidgetThemeMode,
-            multiWidgetColorMode = values[79] as WidgetColorMode,
-            multiWidgetThemeMode = values[80] as WidgetThemeMode,
-            multiWidgetMonthPercent = values[81] as Int,
+            widgetSettings = WidgetSettingsUiState(
+                monthWidgetColorMode = values[56] as WidgetColorMode,
+                monthWidgetThemeMode = values[57] as WidgetThemeMode,
+                tasksWidgetDisplayMode = values[65] as WidgetTaskDisplayMode,
+                tasksWidgetIncludeOverdue = values[66] as Boolean,
+                tasksWidgetSortMode = values[67] as WidgetTaskSortMode,
+                tasksWidgetCreateMode = values[68] as WidgetTaskCreateMode,
+                tasksWidgetSubtaskDefaultMode = values[69] as WidgetTaskSubtaskDefaultMode,
+                dayWidgetScalePercent = values[70] as Int,
+                dayWidgetStartHour = values[71] as Int,
+                dayWidgetStartAtCurrentHour = values[72] as Boolean,
+                agendaWidgetColorMode = values[73] as WidgetColorMode,
+                agendaWidgetThemeMode = values[74] as WidgetThemeMode,
+                tasksWidgetColorMode = values[75] as WidgetColorMode,
+                tasksWidgetThemeMode = values[76] as WidgetThemeMode,
+                dayWidgetColorMode = values[77] as WidgetColorMode,
+                dayWidgetThemeMode = values[78] as WidgetThemeMode,
+                multiWidgetColorMode = values[79] as WidgetColorMode,
+                multiWidgetThemeMode = values[80] as WidgetThemeMode,
+                multiWidgetMonthPercent = values[81] as Int,
+            ),
         )
     }
         .combine(initialDataReady) { uiState, ready ->
             uiState.copy(initialDataLoaded = ready)
+        }
+        .combine(resolvedCalendarLaunch) { uiState, resolved ->
+            uiState.copy(
+                calendarLaunchEvent = resolved?.resolution?.event,
+                calendarLaunchTask = resolved?.resolution?.task,
+                calendarLaunchSerial = resolved?.serial ?: 0,
+            )
+        }
+        .combine(foregroundRecenterSerial) { uiState, serial ->
+            uiState.copy(foregroundRecenterSerial = serial)
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
@@ -398,6 +459,7 @@ class CalendarViewModel(
         openEventUid: String? = null,
         openTaskUid: String? = null,
     ) {
+        suppressAutomaticRecenterForExplicitLaunch()
         selectedViewOverride.value = viewMode
         selectedDateOverride.value = date
         dateNavigationSerial.update { it + 1 }
@@ -421,6 +483,19 @@ class CalendarViewModel(
         persistWidgetSelection(date, viewMode)
     }
 
+    fun openFromCalendarLaunch(target: CalendarLaunchTarget) {
+        suppressAutomaticRecenterForExplicitLaunch()
+        viewModelScope.launch {
+            val resolution = calendarLaunchResolver.resolve(target) ?: return@launch
+            selectedViewOverride.value = resolution.viewMode
+            selectedDateOverride.value = resolution.date
+            dateNavigationSerial.update { it + 1 }
+            nextCalendarLaunchSerial += 1
+            resolvedCalendarLaunch.value = ResolvedCalendarLaunch(nextCalendarLaunchSerial, resolution)
+            persistWidgetSelection(resolution.date, resolution.viewMode)
+        }
+    }
+
     private fun persistWidgetSelection(date: LocalDate, viewMode: CalendarViewMode) {
         selectedDatePersistJob?.cancel()
         selectedDatePersistJob = viewModelScope.launch {
@@ -439,6 +514,20 @@ class CalendarViewModel(
         }
     }
 
+    fun recenterToToday(today: LocalDate = LocalDate.now(zoneId)) {
+        selectedDateOverride.value = today
+        dateNavigationSerial.update { it + 1 }
+        foregroundRecenterSerial.update { it + 1 }
+        selectedDatePersistJob?.cancel()
+        selectedDatePersistJob = viewModelScope.launch {
+            settingsStore.setSelectedDate(today)
+        }
+    }
+
+    private fun suppressAutomaticRecenterForExplicitLaunch() {
+        explicitLaunchSuppressionUntilMillis = System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
+    }
+
     fun setThemeMode(mode: AppThemeMode) {
         viewModelScope.launch {
             settingsStore.setThemeMode(mode)
@@ -453,73 +542,37 @@ class CalendarViewModel(
         }
     }
 
-    fun setMonthWidgetThemeMode(mode: WidgetThemeMode) {
+    fun setWidgetThemeMode(kind: KgsWidgetKind, mode: WidgetThemeMode) {
         viewModelScope.launch {
-            settingsStore.setMonthWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Month)
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.setMonthWidgetThemeMode(mode)
+                KgsWidgetKind.Agenda -> settingsStore.setAgendaWidgetThemeMode(mode)
+                KgsWidgetKind.Tasks -> settingsStore.setTasksWidgetThemeMode(mode)
+                KgsWidgetKind.Day -> settingsStore.setDayWidgetThemeMode(mode)
+                KgsWidgetKind.Multi -> settingsStore.setMultiWidgetThemeMode(mode)
+            }
+            KgsWidgetUpdateScheduler.update(
+                appContext,
+                kind,
+                forceFullDayUpdate = kind == KgsWidgetKind.Day,
+            )
         }
     }
 
-    fun setMonthWidgetColorMode(mode: WidgetColorMode) {
+    fun setWidgetColorMode(kind: KgsWidgetKind, mode: WidgetColorMode) {
         viewModelScope.launch {
-            settingsStore.setMonthWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Month)
-        }
-    }
-
-    fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setAgendaWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
-        }
-    }
-
-    fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setAgendaWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Agenda)
-        }
-    }
-
-    fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setTasksWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
-        }
-    }
-
-    fun setTasksWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setTasksWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Tasks)
-        }
-    }
-
-    fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setDayWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
-        }
-    }
-
-    fun setDayWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setDayWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Day, forceFullDayUpdate = true)
-        }
-    }
-
-    fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
-        viewModelScope.launch {
-            settingsStore.setMultiWidgetThemeMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
-        }
-    }
-
-    fun setMultiWidgetColorMode(mode: WidgetColorMode) {
-        viewModelScope.launch {
-            settingsStore.setMultiWidgetColorMode(mode)
-            KgsWidgetUpdateScheduler.update(appContext, KgsWidgetKind.Multi)
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.setMonthWidgetColorMode(mode)
+                KgsWidgetKind.Agenda -> settingsStore.setAgendaWidgetColorMode(mode)
+                KgsWidgetKind.Tasks -> settingsStore.setTasksWidgetColorMode(mode)
+                KgsWidgetKind.Day -> settingsStore.setDayWidgetColorMode(mode)
+                KgsWidgetKind.Multi -> settingsStore.setMultiWidgetColorMode(mode)
+            }
+            KgsWidgetUpdateScheduler.update(
+                appContext,
+                kind,
+                forceFullDayUpdate = kind == KgsWidgetKind.Day,
+            )
         }
     }
 
@@ -751,7 +804,9 @@ class CalendarViewModel(
         viewModelScope.launch {
             busy.value = true
             val saved = runCatching {
-                repository.saveManualAccount(serverUrl, username, appPassword)
+                sourceCalendarMutationCoordinator.run(CalendarStructuralMutation.AddSource) {
+                    repository.saveManualAccount(serverUrl, username, appPassword)
+                }
             }
             saved.onFailure {
                 val errorMessage = it.message ?: "Could not verify this CalDAV login."
@@ -762,80 +817,52 @@ class CalendarViewModel(
             if (saved.isFailure) {
                 return@launch
             }
-
-            message.value = "CalDAV account added."
+            refreshAndroidProviderDiagnosticsInternal()
+            val resultMessage = structuralMutationMessage(saved.getOrThrow(), "CalDAV account synced.")
+            message.value = resultMessage
             busy.value = false
-            onResult?.invoke(true, null)
-
-            runCatching {
-                repository.syncNow(
-                    includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                    forceFullCalDavRefresh = true,
-                )
-            }.onSuccess {
-                message.value = "CalDAV account synced."
-            }.onFailure {
-                val errorMessage = it.message ?: "The CalDAV account was added, but its first sync failed."
-                message.value = errorMessage
-            }
-            runCatching { ReminderScheduler.reschedule(appContext) }
+            onResult?.invoke(true, resultMessage)
         }
     }
 
     fun startBrowserLogin(serverUrl: String) {
-        runBusy(rescheduleReminders = true) {
-            val start = repository.startLoginFlow(serverUrl)
-            externalLoginUrl.value = start.loginUrl
-            repository.completeLoginFlow(start.pollEndpoint, start.token)
-            repository.syncNow(
-                includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                forceFullCalDavRefresh = true,
-            )
-            message.value = "Login complete."
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Login complete.") {
+            val login = repository.startLoginFlow(serverUrl)
+            externalLoginUrl.value = login.loginUrl
+            repository.completeLoginFlow(login.pollEndpoint, login.token)
         }
     }
 
     fun addReadOnlyCalendar(url: String) {
-        runBusy(rescheduleReminders = true, showManualSync = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Read-only calendar added.", showManualSync = true) {
             repository.addReadOnlyCalendar(url)
-            syncAllSourcesAfterAddingSource()
-            message.value = "Read-only calendar added."
         }
     }
 
     fun addAndroidDeviceCalendars() {
-        runBusy(rescheduleReminders = true, showManualSync = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Android device calendars added.", showManualSync = true) {
             repository.enableAndroidCalendars(
                 includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
             )
             (appContext.applicationContext as? KgsCalendarApplication)?.registerAndroidCalendarObserverIfPermitted()
-            syncAllSourcesAfterAddingSource()
-            message.value = "Android device calendars added."
         }
     }
 
     fun renameAccount(accountId: String, displayName: String) {
-        runBusy {
+        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source renamed.") {
             repository.renameAccount(accountId, displayName)
-            message.value = "Source renamed."
         }
     }
 
     fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source updated.") {
             repository.updateAccount(accountId, displayName, serverUrl, username, appPassword)
-            repository.syncNow(
-                includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-                forceFullCalDavRefresh = true,
-            )
-            message.value = "Source updated."
         }
     }
 
     fun deleteAccount(accountId: String) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
             repository.deleteAccount(accountId)
-            message.value = "Source removed."
         }
     }
 
@@ -934,29 +961,30 @@ class CalendarViewModel(
         }
     }
 
-    fun updateTask(uid: String, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTask(uid, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTask(resourceHref: String, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(resourceHref, effectiveTaskStatus(resourceHref, payload)) {
+                repository.updateTask(resourceHref, payload)
             }
         }
     }
 
-    fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTaskOccurrence(uid, occurrenceStartMillis, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTaskOccurrence(resourceHref: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(
+                resourceHref = resourceHref,
+                status = effectiveTaskStatus(resourceHref, payload),
+                occurrenceId = CalendarOccurrenceId.Task(resourceHref, occurrenceStartMillis),
+            ) {
+                repository.updateTaskOccurrence(resourceHref, occurrenceStartMillis, payload)
             }
         }
     }
 
-    fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        runEdit(rescheduleReminders = true) {
-            repository.updateTaskFollowing(uid, occurrenceStartMillis, payload)
-            if (payload.isCompleted) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
+    fun updateTaskFollowing(resourceHref: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.mutateStatus(resourceHref, effectiveTaskStatus(resourceHref, payload)) {
+                repository.updateTaskFollowing(resourceHref, occurrenceStartMillis, payload)
             }
         }
     }
@@ -968,21 +996,18 @@ class CalendarViewModel(
         }
     }
 
-    fun setTaskCompleted(uid: String, completed: Boolean) {
-        runEdit(rescheduleReminders = true) {
-            repository.setTaskCompleted(uid, completed)
-            if (completed) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
-            }
+    fun setTaskCompleted(resourceHref: String, completed: Boolean) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.setStatus(
+                resourceHref,
+                if (completed) "COMPLETED" else "NEEDS-ACTION",
+            )
         }
     }
 
-    fun setTaskStatus(uid: String, status: String) {
-        runEdit(rescheduleReminders = true) {
-            repository.setTaskStatus(uid, status)
-            if (status.equals("COMPLETED", ignoreCase = true)) {
-                ReminderScheduler.cancelTaskNotifications(appContext, uid)
-            }
+    fun setTaskStatus(resourceHref: String, status: String) {
+        runTaskStatusMutation {
+            taskMutationCoordinator.setStatus(resourceHref, status)
         }
     }
 
@@ -1017,13 +1042,13 @@ class CalendarViewModel(
     }
 
     fun setCollectionEnabled(href: String, enabled: Boolean) {
-        viewModelScope.launch {
-            runCatching {
-                repository.setCollectionEnabled(href, enabled)
-                message.value = null
-            }.onFailure {
-                message.value = it.message ?: "Could not update calendar."
-            }
+        val kind = if (enabled) {
+            CalendarStructuralMutation.EnableCalendar
+        } else {
+            CalendarStructuralMutation.DisableCalendar
+        }
+        runStructuralMutation(kind) {
+            repository.setCollectionEnabled(href, enabled)
         }
     }
 
@@ -1034,13 +1059,8 @@ class CalendarViewModel(
     }
 
     fun updateCollectionAppearance(href: String, displayName: String, customColor: Int?) {
-        viewModelScope.launch {
-            runCatching {
-                repository.updateCollectionAppearance(href, displayName, customColor)
-                message.value = null
-            }.onFailure {
-                message.value = it.message ?: "Could not update calendar."
-            }
+        runStructuralMutation(CalendarStructuralMutation.EditCalendar) {
+            repository.updateCollectionAppearance(href, displayName, customColor)
         }
     }
 
@@ -1050,7 +1070,7 @@ class CalendarViewModel(
         supportsEvents: Boolean,
         supportsTasks: Boolean,
     ) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddCalendar, "CalDAV calendar created.") {
             repository.createCalDavCalendar(
                 accountId = accountId,
                 displayName = displayName,
@@ -1058,14 +1078,12 @@ class CalendarViewModel(
                 supportsEvents = supportsEvents,
                 supportsTasks = supportsTasks,
             )
-            message.value = "CalDAV calendar created."
         }
     }
 
     fun deleteCalDavCalendar(href: String) {
-        runBusy(rescheduleReminders = true) {
+        runStructuralMutation(CalendarStructuralMutation.RemoveCalendar, "CalDAV calendar deleted.") {
             repository.deleteCalDavCalendar(href)
-            message.value = "CalDAV calendar deleted."
         }
     }
 
@@ -1130,6 +1148,54 @@ class CalendarViewModel(
         }
     }
 
+    private fun runTaskStatusMutation(mutation: suspend () -> Unit) {
+        viewModelScope.launch {
+            runCatching { mutation() }
+                .onSuccess { message.value = null }
+                .onFailure { message.value = it.message ?: "Could not save changes." }
+        }
+    }
+
+    private fun effectiveTaskStatus(resourceHref: String, payload: TaskEditPayload): String {
+        payload.status?.takeIf { it.isNotBlank() }?.let { return it }
+        val existing = uiState.value.allTasks.firstOrNull { it.resourceHref == resourceHref }
+        existing?.status?.takeIf { payload.isCompleted == existing.isCompleted }?.let { return it }
+        return if (payload.isCompleted) "COMPLETED" else "NEEDS-ACTION"
+    }
+
+    private fun runStructuralMutation(
+        kind: CalendarStructuralMutation,
+        successMessage: String? = null,
+        showManualSync: Boolean = false,
+        mutation: suspend () -> Unit,
+    ) {
+        viewModelScope.launch {
+            busy.value = true
+            if (showManualSync) manualSyncing.value = true
+            runCatching {
+                sourceCalendarMutationCoordinator.run(kind, mutation)
+            }.onSuccess { result ->
+                refreshAndroidProviderDiagnosticsInternal()
+                message.value = structuralMutationMessage(result, successMessage)
+            }.onFailure {
+                message.value = it.message ?: "Could not update calendar settings."
+            }
+            if (showManualSync) manualSyncing.value = false
+            busy.value = false
+        }
+    }
+
+    private fun structuralMutationMessage(
+        result: StructuralMutationResult,
+        successMessage: String?,
+    ): String? = when (result) {
+        StructuralMutationResult.Complete -> successMessage
+        is StructuralMutationResult.SavedWithFollowUpFailure -> when (result.stage) {
+            PostMutationStage.Refresh -> appContext.getString(R.string.calendar_settings_saved_refresh_failed)
+            PostMutationStage.Reconciliation -> appContext.getString(R.string.calendar_settings_saved_reconciliation_failed)
+        }
+    }
+
     private fun updateNotificationSetting(block: suspend () -> Unit) {
         viewModelScope.launch {
             runCatching {
@@ -1149,13 +1215,10 @@ class CalendarViewModel(
         hiddenAndroidProviderCalendarNames.value = repository.hiddenOrNotSyncedAndroidCalendars()
     }
 
-    private suspend fun syncAllSourcesAfterAddingSource() {
-        repository.syncNow(
-            includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
-            forceFullCalDavRefresh = true,
-        )
-        refreshAndroidProviderDiagnosticsInternal()
+    private companion object {
+        const val EXPLICIT_LAUNCH_SUPPRESSION_MILLIS = 15_000L
     }
+
 }
 
 private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
@@ -1171,13 +1234,23 @@ private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
 class CalendarViewModelFactory(
     private val graph: AppGraph,
     private val initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
+    private val initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return CalendarViewModel(
             repository = graph.repository,
             settingsStore = graph.settingsStore,
+            sourceCalendarMutationCoordinator = graph.sourceCalendarMutationCoordinator,
+            taskMutationCoordinator = graph.taskMutationCoordinator,
+            calendarLaunchResolver = graph.calendarLaunchResolver,
             appContext = graph.appContext,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
+            initialCalendarLaunchTarget = initialCalendarLaunchTarget,
         ) as T
     }
 }
+
+private data class ResolvedCalendarLaunch(
+    val serial: Int,
+    val resolution: CalendarLaunchResolution,
+)

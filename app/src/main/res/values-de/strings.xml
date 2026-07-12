@@ -222,6 +222,8 @@
     <string name="design">Design</string>
     <string name="privacy">Datenschutz</string>
     <string name="privacy_summary">Datenspeicherung, Sync und Kartendienste</string>
+    <string name="sponsor_project">Projekt unterst&#252;tzen</string>
+    <string name="sponsor_project_summary">GitHub Sponsors &#246;ffnen</string>
     <string name="report_bug">Bug melden</string>
     <string name="report_bug_summary">GitHub-Issues öffnen</string>
     <string name="open_privacy_policy">Vollst&#228;ndige Datenschutzerkl&#228;rung &#246;ffnen</string>
@@ -538,4 +540,6 @@
     <string name="tasks_widget_settings_help">Diese Einstellungen betreffen nur das Aufgaben-Widget. Aufgabenzeilen k&#246;nnen eine Aufgabe in der App &#246;ffnen, und der Statuskreis schaltet direkt auf dem Homescreen zwischen offen und erledigt um.</string>
     <string name="follow_app">App folgen</string>
     <string name="follow_os">System folgen</string>
+    <string name="calendar_settings_saved_refresh_failed">Die Kalendereinstellung wurde gespeichert, aber die vollst&#228;ndige Aktualisierung ist fehlgeschlagen. Beim n&#228;chsten Abgleich wird sie erneut versucht.</string>
+    <string name="calendar_settings_saved_reconciliation_failed">Die Kalendereinstellung und Aktualisierung wurden abgeschlossen, aber Erinnerungen oder Widgets konnten nicht aktualisiert werden.</string>
 </resources>

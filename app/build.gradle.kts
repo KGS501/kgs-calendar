@@ -27,8 +27,8 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "V.1.3.3"
+        versionCode = 14
+        versionName = "V.1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
 
@@ -117,12 +118,6 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     implementation(libs.okhttp)
-    // dav4jvm drags in org.ogce:xpp3, which bundles its own copy of org.xmlpull.v1.* and collides
-    // with the Android framework's XmlPullParser under R8. On Android dav4jvm uses the platform
-    // parser, so the bundled one is excluded.
-    implementation(libs.dav4jvm) {
-        exclude(group = "org.ogce", module = "xpp3")
-    }
     implementation(libs.ical4j)
     implementation(libs.kotlinx.coroutines.android)
 

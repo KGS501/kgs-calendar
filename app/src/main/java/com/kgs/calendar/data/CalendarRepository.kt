@@ -38,9 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 import java.net.URI
 import java.net.UnknownHostException
 import java.net.URLEncoder
@@ -1033,8 +1031,8 @@ class CalendarRepository(
         createTask(payload)
     }
 
-    suspend fun setTaskCompleted(uid: String, completed: Boolean) {
-        setTaskStatus(uid, if (completed) "COMPLETED" else "NEEDS-ACTION")
+    suspend fun setTaskCompleted(resourceHref: String, completed: Boolean) {
+        setTaskStatus(resourceHref, if (completed) "COMPLETED" else "NEEDS-ACTION")
     }
 
     /**
@@ -1042,8 +1040,8 @@ class CalendarRepository(
      * task and keeps the derived [TaskEntity.isCompleted] / completedAtMillis fields
      * in sync. COMPLETED is the only status that counts as "done".
      */
-    suspend fun setTaskStatus(uid: String, status: String) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun setTaskStatus(resourceHref: String, status: String) {
+        val existing = database.taskDao().byResource(resourceHref) ?: return
         if (isReadOnlyCollectionHref(existing.collectionHref)) return
         val resource = database.resourceDao().get(existing.resourceHref)
         val completed = status.equals("COMPLETED", ignoreCase = true)
@@ -1593,7 +1591,6 @@ class CalendarRepository(
             supportsEvents = supportsEvents,
             supportsTasks = supportsTasks,
         )
-        syncNow(forceFullCalDavRefresh = true)
     }
 
     suspend fun deleteCalDavCalendar(href: String) {
@@ -2217,18 +2214,6 @@ class CalendarRepository(
         )
     }
 
-    private fun normalizeServer(serverUrl: String): String {
-        val trimmed = serverUrl.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            else -> "https://$trimmed"
-        }
-    }
-
-    private fun accountId(serverUrl: String, username: String): String =
-        "account-" + UUID.nameUUIDFromBytes("$serverUrl\n$username".toByteArray(StandardCharsets.UTF_8)).toString()
-
     private fun readOnlyAccountId(url: String): String =
         READ_ONLY_PREFIX + UUID.nameUUIDFromBytes(url.toByteArray(StandardCharsets.UTF_8)).toString()
 
@@ -2400,38 +2385,8 @@ class CalendarRepository(
         )
     }
 
-    private fun String?.hasTimedIcalProperty(name: String): Boolean =
-        this?.lineSequence()?.any { line ->
-            (line.startsWith("$name:", ignoreCase = true) && line.substringAfter(':').contains('T')) ||
-                (line.startsWith("$name;", ignoreCase = true) && line.substringAfter(':', "").contains('T'))
-        } == true
-
     private fun Long?.sameLocalDateOrMissing(other: Long?): Boolean =
         other == null || (this != null && Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate() == Instant.ofEpochMilli(other).atZone(zoneId).toLocalDate())
-
-    private fun String?.toMinutesList(): List<Int> =
-        this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty()
-
-    private fun String?.updateAttendeePartstat(attendeeEmails: List<String>, partstat: String): String? {
-        val normalizedPartstat = partstat.trim().uppercase()
-        if (normalizedPartstat !in setOf("ACCEPTED", "DECLINED", "TENTATIVE", "NEEDS-ACTION")) return null
-        val matches = attendeeEmails
-            .map { it.trim().lowercase() }
-            .filter { it.isNotBlank() }
-            .toSet()
-        if (matches.isEmpty()) return null
-        val attendees = runCatching { JSONArray(this.orEmpty()) }.getOrNull() ?: return null
-        var changed = false
-        repeat(attendees.length()) { index ->
-            val obj = attendees.optJSONObject(index) ?: return@repeat
-            val email = obj.optString("email").trim().lowercase()
-            if (email in matches) {
-                obj.put("partstat", normalizedPartstat)
-                changed = true
-            }
-        }
-        return attendees.takeIf { changed }?.toString()
-    }
 
     /**
      * Returns all events and tasks (master rows) that carry at least one reminder, used
@@ -2453,30 +2408,18 @@ class CalendarRepository(
     fun expandEventReminders(master: EventEntity, fromMillis: Long, toMillis: Long): List<EventEntity> =
         recurrenceExpander.expand(master, fromMillis, toMillis)
 
+    fun expandEventReminderOccurrences(master: EventEntity, fromMillis: Long, toMillis: Long) =
+        recurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
+
     fun expandTaskReminders(master: TaskEntity, fromMillis: Long, toMillis: Long): List<TaskEntity> =
         taskRecurrenceExpander.expand(master, fromMillis, toMillis)
 
-    private fun newUid(): String = "${UUID.randomUUID()}@kgs-calendar"
+    fun expandTaskReminderOccurrences(master: TaskEntity, fromMillis: Long, toMillis: Long) =
+        taskRecurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
 
-    private fun CollectionEntity.resolvedAutomaticColor(): Int =
-        automaticColor ?: sourceColor ?: color
+    suspend fun eventByResource(resourceHref: String): EventEntity? = database.eventDao().byResource(resourceHref)
 
-    private fun Throwable.isTransientReadOnlySyncFailure(): Boolean {
-        if (findCause<IOException>() != null) return true
-        val statusCode = message
-            ?.substringAfter("URL returned HTTP ", "")
-            ?.takeWhile(Char::isDigit)
-            ?.toIntOrNull()
-            ?: return false
-        return statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
-    }
-
-    private fun String.looksLikeHtmlResponse(contentType: String?): Boolean {
-        if (contentType?.contains("text/html", ignoreCase = true) == true) return true
-        val prefix = trimStart().take(256)
-        return prefix.startsWith("<!DOCTYPE html", ignoreCase = true) ||
-            prefix.startsWith("<html", ignoreCase = true)
-    }
+    suspend fun taskByResource(resourceHref: String): TaskEntity? = database.taskDao().byResource(resourceHref)
 
     private fun AccountEntity.describeSyncError(error: Throwable): String {
         val source = displayName?.takeIf { it.isNotBlank() } ?: username
@@ -2491,15 +2434,6 @@ class CalendarRepository(
             return "Source \"$source\": DNS lookup for \"$host\" failed. Check the internet connection, Private DNS/VPN, and server address."
         }
         return "Source \"$source\": ${error.message ?: "Sync failed."}"
-    }
-
-    private inline fun <reified T : Throwable> Throwable.findCause(): T? {
-        var current: Throwable? = this
-        while (current != null) {
-            if (current is T) return current
-            current = current.cause
-        }
-        return null
     }
 
     private fun LocalDate?.toTaskMillis(time: LocalTime?, hasTime: Boolean, defaultTime: LocalTime): Long? {

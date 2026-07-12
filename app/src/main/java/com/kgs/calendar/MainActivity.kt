@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.reminder.ReminderScheduler
+import com.kgs.calendar.navigation.CalendarLaunchTarget
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.ui.CalendarWidgetLaunchTarget
 import com.kgs.calendar.ui.CalendarViewModel
@@ -31,8 +32,13 @@ import java.time.LocalDate
 class MainActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
     private var initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null
+    private var initialCalendarLaunchTarget: CalendarLaunchTarget? = null
     private val calendarViewModel: CalendarViewModel by viewModels {
-        CalendarViewModelFactory(graph, initialWidgetLaunchTarget = initialWidgetLaunchTarget)
+        CalendarViewModelFactory(
+            graph,
+            initialWidgetLaunchTarget = initialWidgetLaunchTarget,
+            initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+        )
     }
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* result ignored */ }
@@ -40,7 +46,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        initialWidgetLaunchTarget = intent.toWidgetLaunchTarget()
+        initialCalendarLaunchTarget = CalendarLaunchTarget.readFrom(intent)
+        initialWidgetLaunchTarget = if (initialCalendarLaunchTarget == null) intent.toWidgetLaunchTarget() else null
         maybeRequestNotificationPermission()
         maybeRequestExactAlarmPermission()
         setContent {
@@ -51,7 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        applyWidgetLaunch(intent)
+        CalendarLaunchTarget.readFrom(intent)?.let(calendarViewModel::openFromCalendarLaunch) ?: applyWidgetLaunch(intent)
     }
 
     override fun onResume() {

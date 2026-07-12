@@ -201,7 +201,7 @@
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="#FFFFFF"
+                android:textColor="#00000000"
                 android:textSize="13sp" />
 
             <TextView
@@ -212,7 +212,7 @@
                 android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:textColor="#DDE7F2"
+                android:textColor="#00000000"
                 android:textSize="11sp" />
         </LinearLayout>
 

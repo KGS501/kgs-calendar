@@ -198,6 +198,7 @@ interface TaskDao {
         INNER JOIN collections ON collections.href = tasks.collectionHref
         WHERE collections.isEnabled = 1
           AND tasks.isCompleted = 0
+          AND UPPER(COALESCE(tasks.status, '')) != 'CANCELLED'
           AND tasks.remindersCsv IS NOT NULL
           AND tasks.remindersCsv != ''
         """,

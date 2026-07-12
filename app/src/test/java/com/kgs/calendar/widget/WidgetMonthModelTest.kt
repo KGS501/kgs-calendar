@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.Locale
 
 class WidgetMonthModelTest {
     @Test
@@ -408,6 +409,42 @@ class WidgetMonthModelTest {
     }
 
     @Test
+    fun singleDayItemsUseOccurrenceTimeBeforeTitle() {
+        val month = YearMonth.of(2026, 7)
+        val day = LocalDate.of(2026, 7, 9)
+        val layout = WidgetMonthModel.layout(
+            month = month,
+            gridStart = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, DayOfWeek.MONDAY),
+            candidates = listOf(
+                WidgetMonthCandidate("late", "Alpha", 0, 2_000L, day, day, false),
+                WidgetMonthCandidate("early", "Zulu", 0, 1_000L, day, day, false),
+            ),
+            locale = Locale.US,
+        )
+
+        assertEquals(listOf("early", "late"), layout.itemsByDay.getValue(day).map { it.id })
+    }
+
+    @Test
+    fun singleDayItemsWithSameTimeUseLocalizedTitleTieBreak() {
+        val month = YearMonth.of(2026, 7)
+        val day = LocalDate.of(2026, 7, 9)
+        val layout = WidgetMonthModel.layout(
+            month = month,
+            gridStart = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, DayOfWeek.MONDAY),
+            candidates = listOf(
+                WidgetMonthCandidate("zulu", "Zulu", 0, 1_000L, day, day, false),
+                WidgetMonthCandidate("alpha", "Alpha", 0, 1_000L, day, day, false),
+            ),
+            locale = Locale.US,
+        )
+
+        assertEquals(listOf("alpha", "zulu"), layout.itemsByDay.getValue(day).map { it.id })
+    }
+
+    @Test
     fun monthLayoutKeepsEarlierVisibleMultiDayItemsAheadOfLaterLongItems() {
         val month = YearMonth.of(2026, 7)
         val start = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY)
@@ -455,6 +492,23 @@ class WidgetMonthModelTest {
         assertEquals(0, schoolJuly20.lane)
         assertEquals(0, schoolJuly23.lane)
         assertTrue(semesterJuly25.lane > schoolJuly23.lane)
+    }
+
+    @Test
+    fun loadingSkeletonUsesOnlyCurrentMonthCells() {
+        val month = YearMonth.of(2026, 2)
+        val source = WidgetMonthModel.page(
+            month = month,
+            start = WidgetMonthModel.gridStart(month, java.time.DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, java.time.DayOfWeek.MONDAY),
+            monthLayout = WidgetMonthLayout(emptyMap(), emptyMap()),
+        )
+
+        val skeleton = source.loadingSkeleton(0xFF777777.toInt())
+
+        assertTrue(skeleton.cells.filter { it.inCurrentMonth }.all { it.items.isNotEmpty() })
+        assertTrue(skeleton.cells.filterNot { it.inCurrentMonth }.all { it.items.isEmpty() })
+        assertTrue(skeleton.cells.flatMap { it.items }.all { it.id.startsWith("month-skeleton:") })
     }
 
     private fun rowWithItems(count: Int): List<WidgetMonthCellContent> {
