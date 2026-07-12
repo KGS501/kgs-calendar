@@ -37,16 +37,11 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    private fun widgetThemeMode(key: Preferences.Key<String>): Flow<WidgetThemeMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetThemeMode.valueOf(prefs[key] ?: WidgetThemeMode.FollowApp.name)
-        }.getOrDefault(WidgetThemeMode.FollowApp)
-    }
-
-    private fun widgetColorMode(key: Preferences.Key<String>): Flow<WidgetColorMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetColorMode.valueOf(prefs[key] ?: WidgetColorMode.FollowApp.name)
-        }.getOrDefault(WidgetColorMode.FollowApp)
+    private inline fun <reified T : Enum<T>> enumFlow(
+        key: Preferences.Key<String>,
+        default: T,
+    ): Flow<T> = context.dataStore.data.map { prefs ->
+        runCatching { enumValueOf<T>(prefs[key] ?: default.name) }.getOrDefault(default)
     }
 
     val selectedView: Flow<CalendarViewMode> = context.dataStore.data.map { prefs ->
@@ -62,45 +57,29 @@ class SettingsStore(private val context: Context) {
         }.getOrDefault(LocalDate.now())
     }
 
-    val themeMode: Flow<AppThemeMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            AppThemeMode.valueOf(prefs[KEY_THEME] ?: AppThemeMode.KgsBlue.name)
-        }.getOrDefault(AppThemeMode.KgsBlue)
-    }
+    val themeMode: Flow<AppThemeMode> = enumFlow(KEY_THEME, AppThemeMode.KgsBlue)
 
-    val colorMode: Flow<AppColorMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            AppColorMode.valueOf(prefs[KEY_COLOR_MODE] ?: AppColorMode.Auto.name)
-        }.getOrDefault(AppColorMode.Auto)
-    }
+    val colorMode: Flow<AppColorMode> = enumFlow(KEY_COLOR_MODE, AppColorMode.Auto)
 
-    val monthWidgetThemeMode: Flow<WidgetThemeMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetThemeMode.valueOf(prefs[KEY_MONTH_WIDGET_THEME] ?: WidgetThemeMode.FollowApp.name)
-        }.getOrDefault(WidgetThemeMode.FollowApp)
-    }
+    val monthWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_MONTH_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
-    val monthWidgetColorMode: Flow<WidgetColorMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetColorMode.valueOf(prefs[KEY_MONTH_WIDGET_COLOR_MODE] ?: WidgetColorMode.FollowApp.name)
-        }.getOrDefault(WidgetColorMode.FollowApp)
-    }
+    val monthWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MONTH_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
-    val agendaWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_AGENDA_WIDGET_THEME)
+    val agendaWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_AGENDA_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
-    val agendaWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_AGENDA_WIDGET_COLOR_MODE)
+    val agendaWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_AGENDA_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
-    val tasksWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_TASKS_WIDGET_THEME)
+    val tasksWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_TASKS_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
-    val tasksWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_TASKS_WIDGET_COLOR_MODE)
+    val tasksWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_TASKS_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
-    val dayWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_DAY_WIDGET_THEME)
+    val dayWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_DAY_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
-    val dayWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_DAY_WIDGET_COLOR_MODE)
+    val dayWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_DAY_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
-    val multiWidgetThemeMode: Flow<WidgetThemeMode> = widgetThemeMode(KEY_MULTI_WIDGET_THEME)
+    val multiWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_MULTI_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
-    val multiWidgetColorMode: Flow<WidgetColorMode> = widgetColorMode(KEY_MULTI_WIDGET_COLOR_MODE)
+    val multiWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MULTI_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
     val multiWidgetMonthPercent: Flow<Int> = context.dataStore.data.map { prefs ->
         normalizeMultiWidgetMonthPercent(
@@ -108,35 +87,19 @@ class SettingsStore(private val context: Context) {
         )
     }
 
-    val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetTaskDisplayMode.valueOf(prefs[KEY_TASKS_WIDGET_DISPLAY_MODE] ?: WidgetTaskDisplayMode.Planned.name)
-        }.getOrDefault(WidgetTaskDisplayMode.Planned)
-    }
+    val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> =
+        enumFlow(KEY_TASKS_WIDGET_DISPLAY_MODE, WidgetTaskDisplayMode.Planned)
 
     val tasksWidgetIncludeOverdue: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] ?: true
     }
 
-    val tasksWidgetSortMode: Flow<WidgetTaskSortMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetTaskSortMode.valueOf(prefs[KEY_TASKS_WIDGET_SORT_MODE] ?: WidgetTaskSortMode.Date.name)
-        }.getOrDefault(WidgetTaskSortMode.Date)
-    }
+    val tasksWidgetSortMode: Flow<WidgetTaskSortMode> = enumFlow(KEY_TASKS_WIDGET_SORT_MODE, WidgetTaskSortMode.Date)
 
-    val tasksWidgetCreateMode: Flow<WidgetTaskCreateMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetTaskCreateMode.valueOf(prefs[KEY_TASKS_WIDGET_CREATE_MODE] ?: WidgetTaskCreateMode.Today.name)
-        }.getOrDefault(WidgetTaskCreateMode.Today)
-    }
+    val tasksWidgetCreateMode: Flow<WidgetTaskCreateMode> = enumFlow(KEY_TASKS_WIDGET_CREATE_MODE, WidgetTaskCreateMode.Today)
 
-    val tasksWidgetSubtaskDefaultMode: Flow<WidgetTaskSubtaskDefaultMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            WidgetTaskSubtaskDefaultMode.valueOf(
-                prefs[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] ?: WidgetTaskSubtaskDefaultMode.FollowApp.name,
-            )
-        }.getOrDefault(WidgetTaskSubtaskDefaultMode.FollowApp)
-    }
+    val tasksWidgetSubtaskDefaultMode: Flow<WidgetTaskSubtaskDefaultMode> =
+        enumFlow(KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE, WidgetTaskSubtaskDefaultMode.FollowApp)
 
     val dayWidgetScalePercent: Flow<Int> = context.dataStore.data.map { prefs ->
         normalizeDayWidgetScalePercent(
@@ -154,17 +117,9 @@ class SettingsStore(private val context: Context) {
         prefs[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] ?: DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR
     }
 
-    val languageMode: Flow<AppLanguageMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            AppLanguageMode.valueOf(prefs[KEY_LANGUAGE_MODE] ?: AppLanguageMode.System.name)
-        }.getOrDefault(AppLanguageMode.System)
-    }
+    val languageMode: Flow<AppLanguageMode> = enumFlow(KEY_LANGUAGE_MODE, AppLanguageMode.System)
 
-    val taskColorMode: Flow<TaskColorMode> = context.dataStore.data.map { prefs ->
-        runCatching {
-            TaskColorMode.valueOf(prefs[KEY_TASK_COLOR_MODE] ?: TaskColorMode.Collection.name)
-        }.getOrDefault(TaskColorMode.Collection)
-    }
+    val taskColorMode: Flow<TaskColorMode> = enumFlow(KEY_TASK_COLOR_MODE, TaskColorMode.Collection)
 
     val focusTitleOnCreate: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_FOCUS_TITLE_ON_CREATE] ?: false
