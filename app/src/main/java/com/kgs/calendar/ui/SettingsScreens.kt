@@ -1211,27 +1211,27 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widgets), icon = Icons.Default.Widgets) {
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widget_agenda_name),
-                                    value = state.agendaWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.agendaWidgetThemeMode.localizedLabel(),
                                     leadingIcon = Icons.Default.ViewAgenda,
                                 ) { navigateTo(SettingsDestination.WidgetAgenda) }
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widget_month_name),
-                                    value = state.monthWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.monthWidgetThemeMode.localizedLabel(),
                                     leadingIcon = Icons.Default.CalendarMonth,
                                 ) { navigateTo(SettingsDestination.WidgetMonth) }
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widget_tasks_name),
-                                    value = state.tasksWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetThemeMode.localizedLabel(),
                                     leadingIcon = Icons.Default.TaskAlt,
                                 ) { navigateTo(SettingsDestination.WidgetTasks) }
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widget_day_name),
-                                    value = state.dayWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.dayWidgetThemeMode.localizedLabel(),
                                     leadingIcon = Icons.Default.ViewDay,
                                 ) { navigateTo(SettingsDestination.WidgetDay) }
                                 SettingsMenuRow(
                                     title = stringResource(R.string.widget_multi_name),
-                                    value = state.multiWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.multiWidgetThemeMode.localizedLabel(),
                                     leadingIcon = Icons.Default.Widgets,
                                 ) { navigateTo(SettingsDestination.WidgetMulti) }
                             }
@@ -1240,12 +1240,12 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widget_agenda_name), icon = Icons.Default.ViewAgenda) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
-                                    value = state.agendaWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.agendaWidgetThemeMode.localizedLabel(),
                                     onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetAgenda },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.agendaWidgetColorMode.localizedLabel(),
+                                    value = state.widgetSettings.agendaWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetAgenda },
                                 )
                             }
@@ -1254,12 +1254,12 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widget_month_name), icon = Icons.Default.CalendarMonth) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
-                                    value = state.monthWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.monthWidgetThemeMode.localizedLabel(),
                                     onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetMonth },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.monthWidgetColorMode.localizedLabel(),
+                                    value = state.widgetSettings.monthWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetMonth },
                                 )
                                 SettingsHelpText(stringResource(R.string.widget_month_settings_help))
@@ -1269,34 +1269,34 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widget_tasks_name), icon = Icons.Default.TaskAlt) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
-                                    value = state.tasksWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetThemeMode.localizedLabel(),
                                     onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetTasks },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.tasksWidgetColorMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetTasks },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.tasks_widget_display),
-                                    value = state.tasksWidgetDisplayMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetDisplayMode.localizedLabel(),
                                     onClick = { tasksWidgetDisplayDialogOpen = true },
                                 )
-                                AnimatedVisibility(visible = state.tasksWidgetDisplayMode == WidgetTaskDisplayMode.Today) {
+                                AnimatedVisibility(visible = state.widgetSettings.tasksWidgetDisplayMode == WidgetTaskDisplayMode.Today) {
                                     SettingsSwitchRow(
                                         title = stringResource(R.string.include_overdue_tasks),
-                                        checked = state.tasksWidgetIncludeOverdue,
+                                        checked = state.widgetSettings.tasksWidgetIncludeOverdue,
                                         onCheckedChange = onTasksWidgetIncludeOverdueChanged,
                                     )
                                 }
                                 SettingsButtonRow(
                                     label = stringResource(R.string.tasks_widget_plus_action),
-                                    value = state.tasksWidgetCreateMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetCreateMode.localizedLabel(),
                                     onClick = { tasksWidgetCreateDialogOpen = true },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.tasks_widget_subtasks_default),
-                                    value = state.tasksWidgetSubtaskDefaultMode.localizedLabel(),
+                                    value = state.widgetSettings.tasksWidgetSubtaskDefaultMode.localizedLabel(),
                                     onClick = { tasksWidgetSubtaskDefaultDialogOpen = true },
                                 )
                                 SettingsHelpText(stringResource(R.string.tasks_widget_settings_help))
@@ -1306,19 +1306,19 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widget_day_name), icon = Icons.Default.ViewDay) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
-                                    value = state.dayWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.dayWidgetThemeMode.localizedLabel(),
                                     onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetDay },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.dayWidgetColorMode.localizedLabel(),
+                                    value = state.widgetSettings.dayWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetDay },
                                 )
                                 SettingsSliderRow(
                                     title = stringResource(R.string.day_widget_scale),
                                     subtitle = stringResource(R.string.day_widget_scale_help),
-                                    value = state.dayWidgetScalePercent,
-                                    valueLabel = "${state.dayWidgetScalePercent}%",
+                                    value = state.widgetSettings.dayWidgetScalePercent,
+                                    valueLabel = "${state.widgetSettings.dayWidgetScalePercent}%",
                                     range = SettingsStore.MIN_DAY_WIDGET_SCALE_PERCENT..SettingsStore.MAX_DAY_WIDGET_SCALE_PERCENT,
                                     step = 5,
                                     onValueChanged = onDayWidgetScaleChanged,
@@ -1326,15 +1326,15 @@ internal fun SettingsPage(
                                 SettingsSwitchRow(
                                     title = stringResource(R.string.day_widget_start_current_hour),
                                     subtitle = stringResource(R.string.day_widget_start_current_hour_help),
-                                    checked = state.dayWidgetStartAtCurrentHour,
+                                    checked = state.widgetSettings.dayWidgetStartAtCurrentHour,
                                     onCheckedChange = onDayWidgetStartAtCurrentHourChanged,
                                 )
-                                AnimatedVisibility(visible = !state.dayWidgetStartAtCurrentHour) {
+                                AnimatedVisibility(visible = !state.widgetSettings.dayWidgetStartAtCurrentHour) {
                                     SettingsSliderRow(
                                         title = stringResource(R.string.day_widget_start_hour),
                                         subtitle = stringResource(R.string.day_widget_start_hour_help),
-                                        value = state.dayWidgetStartHour,
-                                        valueLabel = "%02d:00".format(state.dayWidgetStartHour),
+                                        value = state.widgetSettings.dayWidgetStartHour,
+                                        valueLabel = "%02d:00".format(state.widgetSettings.dayWidgetStartHour),
                                         range = 0..23,
                                         onValueChanged = onDayWidgetStartHourChanged,
                                     )
@@ -1345,19 +1345,19 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.widget_multi_name), icon = Icons.Default.Widgets) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.color_scheme),
-                                    value = state.multiWidgetThemeMode.localizedLabel(),
+                                    value = state.widgetSettings.multiWidgetThemeMode.localizedLabel(),
                                     onClick = { widgetThemeDialogTarget = SettingsDestination.WidgetMulti },
                                 )
                                 SettingsButtonRow(
                                     label = stringResource(R.string.appearance),
-                                    value = state.multiWidgetColorMode.localizedLabel(),
+                                    value = state.widgetSettings.multiWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetMulti },
                                 )
                                 SettingsSliderRow(
                                     title = stringResource(R.string.multi_widget_split),
                                     subtitle = stringResource(R.string.multi_widget_split_help),
-                                    value = state.multiWidgetMonthPercent,
-                                    valueLabel = "${state.multiWidgetMonthPercent}% / ${100 - state.multiWidgetMonthPercent}%",
+                                    value = state.widgetSettings.multiWidgetMonthPercent,
+                                    valueLabel = "${state.widgetSettings.multiWidgetMonthPercent}% / ${100 - state.widgetSettings.multiWidgetMonthPercent}%",
                                     range = SettingsStore.MIN_MULTI_WIDGET_MONTH_PERCENT..SettingsStore.MAX_MULTI_WIDGET_MONTH_PERCENT,
                                     step = 5,
                                     onValueChanged = onMultiWidgetMonthPercentChanged,
@@ -1502,11 +1502,11 @@ internal fun SettingsPage(
             title = appString(R.string.appearance),
             options = listOf(WidgetColorMode.FollowApp, WidgetColorMode.FollowOs, WidgetColorMode.Light, WidgetColorMode.Dark),
             selected = when (target) {
-                SettingsDestination.WidgetAgenda -> state.agendaWidgetColorMode
-                SettingsDestination.WidgetMonth -> state.monthWidgetColorMode
-                SettingsDestination.WidgetTasks -> state.tasksWidgetColorMode
-                SettingsDestination.WidgetDay -> state.dayWidgetColorMode
-                SettingsDestination.WidgetMulti -> state.multiWidgetColorMode
+                SettingsDestination.WidgetAgenda -> state.widgetSettings.agendaWidgetColorMode
+                SettingsDestination.WidgetMonth -> state.widgetSettings.monthWidgetColorMode
+                SettingsDestination.WidgetTasks -> state.widgetSettings.tasksWidgetColorMode
+                SettingsDestination.WidgetDay -> state.widgetSettings.dayWidgetColorMode
+                SettingsDestination.WidgetMulti -> state.widgetSettings.multiWidgetColorMode
                 else -> WidgetColorMode.FollowApp
             },
             label = { it.localizedLabel() },
@@ -1535,11 +1535,11 @@ internal fun SettingsPage(
                 WidgetThemeMode.SystemDynamic,
             ),
             selected = when (target) {
-                SettingsDestination.WidgetAgenda -> state.agendaWidgetThemeMode
-                SettingsDestination.WidgetMonth -> state.monthWidgetThemeMode
-                SettingsDestination.WidgetTasks -> state.tasksWidgetThemeMode
-                SettingsDestination.WidgetDay -> state.dayWidgetThemeMode
-                SettingsDestination.WidgetMulti -> state.multiWidgetThemeMode
+                SettingsDestination.WidgetAgenda -> state.widgetSettings.agendaWidgetThemeMode
+                SettingsDestination.WidgetMonth -> state.widgetSettings.monthWidgetThemeMode
+                SettingsDestination.WidgetTasks -> state.widgetSettings.tasksWidgetThemeMode
+                SettingsDestination.WidgetDay -> state.widgetSettings.dayWidgetThemeMode
+                SettingsDestination.WidgetMulti -> state.widgetSettings.multiWidgetThemeMode
                 else -> WidgetThemeMode.FollowApp
             },
             label = { it.localizedLabel() },
@@ -1561,7 +1561,7 @@ internal fun SettingsPage(
         SettingsChoiceDialog(
             title = appString(R.string.tasks_widget_display),
             options = listOf(WidgetTaskDisplayMode.Planned, WidgetTaskDisplayMode.Unplanned, WidgetTaskDisplayMode.Today),
-            selected = state.tasksWidgetDisplayMode,
+            selected = state.widgetSettings.tasksWidgetDisplayMode,
             label = { it.localizedLabel() },
             onSelected = {
                 onTasksWidgetDisplayModeSelected(it)
@@ -1574,7 +1574,7 @@ internal fun SettingsPage(
         SettingsChoiceDialog(
             title = appString(R.string.tasks_widget_plus_action),
             options = listOf(WidgetTaskCreateMode.Today, WidgetTaskCreateMode.Unplanned),
-            selected = state.tasksWidgetCreateMode,
+            selected = state.widgetSettings.tasksWidgetCreateMode,
             label = { it.localizedLabel() },
             onSelected = {
                 onTasksWidgetCreateModeSelected(it)
@@ -1591,7 +1591,7 @@ internal fun SettingsPage(
                 WidgetTaskSubtaskDefaultMode.Open,
                 WidgetTaskSubtaskDefaultMode.Closed,
             ),
-            selected = state.tasksWidgetSubtaskDefaultMode,
+            selected = state.widgetSettings.tasksWidgetSubtaskDefaultMode,
             label = { it.localizedLabel() },
             onSelected = {
                 onTasksWidgetSubtaskDefaultModeSelected(it)
