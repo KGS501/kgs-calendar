@@ -1,7 +1,6 @@
 # ical4j parses incoming CalDAV payloads via reflection / ServiceLoader / property files, so the
 # whole library (classes + members) must survive R8.
 -keep class net.fortuna.ical4j.** { *; }
--keep class at.bitfire.dav4jvm.** { *; }
 
 # Reflection-driven parsing relies on generic signatures and annotations being retained.
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations
@@ -24,5 +23,3 @@
 # Compile-only annotations referenced by Tink (androidx.security.crypto) and others.
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
-# org.xmlpull.v1 is provided by the Android framework (dav4jvm uses the platform parser).
--dontwarn org.xmlpull.**

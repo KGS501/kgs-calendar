@@ -118,12 +118,6 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     implementation(libs.okhttp)
-    // dav4jvm drags in org.ogce:xpp3, which bundles its own copy of org.xmlpull.v1.* and collides
-    // with the Android framework's XmlPullParser under R8. On Android dav4jvm uses the platform
-    // parser, so the bundled one is excluded.
-    implementation(libs.dav4jvm) {
-        exclude(group = "org.ogce", module = "xpp3")
-    }
     implementation(libs.ical4j)
     implementation(libs.kotlinx.coroutines.android)
 
