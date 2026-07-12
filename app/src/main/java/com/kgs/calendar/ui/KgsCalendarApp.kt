@@ -2678,23 +2678,6 @@ private fun CreateMenuButton(icon: ImageVector, text: String, onClick: () -> Uni
     }
 }
 
-@Composable
-internal fun CalendarViewMode.localizedLabel(): String = when (this) {
-    CalendarViewMode.ThreeDay -> appString(R.string.three_days)
-    CalendarViewMode.Day -> appString(R.string.day)
-    CalendarViewMode.Month -> appString(R.string.month)
-    CalendarViewMode.Agenda -> appString(R.string.agenda)
-    CalendarViewMode.Tasks -> appString(R.string.tasks)
-}
-
-internal fun CalendarViewMode.settingsIcon(): ImageVector = when (this) {
-    CalendarViewMode.Agenda -> Icons.Default.ViewAgenda
-    CalendarViewMode.Day -> Icons.Default.ViewDay
-    CalendarViewMode.ThreeDay -> Icons.Default.ViewWeek
-    CalendarViewMode.Month -> Icons.Default.CalendarMonth
-    CalendarViewMode.Tasks -> Icons.Default.TaskAlt
-}
-
 internal fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
     drawContent()
     val stroke = 1.8.dp.toPx()
@@ -2724,18 +2707,6 @@ internal fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawWit
         ),
     )
 }
-
-@Composable
-internal fun DayOfWeek.localizedWeekdayLabel(): String =
-    when (this) {
-        DayOfWeek.MONDAY -> appString(R.string.week_monday)
-        DayOfWeek.TUESDAY -> appString(R.string.week_tuesday)
-        DayOfWeek.WEDNESDAY -> appString(R.string.week_wednesday)
-        DayOfWeek.THURSDAY -> appString(R.string.week_thursday)
-        DayOfWeek.FRIDAY -> appString(R.string.week_friday)
-        DayOfWeek.SATURDAY -> appString(R.string.week_saturday)
-        DayOfWeek.SUNDAY -> appString(R.string.week_sunday)
-    }
 
 internal fun Modifier.horizontalEdgeFade(
     edgeWidth: Dp = 14.dp,
@@ -3070,84 +3041,6 @@ internal fun Color.greyedOut(amount: Float): Color {
         blue = blue + (gray - blue) * mix,
         alpha = alpha,
     )
-}
-
-private fun TaskEntity.statusLabel(): String = when (status?.uppercase()) {
-    "IN-PROCESS" -> "In progress"
-    "CANCELLED" -> "Cancelled"
-    "COMPLETED" -> "Completed"
-    "NEEDS-ACTION" -> "Open"
-    null -> if (isCompleted) "Completed" else "Open"
-    else -> status!!
-}
-
-@Composable
-internal fun AppThemeMode.localizedLabel(): String = when (this) {
-    AppThemeMode.KgsBlue -> appString(R.string.kgs_blue)
-    AppThemeMode.KgsWarm -> appString(R.string.kgs_warm)
-    AppThemeMode.KgsFresh -> appString(R.string.kgs_fresh)
-    AppThemeMode.SystemDynamic -> appString(R.string.android_colors)
-}
-
-@Composable
-internal fun AppColorMode.localizedLabel(): String = when (this) {
-    AppColorMode.Auto -> appString(R.string.auto)
-    AppColorMode.Light -> appString(R.string.light)
-    AppColorMode.Dark -> appString(R.string.dark)
-}
-
-@Composable
-internal fun WidgetThemeMode.localizedLabel(): String = when (this) {
-    WidgetThemeMode.FollowApp -> appString(R.string.follow_app)
-    WidgetThemeMode.KgsBlue -> appString(R.string.kgs_blue)
-    WidgetThemeMode.KgsWarm -> appString(R.string.kgs_warm)
-    WidgetThemeMode.KgsFresh -> appString(R.string.kgs_fresh)
-    WidgetThemeMode.SystemDynamic -> appString(R.string.android_colors)
-}
-
-@Composable
-internal fun WidgetColorMode.localizedLabel(): String = when (this) {
-    WidgetColorMode.FollowApp -> appString(R.string.follow_app)
-    WidgetColorMode.FollowOs -> appString(R.string.follow_os)
-    WidgetColorMode.Light -> appString(R.string.light)
-    WidgetColorMode.Dark -> appString(R.string.dark)
-}
-
-@Composable
-internal fun WidgetTaskDisplayMode.localizedLabel(): String = when (this) {
-    WidgetTaskDisplayMode.Planned -> appString(R.string.planned_tasks)
-    WidgetTaskDisplayMode.Unplanned -> appString(R.string.unplanned_tasks)
-    WidgetTaskDisplayMode.Today -> appString(R.string.tasks_for_today)
-}
-
-@Composable
-internal fun WidgetTaskCreateMode.localizedLabel(): String = when (this) {
-    WidgetTaskCreateMode.Today -> appString(R.string.create_task_for_today)
-    WidgetTaskCreateMode.Unplanned -> appString(R.string.create_unplanned_task)
-}
-
-@Composable
-internal fun WidgetTaskSubtaskDefaultMode.localizedLabel(): String = when (this) {
-    WidgetTaskSubtaskDefaultMode.FollowApp -> appString(R.string.follow_app)
-    WidgetTaskSubtaskDefaultMode.Open -> appString(R.string.subtasks_default_open)
-    WidgetTaskSubtaskDefaultMode.Closed -> appString(R.string.subtasks_default_closed)
-}
-
-@Composable
-internal fun AppLanguageMode.localizedLabel(): String = when (this) {
-    AppLanguageMode.System -> appString(R.string.follow_system)
-    AppLanguageMode.English -> appString(R.string.english)
-    AppLanguageMode.German -> appString(R.string.german)
-}
-
-@Composable
-internal fun TaskEntity.localizedStatusLabel(): String = when (status?.uppercase()) {
-    "IN-PROCESS" -> appString(R.string.in_progress)
-    "CANCELLED" -> appString(R.string.aborted)
-    "COMPLETED" -> appString(R.string.status_completed)
-    "NEEDS-ACTION" -> appString(R.string.status_open)
-    null -> if (isCompleted) appString(R.string.status_completed) else appString(R.string.status_open)
-    else -> status!!
 }
 
 internal fun String?.toCategoryTags(): List<String> =
@@ -3591,12 +3484,6 @@ private fun String.toLocalizedWeekdayLabel(): String = when (uppercase(Locale.US
     "SA" -> appString(R.string.week_saturday_short)
     "SU" -> appString(R.string.week_sunday_short)
     else -> this
-}
-
-private fun CollectionEntity.typeLabel(): String = when {
-    supportsEvents && supportsTasks -> "Events and tasks"
-    supportsTasks -> "Tasks"
-    else -> "Events"
 }
 
 internal fun continuationShape(continuesFromPrevious: Boolean, continuesToNext: Boolean): RoundedCornerShape =

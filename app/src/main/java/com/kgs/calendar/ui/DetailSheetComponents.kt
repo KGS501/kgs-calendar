@@ -834,106 +834,6 @@ internal fun List<CalendarParticipant>.toAttendeesJson(): String? =
 internal fun String.isLikelyEmailAddress(): Boolean =
     matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
 
-private fun String.participantRoleLabel(): String =
-    ParticipantRoleOption.entries.firstOrNull { it.value.equals(this, ignoreCase = true) }?.label ?: this
-
-private fun String.eventStatusLabel(): String = when (uppercase(Locale.US)) {
-    "TENTATIVE" -> "Tentative"
-    "CANCELLED" -> "Cancelled"
-    else -> "Confirmed"
-}
-
-@Composable
-internal fun EventEntity.statusLabelText(): String = when ((status ?: EventStatusOption.Confirmed.value).uppercase(Locale.US)) {
-    "TENTATIVE" -> appString(R.string.tentative)
-    "CANCELLED" -> appString(R.string.cancelled)
-    else -> appString(R.string.confirmed)
-}
-
-private fun String.eventClassLabel(): String = when (uppercase(Locale.US)) {
-    "CONFIDENTIAL" -> "Show busy status when shared"
-    "PRIVATE" -> "Hide this event when shared"
-    else -> "Show full event when shared"
-}
-
-@Composable
-internal fun EventEntity.classLabelText(): String = when ((classification ?: EventClassOption.Public.value).uppercase(Locale.US)) {
-    "CONFIDENTIAL" -> appString(R.string.busy_only)
-    "PRIVATE" -> appString(R.string.hidden)
-    else -> appString(R.string.full_details)
-}
-
-private fun String.eventTransparencyLabel(): String = when (uppercase(Locale.US)) {
-    "TRANSPARENT" -> "Free"
-    else -> "Busy"
-}
-
-@Composable
-internal fun EventEntity.transparencyLabelText(): String = when ((transparency ?: EventTransparencyOption.Busy.value).uppercase(Locale.US)) {
-    "TRANSPARENT" -> appString(R.string.free)
-    else -> appString(R.string.busy)
-}
-
-private fun String.participationLabel(): String = when (uppercase(Locale.US)) {
-    "ACCEPTED" -> "Accepted"
-    "DECLINED" -> "Declined"
-    "TENTATIVE" -> "Tentative"
-    "DELEGATED" -> "Delegated"
-    else -> "No response"
-}
-
-@Composable
-private fun String.participationColor(): Color = when (uppercase(Locale.US)) {
-    "ACCEPTED" -> Color(0xFF00A86B)
-    "DECLINED" -> Color(0xFFE53935)
-    "TENTATIVE" -> Color(0xFFFFA000)
-    "DELEGATED" -> Color(0xFF5B6CFF)
-    else -> Color(0xFF6B7280)
-}
-
-private fun CalendarParticipant.displayParticipationLabel(): String =
-    deliveryStatusLabel() ?: partstat.participationLabel()
-
-@Composable
-internal fun CalendarParticipant.localizedDisplayParticipationLabel(): String =
-    localizedDeliveryStatusLabel() ?: when (partstat.uppercase(Locale.US)) {
-        "ACCEPTED" -> appString(R.string.accept)
-        "DECLINED" -> appString(R.string.decline)
-        "TENTATIVE" -> appString(R.string.tentative)
-        "DELEGATED" -> appString(R.string.delegated)
-        else -> appString(R.string.no_response)
-    }
-
-@Composable
-internal fun CalendarParticipant.displayParticipationColor(): Color =
-    if (deliveryStatusLabel() != null) deliveryStatusColor() else partstat.participationColor()
-
-private fun CalendarParticipant.deliveryStatusLabel(): String? {
-    val code = scheduleStatus
-        ?.substringBefore(',')
-        ?.substringBefore(';')
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: return null
-    return when {
-        code == "1.0" -> "Preparing invitation"
-        code == "1.1" -> "Invitation sent"
-        code == "1.2" || code == "2.0" -> null
-        code == "3.7" -> "Invitation could not be delivered"
-        code.startsWith("3.") -> "Invitation could not be delivered"
-        code.startsWith("5.") -> "Invitation could not be delivered"
-        else -> null
-    }
-}
-
-@Composable
-internal fun CalendarParticipant.deliveryStatusColor(): Color =
-    when {
-        scheduleStatus.orEmpty().startsWith("1.") -> Color(0xFF4DA3FF)
-        else -> Color(0xFFE53935)
-    }
-
-
 private val TaskStatusOptions = listOf(
     "NEEDS-ACTION",
     "IN-PROCESS",
@@ -960,13 +860,6 @@ internal fun TaskEntity.effectiveStatus(): String = status?.uppercase()
 internal fun TaskEntity.isInactive(): Boolean = isCompleted || effectiveStatus() == "CANCELLED"
 
 /** Sort weight for the "Status" sort: In Bearbeitung first, then Offen, then others. */
-internal fun TaskEntity.statusSortRank(): Int = when (effectiveStatus()) {
-    "IN-PROCESS" -> 0
-    "NEEDS-ACTION" -> 1
-    "COMPLETED" -> 2
-    "CANCELLED" -> 3
-    else -> 4
-}
 
 internal enum class PlannedTaskSort(val label: String) {
     Date("Date"),
@@ -974,13 +867,6 @@ internal enum class PlannedTaskSort(val label: String) {
     Status("Status");
 
     fun next(): PlannedTaskSort = entries[(ordinal + 1) % entries.size]
-}
-
-@Composable
-internal fun PlannedTaskSort.localizedLabel(): String = when (this) {
-    PlannedTaskSort.Date -> appString(R.string.date)
-    PlannedTaskSort.Priority -> appString(R.string.priority)
-    PlannedTaskSort.Status -> appString(R.string.status)
 }
 
 /**

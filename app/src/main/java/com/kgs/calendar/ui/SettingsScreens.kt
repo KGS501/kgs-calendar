@@ -2140,92 +2140,6 @@ internal fun CollectionSettingsSheet(
     }
 }
 
-@Composable
-private fun CollectionEntity.localizedPermissionMetadataRows(): List<Pair<String, String>> {
-    val capabilities = capabilitiesJson.toJsonObjectOrNull()
-    val androidAccessLevel = capabilities?.optIntOrNull("androidAccessLevel")
-    val androidVisible = capabilities?.optBooleanOrNull("androidVisible")
-    val androidSyncEvents = capabilities?.optBooleanOrNull("androidSyncEvents")
-    val reminders = capabilities?.optBooleanOrNull("reminders")
-    val availability = capabilities?.optStringOrNull("androidAvailability")?.takeIf { it.isNotBlank() }
-    val androidAccessLabel = androidAccessLevel?.localizedAndroidAccessLevel()
-    val calDavCanWriteContent = capabilities?.optBooleanOrNull("canWriteContent")
-    val calDavCanWriteProperties = capabilities?.optBooleanOrNull("canWriteProperties")
-    val calDavCanCreate = capabilities?.optBooleanOrNull("canCreateResources")
-    val calDavCanDelete = capabilities?.optBooleanOrNull("canDeleteResources")
-    val calDavCanReadFreeBusy = capabilities?.optBooleanOrNull("canReadFreeBusy")
-    val calDavIncrementalSync = capabilities?.optBooleanOrNull("supportsSyncCollection")
-    val accessLabel = when {
-        isAndroidProviderForUi() && readOnly -> listOfNotNull(
-            stringResource(R.string.calendar_access_read_only),
-            androidAccessLabel,
-        ).joinToString(" · ")
-        isAndroidProviderForUi() && androidAccessLabel != null -> stringResource(R.string.calendar_access_writable_level, androidAccessLabel)
-        readOnly -> stringResource(R.string.calendar_access_read_only)
-        else -> stringResource(R.string.calendar_access_full)
-    }
-    val identifier = externalId?.takeIf { it.isNotBlank() } ?: href
-    return buildList {
-        add(stringResource(R.string.source) to localizedSourceTypeLabel())
-        add(stringResource(R.string.calendar_access) to accessLabel)
-        add(stringResource(R.string.calendar_writes) to if (isReadOnlyForUi()) stringResource(R.string.calendar_writes_not_allowed) else stringResource(R.string.calendar_writes_allowed))
-        add(stringResource(R.string.calendar_sync_state) to if (isEnabled) stringResource(R.string.calendar_active) else stringResource(R.string.calendar_inactive))
-        if (isAndroidProviderForUi()) {
-            add(stringResource(R.string.calendar_device_visibility) to androidVisible.localizedVisibleHidden())
-            add(stringResource(R.string.calendar_provider_sync) to androidSyncEvents.localizedSupportedUnsupported())
-        } else if (sourceType == SourceType.CalDav) {
-            add(stringResource(R.string.caldav_edit_events) to calDavCanWriteContent.localizedSupportedUnsupported(defaultSupported = !readOnly))
-            add(stringResource(R.string.caldav_edit_calendar) to calDavCanWriteProperties.localizedSupportedUnsupported(defaultSupported = !readOnly))
-            add(stringResource(R.string.caldav_create_items) to calDavCanCreate.localizedSupportedUnsupported(defaultSupported = !readOnly))
-            add(stringResource(R.string.caldav_delete_items) to calDavCanDelete.localizedSupportedUnsupported(defaultSupported = !readOnly))
-            add(stringResource(R.string.caldav_free_busy) to calDavCanReadFreeBusy.localizedSupportedUnsupported(defaultSupported = true))
-            add(stringResource(R.string.caldav_incremental_sync) to calDavIncrementalSync.localizedSupportedUnsupported())
-        }
-        add(stringResource(R.string.calendar_reminder_permission) to reminders.localizedSupportedUnsupported(defaultSupported = true))
-        availability?.let { add(stringResource(R.string.calendar_availability_values) to it) }
-        add(stringResource(R.string.calendar_identifier) to identifier)
-        add(stringResource(R.string.calendar_sync_token) to (syncToken ?: stringResource(R.string.calendar_unknown)))
-    }
-}
-
-@Composable
-private fun CollectionEntity.localizedSourceTypeLabel(): String = when {
-    href.isLocalCollectionHrefUi() || sourceType == SourceType.Local -> stringResource(R.string.local_calendar)
-    isAndroidProviderForUi() -> stringResource(R.string.android_device_calendars)
-    href.isReadOnlyCollectionHrefUi() || sourceType == SourceType.ReadOnlyUrl -> stringResource(R.string.read_only_url)
-    else -> stringResource(R.string.caldav)
-}
-
-@Composable
-private fun Int.localizedAndroidAccessLevel(): String = when (this) {
-    0 -> stringResource(R.string.calendar_android_access_none)
-    100 -> stringResource(R.string.calendar_android_access_freebusy)
-    200 -> stringResource(R.string.calendar_android_access_read)
-    300 -> stringResource(R.string.calendar_android_access_respond)
-    400 -> stringResource(R.string.calendar_android_access_override)
-    500 -> stringResource(R.string.calendar_android_access_contributor)
-    600 -> stringResource(R.string.calendar_android_access_editor)
-    700 -> stringResource(R.string.calendar_android_access_owner)
-    800 -> stringResource(R.string.calendar_android_access_root)
-    else -> this.toString()
-}
-
-@Composable
-private fun Boolean?.localizedSupportedUnsupported(defaultSupported: Boolean? = null): String =
-    when (this ?: defaultSupported) {
-        true -> stringResource(R.string.calendar_supported)
-        false -> stringResource(R.string.calendar_unsupported)
-        null -> stringResource(R.string.calendar_unknown)
-    }
-
-@Composable
-private fun Boolean?.localizedVisibleHidden(): String =
-    when (this) {
-        true -> stringResource(R.string.calendar_visible)
-        false -> stringResource(R.string.calendar_hidden)
-        null -> stringResource(R.string.calendar_unknown)
-    }
-
 internal fun String?.toJsonObjectOrNull(): JSONObject? =
     takeIf { !it.isNullOrBlank() }?.let { json ->
         runCatching { JSONObject(json) }.getOrNull()
@@ -2234,10 +2148,10 @@ internal fun String?.toJsonObjectOrNull(): JSONObject? =
 internal fun JSONObject.optBooleanOrNull(name: String): Boolean? =
     if (has(name) && !isNull(name)) optBoolean(name) else null
 
-private fun JSONObject.optIntOrNull(name: String): Int? =
+internal fun JSONObject.optIntOrNull(name: String): Int? =
     if (has(name) && !isNull(name)) optInt(name) else null
 
-private fun JSONObject.optStringOrNull(name: String): String? =
+internal fun JSONObject.optStringOrNull(name: String): String? =
     if (has(name) && !isNull(name)) optString(name) else null
 
 internal fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities =
@@ -2255,17 +2169,6 @@ internal fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities
             participants = false,
         )
     }
-
-private fun CollectionEntity.kindLabel(): String = buildList {
-    if (supportsEvents) add("Events")
-    if (supportsTasks) add("Tasks")
-}.joinToString(" & ").ifBlank { "Calendar" }
-
-@Composable
-internal fun CollectionEntity.localizedKindLabel(): String = buildList {
-    if (supportsEvents) add(stringResource(R.string.events))
-    if (supportsTasks) add(stringResource(R.string.tasks))
-}.joinToString(" & ").ifBlank { stringResource(R.string.calendar) }
 
 internal fun CollectionEntity.isVisibleInSettingsCalendarList(): Boolean =
     !(href.isLocalCollectionHrefUi() && !isEnabled)

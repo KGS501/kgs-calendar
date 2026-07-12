@@ -522,22 +522,9 @@ internal enum class TaskDefaultSchedule(val label: String) {
     DateTime("Date and time"),
 }
 
-@Composable
-internal fun TaskDefaultSchedule.localizedLabel(): String = when (this) {
-    TaskDefaultSchedule.None -> appString(R.string.no_date)
-    TaskDefaultSchedule.DateOnly -> appString(R.string.date_only)
-    TaskDefaultSchedule.DateTime -> appString(R.string.date_and_time)
-}
-
-private enum class DurationUnit(val label: String, val minutes: Int) {
+internal enum class DurationUnit(val label: String, val minutes: Int) {
     Minutes("Minutes", 1),
     Hours("Hours", 60),
-}
-
-@Composable
-private fun DurationUnit.localizedLabel(): String = when (this) {
-    DurationUnit.Minutes -> appString(R.string.minutes)
-    DurationUnit.Hours -> appString(R.string.hours)
 }
 
 private enum class EventDurationChoice {
@@ -887,15 +874,6 @@ private fun String.settingsFieldIcon(): ImageVector = when (this) {
     "progress" -> Icons.Default.Percent
     else -> Icons.Default.Edit
 }
-
-@Composable
-internal fun Int.localizedDurationLabel(): String =
-    if (this < 60) {
-        stringResource(R.string.duration_minutes, this)
-    } else {
-        val hoursText = stringResource(R.string.duration_hours, this / 60)
-        if (this % 60 == 0) hoursText else "$hoursText ${stringResource(R.string.duration_minutes, this % 60)}"
-    }
 
 @Composable
 internal fun CalendarUiState.localizedDefaultTaskScheduleLabel(): String = when {
