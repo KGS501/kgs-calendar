@@ -196,7 +196,8 @@ private fun nearestAlignedPage(
     pageCount: Int,
     weekStartPageOffset: Int,
 ): Int {
-    require(pageCount > WEEK_DAY_COUNT)
+    require(weekStartPageOffset in 0 until WEEK_DAY_COUNT)
+    require(pageCount >= weekStartPageOffset + WEEK_DAY_COUNT)
     val minimum = minimumAlignedPage(pageCount, weekStartPageOffset)
     val maximum = maximumAlignedPage(pageCount, weekStartPageOffset)
     val boundedPage = page.coerceIn(0, pageCount - 1)
@@ -210,8 +211,9 @@ private fun minimumAlignedPage(pageCount: Int, weekStartPageOffset: Int): Int =
     weekStartPageOffset.coerceIn(0, pageCount - 1)
 
 private fun maximumAlignedPage(pageCount: Int, weekStartPageOffset: Int): Int {
-    val lastPage = pageCount - 1
-    return lastPage - Math.floorMod(lastPage - weekStartPageOffset, WEEK_DAY_COUNT)
+    val lastCompleteWeekStart = pageCount - WEEK_DAY_COUNT
+    return lastCompleteWeekStart -
+        Math.floorMod(lastCompleteWeekStart - weekStartPageOffset, WEEK_DAY_COUNT)
 }
 
 private fun isAlignedPage(page: Int, weekStartPageOffset: Int): Boolean =

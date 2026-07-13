@@ -1,7 +1,10 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.domain.model.WEEK_DAY_COUNT
 import java.time.DayOfWeek
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WeekPagerSnapPolicyTest {
@@ -95,7 +98,7 @@ class WeekPagerSnapPolicyTest {
     }
 
     @Test
-    fun targetsClampToAlignedPagerBounds() {
+    fun targetsClampToCompleteAlignedPagerBounds() {
         val minimum = gestureState(initialAnchorPage = mondayOffset)
         minimum.beginGesture(pagePosition = mondayOffset.toFloat(), settledPage = mondayOffset)
         minimum.recordGesturePosition(mondayOffset - 0.5f)
@@ -105,7 +108,71 @@ class WeekPagerSnapPolicyTest {
         maximum.recordGesturePosition(996.5f)
 
         assertEquals(mondayOffset, minimum.targetPage(mondayOffset - 0.5f, mondayOffset, 0f))
-        assertEquals(996, maximum.targetPage(996.5f, 996, 0f))
+        assertEquals(989, maximum.targetPage(996.5f, 996, 0f))
+    }
+
+    @Test
+    fun everyWeekStartOffsetTargetsOnlyCompleteAlignedWeeks() {
+        DayOfWeek.values().forEach { firstDayOfWeek ->
+            val offset = weekStartPageOffset(firstDayOfWeek)
+            val pageCounts = listOf(
+                offset + WEEK_DAY_COUNT,
+                offset + WEEK_DAY_COUNT * 2,
+                31,
+                1_000,
+            ).filter { it >= offset + WEEK_DAY_COUNT }
+
+            pageCounts.forEach { pageCount ->
+                listOf(-100, 0, pageCount / 2, pageCount - 1, pageCount + 100).forEach { anchor ->
+                    listOf(-1, 0, 1).forEach { direction ->
+                        val target = fullWeekTargetPage(
+                            stableAnchorPage = anchor,
+                            gestureDirection = direction,
+                            pageCount = pageCount,
+                            weekStartPageOffset = offset,
+                        )
+
+                        assertTrue("$firstDayOfWeek pageCount=$pageCount target=$target", target >= 0)
+                        assertEquals(
+                            "$firstDayOfWeek pageCount=$pageCount target=$target",
+                            0,
+                            Math.floorMod(target - offset, WEEK_DAY_COUNT),
+                        )
+                        assertTrue(
+                            "$firstDayOfWeek pageCount=$pageCount target=$target",
+                            target + WEEK_DAY_COUNT <= pageCount,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun smallestPagerWithACompleteAlignedWeekClampsToItsOnlyAnchor() {
+        DayOfWeek.values().forEach { firstDayOfWeek ->
+            val offset = weekStartPageOffset(firstDayOfWeek)
+            val pageCount = offset + WEEK_DAY_COUNT
+
+            assertEquals(offset, fullWeekTargetPage(offset, -1, pageCount, offset))
+            assertEquals(offset, fullWeekTargetPage(offset, 1, pageCount, offset))
+        }
+    }
+
+    @Test
+    fun pagerWithoutACompleteAlignedWeekIsRejected() {
+        DayOfWeek.values().forEach { firstDayOfWeek ->
+            val offset = weekStartPageOffset(firstDayOfWeek)
+
+            assertThrows(IllegalArgumentException::class.java) {
+                fullWeekTargetPage(
+                    stableAnchorPage = offset,
+                    gestureDirection = 1,
+                    pageCount = offset + WEEK_DAY_COUNT - 1,
+                    weekStartPageOffset = offset,
+                )
+            }
+        }
     }
 
     @Test
