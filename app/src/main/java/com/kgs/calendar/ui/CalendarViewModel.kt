@@ -29,6 +29,7 @@ import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.moveCalendarPeriod
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.domain.model.timelineDayCount
+import com.kgs.calendar.domain.model.timelineEntryDate
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
@@ -500,6 +501,16 @@ class CalendarViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
     fun selectView(viewMode: CalendarViewMode) {
+        val state = uiState.value
+        val entryDate = timelineEntryDate(
+            date = state.selectedDate,
+            viewMode = viewMode,
+            weekViewEnabled = state.weekViewEnabled,
+            firstDayOfWeek = state.firstDayOfWeek,
+        )
+        if (entryDate != state.selectedDate) {
+            selectDate(entryDate)
+        }
         selectedViewOverride.value = viewMode
         viewModelScope.launch { settingsStore.setSelectedView(viewMode) }
     }

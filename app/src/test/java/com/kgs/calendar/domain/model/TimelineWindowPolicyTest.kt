@@ -35,6 +35,37 @@ class TimelineWindowPolicyTest {
     }
 
     @Test
+    fun explicitViewEntryAlignsWeekButPreservesOtherFocusedDates() {
+        assertEquals(
+            LocalDate.of(2026, 7, 13),
+            timelineEntryDate(
+                date = focusDate,
+                viewMode = CalendarViewMode.ThreeDay,
+                weekViewEnabled = true,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            ),
+        )
+        assertEquals(
+            focusDate,
+            timelineEntryDate(
+                date = focusDate,
+                viewMode = CalendarViewMode.ThreeDay,
+                weekViewEnabled = false,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            ),
+        )
+        assertEquals(
+            focusDate,
+            timelineEntryDate(
+                date = focusDate,
+                viewMode = CalendarViewMode.Day,
+                weekViewEnabled = true,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            ),
+        )
+    }
+
+    @Test
     fun seamlessWeekKeepsItsSettledDayWhileFullWeekStaysAligned() {
         assertEquals(
             focusDate,

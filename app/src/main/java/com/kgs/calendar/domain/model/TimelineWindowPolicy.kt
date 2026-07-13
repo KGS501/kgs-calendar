@@ -30,6 +30,13 @@ fun timelineAnchorDate(
     date
 }
 
+fun timelineEntryDate(
+    date: LocalDate,
+    viewMode: CalendarViewMode,
+    weekViewEnabled: Boolean,
+    firstDayOfWeek: DayOfWeek,
+): LocalDate = timelineAnchorDate(date, viewMode, weekViewEnabled, firstDayOfWeek)
+
 fun timelineVisibleAnchor(
     date: LocalDate,
     viewMode: CalendarViewMode,
