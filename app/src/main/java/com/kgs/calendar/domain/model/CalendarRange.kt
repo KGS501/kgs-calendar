@@ -24,6 +24,7 @@ fun visibleRangeFor(
     date: LocalDate,
     viewMode: CalendarViewMode,
     multiDayCount: Int = DEFAULT_MULTI_DAY_COUNT,
+    weekViewEnabled: Boolean = false,
 ): CalendarRange {
     return when (viewMode) {
         CalendarViewMode.Month -> {
@@ -34,7 +35,10 @@ fun visibleRangeFor(
             val monthStart = date.withDayOfMonth(1)
             CalendarRange(monthStart.minusMonths(2), monthStart.plusMonths(3))
         }
-        CalendarViewMode.ThreeDay -> CalendarRange(date, date.plusDays(multiDayCount.coerceMultiDayCount().toLong()))
+        CalendarViewMode.ThreeDay -> CalendarRange(
+            date,
+            date.plusDays(timelineDayCount(viewMode, weekViewEnabled, multiDayCount).toLong()),
+        )
         // Load a generous window around the day even though only one is shown. The morphs
         // into/out of this view keep the *other* days visible while they animate (the 3-day
         // neighbours sliding out, and the whole surrounding month staying populated while a
