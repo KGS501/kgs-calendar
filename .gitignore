@@ -18,6 +18,7 @@ captures/
 # Local runtime/tooling caches
 .codex-remote-attachments/
 .device-debug/
+.worktrees/
 .kotlin/
 ADB/
 tmp/
