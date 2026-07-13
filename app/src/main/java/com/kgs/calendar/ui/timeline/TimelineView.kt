@@ -70,6 +70,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -369,7 +370,10 @@ import com.kgs.calendar.ui.labels.recurrencePart
 import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
-import com.kgs.calendar.ui.timeline.fullWeekTargetPage
+import com.kgs.calendar.ui.timeline.fallbackPagerSnapPageLimit
+import com.kgs.calendar.ui.timeline.FullWeekPagerFlingBehavior
+import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
+import com.kgs.calendar.ui.timeline.pagePosition
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
@@ -542,10 +546,17 @@ internal fun TimelineView(
     }
     val isDayMode = timelineMode == CalendarViewMode.Day
     val isWeekMode = !isDayMode && state.weekViewEnabled
+    val fullWeekPagingEnabled = isWeekMode && state.fullWeekSwipeEnabled
+    val configuredMultiDayCount = state.multiDayCount.coerceMultiDayCount()
     val multiDayCount = timelineDayCount(
         viewMode = CalendarViewMode.ThreeDay,
         weekViewEnabled = state.weekViewEnabled,
-        multiDayCount = state.multiDayCount,
+        multiDayCount = configuredMultiDayCount,
+    )
+    val fallbackSnapPageLimit = fallbackPagerSnapPageLimit(
+        isDayMode = isDayMode,
+        weekViewEnabled = state.weekViewEnabled,
+        configuredMultiDayCount = configuredMultiDayCount,
     )
     val targetDayCount = if (isDayMode) 1 else multiDayCount
     val dayEndGutterPx = daySpacingPx
@@ -588,26 +599,53 @@ internal fun TimelineView(
     val alignedWeekPageOffset = remember(state.firstDayOfWeek) {
         weekStartPageOffset(state.firstDayOfWeek)
     }
-    val fullWeekSnapDistance = remember(alignedWeekPageOffset) {
-        object : PagerSnapDistance {
-            override fun calculateTargetPage(
-                startPage: Int,
-                suggestedTargetPage: Int,
-                velocity: Float,
-                pageSize: Int,
-                pageSpacing: Int,
-            ): Int = fullWeekTargetPage(
-                startPage,
-                suggestedTargetPage,
-                DayPagerPageCount,
-                alignedWeekPageOffset,
-            )
-        }
+    val fullWeekGestureState = remember(alignedWeekPageOffset, fullWeekPagingEnabled) {
+        FullWeekPagerGestureState(
+            initialAnchorPage = selectedPage,
+            pageCount = DayPagerPageCount,
+            weekStartPageOffset = alignedWeekPageOffset,
+        )
     }
+    val fullWeekFlingBehavior = remember(pagerState, fullWeekGestureState) {
+        FullWeekPagerFlingBehavior(
+            pagerState = pagerState,
+            gestureState = fullWeekGestureState,
+            animationSpec = tween(durationMillis = 320, easing = MotionEmphasized),
+        )
+    }
+    val fallbackPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = pagerState,
+        pagerSnapDistance = PagerSnapDistance.atMost(fallbackSnapPageLimit),
+    )
     var programmaticTargetPage by remember { mutableStateOf<Int?>(null) }
     var handledWidgetDateNavigationSerial by remember { mutableStateOf(0) }
     val latestMorphContext by rememberUpdatedState(morphContext)
     val latestSelectedDate by rememberUpdatedState(state.selectedDate)
+
+    LaunchedEffect(selectedPage, fullWeekPagingEnabled, fullWeekGestureState) {
+        if (fullWeekPagingEnabled) fullWeekGestureState.resetAnchor(selectedPage)
+    }
+
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
+        if (!fullWeekPagingEnabled) return@LaunchedEffect
+        pagerState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> fullWeekGestureState.beginGesture(
+                    pagePosition = pagerState.pagePosition(),
+                    settledPage = pagerState.settledPage,
+                )
+                is DragInteraction.Stop ->
+                    fullWeekGestureState.recordGesturePosition(pagerState.pagePosition())
+                is DragInteraction.Cancel -> fullWeekGestureState.cancelGesture()
+            }
+        }
+    }
+
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
+        if (!fullWeekPagingEnabled) return@LaunchedEffect
+        snapshotFlow { pagerState.pagePosition() }
+            .collect(fullWeekGestureState::recordGesturePosition)
+    }
     val actualVisiblePages = remember(
         pagerState.layoutInfo.visiblePagesInfo,
         dayViewportWidthPx,
@@ -811,10 +849,11 @@ internal fun TimelineView(
         previousTimelineInsetPx = insetPx
     }
 
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
+                if (fullWeekPagingEnabled) fullWeekGestureState.onSettled(page)
                 // Header morphs deliberately resize the pager columns. That internal relayout can
                 // change settledPage even though the user did not horizontally scroll. Treating it
                 // like a swipe is the legacy focus behavior that moves a tapped middle/right date
@@ -1136,14 +1175,11 @@ internal fun TimelineView(
                 state = pagerState,
                 pageSize = PageSize.Fixed(dayWidthDp),
                 pageSpacing = DayColumnSpacing,
-                flingBehavior = PagerDefaults.flingBehavior(
-                    state = pagerState,
-                    pagerSnapDistance = if (isWeekMode && state.fullWeekSwipeEnabled) {
-                        fullWeekSnapDistance
-                    } else {
-                        PagerSnapDistance.atMost(multiDayCount.coerceAtLeast(3))
-                    },
-                ),
+                flingBehavior = if (fullWeekPagingEnabled) {
+                    fullWeekFlingBehavior
+                } else {
+                    fallbackPagerFlingBehavior
+                },
                 // Keep both neighbours composed so they're ready to slide in when the 1-day
                 // view widens out to 3-day, instead of popping in once they reach the viewport.
                 beyondViewportPageCount = multiDayCount.coerceAtLeast(2),
