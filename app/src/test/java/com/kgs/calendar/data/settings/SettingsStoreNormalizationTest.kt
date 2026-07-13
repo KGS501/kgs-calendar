@@ -17,4 +17,10 @@ class SettingsStoreNormalizationTest {
         assertEquals(100, SettingsStore.normalizeDayWidgetScalePercent(100))
         assertEquals(200, SettingsStore.normalizeDayWidgetScalePercent(250))
     }
+
+    @Test
+    fun weekSettingsHaveCompatibilitySafeDefaults() {
+        assertEquals(false, SettingsStore.DEFAULT_WEEK_VIEW_ENABLED)
+        assertEquals(true, SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED)
+    }
 }

@@ -90,6 +90,8 @@ data class CalendarUiState(
     val autoLoadMapPreviews: Boolean = false,
     val maxVisibleAllDayItems: Int = 3,
     val multiDayCount: Int = 3,
+    val weekViewEnabled: Boolean = SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,
+    val fullWeekSwipeEnabled: Boolean = SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
     val multiDaySidebarControlsEnabled: Boolean = true,
     val defaultEventDurationMinutes: Int = 60,
     val defaultTaskHasDate: Boolean = false,

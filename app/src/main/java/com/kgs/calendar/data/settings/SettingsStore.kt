@@ -155,6 +155,14 @@ class SettingsStore(private val context: Context) {
         (prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT).coerceMultiDayCount()
     }
 
+    val weekViewEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WEEK_VIEW_ENABLED] ?: DEFAULT_WEEK_VIEW_ENABLED
+    }
+
+    val fullWeekSwipeEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FULL_WEEK_SWIPE_ENABLED] ?: DEFAULT_FULL_WEEK_SWIPE_ENABLED
+    }
+
     val multiDaySidebarControlsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] ?: true
     }
@@ -362,6 +370,14 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
     }
 
+    suspend fun setWeekViewEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_WEEK_VIEW_ENABLED] = enabled }
+    }
+
+    suspend fun setFullWeekSwipeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_FULL_WEEK_SWIPE_ENABLED] = enabled }
+    }
+
     suspend fun setMultiDaySidebarControlsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] = enabled }
     }
@@ -489,6 +505,8 @@ class SettingsStore(private val context: Context) {
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
+        private val KEY_WEEK_VIEW_ENABLED = booleanPreferencesKey("week_view_enabled")
+        private val KEY_FULL_WEEK_SWIPE_ENABLED = booleanPreferencesKey("full_week_swipe_enabled")
         private val KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED = booleanPreferencesKey("multi_day_sidebar_controls_enabled")
         private val KEY_DEFAULT_EVENT_DURATION = intPreferencesKey("default_event_duration_minutes")
         private val KEY_DEFAULT_TASK_HAS_DATE = booleanPreferencesKey("default_task_has_date")
@@ -517,6 +535,8 @@ class SettingsStore(private val context: Context) {
         const val DEFAULT_MULTI_WIDGET_MONTH_PERCENT = 50
         const val MIN_MULTI_WIDGET_MONTH_PERCENT = 30
         const val MAX_MULTI_WIDGET_MONTH_PERCENT = 70
+        const val DEFAULT_WEEK_VIEW_ENABLED = false
+        const val DEFAULT_FULL_WEEK_SWIPE_ENABLED = true
 
         fun normalizeDayWidgetScalePercent(scalePercent: Int): Int =
             scalePercent.coerceIn(MIN_DAY_WIDGET_SCALE_PERCENT, MAX_DAY_WIDGET_SCALE_PERCENT)

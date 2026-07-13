@@ -26,6 +26,10 @@ import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.moveCalendarPeriod
+import com.kgs.calendar.domain.model.startOfWeek
+import com.kgs.calendar.domain.model.timelineDayCount
+import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.reminder.ReminderScheduler
@@ -66,6 +70,13 @@ data class CalendarWidgetLaunchTarget(
     val createTaskScheduled: Boolean? = null,
     val openEventUid: String? = null,
     val openTaskUid: String? = null,
+)
+
+private data class TimelinePolicySettings(
+    val multiDayCount: Int,
+    val weekViewEnabled: Boolean,
+    val fullWeekSwipeEnabled: Boolean,
+    val firstDayOfWeek: DayOfWeek,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -185,12 +196,50 @@ class CalendarViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
     private val multiDayCount = settingsStore.multiDayCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
-    private val visibleRange = combine(selectedDate, selectedView, multiDayCount) { date, view, dayCount ->
-        visibleRangeFor(date, view, dayCount)
+    private val firstDayOfWeek = settingsStore.firstDayOfWeek
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DayOfWeek.MONDAY)
+    private val weekViewEnabled = settingsStore.weekViewEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsStore.DEFAULT_WEEK_VIEW_ENABLED)
+    private val fullWeekSwipeEnabled = settingsStore.fullWeekSwipeEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED)
+    private val timelinePolicySettings = combine(
+        multiDayCount,
+        weekViewEnabled,
+        fullWeekSwipeEnabled,
+        firstDayOfWeek,
+    ) { dayCount, weekEnabled, fullWeekSwipe, weekStart ->
+        TimelinePolicySettings(dayCount, weekEnabled, fullWeekSwipe, weekStart)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        TimelinePolicySettings(
+            DEFAULT_MULTI_DAY_COUNT,
+            SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,
+            SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
+            DayOfWeek.MONDAY,
+        ),
+    )
+    private val visibleRange = combine(selectedDate, selectedView, timelinePolicySettings) { date, view, policy ->
+        val anchor = timelineVisibleAnchor(
+            date,
+            view,
+            policy.weekViewEnabled,
+            policy.fullWeekSwipeEnabled,
+            policy.firstDayOfWeek,
+        )
+        visibleRangeFor(anchor, view, policy.multiDayCount, policy.weekViewEnabled)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, visibleRangeFor(initialSelectedDate, initialSelectedView))
-    private val dataRange = combine(selectedDate, selectedView, multiDayCount) { date, view, dayCount ->
+    private val dataRange = combine(selectedDate, selectedView, timelinePolicySettings) { date, view, policy ->
         if (view == CalendarViewMode.ThreeDay) {
-            date.multiDayDataRange(dayCount)
+            timelineVisibleAnchor(
+                date,
+                view,
+                policy.weekViewEnabled,
+                policy.fullWeekSwipeEnabled,
+                policy.firstDayOfWeek,
+            ).multiDayDataRange(
+                timelineDayCount(view, policy.weekViewEnabled, policy.multiDayCount),
+            )
         } else {
             visibleRangeFor(date, view)
         }
@@ -279,7 +328,7 @@ class CalendarViewModel(
         settingsStore.colorMode,
         settingsStore.taskColorMode,
         settingsStore.focusTitleOnCreate,
-        settingsStore.firstDayOfWeek,
+        firstDayOfWeek,
         settingsStore.showCompletedTasksInCalendar,
         settingsStore.priorityAnimationsEnabled,
         settingsStore.autoLoadMapPreviews,
@@ -342,6 +391,8 @@ class CalendarViewModel(
         settingsStore.multiWidgetColorMode,
         settingsStore.multiWidgetThemeMode,
         settingsStore.multiWidgetMonthPercent,
+        weekViewEnabled,
+        fullWeekSwipeEnabled,
     ) { values ->
         CalendarUiState(
             initialDataLoaded = true,
@@ -429,6 +480,8 @@ class CalendarViewModel(
                 multiWidgetThemeMode = values[80] as WidgetThemeMode,
                 multiWidgetMonthPercent = values[81] as Int,
             ),
+            weekViewEnabled = values[82] as Boolean,
+            fullWeekSwipeEnabled = values[83] as Boolean,
         )
     }
         .combine(initialDataReady) { uiState, ready ->
@@ -655,6 +708,9 @@ class CalendarViewModel(
     }
 
     fun setFirstDayOfWeek(dayOfWeek: DayOfWeek) {
+        if (uiState.value.weekViewEnabled && uiState.value.selectedView == CalendarViewMode.ThreeDay) {
+            selectDate(uiState.value.selectedDate.startOfWeek(dayOfWeek))
+        }
         viewModelScope.launch { settingsStore.setFirstDayOfWeek(dayOfWeek) }
     }
 
@@ -686,6 +742,20 @@ class CalendarViewModel(
 
     fun setMultiDayCount(count: Int) {
         viewModelScope.launch { settingsStore.setMultiDayCount(count.coerceMultiDayCount()) }
+    }
+
+    fun setWeekViewEnabled(enabled: Boolean) {
+        if (enabled && uiState.value.selectedView == CalendarViewMode.ThreeDay) {
+            selectDate(uiState.value.selectedDate.startOfWeek(uiState.value.firstDayOfWeek))
+        }
+        viewModelScope.launch { settingsStore.setWeekViewEnabled(enabled) }
+    }
+
+    fun setFullWeekSwipeEnabled(enabled: Boolean) {
+        if (enabled && uiState.value.weekViewEnabled && uiState.value.selectedView == CalendarViewMode.ThreeDay) {
+            selectDate(uiState.value.selectedDate.startOfWeek(uiState.value.firstDayOfWeek))
+        }
+        viewModelScope.launch { settingsStore.setFullWeekSwipeEnabled(enabled) }
     }
 
     fun setMultiDaySidebarControlsEnabled(enabled: Boolean) {
@@ -783,15 +853,14 @@ class CalendarViewModel(
     }
 
     fun movePeriod(delta: Long) {
-        val currentDate = uiState.value.selectedDate
-        val currentView = uiState.value.selectedView
-        val next = when (currentView) {
-            CalendarViewMode.Month -> currentDate.plusMonths(delta)
-            CalendarViewMode.ThreeDay -> currentDate.plusDays(uiState.value.multiDayCount.coerceMultiDayCount().toLong() * delta)
-            CalendarViewMode.Day -> currentDate.plusDays(delta)
-            CalendarViewMode.Agenda -> currentDate.plusWeeks(delta)
-            CalendarViewMode.Tasks -> currentDate.plusWeeks(delta)
-        }
+        val next = moveCalendarPeriod(
+            date = uiState.value.selectedDate,
+            viewMode = uiState.value.selectedView,
+            delta = delta,
+            weekViewEnabled = uiState.value.weekViewEnabled,
+            multiDayCount = uiState.value.multiDayCount,
+            firstDayOfWeek = uiState.value.firstDayOfWeek,
+        )
         selectDate(next)
     }
 
