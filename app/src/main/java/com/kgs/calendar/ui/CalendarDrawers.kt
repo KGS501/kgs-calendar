@@ -531,7 +531,13 @@ internal fun CalendarDrawer(
                 }
                 DrawerViewItem(stringResource(R.string.agenda), Icons.Default.ViewAgenda, CalendarViewMode.Agenda, state.selectedView, onViewSelected)
                 DrawerViewItem(stringResource(R.string.day), Icons.Default.ViewDay, CalendarViewMode.Day, state.selectedView, onViewSelected)
-                DrawerViewItem(stringResource(R.string.three_days), Icons.Default.ViewWeek, CalendarViewMode.ThreeDay, state.selectedView, onViewSelected)
+                DrawerViewItem(
+                    stringResource(CalendarViewMode.ThreeDay.labelRes(state.weekViewEnabled)),
+                    Icons.Default.ViewWeek,
+                    CalendarViewMode.ThreeDay,
+                    state.selectedView,
+                    onViewSelected,
+                )
                 DrawerViewItem(stringResource(R.string.month), Icons.Default.CalendarMonth, CalendarViewMode.Month, state.selectedView, onViewSelected)
                 HorizontalDivider(color = WarmLine, modifier = Modifier.padding(top = 10.dp))
                 DrawerActionRow(stringResource(R.string.refresh), Icons.Default.Refresh, onSync)

@@ -333,6 +333,7 @@ import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -573,6 +574,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             if (resolvedHref != null && resolvedHref in state.hiddenCollectionHrefs) {
                 hiddenSaveNotice = HiddenSaveNotice(resolvedHref, kind)
             }
+        }
+        fun selectViewFromNavigation(viewMode: CalendarViewMode) {
+            if (viewMode == CalendarViewMode.ThreeDay && state.weekViewEnabled) {
+                viewModel.selectDate(state.selectedDate.startOfWeek(state.firstDayOfWeek))
+            }
+            viewModel.selectView(viewMode)
         }
         val backgroundBlur by animateDpAsState(
             targetValue = if (createMenuOpen) 8.dp else 0.dp,
@@ -1027,7 +1034,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     state = renderState,
                     onDismiss = { drawerOpen = false },
                     onViewSelected = {
-                        viewModel.selectView(it)
+                        selectViewFromNavigation(it)
                         drawerOpen = false
                     },
                     onSync = {
@@ -1603,7 +1610,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             SettingsPage(
                 state = state,
                 initialDestination = settingsStartDestination,
-                onViewSelected = viewModel::selectView,
+                onViewSelected = ::selectViewFromNavigation,
                 onThemeSelected = viewModel::setThemeMode,
                 onColorModeSelected = viewModel::setColorMode,
                 onMonthWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Month, it) },
@@ -1632,6 +1639,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onMaxVisibleAllDayItemsChanged = viewModel::setMaxVisibleAllDayItems,
                 onMultiDaySidebarControlsChanged = viewModel::setMultiDaySidebarControlsEnabled,
                 onMultiDayCountChanged = viewModel::setMultiDayCount,
+                onWeekViewEnabledChanged = viewModel::setWeekViewEnabled,
+                onFullWeekSwipeEnabledChanged = viewModel::setFullWeekSwipeEnabled,
                 onFocusTitleOnCreateChanged = viewModel::setFocusTitleOnCreate,
                 onFirstDayOfWeekSelected = viewModel::setFirstDayOfWeek,
                 onShowCompletedTasksChanged = viewModel::setShowCompletedTasksInCalendar,

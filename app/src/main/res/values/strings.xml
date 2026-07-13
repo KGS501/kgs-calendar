@@ -9,6 +9,7 @@
     <string name="agenda">Agenda</string>
     <string name="day">Day</string>
     <string name="three_days">Multiple days</string>
+    <string name="week">Week</string>
     <string name="month">Month</string>
     <string name="refresh">Refresh</string>
     <string name="app_settings">App settings</string>
@@ -399,6 +400,10 @@
     <string name="multi_day_sidebar_controls_help">Shows the small plus and minus control on the left edge of the Multiple days view.</string>
     <string name="multi_day_count_setting">Days in Multiple days</string>
     <string name="multi_day_count_setting_help">Sets how many days the Multiple days view displays when the side buttons are hidden.</string>
+    <string name="use_week_view">Use week view</string>
+    <string name="use_week_view_help">Shows seven days aligned to your first day of week.</string>
+    <string name="swipe_full_weeks">Swipe full weeks</string>
+    <string name="swipe_full_weeks_help">Moves one whole week per horizontal swipe. Turn off to scroll by individual days.</string>
     <string name="read_only_editor_notice">This source is read-only. In KGS Calendar only the local color can be changed here.</string>
     <string name="at_time">At time</string>
     <string name="minutes_before">%1$d min before</string>

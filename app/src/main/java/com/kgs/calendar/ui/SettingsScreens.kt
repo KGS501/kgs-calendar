@@ -465,6 +465,8 @@ internal fun SettingsPage(
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
     onMultiDaySidebarControlsChanged: (Boolean) -> Unit,
     onMultiDayCountChanged: (Int) -> Unit,
+    onWeekViewEnabledChanged: (Boolean) -> Unit,
+    onFullWeekSwipeEnabledChanged: (Boolean) -> Unit,
     onFocusTitleOnCreateChanged: (Boolean) -> Unit,
     onFirstDayOfWeekSelected: (DayOfWeek) -> Unit,
     onShowCompletedTasksChanged: (Boolean) -> Unit,
@@ -495,6 +497,10 @@ internal fun SettingsPage(
     onLocalCalendarEnabledChanged: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
+    val timelineVisibility = timelineSettingsVisibility(
+        weekViewEnabled = state.weekViewEnabled,
+        sidebarControlsEnabled = state.multiDaySidebarControlsEnabled,
+    )
     val initialNavigationStack = remember(initialDestination) {
         if (initialDestination == SettingsDestination.Main) {
             listOf(SettingsDestination.Main.name)
@@ -1046,7 +1052,7 @@ internal fun SettingsPage(
                             SettingsSection(title = stringResource(R.string.view), icon = Icons.Default.ViewAgenda) {
                                 SettingsButtonRow(
                                     label = stringResource(R.string.default_view),
-                                    value = state.selectedView.localizedLabel(),
+                                    value = state.selectedView.localizedLabel(state.weekViewEnabled),
                                     onClick = { defaultViewDialogOpen = true },
                                 )
                                 SettingsButtonRow(
@@ -1073,25 +1079,55 @@ internal fun SettingsPage(
                                     onValueChanged = onMaxVisibleAllDayItemsChanged,
                                 )
                                 SettingsSwitchRow(
-                                    title = stringResource(R.string.multi_day_sidebar_controls),
-                                    checked = state.multiDaySidebarControlsEnabled,
-                                    onCheckedChange = onMultiDaySidebarControlsChanged,
-                                    subtitle = stringResource(R.string.multi_day_sidebar_controls_help),
+                                    title = stringResource(R.string.use_week_view),
+                                    checked = state.weekViewEnabled,
+                                    onCheckedChange = onWeekViewEnabledChanged,
+                                    subtitle = stringResource(R.string.use_week_view_help),
                                 )
                                 AnimatedVisibility(
-                                    visible = !state.multiDaySidebarControlsEnabled,
+                                    visible = timelineVisibility.showFullWeekSwipe,
                                     enter = fadeIn(animationSpec = tween(MotionMedium, easing = MotionStandard)) +
                                         expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)),
                                     exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
                                         shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
                                 ) {
-                                    SettingsSliderRow(
-                                        title = stringResource(R.string.multi_day_count_setting),
-                                        subtitle = stringResource(R.string.multi_day_count_setting_help),
-                                        value = state.multiDayCount.coerceMultiDayCount(),
-                                        range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                        onValueChanged = onMultiDayCountChanged,
+                                    SettingsSwitchRow(
+                                        title = stringResource(R.string.swipe_full_weeks),
+                                        checked = state.fullWeekSwipeEnabled,
+                                        onCheckedChange = onFullWeekSwipeEnabledChanged,
+                                        subtitle = stringResource(R.string.swipe_full_weeks_help),
                                     )
+                                }
+                                AnimatedVisibility(
+                                    visible = timelineVisibility.showMultiDayControls,
+                                    enter = fadeIn(animationSpec = tween(MotionMedium, easing = MotionStandard)) +
+                                        expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+                                    exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
+                                        shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
+                                ) {
+                                    Column {
+                                        SettingsSwitchRow(
+                                            title = stringResource(R.string.multi_day_sidebar_controls),
+                                            checked = state.multiDaySidebarControlsEnabled,
+                                            onCheckedChange = onMultiDaySidebarControlsChanged,
+                                            subtitle = stringResource(R.string.multi_day_sidebar_controls_help),
+                                        )
+                                        AnimatedVisibility(
+                                            visible = timelineVisibility.showMultiDayCount,
+                                            enter = fadeIn(animationSpec = tween(MotionMedium, easing = MotionStandard)) +
+                                                expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+                                            exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
+                                                shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
+                                        ) {
+                                            SettingsSliderRow(
+                                                title = stringResource(R.string.multi_day_count_setting),
+                                                subtitle = stringResource(R.string.multi_day_count_setting_help),
+                                                value = state.multiDayCount.coerceMultiDayCount(),
+                                                range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
+                                                onValueChanged = onMultiDayCountChanged,
+                                            )
+                                        }
+                                    }
                                 }
                                 SettingsSwitchRow(
                                     title = stringResource(R.string.auto_map_previews),
@@ -1444,7 +1480,7 @@ internal fun SettingsPage(
                     listOf(CalendarViewMode.ThreeDay, CalendarViewMode.Day, CalendarViewMode.Month, CalendarViewMode.Agenda).forEach { view ->
                         SettingsRadioRow(
                             selected = state.selectedView == view,
-                            title = view.localizedLabel(),
+                            title = view.localizedLabel(state.weekViewEnabled),
                             leadingIcon = view.settingsIcon(),
                             onClick = {
                                 onViewSelected(view)

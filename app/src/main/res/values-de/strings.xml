@@ -9,6 +9,7 @@
     <string name="agenda">Terminübersicht</string>
     <string name="day">Tag</string>
     <string name="three_days">Mehrere Tage</string>
+    <string name="week">Woche</string>
     <string name="month">Monat</string>
     <string name="refresh">Aktualisieren</string>
     <string name="app_settings">App-Einstellungen</string>
@@ -399,6 +400,10 @@
     <string name="multi_day_sidebar_controls_help">Zeigt die kleine Plus- und Minussteuerung am linken Rand der Ansicht Mehrere Tage.</string>
     <string name="multi_day_count_setting">Tage in Mehrere Tage</string>
     <string name="multi_day_count_setting_help">Legt fest, wie viele Tage die Ansicht Mehrere Tage anzeigt, wenn die seitlichen Schalter ausgeblendet sind.</string>
+    <string name="use_week_view">Wochenansicht verwenden</string>
+    <string name="use_week_view_help">Zeigt sieben Tage ab dem festgelegten ersten Wochentag.</string>
+    <string name="swipe_full_weeks">Ganze Wochen wischen</string>
+    <string name="swipe_full_weeks_help">Wechselt pro horizontaler Wischgeste eine ganze Woche. Deaktivieren, um tageweise zu blättern.</string>
     <string name="read_only_editor_notice">Diese Quelle ist read-only. In KGS Calendar kann hier nur die lokale Farbe angepasst werden.</string>
     <string name="at_time">Zum Zeitpunkt</string>
     <string name="minutes_before">%1$d Min. vorher</string>

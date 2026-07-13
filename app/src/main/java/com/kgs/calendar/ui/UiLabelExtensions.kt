@@ -433,13 +433,8 @@ import kotlin.math.ln
 import kotlin.math.tan
 
 @Composable
-internal fun CalendarViewMode.localizedLabel(): String = when (this) {
-    CalendarViewMode.ThreeDay -> appString(R.string.three_days)
-    CalendarViewMode.Day -> appString(R.string.day)
-    CalendarViewMode.Month -> appString(R.string.month)
-    CalendarViewMode.Agenda -> appString(R.string.agenda)
-    CalendarViewMode.Tasks -> appString(R.string.tasks)
-}
+internal fun CalendarViewMode.localizedLabel(weekViewEnabled: Boolean = false): String =
+    appString(labelRes(weekViewEnabled))
 
 internal fun CalendarViewMode.settingsIcon(): ImageVector = when (this) {
     CalendarViewMode.Agenda -> Icons.Default.ViewAgenda
