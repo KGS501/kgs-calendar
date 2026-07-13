@@ -90,6 +90,29 @@ class TimelineWindowPolicyTest {
     }
 
     @Test
+    fun persistedSeamlessWeekRestoreAlignsWhilePagerSettlesRemainDayLevel() {
+        assertEquals(
+            LocalDate.of(2026, 7, 13),
+            timelineRestoreDate(
+                date = focusDate,
+                viewMode = CalendarViewMode.ThreeDay,
+                weekViewEnabled = true,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            ),
+        )
+        assertEquals(
+            focusDate,
+            timelineVisibleAnchor(
+                date = focusDate,
+                viewMode = CalendarViewMode.ThreeDay,
+                weekViewEnabled = true,
+                fullWeekSwipeEnabled = false,
+                firstDayOfWeek = DayOfWeek.MONDAY,
+            ),
+        )
+    }
+
+    @Test
     fun timelineDayCountUsesOneSevenOrConfiguredCount() {
         assertEquals(1, timelineDayCount(CalendarViewMode.Day, true, 3))
         assertEquals(7, timelineDayCount(CalendarViewMode.ThreeDay, true, 3))
@@ -114,15 +137,4 @@ class TimelineWindowPolicyTest {
         assertEquals(LocalDate.of(2026, 7, 20), range.endExclusiveDate)
     }
 
-    @Test
-    fun periodMovementUsesWeekOrConfiguredMultipleDayCount() {
-        assertEquals(
-            LocalDate.of(2026, 7, 20),
-            moveCalendarPeriod(focusDate, CalendarViewMode.ThreeDay, 1, true, 3, DayOfWeek.MONDAY),
-        )
-        assertEquals(
-            LocalDate.of(2026, 7, 19),
-            moveCalendarPeriod(focusDate, CalendarViewMode.ThreeDay, 1, false, 4, DayOfWeek.MONDAY),
-        )
-    }
 }

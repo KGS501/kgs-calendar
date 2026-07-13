@@ -37,6 +37,13 @@ fun timelineEntryDate(
     firstDayOfWeek: DayOfWeek,
 ): LocalDate = timelineAnchorDate(date, viewMode, weekViewEnabled, firstDayOfWeek)
 
+fun timelineRestoreDate(
+    date: LocalDate,
+    viewMode: CalendarViewMode,
+    weekViewEnabled: Boolean,
+    firstDayOfWeek: DayOfWeek,
+): LocalDate = timelineAnchorDate(date, viewMode, weekViewEnabled, firstDayOfWeek)
+
 fun timelineVisibleAnchor(
     date: LocalDate,
     viewMode: CalendarViewMode,
@@ -47,26 +54,4 @@ fun timelineVisibleAnchor(
     timelineAnchorDate(date, viewMode, weekViewEnabled, firstDayOfWeek)
 } else {
     date
-}
-
-fun moveCalendarPeriod(
-    date: LocalDate,
-    viewMode: CalendarViewMode,
-    delta: Long,
-    weekViewEnabled: Boolean,
-    multiDayCount: Int,
-    firstDayOfWeek: DayOfWeek,
-): LocalDate = when (viewMode) {
-    CalendarViewMode.Month -> date.plusMonths(delta)
-    CalendarViewMode.ThreeDay -> {
-        if (weekViewEnabled) {
-            date.startOfWeek(firstDayOfWeek).plusWeeks(delta)
-        } else {
-            date.plusDays(multiDayCount.coerceMultiDayCount().toLong() * delta)
-        }
-    }
-    CalendarViewMode.Day -> date.plusDays(delta)
-    CalendarViewMode.Agenda,
-    CalendarViewMode.Tasks,
-    -> date.plusWeeks(delta)
 }

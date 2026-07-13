@@ -26,10 +26,10 @@ import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
-import com.kgs.calendar.domain.model.moveCalendarPeriod
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineEntryDate
+import com.kgs.calendar.domain.model.timelineRestoreDate
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
@@ -45,6 +45,7 @@ import com.kgs.calendar.sync.StructuralMutationResult
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +56,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -188,9 +190,16 @@ class CalendarViewModel(
     private val selectedView = combine(settingsStore.selectedView, selectedViewOverride) { stored, override -> override ?: stored }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
-    private val storedSelectedDate = settingsStore.selectedDate
+    private val restoredSelectedDate = restorePersistedSelectedDate(
+        storedDate = settingsStore.selectedDate,
+        storedView = settingsStore.selectedView,
+        weekViewEnabled = settingsStore.weekViewEnabled,
+        firstDayOfWeek = settingsStore.firstDayOfWeek,
+    )
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
-    private val selectedDate = combine(storedSelectedDate, selectedDateOverride) { stored, override -> override ?: stored }
+    private val selectedDate = combine(restoredSelectedDate, selectedDateOverride) { restored, override ->
+        override ?: restored
+    }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
     private val hiddenCollectionHrefs = settingsStore.hiddenCollectionHrefs
@@ -719,10 +728,19 @@ class CalendarViewModel(
     }
 
     fun setFirstDayOfWeek(dayOfWeek: DayOfWeek) {
-        if (uiState.value.weekViewEnabled && uiState.value.selectedView == CalendarViewMode.ThreeDay) {
-            selectDate(uiState.value.selectedDate.startOfWeek(dayOfWeek))
+        viewModelScope.launch {
+            applyFirstDayOfWeekChange(
+                dayOfWeek = dayOfWeek,
+                activeWeekDate = {
+                    uiState.value.takeIf {
+                        it.weekViewEnabled && it.selectedView == CalendarViewMode.ThreeDay
+                    }?.selectedDate
+                },
+                persistFirstDayOfWeek = settingsStore::setFirstDayOfWeek,
+                publishedFirstDayOfWeek = firstDayOfWeek,
+                selectDate = ::selectDate,
+            )
         }
-        viewModelScope.launch { settingsStore.setFirstDayOfWeek(dayOfWeek) }
     }
 
     fun setShowCompletedTasksInCalendar(show: Boolean) {
@@ -861,18 +879,6 @@ class CalendarViewModel(
 
     fun today() {
         selectDate(LocalDate.now())
-    }
-
-    fun movePeriod(delta: Long) {
-        val next = moveCalendarPeriod(
-            date = uiState.value.selectedDate,
-            viewMode = uiState.value.selectedView,
-            delta = delta,
-            weekViewEnabled = uiState.value.weekViewEnabled,
-            multiDayCount = uiState.value.multiDayCount,
-            firstDayOfWeek = uiState.value.firstDayOfWeek,
-        )
-        selectDate(next)
     }
 
     fun manualLogin(
@@ -1309,6 +1315,32 @@ private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
         endExclusiveDate = monthStart.plusMonths(forwardMonths),
     )
 }
+
+internal suspend fun applyFirstDayOfWeekChange(
+    dayOfWeek: DayOfWeek,
+    activeWeekDate: () -> LocalDate?,
+    persistFirstDayOfWeek: suspend (DayOfWeek) -> Unit,
+    publishedFirstDayOfWeek: Flow<DayOfWeek>,
+    selectDate: (LocalDate) -> Unit,
+) {
+    persistFirstDayOfWeek(dayOfWeek)
+    publishedFirstDayOfWeek.first { it == dayOfWeek }
+    activeWeekDate()?.let { selectDate(it.startOfWeek(dayOfWeek)) }
+}
+
+internal fun restorePersistedSelectedDate(
+    storedDate: Flow<LocalDate>,
+    storedView: Flow<CalendarViewMode>,
+    weekViewEnabled: Flow<Boolean>,
+    firstDayOfWeek: Flow<DayOfWeek>,
+): Flow<LocalDate> = combine(
+    storedDate,
+    storedView,
+    weekViewEnabled,
+    firstDayOfWeek,
+) { date, view, weekEnabled, weekStart ->
+    timelineRestoreDate(date, view, weekEnabled, weekStart)
+}.take(1)
 
 @Suppress("UNCHECKED_CAST")
 class CalendarViewModelFactory(
