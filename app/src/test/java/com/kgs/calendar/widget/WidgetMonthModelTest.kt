@@ -227,6 +227,45 @@ class WidgetMonthModelTest {
     }
 
     @Test
+    fun monthLayoutKeepsIndependentSameNameEventsOnAdjacentDaysSeparate() {
+        val month = YearMonth.of(2026, 7)
+        val firstDay = LocalDate.of(2026, 7, 8)
+        val layout = WidgetMonthModel.layout(
+            month = month,
+            gridStart = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, DayOfWeek.MONDAY),
+            candidates = listOf(
+                WidgetMonthCandidate(
+                    id = "event:swim-8",
+                    title = "Swim Practice",
+                    color = 0xFF1A73E8.toInt(),
+                    sortMillis = 10L * 60L,
+                    start = firstDay,
+                    end = firstDay,
+                    completed = false,
+                ),
+                WidgetMonthCandidate(
+                    id = "event:swim-9",
+                    title = "Swim Practice",
+                    color = 0xFF1A73E8.toInt(),
+                    sortMillis = 24L * 60L + 10L * 60L,
+                    start = firstDay.plusDays(1),
+                    end = firstDay.plusDays(1),
+                    completed = false,
+                ),
+            ),
+            locale = Locale.US,
+        )
+
+        val first = layout.itemsByDay.getValue(firstDay).single()
+        val second = layout.itemsByDay.getValue(firstDay.plusDays(1)).single()
+        assertFalse(first.continuesToNext)
+        assertFalse(second.continuesFromPrevious)
+        assertEquals("Swim Practice", first.title)
+        assertEquals("Swim Practice", second.title)
+    }
+
+    @Test
     fun monthLayoutShowsMultiDayTitleAtEachNewRowStart() {
         val month = YearMonth.of(2026, 6)
         val start = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY)
@@ -260,7 +299,7 @@ class WidgetMonthModelTest {
     }
 
     @Test
-    fun monthWeekSegmentsMergeVisuallyConnectedAdjacentItemsWithDifferentIds() {
+    fun monthWeekSegmentsDoNotMergeContinuationFlagsAcrossDifferentIds() {
         val date = LocalDate.of(2026, 5, 1)
         val row = listOf(
             WidgetMonthCellContent(
@@ -281,7 +320,7 @@ class WidgetMonthModelTest {
                 items = listOf(
                     widgetMonthItem(0).copy(
                         id = "event:second-piece",
-                        title = "",
+                        title = "Two Day Event",
                         continuesFromPrevious = true,
                     ),
                 ),
@@ -298,10 +337,8 @@ class WidgetMonthModelTest {
 
         val segments = row.monthWeekSegments(lane = 0)
 
-        assertEquals(1, segments.size)
-        assertEquals(0, segments.single().startColumn)
-        assertEquals(1, segments.single().endColumn)
-        assertEquals("Two Day Event", segments.single().title)
+        assertEquals(2, segments.size)
+        assertEquals(listOf(1, 1), segments.map { it.columnSpan })
     }
 
     @Test

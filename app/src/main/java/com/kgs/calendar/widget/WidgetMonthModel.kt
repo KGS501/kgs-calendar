@@ -119,37 +119,18 @@ internal object WidgetMonthModel {
                 segments += segment
             }
 
-            fun WidgetMonthCandidate.visuallyConnectsTo(other: WidgetMonthCandidate): Boolean =
-                color == other.color && title.trim().equals(other.title.trim(), ignoreCase = true)
-
             segments
                 .filter { it.lane < WIDGET_MONTH_MAX_LANES && !it.visualEnd.isBefore(it.visualStart) }
                 .forEach { segment ->
                     var day = segment.visualStart
                     while (!day.isAfter(segment.visualEnd)) {
-                        val previousSameLaneSegment = segments.firstOrNull { other ->
-                            other !== segment &&
-                                other.lane == segment.lane &&
-                                other.visualEnd == day.minusDays(1) &&
-                                other.candidate.visuallyConnectsTo(segment.candidate)
-                        }
-                        val nextSameLaneSegment = segments.firstOrNull { other ->
-                            other !== segment &&
-                                other.lane == segment.lane &&
-                                other.visualStart == day.plusDays(1) &&
-                                segment.candidate.visuallyConnectsTo(other.candidate)
-                        }
-                        val continuesFromPrevious = segment.candidate.start < day || previousSameLaneSegment != null
-                        val continuesToNext = segment.candidate.end > day || nextSameLaneSegment != null
+                        val continuesFromPrevious = segment.candidate.start < day
+                        val continuesToNext = segment.candidate.end > day
                         val fadesFromPrevious = day == segment.visualStart && segment.candidate.start < segment.visualStart
                         val fadesToNext = day == segment.visualEnd && segment.candidate.end > segment.visualEnd
                         itemsByDay.getOrPut(day) { mutableListOf() } += WidgetMonthItem(
                             id = segment.candidate.id,
-                            title = if (day == segment.visualStart && previousSameLaneSegment == null) {
-                                segment.candidate.title
-                            } else {
-                                ""
-                            },
+                            title = if (day == segment.visualStart) segment.candidate.title else "",
                             color = segment.candidate.color,
                             sortMillis = segment.candidate.sortMillis,
                             lane = segment.lane,
@@ -304,7 +285,8 @@ internal fun List<WidgetMonthCellContent>.monthWeekSegments(lane: Int): List<Wid
 }
 
 internal fun WidgetMonthItem.visuallyContinuesInto(next: WidgetMonthItem): Boolean =
-    lane == next.lane &&
+    id == next.id &&
+        lane == next.lane &&
         color == next.color &&
         continuesToNext &&
         next.continuesFromPrevious
