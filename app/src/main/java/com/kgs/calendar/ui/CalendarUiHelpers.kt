@@ -333,6 +333,8 @@ import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.model.timelineDayCount
+import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -1482,8 +1484,17 @@ internal fun CalendarUiState.defaultFabCreationDate(today: LocalDate = LocalDate
     when (selectedView) {
         CalendarViewMode.Day -> selectedDate
         CalendarViewMode.ThreeDay -> {
-            val endExclusive = selectedDate.plusDays(multiDayCount.coerceMultiDayCount().toLong())
-            if (!today.isBefore(selectedDate) && today.isBefore(endExclusive)) today else selectedDate
+            val start = timelineVisibleAnchor(
+                date = selectedDate,
+                viewMode = selectedView,
+                weekViewEnabled = weekViewEnabled,
+                fullWeekSwipeEnabled = fullWeekSwipeEnabled,
+                firstDayOfWeek = firstDayOfWeek,
+            )
+            val endExclusive = start.plusDays(
+                timelineDayCount(selectedView, weekViewEnabled, multiDayCount).toLong(),
+            )
+            if (!today.isBefore(start) && today.isBefore(endExclusive)) today else start
         }
         CalendarViewMode.Month,
         CalendarViewMode.Agenda,

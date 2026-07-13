@@ -335,6 +335,9 @@ import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.model.startOfWeek
+import com.kgs.calendar.domain.model.timelineDayCount
+import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -366,6 +369,8 @@ import com.kgs.calendar.ui.labels.recurrencePart
 import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
+import com.kgs.calendar.ui.timeline.fullWeekTargetPage
+import com.kgs.calendar.ui.timeline.weekStartPageOffset
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
@@ -536,7 +541,12 @@ internal fun TimelineView(
         else if (selectedView == CalendarViewMode.ThreeDay) timelineMode = CalendarViewMode.ThreeDay
     }
     val isDayMode = timelineMode == CalendarViewMode.Day
-    val multiDayCount = state.multiDayCount.coerceMultiDayCount()
+    val isWeekMode = !isDayMode && state.weekViewEnabled
+    val multiDayCount = timelineDayCount(
+        viewMode = CalendarViewMode.ThreeDay,
+        weekViewEnabled = state.weekViewEnabled,
+        multiDayCount = state.multiDayCount,
+    )
     val targetDayCount = if (isDayMode) 1 else multiDayCount
     val dayEndGutterPx = daySpacingPx
     val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
@@ -563,12 +573,37 @@ internal fun TimelineView(
     val dayWidthPx = ((dayGeometryViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
         .coerceAtLeast(with(density) { 32.dp.toPx() })
     val dayWidthDp = with(density) { dayWidthPx.toDp() }
-    // Anchor the pager on selectedDate itself, NOT on visibleRange.startDate. The loaded range
-    // is intentionally wider than the shown day (for the morphs), so its start is several days
-    // earlier; using it here would put the pager — and the settle feedback below — on the wrong
-    // day and send it scrolling.
-    val selectedPage = state.selectedDate.toDayPage()
+    // Derive the pager anchor from the active timeline policy, not visibleRange.startDate. The
+    // loaded range is intentionally wider than the displayed window for morphs, so its start may
+    // be several days earlier than either the focused date or the aligned week anchor.
+    val selectedAnchorDate = timelineVisibleAnchor(
+        date = state.selectedDate,
+        viewMode = timelineMode,
+        weekViewEnabled = state.weekViewEnabled,
+        fullWeekSwipeEnabled = state.fullWeekSwipeEnabled,
+        firstDayOfWeek = state.firstDayOfWeek,
+    )
+    val selectedPage = selectedAnchorDate.toDayPage()
     val pagerState = rememberPagerState(initialPage = selectedPage, pageCount = { DayPagerPageCount })
+    val alignedWeekPageOffset = remember(state.firstDayOfWeek) {
+        weekStartPageOffset(state.firstDayOfWeek)
+    }
+    val fullWeekSnapDistance = remember(alignedWeekPageOffset) {
+        object : PagerSnapDistance {
+            override fun calculateTargetPage(
+                startPage: Int,
+                suggestedTargetPage: Int,
+                velocity: Float,
+                pageSize: Int,
+                pageSpacing: Int,
+            ): Int = fullWeekTargetPage(
+                startPage,
+                suggestedTargetPage,
+                DayPagerPageCount,
+                alignedWeekPageOffset,
+            )
+        }
+    }
     var programmaticTargetPage by remember { mutableStateOf<Int?>(null) }
     var handledWidgetDateNavigationSerial by remember { mutableStateOf(0) }
     val latestMorphContext by rememberUpdatedState(morphContext)
@@ -687,15 +722,14 @@ internal fun TimelineView(
             // Keep the overlay visible through one settled pager frame. Clearing it immediately
             // from animateFloatAsState's completion callback reveals stale pager geometry for a
             // single frame when the tapped day was not the leftmost 3-day column.
-            val focusedDate = ctx.days[ctx.expandSlot]
-            val focusedPage = focusedDate.toDayPage()
-            programmaticTargetPage = focusedPage
-            pagerState.scrollToPage(focusedPage)
-            if (state.selectedDate != focusedDate) {
+            val targetDate = ctx.targetAnchorDate
+            programmaticTargetPage = targetDate.toDayPage()
+            pagerState.scrollToPage(targetDate.toDayPage())
+            if (state.selectedDate != targetDate) {
                 // Commit the selected date only after the visual morph has reached its target.
                 // Updating it at tap-time makes middle/right columns relocate to the pager's
                 // left edge before their expansion animation begins.
-                onDateSelected(focusedDate)
+                onDateSelected(targetDate)
                 return@LaunchedEffect
             }
             withFrameNanos { }
@@ -803,11 +837,14 @@ internal fun TimelineView(
     // its column slot so the overlay can expand it FROM that position (not force it leftmost).
     val onHeaderTap: (LocalDate) -> Unit = { day ->
         if (isDayMode) {
-            // Collapse to multi-day: this day becomes the leftmost column and the next days slide in.
+            // Collapse to multi-day or Week while preserving this day's target column.
+            val targetAnchor = if (state.weekViewEnabled) day.startOfWeek(state.firstDayOfWeek) else day
+            val targetDays = (0 until multiDayCount).map { targetAnchor.plusDays(it.toLong()) }
             morphContext = DayMorphContext(
-                days = (0 until multiDayCount).map { day.plusDays(it.toLong()) },
-                expandSlot = 0,
+                days = targetDays,
+                expandSlot = targetDays.indexOf(day).coerceAtLeast(0),
                 targetMode = CalendarViewMode.ThreeDay,
+                targetAnchorDate = targetAnchor,
             )
             scope.launch {
                 // First paint the affine overlay at the untouched 1-day geometry. Starting the
@@ -825,6 +862,7 @@ internal fun TimelineView(
                 days = (0 until multiDayCount).map { leftmost.plusDays(it.toLong()) },
                 expandSlot = slot,
                 targetMode = CalendarViewMode.Day,
+                targetAnchorDate = day,
             )
             scope.launch {
                 // Keep one frame of the original 3-day positions before beginning the local
@@ -1029,7 +1067,7 @@ internal fun TimelineView(
                     contentAlignment = Alignment.Center,
                 ) {
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = !isDayMode && state.multiDaySidebarControlsEnabled,
+                        visible = !isDayMode && !state.weekViewEnabled && state.multiDaySidebarControlsEnabled,
                         enter = slideInHorizontally(
                             initialOffsetX = { -it },
                             animationSpec = tween(280, easing = MotionEmphasized),
@@ -1100,7 +1138,11 @@ internal fun TimelineView(
                 pageSpacing = DayColumnSpacing,
                 flingBehavior = PagerDefaults.flingBehavior(
                     state = pagerState,
-                    pagerSnapDistance = PagerSnapDistance.atMost(multiDayCount.coerceAtLeast(3)),
+                    pagerSnapDistance = if (isWeekMode && state.fullWeekSwipeEnabled) {
+                        fullWeekSnapDistance
+                    } else {
+                        PagerSnapDistance.atMost(multiDayCount.coerceAtLeast(3))
+                    },
                 ),
                 // Keep both neighbours composed so they're ready to slide in when the 1-day
                 // view widens out to 3-day, instead of popping in once they reach the viewport.
@@ -1397,6 +1439,7 @@ private data class DayMorphContext(
     val days: List<LocalDate>,
     val expandSlot: Int,
     val targetMode: CalendarViewMode,
+    val targetAnchorDate: LocalDate,
 )
 
 private data class CurrentLineGeometry(
