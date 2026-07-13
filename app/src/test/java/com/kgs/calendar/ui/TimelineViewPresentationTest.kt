@@ -26,5 +26,9 @@ class TimelineViewPresentationTest {
         assertFalse(multipleDays.showFullWeekSwipe)
         assertTrue(multipleDays.showMultiDayControls)
         assertTrue(multipleDays.showMultiDayCount)
+
+        val sidebarControls = timelineSettingsVisibility(weekViewEnabled = false, sidebarControlsEnabled = true)
+        assertTrue(sidebarControls.showMultiDayControls)
+        assertFalse(sidebarControls.showMultiDayCount)
     }
 }
