@@ -40,9 +40,11 @@ class SourceCalendarMutationCoordinator(
 ) {
     suspend fun run(
         kind: CalendarStructuralMutation,
+        onMutationPersisted: suspend () -> Unit = {},
         mutation: suspend () -> Unit,
     ): StructuralMutationResult = mutex.withLock {
         mutation()
+        onMutationPersisted()
         if (!kind.requiresFullRefresh) return@withLock StructuralMutationResult.Complete
 
         val refreshFailure = runCatching {

@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.model
 
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import java.time.Instant
@@ -20,6 +21,70 @@ internal fun EventEntity.visibleAgendaDates(): List<LocalDate> {
         guard++
     }
     return dates
+}
+
+internal data class AgendaEventDateSpan(
+    val event: EventEntity,
+    val startDate: LocalDate,
+    val endDate: LocalDate = startDate,
+)
+
+internal fun agendaEventDateSpans(
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+): List<AgendaEventDateSpan> {
+    val taskDates = tasks
+        .flatMap { it.visibleDates() }
+        .toSet()
+    val eventDates = events.map { event -> event to event.visibleAgendaDates() }
+
+    return eventDates.flatMapIndexed { eventIndex, (event, dates) ->
+        if (dates.size <= 1) {
+            listOf(AgendaEventDateSpan(event, dates.firstOrNull() ?: event.startsAtMillis.toDate()))
+        } else {
+            val interruptionDates = dates.filterTo(mutableSetOf()) { date ->
+                date in taskDates || eventDates.withIndex().any { (otherIndex, other) ->
+                    otherIndex != eventIndex && date in other.second
+                }
+            }
+            event.toAgendaDateSpans(dates, interruptionDates)
+        }
+    }
+}
+
+private fun EventEntity.toAgendaDateSpans(
+    dates: List<LocalDate>,
+    interruptionDates: Set<LocalDate>,
+): List<AgendaEventDateSpan> {
+    val sortedDates = dates.sorted()
+    if (sortedDates.isEmpty()) return emptyList()
+    val results = mutableListOf<AgendaEventDateSpan>()
+    var segmentStart: LocalDate? = null
+    var previous: LocalDate? = null
+
+    fun flushSegment(end: LocalDate) {
+        val start = segmentStart ?: return
+        if (!end.isBefore(start)) {
+            results += AgendaEventDateSpan(this, start, end)
+        }
+        segmentStart = null
+    }
+
+    sortedDates.forEach { date ->
+        val last = previous
+        if (last != null && last.plusDays(1) != date) {
+            flushSegment(last)
+        }
+        if (date in interruptionDates) {
+            flushSegment(date.minusDays(1))
+            results += AgendaEventDateSpan(this, date)
+        } else if (segmentStart == null) {
+            segmentStart = date
+        }
+        previous = date
+    }
+    previous?.let(::flushSegment)
+    return results
 }
 
 internal fun TaskEntity.isFullDayTaskOn(day: LocalDate): Boolean {
@@ -50,6 +115,9 @@ internal fun EventEntity.isTimedMultiDayMiddleOn(date: LocalDate): Boolean {
 internal fun EventEntity.isAllDayTopItemOn(date: LocalDate): Boolean =
     if (allDay) occursOn(date) else isTimedMultiDayMiddleOn(date)
 
+internal fun EventEntity.continuesAllDayTopItemAfter(date: LocalDate): Boolean =
+    isAllDayTopItemOn(date.plusDays(1))
+
 internal fun EventEntity.allDayTopStartDate(): LocalDate? =
     if (allDay) {
         startsAtMillis.toDate()
@@ -78,6 +146,12 @@ internal fun TaskEntity.agendaSortMillis(): Long? =
 
 internal fun TaskEntity.occurrenceStartForEdit(): Long =
     startAtMillis ?: dueAtMillis ?: System.currentTimeMillis()
+
+internal fun EventEntity.occurrenceStartForEdit(): Long =
+    RecurrenceOverrideCodec.decodeEvents(recurrenceOverridesJson)
+        .firstOrNull { it.matchesOccurrence(this) }
+        ?.recurrenceIdMillis
+        ?: startsAtMillis
 
 internal fun TaskEntity.visibleDates(): List<LocalDate> {
     val start = startAtMillis?.toDate()

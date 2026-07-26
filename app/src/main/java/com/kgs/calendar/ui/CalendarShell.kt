@@ -22,6 +22,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -70,7 +72,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -79,6 +84,9 @@ import androidx.compose.ui.zIndex
 import com.kgs.calendar.R
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.calendar.overviewPanelHeight
+import com.kgs.calendar.ui.month.MonthGestureAxis
+import com.kgs.calendar.ui.month.MonthOverviewGestureReducer
+import com.kgs.calendar.ui.month.MonthOverviewGestureState
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import java.time.LocalDate
 import java.time.YearMonth
@@ -109,6 +117,8 @@ internal fun CalendarShell(
     onDraftTap: () -> Unit,
     timelineBottomInset: Dp,
     onDetail: (DetailSheet) -> Unit,
+    overdueTasksExpanded: Boolean,
+    onOverdueTasksExpandedChange: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -158,8 +168,9 @@ internal fun CalendarShell(
         }
     }
     val monthOverviewVisible = (monthOverviewOpen || monthOverviewGestureClosing) && !isMonthView
+    val monthOverviewExpandedHeight = overviewMonth.overviewPanelHeight(state.firstDayOfWeek)
     val monthOverviewHeight by animateDpAsState(
-        targetValue = if (monthOverviewVisible) overviewMonth.overviewPanelHeight(state.firstDayOfWeek) else 0.dp,
+        targetValue = if (monthOverviewVisible) monthOverviewExpandedHeight else 0.dp,
         animationSpec = tween(220, easing = MotionEmphasized),
         label = "monthOverviewHeight",
     )
@@ -168,25 +179,27 @@ internal fun CalendarShell(
         animationSpec = tween(160, easing = MotionStandard),
         label = "monthOverviewAlpha",
     )
-    val monthOverviewHeightPx = with(density) { monthOverviewHeight.toPx() }.coerceAtLeast(1f)
+    val monthOverviewDismissRangePx = with(density) { monthOverviewExpandedHeight.toPx() }.coerceAtLeast(1f)
+    val currentMonthOverviewDismissRangePx = rememberUpdatedState(monthOverviewDismissRangePx)
     val monthOverviewVisibleHeight = with(density) {
         (monthOverviewHeight.toPx() + monthOverviewDismissDragPx).coerceAtLeast(0f).toDp()
     }
     val monthDismissThresholdPx = with(density) { 58.dp.toPx() }
-    val monthDismissProgress = (-monthOverviewDismissDragPx / (monthOverviewHeightPx * 0.55f)).coerceIn(0f, 1f)
-
+    val monthDismissProgress = (-monthOverviewDismissDragPx / (monthOverviewDismissRangePx * 0.55f)).coerceIn(0f, 1f)
     fun applyMonthOverviewDismissDrag(deltaY: Float) {
         monthOverviewGestureClosing = false
-        monthOverviewDismissDragPx = (monthOverviewDismissDragPx + deltaY).coerceIn(-monthOverviewHeightPx, 0f)
+        monthOverviewDismissDragPx = (monthOverviewDismissDragPx + deltaY)
+            .coerceIn(-currentMonthOverviewDismissRangePx.value, 0f)
     }
 
     fun settleMonthOverviewDismissDrag() {
         val shouldClose = monthOverviewDismissDragPx <= -monthDismissThresholdPx
+        val dismissRangePx = currentMonthOverviewDismissRangePx.value
         scope.launch {
             if (shouldClose) monthOverviewGestureClosing = true
             animate(
                 initialValue = monthOverviewDismissDragPx,
-                targetValue = if (shouldClose) -monthOverviewHeightPx else 0f,
+                targetValue = if (shouldClose) -dismissRangePx else 0f,
                 animationSpec = tween(
                     durationMillis = if (shouldClose) 170 else MotionMedium,
                     easing = if (shouldClose) MotionStandardAccelerate else MotionEmphasized,
@@ -197,7 +210,7 @@ internal fun CalendarShell(
             if (shouldClose) {
                 monthOverviewOpen = false
                 monthOverviewGestureClosing = false
-                monthOverviewDismissDragPx = -monthOverviewHeightPx
+                monthOverviewDismissDragPx = -dismissRangePx
                 delay(240)
                 if (!monthOverviewOpen && !monthOverviewGestureClosing) {
                     monthOverviewDismissDragPx = 0f
@@ -206,23 +219,43 @@ internal fun CalendarShell(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .monthOverviewTimelineDismissGesture(
+                enabled = monthOverviewOpen && !isMonthView,
+                onVerticalDrag = ::applyMonthOverviewDismissDrag,
+                onVerticalEnd = ::settleMonthOverviewDismissDrag,
+            ),
+    ) {
         CalendarToolbar(
             state = state,
-            onMenu = onMenu,
-            onToday = {
-                if (state.selectedView == CalendarViewMode.Agenda) {
-                    agendaScrollTargetDate = today
-                    agendaTodayScrollRequest++
-                }
-                onToday()
-                if (isMonthView) monthJumpRequest = YearMonth.from(today)
+            onMenu = {
+                if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onMenu()
             },
-            onSearch = onSearch,
-            onTasks = onTasks,
+            onToday = {
+                if (overdueTasksExpanded) {
+                    onOverdueTasksExpandedChange(false)
+                } else {
+                    if (state.selectedView == CalendarViewMode.Agenda) {
+                        agendaScrollTargetDate = today
+                        agendaTodayScrollRequest++
+                    }
+                    onToday()
+                    if (isMonthView) monthJumpRequest = YearMonth.from(today)
+                }
+            },
+            onSearch = {
+                if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onSearch()
+            },
+            onTasks = {
+                if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onTasks()
+            },
             monthOverviewOpen = if (isMonthView) yearStripOpen else monthOverviewOpen,
             onMonthClick = {
-                if (isMonthView) {
+                if (overdueTasksExpanded) {
+                    onOverdueTasksExpandedChange(false)
+                } else if (isMonthView) {
                     yearStripOpen = !yearStripOpen
                 } else {
                     monthOverviewGestureClosing = false
@@ -248,6 +281,7 @@ internal fun CalendarShell(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(monthOverviewVisibleHeight)
+                .testTag("calendar-month-overview-container")
                 .clipToBounds()
                 .graphicsLayer {
                     alpha = monthOverviewAlpha * (1f - monthDismissProgress * 0.35f)
@@ -268,18 +302,6 @@ internal fun CalendarShell(
                 onMonthSelected = { month ->
                     overviewMonthText = month.toString()
                     onDateSelected(month.atDay(1))
-                },
-                onMonthOffset = { offset ->
-                    val next = overviewMonth.plusMonths(offset)
-                    overviewMonthText = next.toString()
-                    onDateSelected(next.atDay(1))
-                },
-                onDismissDrag = ::applyMonthOverviewDismissDrag,
-                onDismissDragEnd = ::settleMonthOverviewDismissDrag,
-                onDismiss = {
-                    monthOverviewGestureClosing = false
-                    monthOverviewDismissDragPx = 0f
-                    monthOverviewOpen = false
                 },
             )
         }
@@ -340,6 +362,8 @@ internal fun CalendarShell(
                                     onDraftTap = onDraftTap,
                                     timelineBottomInset = timelineBottomInset,
                                     onDetail = onDetail,
+                                    overdueTasksExpanded = overdueTasksExpanded,
+                                    onOverdueTasksExpandedChange = onOverdueTasksExpandedChange,
                                     timeScroll = dayTimeScroll,
                                     hourHeightDp = dayHourHeightDp,
                                     onHourHeightChange = { dayHourHeightDp = it },
@@ -383,12 +407,47 @@ internal fun CalendarShell(
                     }
                 }
             }
-            if (monthOverviewOpen && !isMonthView) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .zIndex(200f),
-                )
+        }
+    }
+}
+
+@Composable
+internal fun Modifier.monthOverviewTimelineDismissGesture(
+    enabled: Boolean,
+    onVerticalDrag: (Float) -> Unit,
+    onVerticalEnd: () -> Unit,
+): Modifier {
+    val currentVerticalDrag by rememberUpdatedState(onVerticalDrag)
+    val currentVerticalEnd by rememberUpdatedState(onVerticalEnd)
+    if (!enabled) return this
+    return pointerInput(enabled) {
+        val reducer = MonthOverviewGestureReducer()
+        awaitEachGesture {
+            var gesture = MonthOverviewGestureState()
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val dragAmount = event.changes.firstOrNull()?.let { change ->
+                    change.position - change.previousPosition
+                } ?: Offset.Zero
+                if (dragAmount != Offset.Zero) {
+                    gesture = reducer.update(
+                        delta = dragAmount,
+                        touchSlop = viewConfiguration.touchSlop,
+                        state = gesture,
+                    )
+                }
+                if (gesture.axis == MonthGestureAxis.Vertical) {
+                    event.changes.forEach { it.consume() }
+                    currentVerticalDrag(dragAmount.y)
+                }
+                if (event.changes.none { it.pressed }) {
+                    when (gesture.axis) {
+                        MonthGestureAxis.Vertical -> currentVerticalEnd()
+                        MonthGestureAxis.Undecided -> Unit
+                        MonthGestureAxis.Horizontal -> Unit
+                    }
+                    break
+                }
             }
         }
     }
@@ -432,6 +491,7 @@ private fun CalendarToolbar(
         }
         Row(
             modifier = Modifier
+                .testTag("calendar-toolbar-month")
                 .clip(RoundedCornerShape(22.dp))
                 .clickable(onClick = onMonthClick)
                 .padding(horizontal = 4.dp, vertical = 3.dp),

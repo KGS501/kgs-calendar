@@ -373,6 +373,7 @@ import com.kgs.calendar.ui.layout.TimedPlacement
 import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
 import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
+import com.kgs.calendar.ui.layout.buildAllDayScene
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
@@ -1392,19 +1393,15 @@ internal fun List<LocalDate>.allDayAreaHeight(
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return 22.dp
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
     val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage)
-    val rows = overlayItems.maxOfOrNull { it.lane + 1 } ?: 0
-    val displayedRows = when {
-        expanded -> rows
-        else -> (visibleStartPage..visibleEndPage).maxOfOrNull { page ->
-            val pageItems = overlayItems.filter { page in it.startPage..it.endPage }
-            when {
-                pageItems.isEmpty() -> 0
-                maxVisibleItems <= 0 -> 1
-                pageItems.size > maxVisibleItems -> maxVisibleItems
-                else -> pageItems.size
-            }
-        } ?: 0
-    }
+    val scene = buildAllDayScene(
+        overlayItems = overlayItems,
+        visibleStartPage = visibleStartPage,
+        visibleEndPage = visibleEndPage,
+        priorityStartPage = visibleStartPage,
+        priorityEndPage = visibleEndPage,
+        maxVisibleItems = maxVisibleItems,
+    )
+    val displayedRows = if (expanded) scene.metrics.expandedRowCount else scene.metrics.collapsedRowCount
     val draftPage = draftDate
         ?.takeIf { date -> any { it == date } }
         ?.toDayPage()
@@ -1445,10 +1442,14 @@ internal fun List<LocalDate>.hasAllDayOverflow(
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return false
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
     val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage)
-    return (visibleStartPage..visibleEndPage).any { page ->
-        val pageItems = overlayItems.count { page in it.startPage..it.endPage }
-        if (maxVisibleItems <= 0) pageItems > 0 else pageItems > maxVisibleItems
-    }
+    return buildAllDayScene(
+        overlayItems = overlayItems,
+        visibleStartPage = visibleStartPage,
+        visibleEndPage = visibleEndPage,
+        priorityStartPage = visibleStartPage,
+        priorityEndPage = visibleEndPage,
+        maxVisibleItems = maxVisibleItems,
+    ).metrics.hasCollapsedOverflow
 }
 
 internal fun List<EventEntity>.indexEventsByDay(): Map<LocalDate, List<EventEntity>> {
@@ -1701,12 +1702,16 @@ internal fun buildAllDayOverlayItems(
             .thenBy { it.title },
     )
 
-    val laneEnds = mutableListOf<Int>()
+    val laneCandidates = mutableListOf<MutableList<Candidate>>()
     val assigned = candidates.map { candidate ->
-        val lane = laneEnds.indexOfFirst { it < candidate.startPage }.let { index ->
-            if (index >= 0) index else laneEnds.size.also { laneEnds.add(Int.MIN_VALUE) }
+        val lane = laneCandidates.indexOfFirst { assignedCandidates ->
+            assignedCandidates.none { existing ->
+                candidate.startPage <= existing.endPage && existing.startPage <= candidate.endPage
+            }
+        }.let { index ->
+            if (index >= 0) index else laneCandidates.size.also { laneCandidates.add(mutableListOf()) }
         }
-        laneEnds[lane] = candidate.endPage
+        laneCandidates[lane] += candidate
         AssignedCandidate(candidate, lane)
     }.toMutableList()
 

@@ -50,6 +50,57 @@ class SourceCalendarMutationCoordinatorTest {
     }
 
     @Test
+    fun persistedCallbackRunsBeforeInitialRefresh() = runTest {
+        val refreshEntered = CompletableDeferred<Unit>()
+        val releaseRefresh = CompletableDeferred<Unit>()
+        val calls = mutableListOf<String>()
+        val coordinator = SourceCalendarMutationCoordinator(
+            includeDisabledProviderCalendars = { false },
+            fullRefresh = {
+                calls += "refresh"
+                refreshEntered.complete(Unit)
+                releaseRefresh.await()
+            },
+            reconcileLocalState = { calls += "reconcile" },
+        )
+
+        val result = async {
+            coordinator.run(
+                kind = CalendarStructuralMutation.AddSource,
+                onMutationPersisted = { calls += "persisted" },
+            ) { calls += "mutation" }
+        }
+
+        refreshEntered.await()
+        assertEquals(listOf("mutation", "persisted", "refresh"), calls)
+        assertFalse(result.isCompleted)
+
+        releaseRefresh.complete(Unit)
+        assertEquals(StructuralMutationResult.Complete, result.await())
+        assertEquals(listOf("mutation", "persisted", "refresh", "reconcile"), calls)
+    }
+
+    @Test
+    fun persistedCallbackDoesNotRunWhenMutationFails() = runTest {
+        var callbackCount = 0
+        val coordinator = SourceCalendarMutationCoordinator(
+            includeDisabledProviderCalendars = { false },
+            fullRefresh = {},
+            reconcileLocalState = {},
+        )
+
+        val failure = runCatching {
+            coordinator.run(
+                kind = CalendarStructuralMutation.AddSource,
+                onMutationPersisted = { callbackCount++ },
+            ) { error("invalid credentials") }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertEquals(0, callbackCount)
+    }
+
+    @Test
     fun structuralMutationsAreSerializedThroughReconciliation() = runTest {
         val firstEntered = CompletableDeferred<Unit>()
         val releaseFirst = CompletableDeferred<Unit>()

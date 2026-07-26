@@ -41,6 +41,8 @@ internal data class TimelineDragSession(
 
 internal enum class TimelineDraggedItemKind { Event, Task }
 
+internal enum class TimelineDraggedItemOrigin { TimedGrid, OverduePanel }
+
 internal data class TimelineDraggedItem(
     val kind: TimelineDraggedItemKind,
     val resourceHref: String,
@@ -53,6 +55,7 @@ internal data class TimelineDraggedItem(
     val sourceDate: LocalDate,
     val startMinute: Int,
     val endMinute: Int,
+    val origin: TimelineDraggedItemOrigin = TimelineDraggedItemOrigin.TimedGrid,
 ) {
     init {
         require(endMinute > startMinute) { "Dragged item must have a positive duration" }

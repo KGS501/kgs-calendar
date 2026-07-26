@@ -448,8 +448,18 @@ internal fun DraftEventWireframe(
     val visibleEndMinute = (DayEndHour + 1) * 60 - 1
     val startMinute = draft.start.minuteOfDay().coerceIn(visibleStartMinute, visibleEndMinute - DraftMinDurationMinutes)
     val endMinute = draft.end.minuteOfDay().coerceIn(startMinute + DraftMinDurationMinutes, visibleEndMinute)
-    val topDp = (startMinute - visibleStartMinute) / 60f * hourHeightDp
-    val visualHeightDp = ((endMinute - startMinute) / 60f * hourHeightDp).coerceAtLeast(1f)
+    val targetTopDp = (startMinute - visibleStartMinute) / 60f * hourHeightDp
+    val targetVisualHeightDp = ((endMinute - startMinute) / 60f * hourHeightDp).coerceAtLeast(1f)
+    val topDp by animateFloatAsState(
+        targetValue = targetTopDp,
+        animationSpec = tween(80, easing = MotionStandard),
+        label = "draftWireframeTop",
+    )
+    val visualHeightDp by animateFloatAsState(
+        targetValue = targetVisualHeightDp,
+        animationSpec = tween(80, easing = MotionStandard),
+        label = "draftWireframeHeight",
+    )
     val touchHeightDp = max(44f, visualHeightDp)
     val visualTopInsetDp = (touchHeightDp - visualHeightDp) / 2f
     val shape = RoundedCornerShape(8.dp)
@@ -473,11 +483,12 @@ internal fun DraftEventWireframe(
         var dragEndMinute = 0
         var dragStartDate = currentDraft.date
         var totalDragPx = 0f
+        var lastPublishedDraft: EditorSchedulePreview? = null
         var autoScrollDirection = 0f
         var autoScrollJob: Job? = null
 
         fun publishDraft(commitDate: Boolean = false) {
-            val deltaMinutes = ((totalDragPx / hourHeightPx) * 60f).roundToInt()
+            val deltaMinutes = ((totalDragPx / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
             val dayDelta = if (mode == DraftDragMode.Move && dayStep > 0f) {
                 (dragX / dayStep).roundToInt()
             } else {
@@ -490,7 +501,10 @@ internal fun DraftEventWireframe(
                     deltaMinutes = deltaMinutes,
                 )
                 .copy(date = if (commitDate) dragStartDate.plusDays(dayDelta.toLong()) else dragStartDate)
-            currentOnDraftChanged(nextDraft)
+            if (nextDraft != lastPublishedDraft) {
+                lastPublishedDraft = nextDraft
+                currentOnDraftChanged(nextDraft)
+            }
         }
 
         fun updateAutoScroll(direction: Float) {
@@ -523,6 +537,7 @@ internal fun DraftEventWireframe(
                 dragStartMinute = snapshot.start.minuteOfDay()
                 dragEndMinute = snapshot.end.minuteOfDay()
                 totalDragPx = 0f
+                lastPublishedDraft = snapshot
                 dragX = 0f
                 draggingBody = mode == DraftDragMode.Move
             },

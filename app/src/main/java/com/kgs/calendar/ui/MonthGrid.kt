@@ -115,7 +115,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -523,6 +522,7 @@ internal fun MonthView(
     onDetail: (DetailSheet) -> Unit,
 ) {
     val firstDayOfWeek = state.firstDayOfWeek
+    val locale = LocalAppLocale.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // One LazyColumn item per month. Each month is a self-contained block with a big
@@ -566,7 +566,7 @@ internal fun MonthView(
                 .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            weekHeaderLabels(firstDayOfWeek).forEach { label ->
+            weekHeaderLabels(firstDayOfWeek, locale).forEach { label ->
                 Text(
                     text = label,
                     modifier = Modifier.weight(1f),
@@ -613,7 +613,8 @@ private fun MonthDayCard(
     modifier: Modifier = Modifier,
 ) {
     val isToday = day == LocalCalendarTimeSnapshot.current.today
-    val todayCellColor = WarmBrown.blendWith(MaterialTheme.colorScheme.surface, 0.84f).copy(alpha = 0.96f)
+    val cellShape = RoundedCornerShape(12.dp)
+    val cellColor = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f)
     // Keep the visible month cell in the month scene. Only an invisible anchor participates as
     // the source of the container transform. Otherwise Compose lifts the solid cell into the
     // transition overlay immediately, briefly covering row-spanning pills before the entering
@@ -632,11 +633,14 @@ private fun MonthDayCard(
         Column(
             modifier = Modifier
                 .matchParentSize()
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    color = if (isToday) todayCellColor
-                    else WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f),
-                    shape = RoundedCornerShape(12.dp),
+                .clip(cellShape)
+                .background(cellColor, cellShape)
+                .then(
+                    if (isToday) {
+                        Modifier.border(1.dp, WarmBrown, cellShape)
+                    } else {
+                        Modifier
+                    },
                 )
                 .clickable(onClick = onClick)
                 .padding(horizontal = 3.dp, vertical = 3.dp),
@@ -645,14 +649,12 @@ private fun MonthDayCard(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(if (isToday) WarmBrown else Color.Transparent),
+                .size(20.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 day.dayOfMonth.toString(),
-                color = if (isToday) accentContainerContentColor() else WarmInk,
+                color = if (isToday) WarmBrown else WarmInk,
                 fontSize = 12.sp,
                 lineHeight = 13.sp,
                 fontWeight = FontWeight.SemiBold,

@@ -139,6 +139,10 @@ class SettingsStore(private val context: Context) {
         prefs[KEY_PRIORITY_ANIMATIONS_ENABLED] ?: true
     }
 
+    val overdueSummaryPriorityAnimationEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] ?: true
+    }
+
     val subtasksExpandedByDefault: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] ?: true
     }
@@ -354,6 +358,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_PRIORITY_ANIMATIONS_ENABLED] = enabled }
     }
 
+    suspend fun setOverdueSummaryPriorityAnimationEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] = enabled }
+    }
+
     suspend fun setSubtasksExpandedByDefault(expanded: Boolean) {
         context.dataStore.edit { it[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] = expanded }
     }
@@ -501,6 +509,7 @@ class SettingsStore(private val context: Context) {
         private val KEY_FIRST_DAY_OF_WEEK = intPreferencesKey("first_day_of_week")
         private val KEY_SHOW_COMPLETED_TASKS = booleanPreferencesKey("show_completed_tasks_in_calendar")
         private val KEY_PRIORITY_ANIMATIONS_ENABLED = booleanPreferencesKey("priority_animations_enabled")
+        private val KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED = booleanPreferencesKey("overdue_summary_priority_animation_enabled")
         private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")

@@ -22,6 +22,22 @@ data class EventRecurrenceOverride(
     val attendeesJson: String?,
     val timezoneId: String?,
 ) {
+    fun matchesOccurrence(event: EventEntity): Boolean =
+        startsAtMillis == event.startsAtMillis &&
+            endsAtMillis == event.endsAtMillis &&
+            allDay == event.allDay &&
+            title == event.title &&
+            description == event.description &&
+            location == event.location &&
+            remindersCsv == event.remindersCsv &&
+            status == event.status &&
+            classification == event.classification &&
+            transparency == event.transparency &&
+            categories == event.categories &&
+            organizerJson == event.organizerJson &&
+            attendeesJson == event.attendeesJson &&
+            timezoneId == event.timezoneId
+
     fun applyTo(master: EventEntity): EventEntity = master.copy(
         startsAtMillis = startsAtMillis,
         endsAtMillis = endsAtMillis,

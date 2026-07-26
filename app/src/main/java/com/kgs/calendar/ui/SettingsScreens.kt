@@ -460,6 +460,7 @@ internal fun SettingsPage(
     onLanguageSelected: (AppLanguageMode) -> Unit,
     onTaskColorModeSelected: (TaskColorMode) -> Unit,
     onPriorityAnimationsChanged: (Boolean) -> Unit,
+    onOverdueSummaryPriorityAnimationChanged: (Boolean) -> Unit,
     onSubtasksExpandedByDefaultChanged: (Boolean) -> Unit,
     onAutoLoadMapPreviewsChanged: (Boolean) -> Unit,
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
@@ -1232,6 +1233,12 @@ internal fun SettingsPage(
                                     checked = state.priorityAnimationsEnabled,
                                     onCheckedChange = onPriorityAnimationsChanged,
                                     subtitle = stringResource(R.string.priority_animations_help),
+                                )
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.overdue_summary_priority_animation),
+                                    checked = state.overdueSummaryPriorityAnimationEnabled,
+                                    onCheckedChange = onOverdueSummaryPriorityAnimationChanged,
+                                    subtitle = stringResource(R.string.overdue_summary_priority_animation_help),
                                 )
                                 SettingsMenuRow(stringResource(R.string.sort_task_fields), stringResource(R.string.field_order_summary)) {
                                     navigateTo(SettingsDestination.TaskFieldOrder)

@@ -428,8 +428,13 @@ private suspend fun animateTasksSubtaskToggle(
     return true
 }
 
+// Agenda rows render card bitmaps; keeping them service-backed avoids attaching the full
+// bitmap set to the top-level RemoteViews transaction. Multi includes those rows as well.
 internal fun KgsWidgetKind.usesDirectCollectionItems(): Boolean =
-    (this == KgsWidgetKind.Tasks || this == KgsWidgetKind.Agenda || this == KgsWidgetKind.Multi) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    this == KgsWidgetKind.Tasks && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+internal fun KgsWidgetKind.usesDirectCollectionItemsAtSdk(sdkInt: Int): Boolean =
+    this == KgsWidgetKind.Tasks && sdkInt >= Build.VERSION_CODES.S
 
 internal fun usesDirectDayGridItems(): Boolean =
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

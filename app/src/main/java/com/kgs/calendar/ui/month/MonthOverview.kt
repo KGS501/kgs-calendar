@@ -441,10 +441,6 @@ internal fun MonthOverview(
     firstDayOfWeek: DayOfWeek,
     onDaySelected: (LocalDate) -> Unit,
     onMonthSelected: (YearMonth) -> Unit,
-    onMonthOffset: (Long) -> Unit,
-    onDismissDrag: (Float) -> Unit,
-    onDismissDragEnd: () -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val dragX = remember { Animatable(0f) }
@@ -458,7 +454,6 @@ internal fun MonthOverview(
     var suppressNextExternalMonthAnimation by remember { mutableStateOf(false) }
     var monthViewportWidthPx by remember { mutableFloatStateOf(0f) }
     var monthDragVelocityX by remember { mutableFloatStateOf(0f) }
-    var monthDragY by remember { mutableFloatStateOf(0f) }
     var lastMonthDragNanos by remember { mutableStateOf(0L) }
     var monthGestureMoved by remember { mutableStateOf(false) }
     var gestureState by remember { mutableStateOf(MonthOverviewGestureState()) }
@@ -528,7 +523,6 @@ internal fun MonthOverview(
                             }
                             gestureState = MonthOverviewGestureState()
                             monthDragVelocityX = 0f
-                            monthDragY = 0f
                             monthGestureMoved = false
                             lastMonthDragNanos = System.nanoTime()
                             scope.launch { dragX.stop(); dragX.snapTo(0f) }
@@ -542,10 +536,7 @@ internal fun MonthOverview(
                             if (gestureState.axis == MonthGestureAxis.Undecided) return@detectDragGestures
                             change.consume()
                             monthGestureMoved = true
-                            if (gestureState.axis == MonthGestureAxis.Vertical) {
-                                monthDragY += dragAmount.y
-                                if (monthDragY < 0f) onDismissDrag(dragAmount.y)
-                            } else {
+                            if (gestureState.axis == MonthGestureAxis.Horizontal) {
                                 val now = System.nanoTime()
                                 val seconds = ((now - lastMonthDragNanos).coerceAtLeast(1L) / 1_000_000_000f)
                                     .coerceAtLeast(0.001f)
@@ -561,8 +552,11 @@ internal fun MonthOverview(
                         },
                         onDragEnd = {
                             if (gestureState.axis == MonthGestureAxis.Vertical) {
-                                onDismissDragEnd()
+                                interruptedSettle = null
                                 monthGestureMoved = false
+                                settleJob = scope.launch {
+                                    dragX.animateTo(0f, tween(MotionShort, easing = MotionStandard))
+                                }
                             } else {
                                 val threshold = (monthViewportWidthPx * 0.18f).coerceAtLeast(32f)
                                 val targetOffset = when {
@@ -602,7 +596,6 @@ internal fun MonthOverview(
                         },
                         onDragCancel = {
                             interruptedSettle = null
-                            onDismissDragEnd()
                             monthGestureMoved = false
                             settleJob = scope.launch {
                                 dragX.animateTo(0f, tween(MotionShort, easing = MotionStandard))
@@ -617,7 +610,7 @@ internal fun MonthOverview(
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                weekHeaderLabels(firstDayOfWeek).forEach { label ->
+                weekHeaderLabels(firstDayOfWeek, locale).forEach { label ->
                     Text(
                         text = label,
                         modifier = Modifier.weight(1f),
@@ -790,7 +783,6 @@ private fun MonthDayCell(
                     color = WarmInk,
                     fontSize = 8.sp,
                     lineHeight = 8.sp,
-                    modifier = Modifier.offset(y = (-2).dp),
                 )
             }
         }

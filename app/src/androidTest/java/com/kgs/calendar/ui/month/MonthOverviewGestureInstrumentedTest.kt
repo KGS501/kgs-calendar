@@ -17,10 +17,8 @@ import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -48,44 +46,31 @@ class MonthOverviewGestureInstrumentedTest {
     @Test
     fun diagonalHorizontalSwipePagesWithoutTriggeringDismiss() {
         val selectedMonth = AtomicReference(initialMonth)
-        val dismissDragCount = AtomicInteger()
-        setMonthOverview(
-            onMonthSelected = selectedMonth::set,
-            onDismissDrag = { dismissDragCount.incrementAndGet() },
-        )
+        setMonthOverview(onMonthSelected = selectedMonth::set)
 
         swipeMonth(horizontalFraction = -0.7f, verticalFraction = -0.18f)
         composeRule.waitForIdle()
 
         assertEquals(initialMonth.plusMonths(1), selectedMonth.get())
-        assertEquals(0, dismissDragCount.get())
     }
 
     @Test
-    fun upwardSwipeDismissesAndDayTapSelectsExactDate() {
+    fun upwardSwipeDoesNothingAndDayTapSelectsExactDate() {
         val selectedDay = AtomicReference<LocalDate?>()
-        val dismissDragCount = AtomicInteger()
-        val dismissEndCount = AtomicInteger()
-        setMonthOverview(
-            onDaySelected = selectedDay::set,
-            onDismissDrag = { dismissDragCount.incrementAndGet() },
-            onDismissDragEnd = { dismissEndCount.incrementAndGet() },
-        )
+        val selectedMonth = AtomicReference(initialMonth)
+        setMonthOverview(onDaySelected = selectedDay::set, onMonthSelected = selectedMonth::set)
 
         composeRule.onNodeWithTag("month-overview-day-2026-07-16").performTouchInput { click() }
         swipeMonth(horizontalFraction = 0.08f, verticalFraction = -0.65f)
         composeRule.waitForIdle()
 
         assertEquals(LocalDate.of(2026, 7, 16), selectedDay.get())
-        assertTrue(dismissDragCount.get() > 0)
-        assertEquals(1, dismissEndCount.get())
+        assertEquals(initialMonth, selectedMonth.get())
     }
 
     private fun setMonthOverview(
         onMonthSelected: (YearMonth) -> Unit = {},
         onDaySelected: (LocalDate) -> Unit = {},
-        onDismissDrag: (Float) -> Unit = {},
-        onDismissDragEnd: () -> Unit = {},
     ) {
         composeRule.setContent {
             var month by remember { mutableStateOf(initialMonth) }
@@ -103,10 +88,6 @@ class MonthOverviewGestureInstrumentedTest {
                         month = it
                         onMonthSelected(it)
                     },
-                    onMonthOffset = { offset -> month = month.plusMonths(offset) },
-                    onDismissDrag = onDismissDrag,
-                    onDismissDragEnd = onDismissDragEnd,
-                    onDismiss = {},
                 )
             }
         }

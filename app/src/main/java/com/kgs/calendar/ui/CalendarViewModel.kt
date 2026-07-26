@@ -403,6 +403,7 @@ class CalendarViewModel(
         settingsStore.multiWidgetMonthPercent,
         weekViewEnabled,
         fullWeekSwipeEnabled,
+        settingsStore.overdueSummaryPriorityAnimationEnabled,
     ) { values ->
         CalendarUiState(
             initialDataLoaded = true,
@@ -492,6 +493,7 @@ class CalendarViewModel(
             ),
             weekViewEnabled = values[82] as Boolean,
             fullWeekSwipeEnabled = values[83] as Boolean,
+            overdueSummaryPriorityAnimationEnabled = values[84] as Boolean,
         )
     }
         .combine(initialDataReady) { uiState, ready ->
@@ -754,6 +756,12 @@ class CalendarViewModel(
         }
     }
 
+    fun setOverdueSummaryPriorityAnimationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setOverdueSummaryPriorityAnimationEnabled(enabled)
+        }
+    }
+
     fun setSubtasksExpandedByDefault(expanded: Boolean) {
         viewModelScope.launch {
             settingsStore.setSubtasksExpandedByDefault(expanded)
@@ -890,9 +898,15 @@ class CalendarViewModel(
         viewModelScope.launch {
             busy.value = true
             val saved = runCatching {
-                sourceCalendarMutationCoordinator.run(CalendarStructuralMutation.AddSource) {
-                    repository.saveManualAccount(serverUrl, username, appPassword)
-                }
+                sourceCalendarMutationCoordinator.run(
+                    kind = CalendarStructuralMutation.AddSource,
+                    onMutationPersisted = {
+                        val acceptedMessage = "CalDAV account added. Initial sync started."
+                        message.value = acceptedMessage
+                        busy.value = false
+                        onResult?.invoke(true, acceptedMessage)
+                    },
+                ) { repository.saveManualAccount(serverUrl, username, appPassword) }
             }
             saved.onFailure {
                 val errorMessage = it.message ?: "Could not verify this CalDAV login."
@@ -907,7 +921,6 @@ class CalendarViewModel(
             val resultMessage = structuralMutationMessage(saved.getOrThrow(), "CalDAV account synced.")
             message.value = resultMessage
             busy.value = false
-            onResult?.invoke(true, resultMessage)
         }
     }
 
@@ -1259,7 +1272,7 @@ class CalendarViewModel(
             busy.value = true
             if (showManualSync) manualSyncing.value = true
             runCatching {
-                sourceCalendarMutationCoordinator.run(kind, mutation)
+                sourceCalendarMutationCoordinator.run(kind, mutation = mutation)
             }.onSuccess { result ->
                 refreshAndroidProviderDiagnosticsInternal()
                 message.value = structuralMutationMessage(result, successMessage)

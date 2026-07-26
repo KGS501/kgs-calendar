@@ -30,6 +30,16 @@ interface PendingMutationDao {
     @Query("SELECT * FROM pending_mutations WHERE accountId = :accountId ORDER BY createdAtMillis ASC, id ASC")
     suspend fun allForAccount(accountId: String): List<PendingMutationEntity>
 
+    @Query(
+        """
+        SELECT * FROM pending_mutations
+        WHERE resourceHref = :resourceHref AND action = :action
+        ORDER BY createdAtMillis DESC, id DESC
+        LIMIT 1
+        """,
+    )
+    suspend fun latestForResourceAndAction(resourceHref: String, action: String): PendingMutationEntity?
+
     @Insert
     suspend fun insert(mutation: PendingMutationEntity): Long
 
@@ -44,6 +54,9 @@ interface PendingMutationDao {
 
     @Query("UPDATE pending_mutations SET payloadIcs = :payloadIcs WHERE id = :id")
     suspend fun updatePayload(id: Long, payloadIcs: String)
+
+    @Query("UPDATE pending_mutations SET baseEtag = :baseEtag WHERE id = :id")
+    suspend fun updateBaseEtag(id: Long, baseEtag: String?)
 
     @Delete
     suspend fun delete(mutation: PendingMutationEntity)

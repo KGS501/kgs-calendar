@@ -487,6 +487,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             }
         }
         var createMenuOpen by remember { mutableStateOf(false) }
+        var overdueTasksExpanded by remember { mutableStateOf(false) }
         var creationSheet by remember { mutableStateOf<CreationSheet?>(null) }
         var detailSheet by remember { mutableStateOf<DetailSheet?>(null) }
         val detailTaskBackStack = remember { mutableStateListOf<TaskEntity>() }
@@ -999,6 +1000,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         },
                         timelineBottomInset = if (editorWireframeMode) EditorTinyVisibleHeight else 0.dp,
                         onDetail = { detailSheet = it },
+                        overdueTasksExpanded = overdueTasksExpanded,
+                        onOverdueTasksExpandedChange = { overdueTasksExpanded = it },
                     )
                 }
                 AnimatedVisibility(
@@ -1010,7 +1013,14 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 ) {
                     CreateFabMenu(
                         expanded = createMenuOpen,
-                        onExpandedChange = { createMenuOpen = it },
+                        onExpandedChange = { expanded ->
+                            if (overdueTasksExpanded) {
+                                overdueTasksExpanded = false
+                                createMenuOpen = false
+                            } else {
+                                createMenuOpen = expanded
+                            }
+                        },
                         onCreateEvent = {
                             openEventCreation(state.defaultFabCreationDate())
                         },
@@ -1440,7 +1450,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             val currentDetail = when (detail) {
                 is DetailSheet.Event -> {
                     val sameResource = renderState.events.filter { it.resourceHref == detail.event.resourceHref }
-                    val refreshed = sameResource.firstOrNull { it.startsAtMillis == detail.event.startsAtMillis }
+                    val occurrenceStart = detail.event.occurrenceStartForEdit()
+                    val refreshed = sameResource.firstOrNull { it.occurrenceStartForEdit() == occurrenceStart }
                         ?: sameResource.firstOrNull()
                     refreshed?.let { DetailSheet.Event(it) } ?: detail
                 }
@@ -1627,6 +1638,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onLanguageSelected = viewModel::setLanguageMode,
                 onTaskColorModeSelected = viewModel::setTaskColorMode,
                 onPriorityAnimationsChanged = viewModel::setPriorityAnimationsEnabled,
+                onOverdueSummaryPriorityAnimationChanged = viewModel::setOverdueSummaryPriorityAnimationEnabled,
                 onSubtasksExpandedByDefaultChanged = viewModel::setSubtasksExpandedByDefault,
                 onAutoLoadMapPreviewsChanged = viewModel::setAutoLoadMapPreviews,
                 onMaxVisibleAllDayItemsChanged = viewModel::setMaxVisibleAllDayItems,
@@ -1725,7 +1737,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onDismiss = { recurringSaveRequest = null },
                 onSaveThis = {
                     when (request) {
-                        is RecurringSaveRequest.Event -> viewModel.updateEventOccurrence(request.event.resourceHref, request.event.startsAtMillis, request.payload)
+                        is RecurringSaveRequest.Event -> viewModel.updateEventOccurrence(
+                            request.event.resourceHref,
+                            request.event.occurrenceStartForEdit(),
+                            request.payload,
+                        )
                         is RecurringSaveRequest.Task -> viewModel.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
                     }
                     when (request) {
@@ -1737,7 +1753,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 },
                 onSaveFollowing = {
                     when (request) {
-                        is RecurringSaveRequest.Event -> viewModel.updateEventFollowing(request.event.resourceHref, request.event.startsAtMillis, request.payload)
+                        is RecurringSaveRequest.Event -> viewModel.updateEventFollowing(
+                            request.event.resourceHref,
+                            request.event.occurrenceStartForEdit(),
+                            request.payload,
+                        )
                         is RecurringSaveRequest.Task -> viewModel.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
                     }
                     when (request) {

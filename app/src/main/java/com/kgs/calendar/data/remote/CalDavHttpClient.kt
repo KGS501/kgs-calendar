@@ -332,7 +332,7 @@ class CalDavHttpClient(
             }
             .build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (response.code == 412) error("Conflict while uploading $href")
+            if (response.code == 412) throw CalDavConflictException("PUT", href)
             if (!response.isSuccessful) error("PUT $href failed: HTTP ${response.code}")
             PutResult(href, response.header("ETag"))
         }
@@ -351,7 +351,7 @@ class CalDavHttpClient(
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             if (response.code == 404) return@use
-            if (response.code == 412) error("Conflict while deleting $href")
+            if (response.code == 412) throw CalDavConflictException("DELETE", href)
             if (!response.isSuccessful) error("DELETE $href failed: HTTP ${response.code}")
         }
     }

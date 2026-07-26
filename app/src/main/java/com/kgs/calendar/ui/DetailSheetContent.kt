@@ -836,9 +836,9 @@ internal fun DetailSheetContent(
                             canDelete = !readOnlySource,
                             onDuplicate = { onDuplicateEvent(ev) },
                             onCopyTo = { onCopyEventTo(ev, it) },
-                            onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.startsAtMillis) },
-                            onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.startsAtMillis) },
-                            onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.startsAtMillis) },
+                            onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
+                            onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
+                            onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
                         )
                     }
                 }

@@ -86,6 +86,7 @@ data class CalendarUiState(
     val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val showCompletedTasksInCalendar: Boolean = true,
     val priorityAnimationsEnabled: Boolean = true,
+    val overdueSummaryPriorityAnimationEnabled: Boolean = true,
     val subtasksExpandedByDefault: Boolean = true,
     val autoLoadMapPreviews: Boolean = false,
     val maxVisibleAllDayItems: Int = 3,

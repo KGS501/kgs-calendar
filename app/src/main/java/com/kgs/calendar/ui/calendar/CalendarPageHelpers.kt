@@ -6,6 +6,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
@@ -68,16 +69,7 @@ internal fun YearMonth.overviewPanelHeight(firstDayOfWeek: DayOfWeek = DayOfWeek
 internal fun LocalDate.leadingDaysFrom(firstDayOfWeek: DayOfWeek): Int =
     (dayOfWeek.value - firstDayOfWeek.value + 7) % 7
 
-internal fun weekHeaderLabels(firstDayOfWeek: DayOfWeek): List<String> =
+internal fun weekHeaderLabels(firstDayOfWeek: DayOfWeek, locale: Locale): List<String> =
     (0 until 7).map { offset ->
-        val day = DayOfWeek.of(((firstDayOfWeek.value - 1 + offset) % 7) + 1)
-        when (day) {
-            DayOfWeek.MONDAY -> "M"
-            DayOfWeek.TUESDAY -> "D"
-            DayOfWeek.WEDNESDAY -> "M"
-            DayOfWeek.THURSDAY -> "D"
-            DayOfWeek.FRIDAY -> "F"
-            DayOfWeek.SATURDAY -> "S"
-            DayOfWeek.SUNDAY -> "S"
-        }
+        firstDayOfWeek.plus(offset.toLong()).getDisplayName(TextStyle.NARROW, locale)
     }

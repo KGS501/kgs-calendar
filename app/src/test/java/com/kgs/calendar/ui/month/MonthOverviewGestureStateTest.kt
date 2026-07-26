@@ -16,6 +16,13 @@ class MonthOverviewGestureStateTest {
     }
 
     @Test
+    fun nearDiagonalMonthSwipePrefersHorizontalNavigation() {
+        val state = reducer.update(Offset(-40f, -46f), touchSlop = 12f)
+
+        assertEquals(MonthGestureAxis.Horizontal, state.axis)
+    }
+
+    @Test
     fun verticalIntentLocksAfterTouchSlop() {
         val state = reducer.update(Offset(5f, -32f), touchSlop = 12f)
 

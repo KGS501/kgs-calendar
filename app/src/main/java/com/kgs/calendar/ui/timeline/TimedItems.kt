@@ -506,8 +506,12 @@ internal fun DayTimedColumn(
                     hourHeightDp = hourHeightDp,
                     color = item.event.displayColor(),
                     dayWidthPx = dayWidthPx,
-                    onMove = { targetDate, start, end -> onEventMoved(item.event.resourceHref, item.event.startsAtMillis, targetDate, start, end) },
-                    onMoveAllDay = { targetDate -> onEventMovedAllDay(item.event.resourceHref, item.event.startsAtMillis, targetDate) },
+                    onMove = { targetDate, start, end ->
+                        onEventMoved(item.event.resourceHref, item.event.occurrenceStartForEdit(), targetDate, start, end)
+                    },
+                    onMoveAllDay = { targetDate ->
+                        onEventMovedAllDay(item.event.resourceHref, item.event.occurrenceStartForEdit(), targetDate)
+                    },
                     onClick = { onDetail(DetailSheet.Event(item.event)) },
                 )
                 is TimedCalendarItem.TaskItem -> TimedTaskBlock(
@@ -778,7 +782,7 @@ private fun TimedEventBlock(
                             item = TimelineDraggedItem(
                                 kind = TimelineDraggedItemKind.Event,
                                 resourceHref = event.resourceHref,
-                                occurrenceMillis = event.startsAtMillis,
+                                occurrenceMillis = event.occurrenceStartForEdit(),
                                 title = event.title,
                                 location = displayLocation,
                                 colorArgb = background.toArgb(),

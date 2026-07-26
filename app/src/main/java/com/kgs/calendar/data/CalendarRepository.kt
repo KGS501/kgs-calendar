@@ -18,7 +18,9 @@ import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import com.kgs.calendar.data.recurrence.TaskRecurrenceExpander
 import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.CalDavAccountDiscovery
+import com.kgs.calendar.data.remote.PutResult
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
@@ -68,6 +70,7 @@ class CalendarRepository(
     private val taskRecurrenceExpander = TaskRecurrenceExpander(recurrenceExpander)
     private val readOnlyHttpClient = OkHttpClient()
     private val androidProviderSyncMutex = Mutex()
+    private val remoteSyncMutex = Mutex()
     private val recentCalDavLocalWrites = ConcurrentHashMap<String, Long>()
     private val recentAndroidLocalWrites = ConcurrentHashMap<String, Long>()
     private val recentAndroidLocalDeletes = ConcurrentHashMap<String, Long>()
@@ -333,6 +336,13 @@ class CalendarRepository(
     suspend fun syncNow(
         includeDisabledProviderCalendars: Boolean = false,
         forceFullCalDavRefresh: Boolean = false,
+    ) = remoteSyncMutex.withLock {
+        syncNowLocked(includeDisabledProviderCalendars, forceFullCalDavRefresh)
+    }
+
+    private suspend fun syncNowLocked(
+        includeDisabledProviderCalendars: Boolean,
+        forceFullCalDavRefresh: Boolean,
     ) {
         repairInvalidTaskSchedules()
         repairPendingTaskMutations()
@@ -432,9 +442,12 @@ class CalendarRepository(
     }
 
     suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long) {
-        val threshold = startedAtMillis - TARGETED_SYNC_CLOCK_SKEW_MILLIS
-        repairPendingTaskMutations(database.pendingMutationDao().createdSince(threshold))
-        pushPendingMutations(database.pendingMutationDao().createdSince(threshold))
+        remoteSyncMutex.withLock {
+            val threshold = startedAtMillis - TARGETED_SYNC_CLOCK_SKEW_MILLIS
+            val pendingMutations = database.pendingMutationDao().createdSince(threshold)
+            repairPendingTaskMutations(pendingMutations)
+            pushPendingMutations(database.pendingMutationDao().createdSince(threshold))
+        }
     }
 
     suspend fun createEvent(payload: EventEditPayload) {
@@ -1879,9 +1892,16 @@ class CalendarRepository(
     ) {
         val localResources = database.resourceDao().forCollection(collection.href)
         val localByKey = localResources.associateBy { it.href.davHrefKey() }
-        val pendingDeletes = database.pendingMutationDao().allForAccount(collection.accountId)
+        val pendingMutations = database.pendingMutationDao().allForAccount(collection.accountId)
+            .filter { it.collectionHref == collection.href }
+        val pendingDeletes = pendingMutations
             .asSequence()
-            .filter { it.collectionHref == collection.href && it.action == MutationAction.Delete }
+            .filter { it.action == MutationAction.Delete }
+            .map { it.resourceHref.davHrefKey() }
+            .toSet()
+        val pendingPuts = pendingMutations
+            .asSequence()
+            .filter { it.action == MutationAction.Put }
             .map { it.resourceHref.davHrefKey() }
             .toSet()
 
@@ -1941,7 +1961,7 @@ class CalendarRepository(
         val remoteByKey = remoteResources.associateBy { it.href.davHrefKey() }
         val changedResources = remoteResources.filter { remote ->
             val key = remote.href.davHrefKey()
-            if (key in pendingDeletes) return@filter false
+            if (key in pendingDeletes || !shouldApplyRemoteCalDavState(key, pendingPuts)) return@filter false
             val local = localByKey[key]
             incremental != null || local == null || local.etag != remote.etag || local.syncError != null
         }
@@ -2017,6 +2037,7 @@ class CalendarRepository(
             ?: localByKey.keys.minus(remoteByKey.keys)
         deletedKeys.mapNotNull(localByKey::get).forEach { deletedResource ->
             val deletedHref = deletedResource.href
+            if (!shouldApplyRemoteCalDavState(deletedHref.davHrefKey(), pendingPuts)) return@forEach
             if (shouldKeepRecentCalDavMissingResource(deletedHref)) return@forEach
             database.eventDao().deleteByResource(deletedHref)
             database.taskDao().deleteByResource(deletedHref)
@@ -2072,6 +2093,7 @@ class CalendarRepository(
     }
 
     private suspend fun pushPendingMutations(credentials: StoredCredentials, mutations: List<PendingMutationEntity>) {
+        var firstFailure: Throwable? = null
         mutations.forEach { mutation ->
             try {
                 when (mutation.action) {
@@ -2081,16 +2103,35 @@ class CalendarRepository(
                         } else {
                             mutation.payloadIcs ?: error("Missing payload")
                         }
-                        val effectiveBaseEtag = mutation.baseEtag
-                            ?: database.resourceDao().get(mutation.resourceHref)?.etag
-                        val result = calDavClient.putResource(
-                            serverUrl = credentials.serverUrl,
-                            href = mutation.resourceHref,
-                            username = credentials.username,
-                            appPassword = credentials.appPassword,
-                            rawIcs = raw,
-                            baseEtag = effectiveBaseEtag,
+                        val resource = database.resourceDao().get(mutation.resourceHref)
+                        val effectiveBaseEtag = resolveCalDavUploadBaseEtag(
+                            queuedBaseEtag = mutation.baseEtag,
+                            currentResourceEtag = resource?.etag,
+                            queuedPayload = raw,
+                            currentRawIcs = resource?.rawIcs,
                         )
+                        val putAttempt = putCalDavResourceWithConflictRetry(
+                            initialBaseEtag = effectiveBaseEtag,
+                            put = { baseEtag ->
+                                calDavClient.putResource(
+                                    serverUrl = credentials.serverUrl,
+                                    href = mutation.resourceHref,
+                                    username = credentials.username,
+                                    appPassword = credentials.appPassword,
+                                    rawIcs = raw,
+                                    baseEtag = baseEtag,
+                                )
+                            },
+                            resolveCurrentEtag = {
+                                calDavClient.getResourceEtag(
+                                    serverUrl = credentials.serverUrl,
+                                    href = mutation.resourceHref,
+                                    username = credentials.username,
+                                    appPassword = credentials.appPassword,
+                                )
+                            },
+                        )
+                        val result = putAttempt.result
                         val uploadedEtag = result.etag
                             ?: runCatching {
                                 calDavClient.getResourceEtag(
@@ -2100,8 +2141,17 @@ class CalendarRepository(
                                     appPassword = credentials.appPassword,
                                 )
                             }.getOrNull()
-                            ?: effectiveBaseEtag
-                        database.resourceDao().markSynced(result.href, uploadedEtag)
+                            ?: putAttempt.submittedBaseEtag
+                        database.resourceDao().markSynced(mutation.resourceHref, uploadedEtag)
+                        if (result.href != mutation.resourceHref) {
+                            database.resourceDao().markSynced(result.href, uploadedEtag)
+                        }
+                        database.pendingMutationDao()
+                            .latestForResourceAndAction(mutation.resourceHref, MutationAction.Put)
+                            ?.takeIf { it.id != mutation.id }
+                            ?.let { newerMutation ->
+                                database.pendingMutationDao().updateBaseEtag(newerMutation.id, uploadedEtag)
+                            }
                         markRecentCalDavLocalWrite(result.href)
                     }
                     MutationAction.Delete -> {
@@ -2122,8 +2172,10 @@ class CalendarRepository(
                 database.pendingMutationDao().delete(mutation)
             } catch (error: Throwable) {
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")
+                if (firstFailure == null) firstFailure = error
             }
         }
+        firstFailure?.let { throw it }
     }
 
     private suspend fun upsertLocalResource(
@@ -2518,3 +2570,49 @@ private fun String.calendarObjectPathSegment(): String =
     URLEncoder.encode(trim(), StandardCharsets.UTF_8.name())
         .replace("+", "%20")
         .ifBlank { UUID.randomUUID().toString() }
+
+internal fun resolveCalDavUploadBaseEtag(
+    queuedBaseEtag: String?,
+    currentResourceEtag: String?,
+    queuedPayload: String,
+    currentRawIcs: String?,
+): String? {
+    val payloadStillMatchesLocalState = currentRawIcs != null &&
+        queuedPayload.normalizedIcsForUploadComparison() == currentRawIcs.normalizedIcsForUploadComparison()
+    return when {
+        payloadStillMatchesLocalState && currentResourceEtag != null -> currentResourceEtag
+        queuedBaseEtag != null -> queuedBaseEtag
+        else -> currentResourceEtag
+    }
+}
+
+internal data class CalDavPutAttemptResult(
+    val result: PutResult,
+    val submittedBaseEtag: String?,
+)
+
+internal suspend fun putCalDavResourceWithConflictRetry(
+    initialBaseEtag: String?,
+    put: suspend (baseEtag: String?) -> PutResult,
+    resolveCurrentEtag: suspend () -> String?,
+): CalDavPutAttemptResult = try {
+    CalDavPutAttemptResult(
+        result = put(initialBaseEtag),
+        submittedBaseEtag = initialBaseEtag,
+    )
+} catch (conflict: CalDavConflictException) {
+    val currentEtag = resolveCurrentEtag() ?: throw conflict
+    if (currentEtag == initialBaseEtag) throw conflict
+    CalDavPutAttemptResult(
+        result = put(currentEtag),
+        submittedBaseEtag = currentEtag,
+    )
+}
+
+internal fun shouldApplyRemoteCalDavState(
+    resourceKey: String,
+    pendingPutResourceKeys: Set<String>,
+): Boolean = resourceKey !in pendingPutResourceKeys
+
+private fun String.normalizedIcsForUploadComparison(): String =
+    replace("\r\n", "\n").replace('\r', '\n').trim()

@@ -94,6 +94,27 @@ class CalDavHttpClientTest {
     }
 
     @Test
+    fun putPreconditionFailureIsReportedAsRetryableConflict() = runTest {
+        server.enqueue(MockResponse().setResponseCode(412))
+        var thrown: Throwable? = null
+
+        try {
+            client.putResource(
+                serverUrl = server.url("/").toString(),
+                href = "/calendars/alice/work/event.ics",
+                username = "alice",
+                appPassword = "secret",
+                rawIcs = "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
+                baseEtag = "old-etag",
+            )
+        } catch (error: Throwable) {
+            thrown = error
+        }
+
+        assertTrue(thrown is CalDavConflictException)
+    }
+
+    @Test
     fun discoversScheduleInboxAsReadOnlyTaskCollection() = runTest {
         server.enqueue(xmlResponse(discoveryResponse("/principals/users/alice/")))
         server.enqueue(xmlResponse(principalResponse("/calendars/alice/")))

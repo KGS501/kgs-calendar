@@ -5,7 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.MutationAction
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -92,6 +95,46 @@ class KgsDatabaseInstrumentedTest {
 
         assertEquals(null, database.taskDao().byResource(firstHref)!!.status)
         assertEquals("COMPLETED", database.taskDao().byResource(secondHref)!!.status)
+    }
+
+    @Test
+    fun latestPendingEditCanBeRebasedAfterEarlierUploadCompletes() = runBlocking {
+        database.accountDao().upsert(
+            AccountEntity(serverUrl = "https://nextcloud.test", username = "fromb", displayName = "fromb", lastSyncAtMillis = null),
+        )
+        val resourceHref = "/remote.php/dav/calendars/fromb/work/event.ics"
+        val firstId = database.pendingMutationDao().insert(
+            PendingMutationEntity(
+                accountId = AccountEntity.PRIMARY_ID,
+                collectionHref = "/remote.php/dav/calendars/fromb/work/",
+                resourceHref = resourceHref,
+                componentType = ComponentType.Event,
+                action = MutationAction.Put,
+                payloadIcs = "first",
+                baseEtag = "etag-1",
+                createdAtMillis = 1L,
+            ),
+        )
+        val latestId = database.pendingMutationDao().insert(
+            PendingMutationEntity(
+                accountId = AccountEntity.PRIMARY_ID,
+                collectionHref = "/remote.php/dav/calendars/fromb/work/",
+                resourceHref = resourceHref,
+                componentType = ComponentType.Event,
+                action = MutationAction.Put,
+                payloadIcs = "latest",
+                baseEtag = "etag-1",
+                createdAtMillis = 2L,
+            ),
+        )
+
+        val latest = database.pendingMutationDao().latestForResourceAndAction(resourceHref, MutationAction.Put)!!
+        assertEquals(latestId, latest.id)
+        database.pendingMutationDao().updateBaseEtag(latest.id, "etag-2")
+
+        val mutationsById = database.pendingMutationDao().all().associateBy { it.id }
+        assertEquals("etag-1", mutationsById.getValue(firstId).baseEtag)
+        assertEquals("etag-2", mutationsById.getValue(latestId).baseEtag)
     }
 
     @Test

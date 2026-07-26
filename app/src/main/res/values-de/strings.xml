@@ -295,6 +295,17 @@
     <string name="color_source_help">Legt fest, ob Aufgaben automatisch die Farbe ihrer Aufgabenliste übernehmen oder nach Priorität eingefärbt werden. Manuell gesetzte Farben haben immer Vorrang.</string>
     <string name="priority_animations">Prioritätsanimationen</string>
     <string name="priority_animations_help">Hohe Prioritäten pulsieren und bewegen sich leicht. Ausschalten reduziert Bewegung in der gesamten App.</string>
+    <string name="overdue_summary_priority_animation">Zusammenfassung überfälliger Aufgaben animieren</string>
+    <string name="overdue_summary_priority_animation_help">Verwendet die höchste Priorität der überfälligen Aufgaben für die Animation.</string>
+    <string name="minimize_overdue_tasks">Minimieren</string>
+    <plurals name="overdue_tasks_short_count">
+        <item quantity="one">%1$d Aufgabe</item>
+        <item quantity="other">%1$d Aufgaben</item>
+    </plurals>
+    <plurals name="overdue_tasks_count">
+        <item quantity="one">%1$d Aufgabe überfällig</item>
+        <item quantity="other">%1$d Aufgaben überfällig</item>
+    </plurals>
     <string name="sort_task_fields">Aufgaben-Felder sortieren</string>
     <string name="field_order_summary">Reihenfolge in Editor und Detailansicht</string>
     <string name="sort_event_fields">Termin-Felder sortieren</string>

@@ -143,9 +143,7 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
             .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
         return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
             val recurrenceIdMillis = overrides.firstOrNull { override ->
-                override.startsAtMillis == occurrence.startsAtMillis &&
-                    override.endsAtMillis == occurrence.endsAtMillis &&
-                    override.title == occurrence.title
+                override.matchesOccurrence(occurrence)
             }?.recurrenceIdMillis ?: occurrence.startsAtMillis
             CalendarOccurrenceEnvelope(
                 occurrenceId = CalendarOccurrenceId.Event(master.resourceHref, recurrenceIdMillis),

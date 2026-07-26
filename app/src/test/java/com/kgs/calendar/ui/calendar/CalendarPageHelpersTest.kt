@@ -5,6 +5,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.Locale
 
 class CalendarPageHelpersTest {
     @Test
@@ -27,6 +28,21 @@ class CalendarPageHelpersTest {
     fun monthGridUsesFirstDayOfWeek() {
         assertEquals(6, YearMonth.of(2026, 3).monthGridRowCount(DayOfWeek.MONDAY))
         assertEquals(5, YearMonth.of(2026, 3).monthGridRowCount(DayOfWeek.SUNDAY))
-        assertEquals(listOf("S", "M", "D", "M", "D", "F", "S"), weekHeaderLabels(DayOfWeek.SUNDAY))
+    }
+
+    @Test
+    fun weekHeaderLabelsUseEnglishLocaleAndConfiguredFirstDay() {
+        assertEquals(
+            listOf("S", "M", "T", "W", "T", "F", "S"),
+            weekHeaderLabels(DayOfWeek.SUNDAY, Locale.ENGLISH),
+        )
+    }
+
+    @Test
+    fun weekHeaderLabelsUseGermanLocaleAndConfiguredFirstDay() {
+        assertEquals(
+            listOf("M", "D", "M", "D", "F", "S", "S"),
+            weekHeaderLabels(DayOfWeek.MONDAY, Locale.GERMAN),
+        )
     }
 }

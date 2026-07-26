@@ -51,7 +51,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
@@ -139,6 +138,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
@@ -215,7 +215,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -238,8 +237,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
@@ -258,15 +255,21 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -276,6 +279,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -368,15 +372,31 @@ import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
 import com.kgs.calendar.ui.layout.TimedPlacement
-import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
-import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
-import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
+import com.kgs.calendar.ui.layout.allDayContinuationFadeVisualProgress
+import com.kgs.calendar.ui.layout.allDayLeadingCornerProgress
+import com.kgs.calendar.ui.layout.allDayLeadingCornerRadiusFraction
+import com.kgs.calendar.ui.layout.allDayLeadingContinuationProgress
+import com.kgs.calendar.ui.layout.allDayPageLeftX
+import com.kgs.calendar.ui.layout.allDaySegmentVisualVisibility
+import com.kgs.calendar.ui.layout.allDaySegmentContinuesPastViewport
+import com.kgs.calendar.ui.layout.allDayStableSurfaceLeft
+import com.kgs.calendar.ui.layout.allDayTrailingCornerProgress
+import com.kgs.calendar.ui.layout.allDayViewportCardBounds
+import com.kgs.calendar.ui.layout.buildAllDayScene
+import com.kgs.calendar.ui.layout.buildAllDayViewportWindow
+import com.kgs.calendar.ui.layout.interpolateAllDayContinuationFadeProgress
+import com.kgs.calendar.ui.layout.interpolateAllDayTransitionLane
+import com.kgs.calendar.ui.layout.interpolateAllDayVisualPieceFrame
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
+import com.kgs.calendar.ui.layout.rightEdgeSquashGeometry
+import com.kgs.calendar.ui.layout.shouldPreserveRightExitCardShape
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
+import com.kgs.calendar.ui.model.continuesAllDayTopItemAfter
 import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
+import com.kgs.calendar.ui.model.highestOverduePriority
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
@@ -386,6 +406,12 @@ import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.timeline.AllDayReservation
+import com.kgs.calendar.ui.timeline.TimelineDragBounds
+import com.kgs.calendar.ui.timeline.TimelineDragPoint
+import com.kgs.calendar.ui.timeline.TimelineDraggedItem
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemOrigin
+import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -431,7 +457,6 @@ import kotlin.random.Random
 import kotlin.math.ln
 import kotlin.math.tan
 
-
 internal fun allDayReservationFor(
     date: LocalDate,
     events: List<EventEntity>,
@@ -465,8 +490,10 @@ internal fun AllDayViewportOverlay(
     dayWidthPx: Float,
     dayStepPx: Float,
     viewportWidthPx: Float,
+    layoutViewportWidthPx: Float = viewportWidthPx,
     topOffset: Dp,
     height: Dp,
+    timedGridTopPadding: Dp,
     hourHeightDp: Float,
     timeScrollPx: Int,
     defaultEventDurationMinutes: Int,
@@ -484,29 +511,53 @@ internal fun AllDayViewportOverlay(
     onDetail: (DetailSheet) -> Unit,
     priorityPageCount: Int,
     reservation: AllDayReservation? = null,
+    allowVerticalOverflow: Boolean = false,
 ) {
     if (height <= 0.dp || viewportWidthPx <= 0f || dayStepPx <= 0f) return
     val bufferStartPage = (anchorPage - 10).coerceAtLeast(0)
     val bufferEndPage = (anchorPage + 14).coerceAtMost(DayPagerPageCount - 1)
+    val density = LocalDensity.current
     val daySpacingPx = (dayStepPx - dayWidthPx).coerceAtLeast(0f)
-    val viewportPages = remember(anchorPage, anchorOffsetPx, dayWidthPx, dayStepPx, viewportWidthPx, bufferStartPage, bufferEndPage) {
-        (bufferStartPage..bufferEndPage).filter { page ->
-            val left = anchorOffsetPx + (page - anchorPage) * dayStepPx
-            left < viewportWidthPx + daySpacingPx && left + dayWidthPx + daySpacingPx > 0f
-        }
+    val continuationFadeExitDistancePx = with(density) { 20.dp.toPx() }
+    val continuationRenderBleedPx = max(
+        continuationFadeExitDistancePx,
+        daySpacingPx + with(density) { 9.dp.toPx() },
+    )
+    val viewportWindow = remember(
+        anchorPage,
+        anchorOffsetPx,
+        dayWidthPx,
+        dayStepPx,
+        viewportWidthPx,
+        layoutViewportWidthPx,
+        continuationRenderBleedPx,
+        bufferStartPage,
+        bufferEndPage,
+    ) {
+        buildAllDayViewportWindow(
+            anchorPage = anchorPage,
+            anchorOffsetPx = anchorOffsetPx,
+            dayWidthPx = dayWidthPx,
+            dayStepPx = dayStepPx,
+            viewportWidthPx = viewportWidthPx,
+            bufferStartPage = bufferStartPage,
+            bufferEndPage = bufferEndPage,
+            renderBleedPx = continuationRenderBleedPx,
+            layoutViewportWidthPx = layoutViewportWidthPx,
+        )
     }
-    val visibleStartPage = viewportPages.minOrNull() ?: anchorPage.coerceIn(bufferStartPage, bufferEndPage)
-    val visibleEndPage = viewportPages.maxOrNull() ?: visibleStartPage
+    val visibleStartPage = viewportWindow.layoutStartPage
+    val visibleEndPage = viewportWindow.layoutEndPage
     val corePageCount = priorityPageCount.coerceIn(1, MAX_MULTI_DAY_COUNT)
-    val priorityPages = remember(anchorPage, anchorOffsetPx, dayWidthPx, dayStepPx, viewportWidthPx, visibleStartPage, visibleEndPage, corePageCount) {
-        val visiblePages = (visibleStartPage..visibleEndPage).toList()
+    val priorityPages = remember(anchorPage, anchorOffsetPx, dayWidthPx, dayStepPx, layoutViewportWidthPx, visibleStartPage, visibleEndPage, corePageCount) {
+        val visiblePages = viewportWindow.layoutPages
         if (visiblePages.size <= corePageCount) {
             visiblePages
         } else {
             val coverageByPage = visiblePages.associateWith { page ->
-                val left = anchorOffsetPx + (page - anchorPage) * dayStepPx
+                val left = allDayPageLeftX(page, anchorPage, anchorOffsetPx, dayStepPx)
                 val right = left + dayWidthPx
-                (min(right, viewportWidthPx) - max(left, 0f)).coerceIn(0f, dayWidthPx)
+                (min(right, layoutViewportWidthPx) - max(left, 0f)).coerceIn(0f, dayWidthPx)
             }
             val minStart = visiblePages.first()
             val maxStart = visiblePages.last() - corePageCount + 1
@@ -537,46 +588,42 @@ internal fun AllDayViewportOverlay(
             priorityEndPage = priorityEndPage,
         )
     }
-    val rowCount = overlayItems.maxOfOrNull { it.lane + 1 } ?: 0
-    val pageItemsByPage = remember(overlayItems, layoutStartPage, layoutEndPage, priorityStartPage, priorityEndPage) {
-        (layoutStartPage..layoutEndPage).associateWith { page ->
-            overlayItems
-                .filter { page in it.startPage..it.endPage }
-                .sortedWith(allDayCollapsedPageItemComparator(priorityStartPage, priorityEndPage))
-        }
+    val scene = remember(
+        overlayItems,
+        layoutStartPage,
+        layoutEndPage,
+        priorityStartPage,
+        priorityEndPage,
+        maxVisibleItems,
+    ) {
+        buildAllDayScene(
+            overlayItems = overlayItems,
+            visibleStartPage = layoutStartPage,
+            visibleEndPage = layoutEndPage,
+            priorityStartPage = priorityStartPage,
+            priorityEndPage = priorityEndPage,
+            maxVisibleItems = maxVisibleItems,
+        )
     }
-    val hasCollapsedOverflow = maxVisibleItems < rowCount &&
-        (visibleStartPage..visibleEndPage).any { pageItemsByPage[it].orEmpty().size > maxVisibleItems }
-    val collapsedVisibleItemLimit = when {
-        maxVisibleItems <= 0 && rowCount > 0 -> 0
-        hasCollapsedOverflow -> (maxVisibleItems - 1).coerceAtLeast(0)
-        else -> maxVisibleItems
-    }
-    val overflowLane = if (maxVisibleItems <= 0) 0 else collapsedVisibleItemLimit
-    val density = LocalDensity.current
+    val pageItemsByPage = scene.pageItemsByPage
+    val hasCollapsedOverflow = scene.metrics.hasCollapsedOverflow
+    val collapsedVisibleItemLimit = scene.metrics.collapsedVisibleItemLimit
+    val overflowLane = scene.metrics.overflowLane
     val expansionProgress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
         label = "allDayOverflowExpansionProgress",
     )
     val renderExpandedItems = expanded || expansionProgress > 0.01f
-    val collapsedLayout = remember(overlayItems, pageItemsByPage, layoutStartPage, layoutEndPage, maxVisibleItems, collapsedVisibleItemLimit) {
-        buildCollapsedAllDayLayout(
-            overlayItems = overlayItems,
-            pageItemsByPage = pageItemsByPage,
-            visibleStartPage = layoutStartPage,
-            visibleEndPage = layoutEndPage,
-            maxVisibleItems = maxVisibleItems,
-            collapsedVisibleItemLimit = collapsedVisibleItemLimit,
-        )
-    }
-    val collapsedSegments = collapsedLayout.segments
-    val continuationSegments = collapsedLayout.continuations
-    val showCollapsedOverflowChips = hasCollapsedOverflow && !expanded && expansionProgress <= 0.08f
+    val renderCollapsedItems = !expanded || expansionProgress < 0.999f
+    val collapsedConnectorAlpha = (1f - expansionProgress).coerceIn(0f, 1f)
+    val collapsedSegments = scene.collapsedLayout.segments
+    val continuationSegments = scene.collapsedLayout.continuations
+    val showCollapsedOverflowChips = hasCollapsedOverflow && renderCollapsedItems
     var draggingAllDayItemId by remember { mutableStateOf<String?>(null) }
     fun moveAllDayItemToTimed(item: AllDayOverlayItem, date: LocalDate, start: LocalTime, end: LocalTime) {
         item.event?.let { event ->
-            onEventMoved(event.resourceHref, event.startsAtMillis, date, start, end)
+            onEventMoved(event.resourceHref, event.occurrenceStartForEdit(), date, start, end)
         }
         item.task?.let { task ->
             onTaskMoved(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date, start, end)
@@ -584,28 +631,26 @@ internal fun AllDayViewportOverlay(
     }
     fun moveAllDayItemToAllDay(item: AllDayOverlayItem, date: LocalDate) {
         item.event?.let { event ->
-            onEventMovedAllDay(event.resourceHref, event.startsAtMillis, date)
+            onEventMovedAllDay(event.resourceHref, event.occurrenceStartForEdit(), date)
         }
         item.task?.let { task ->
             onTaskMovedAllDay(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date)
         }
     }
-    val hiddenPages = if (!showCollapsedOverflowChips) {
-        emptyMap()
-    } else {
-        (visibleStartPage..visibleEndPage).mapNotNull { page ->
-            val pageItems = pageItemsByPage[page].orEmpty()
-            if (pageItems.size <= maxVisibleItems) return@mapNotNull null
-            val hiddenItems = pageItems.drop(collapsedVisibleItemLimit)
-            if (hiddenItems.isEmpty()) null else page to hiddenItems
-        }.toMap()
-    }
+    val hiddenPages = if (showCollapsedOverflowChips) scene.hiddenPages else emptyMap()
     Box(
         modifier = Modifier
             .offset(y = topOffset)
             .fillMaxWidth()
             .height(height)
-            .then(if (draggingAllDayItemId == null) Modifier.verticalClipAllowHorizontalOverflow() else Modifier)
+            .then(
+                if (draggingAllDayItemId == null && !allowVerticalOverflow) {
+                    Modifier.verticalClipAllowHorizontalOverflow()
+                } else {
+                    Modifier
+                },
+            )
+            .testTag("timeline-all-day-overlay")
             .zIndex(9f),
     ) {
         Box(
@@ -619,74 +664,45 @@ internal fun AllDayViewportOverlay(
                     }
                 },
         )
-        val expandedRenderItems = if (renderExpandedItems) overlayItems else emptyList()
-        expandedRenderItems.forEach { item ->
-            val startX = anchorOffsetPx + (item.startPage - anchorPage) * dayStepPx
-            val endX = anchorOffsetPx + (item.endPage - anchorPage) * dayStepPx + dayWidthPx
-            val visibleLeft = startX.coerceAtLeast(0f)
-            val visibleRight = endX.coerceAtMost(viewportWidthPx)
-            val visibleWidth = visibleRight - visibleLeft
-            if (visibleWidth <= 1f) return@forEach
-            key("expanded-all-day:${item.id}") {
-                val animatedBaseLane by animateFloatAsState(
-                    targetValue = item.lane.toFloat(),
-                    animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                    label = "expandedAllDayLane",
+        if (renderCollapsedItems) {
+            fun segmentVisibility(startPage: Int, endPage: Int): Float {
+                val segmentStartX = allDayPageLeftX(startPage, anchorPage, anchorOffsetPx, dayStepPx)
+                val segmentEndX = allDayPageLeftX(endPage, anchorPage, anchorOffsetPx, dayStepPx) + dayWidthPx
+                return allDaySegmentVisualVisibility(
+                    segmentStartX = segmentStartX,
+                    segmentEndX = segmentEndX,
+                    viewportWidthPx = viewportWidthPx,
+                    fadeDistancePx = continuationFadeExitDistancePx,
                 )
-                val isOverflowItem = item.lane >= collapsedVisibleItemLimit
-                val animatedLane = if (isOverflowItem) {
-                    overflowLane + (animatedBaseLane - overflowLane) * expansionProgress
-                } else {
-                    animatedBaseLane
-                }
-                val itemAlpha = if (isOverflowItem) expansionProgress else 1f
-                val chipTopDp = 7.dp + (animatedLane * 29f).dp
-                AllDayViewportChip(
-                    item = item,
-                    chipLeftPx = visibleLeft,
-                    chipTopDp = chipTopDp,
-                    allDayHeight = height,
-                    hourHeightDp = hourHeightDp,
-                    timeScrollPx = timeScrollPx,
-                    anchorPage = anchorPage,
-                    anchorOffsetPx = anchorOffsetPx,
-                    dayStepPx = dayStepPx,
-                    defaultDurationMinutes = if (item.task != null) (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt() else defaultEventDurationMinutes,
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                x = visibleLeft.roundToInt(),
-                                y = with(density) { chipTopDp.roundToPx() },
-                            )
-                        }
-                        .graphicsLayer {
-                            alpha = itemAlpha
-                            scaleY = if (isOverflowItem) 0.94f + 0.06f * expansionProgress else 1f
-                        }
-                        .width(with(density) { visibleWidth.toDp() }),
-                    onTaskStatusChanged = onTaskStatusChanged,
-                    onDetail = onDetail,
-                    onMoveToTimed = ::moveAllDayItemToTimed,
-                    onMoveToAllDay = ::moveAllDayItemToAllDay,
-                    onDragStateChanged = { active -> draggingAllDayItemId = if (active) item.id else null },
-                )
-            }
-        }
-        if (!renderExpandedItems) {
-            fun pageVisibility(page: Int): Float {
-                val pageLeft = anchorOffsetPx + (page - anchorPage) * dayStepPx
-                val pageRight = pageLeft + dayWidthPx
-                return ((min(pageRight, viewportWidthPx) - max(pageLeft, 0f)) / dayWidthPx)
-                    .coerceIn(0f, 1f)
             }
 
             continuationSegments.forEach { segment ->
-                val left = anchorOffsetPx + (segment.page - anchorPage) * dayStepPx
+                val left = allDayPageLeftX(segment.page, anchorPage, anchorOffsetPx, dayStepPx)
                 val spacing = (dayStepPx - dayWidthPx).coerceAtLeast(0f)
                 val overlap = with(density) { 9.dp.toPx() }
                 val edgeReach = dayWidthPx * 0.18f
-                val fromPreviousAlpha = if (segment.fromPrevious) pageVisibility(segment.page - 1) else 0f
-                val toNextAlpha = if (segment.toNext) pageVisibility(segment.page + 1) else 0f
+                val previousSource = if (segment.fromPrevious) {
+                    collapsedSegments
+                        .asSequence()
+                        .filter { it.item.id == segment.item.id && it.endPage < segment.page }
+                        .maxByOrNull { it.endPage }
+                } else {
+                    null
+                }
+                val nextSource = if (segment.toNext) {
+                    collapsedSegments
+                        .asSequence()
+                        .filter { it.item.id == segment.item.id && it.startPage > segment.page }
+                        .minByOrNull { it.startPage }
+                } else {
+                    null
+                }
+                val fromPreviousAlpha = previousSource?.let {
+                    segmentVisibility(it.startPage, it.endPage)
+                } ?: 0f
+                val toNextAlpha = nextSource?.let {
+                    segmentVisibility(it.startPage, it.endPage)
+                } ?: 0f
                 val segmentLeft = when {
                     segment.fromPrevious -> left - spacing - overlap
                     segment.toNext -> left + dayWidthPx - edgeReach
@@ -707,10 +723,20 @@ internal fun AllDayViewportOverlay(
                     if (segment.fromPrevious && segment.toNext) 0.48f else 1f,
                 )
                 key("all-day-continuation:${segment.item.id}:${segment.page}") {
-                    val animatedLane by animateFloatAsState(
+                    val animatedCollapsedLane by animateFloatAsState(
                         targetValue = segment.lane.toFloat(),
                         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "allDayContinuationLane",
+                        label = "allDayContinuationCollapsedLane",
+                    )
+                    val animatedExpandedLane by animateFloatAsState(
+                        targetValue = segment.item.lane.toFloat(),
+                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                        label = "allDayContinuationExpandedLane",
+                    )
+                    val animatedLane = interpolateAllDayTransitionLane(
+                        collapsedLane = animatedCollapsedLane,
+                        expandedLane = animatedExpandedLane,
+                        expansionProgress = expansionProgress,
                     )
                     AllDayContinuationChip(
                         segment = segment,
@@ -725,59 +751,170 @@ internal fun AllDayViewportOverlay(
                                 )
                             }
                             .width(with(density) { visibleWidth.toDp() })
-                            .height(24.dp),
-                    )
-                }
-            }
-            collapsedSegments.forEach { segment ->
-                val item = segment.item
-                val startX = anchorOffsetPx + (segment.startPage - anchorPage) * dayStepPx
-                val endX = anchorOffsetPx + (segment.endPage - anchorPage) * dayStepPx + dayWidthPx
-                val visibleLeft = startX.coerceAtLeast(0f)
-                val visibleRight = endX.coerceAtMost(viewportWidthPx)
-                val visibleWidth = visibleRight - visibleLeft
-                if (visibleWidth <= 1f) return@forEach
-                val segmentOrdinal = collapsedSegments
-                    .asSequence()
-                    .filter { it.item.id == segment.item.id && it.startPage < segment.startPage }
-                    .count()
-                key("collapsed-all-day:${segment.item.id}:$segmentOrdinal") {
-                    val animatedLane by animateFloatAsState(
-                        targetValue = segment.lane.toFloat(),
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "collapsedAllDayLane",
-                    )
-                    val chipTopDp = 7.dp + (animatedLane * 29f).dp
-                    AllDayViewportChip(
-                        item = item,
-                        chipLeftPx = visibleLeft,
-                        chipTopDp = chipTopDp,
-                        allDayHeight = height,
-                        hourHeightDp = hourHeightDp,
-                        timeScrollPx = timeScrollPx,
-                        anchorPage = anchorPage,
-                        anchorOffsetPx = anchorOffsetPx,
-                        dayStepPx = dayStepPx,
-                        defaultDurationMinutes = if (item.task != null) (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt() else defaultEventDurationMinutes,
-                        modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = visibleLeft.roundToInt(),
-                                    y = with(density) { chipTopDp.roundToPx() },
-                                )
-                            }
-                            .width(with(density) { visibleWidth.toDp() }),
-                        onTaskStatusChanged = onTaskStatusChanged,
-                        onDetail = onDetail,
-                        onMoveToTimed = ::moveAllDayItemToTimed,
-                        onMoveToAllDay = ::moveAllDayItemToAllDay,
-                        onDragStateChanged = { active -> draggingAllDayItemId = if (active) item.id else null },
+                            .height(24.dp)
+                            .graphicsLayer { alpha = collapsedConnectorAlpha },
                     )
                 }
             }
         }
+        scene.visualPieces
+            .sortedBy { piece -> piece.primary }
+            .forEach { piece ->
+                val item = piece.item
+                val itemStartX = allDayPageLeftX(item.startPage, anchorPage, anchorOffsetPx, dayStepPx)
+                val itemEndX = allDayPageLeftX(item.endPage, anchorPage, anchorOffsetPx, dayStepPx) + dayWidthPx
+                val expandedBounds = allDayViewportCardBounds(
+                    segmentStartX = itemStartX,
+                    segmentEndX = itemEndX,
+                    continuesAfterSegment = false,
+                    viewportWidthPx = viewportWidthPx,
+                )
+                val expandedGeometry = rightEdgeSquashGeometry(
+                    visibleLeftX = expandedBounds.visibleLeftX,
+                    visibleRightX = expandedBounds.visibleRightX,
+                    minimumLayoutWidthPx = with(density) { 16.dp.toPx() },
+                    enabled = shouldPreserveRightExitCardShape(
+                        visibleRightX = expandedBounds.visibleRightX,
+                        viewportWidthPx = viewportWidthPx,
+                        trailingSurfaceOverflowPx = (itemEndX - expandedBounds.visibleRightX).coerceAtLeast(0f),
+                    ),
+                )
+                val segment = piece.collapsedSegment
+                val collapsedStartX = segment?.let {
+                    allDayPageLeftX(it.startPage, anchorPage, anchorOffsetPx, dayStepPx)
+                } ?: itemStartX
+                val collapsedEndX = segment?.let {
+                    allDayPageLeftX(it.endPage, anchorPage, anchorOffsetPx, dayStepPx) + dayWidthPx
+                } ?: itemEndX
+                val collapsedContinuesPastViewport = segment?.let {
+                    allDaySegmentContinuesPastViewport(
+                        itemStartPage = item.startPage,
+                        itemEndPage = item.endPage,
+                        segmentEndPage = it.endPage,
+                        visibleEndPage = layoutEndPage,
+                        segmentEndX = collapsedEndX,
+                        viewportEndX = viewportWidthPx,
+                    )
+                } ?: false
+                val collapsedContinuesBeforeViewport = segment?.let {
+                    it.startPage == layoutStartPage && item.startPage < layoutStartPage
+                } == true
+                val collapsedBounds = allDayViewportCardBounds(
+                    segmentStartX = collapsedStartX,
+                    segmentEndX = collapsedEndX,
+                    continuesAfterSegment = segment?.let {
+                        collapsedContinuesPastViewport && item.endPage > it.endPage
+                    } == true,
+                    viewportWidthPx = viewportWidthPx,
+                    continuesBeforeSegment = collapsedContinuesBeforeViewport,
+                )
+                val collapsedGeometry = rightEdgeSquashGeometry(
+                    visibleLeftX = collapsedBounds.visibleLeftX,
+                    visibleRightX = collapsedBounds.visibleRightX,
+                    minimumLayoutWidthPx = with(density) { 16.dp.toPx() },
+                    enabled = shouldPreserveRightExitCardShape(
+                        visibleRightX = collapsedBounds.visibleRightX,
+                        viewportWidthPx = viewportWidthPx,
+                        trailingSurfaceOverflowPx = (itemEndX - collapsedBounds.visibleRightX).coerceAtLeast(0f),
+                    ),
+                )
+                val collapsedFadeProgress = segment?.let {
+                    allDayLeadingContinuationProgress(
+                        itemStartPage = item.startPage,
+                        itemEndPage = item.endPage,
+                        itemStartX = itemStartX,
+                        itemEndX = collapsedEndX,
+                        dayWidthPx = dayWidthPx,
+                        fadeExitDistancePx = continuationFadeExitDistancePx,
+                    )
+                } ?: 0f
+                val expandedFadeProgress = allDayLeadingContinuationProgress(
+                    itemStartPage = item.startPage,
+                    itemEndPage = item.endPage,
+                    itemStartX = itemStartX,
+                    itemEndX = itemEndX,
+                    dayWidthPx = dayWidthPx,
+                    fadeExitDistancePx = continuationFadeExitDistancePx,
+                )
+                key("all-day-piece:${piece.key}") {
+                    val animatedCollapsedLane by animateFloatAsState(
+                        targetValue = (segment?.lane ?: overflowLane).toFloat(),
+                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                        label = "allDayPieceCollapsedLane",
+                    )
+                    val animatedExpandedLane by animateFloatAsState(
+                        targetValue = item.lane.toFloat(),
+                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                        label = "allDayPieceExpandedLane",
+                    )
+                    val frame = interpolateAllDayVisualPieceFrame(
+                        collapsedLeftX = collapsedGeometry.layoutLeftX,
+                        collapsedWidthPx = collapsedGeometry.layoutWidthPx,
+                        collapsedLane = animatedCollapsedLane,
+                        collapsedLeadingContinuationProgress = collapsedFadeProgress,
+                        expandedLeftX = expandedGeometry.layoutLeftX,
+                        expandedWidthPx = expandedGeometry.layoutWidthPx,
+                        expandedLane = animatedExpandedLane,
+                        expandedLeadingContinuationProgress = expandedFadeProgress,
+                        expansionProgress = expansionProgress,
+                        primary = piece.primary,
+                        visibleWhenCollapsed = segment != null,
+                    )
+                    if (frame.alpha > 0.001f && frame.widthPx > 1f) {
+                        val chipTopDp = 7.dp + (frame.lane * 29f).dp
+                        AllDayViewportChip(
+                            item = item,
+                            visualPieceKey = piece.key,
+                            chipLeftPx = frame.leftX,
+                            chipTopDp = chipTopDp,
+                            allDayHeight = height,
+                            timedGridTopPadding = timedGridTopPadding,
+                            hourHeightDp = hourHeightDp,
+                            timeScrollPx = timeScrollPx,
+                            anchorPage = anchorPage,
+                            anchorOffsetPx = anchorOffsetPx,
+                            dayStepPx = dayStepPx,
+                            defaultDurationMinutes = if (item.task != null) (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt() else defaultEventDurationMinutes,
+                            leadingContinuationProgress = frame.leadingContinuationProgress,
+                            leadingCornerProgress = allDayLeadingCornerProgress(
+                                itemStartPage = item.startPage,
+                                itemEndPage = item.endPage,
+                                itemStartX = itemStartX,
+                                dayWidthPx = dayWidthPx,
+                            ),
+                            trailingCornerProgress = allDayTrailingCornerProgress(
+                                itemStartPage = item.startPage,
+                                itemEndPage = item.endPage,
+                                itemEndX = itemEndX,
+                                dayWidthPx = dayWidthPx,
+                                viewportEndX = viewportWidthPx,
+                            ),
+                            transitionAlpha = frame.alpha,
+                            transitionScaleY = if (segment == null) {
+                                0.94f + 0.06f * expansionProgress
+                            } else {
+                                1f
+                            },
+                            showPrimaryContent = piece.primary,
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        x = frame.leftX.roundToInt(),
+                                        y = with(density) { chipTopDp.roundToPx() },
+                                    )
+                                }
+                                .width(with(density) { frame.widthPx.toDp() }),
+                            onTaskStatusChanged = onTaskStatusChanged,
+                            onDetail = onDetail,
+                            onMoveToTimed = ::moveAllDayItemToTimed,
+                            onMoveToAllDay = ::moveAllDayItemToAllDay,
+                            onDragStateChanged = { active -> draggingAllDayItemId = if (active) item.id else null },
+                        )
+                    }
+                }
+            }
         hiddenPages.forEach { (page, hiddenItems) ->
-            val left = anchorOffsetPx + (page - anchorPage) * dayStepPx
+            val left = allDayPageLeftX(page, anchorPage, anchorOffsetPx, dayStepPx)
             val visibleLeft = left.coerceAtLeast(0f)
             val visibleRight = (left + dayWidthPx).coerceAtMost(viewportWidthPx)
             if (visibleRight - visibleLeft <= 1f) return@forEach
@@ -796,7 +933,8 @@ internal fun AllDayViewportOverlay(
                             )
                         }
                         .width(with(density) { (visibleRight - visibleLeft).toDp() })
-                        .height(22.dp),
+                        .height(22.dp)
+                        .graphicsLayer { alpha = collapsedConnectorAlpha },
                     hiddenItems = hiddenItems,
                     onClick = { onExpandedChange(true) },
                 )
@@ -804,7 +942,7 @@ internal fun AllDayViewportOverlay(
         }
         reservation?.let { reserved ->
             val reservedPage = reserved.date.toDayPage()
-            val left = anchorOffsetPx + (reservedPage - anchorPage) * dayStepPx
+            val left = allDayPageLeftX(reservedPage, anchorPage, anchorOffsetPx, dayStepPx)
             val visibleLeft = left.coerceAtLeast(0f)
             val visibleRight = (left + dayWidthPx).coerceAtMost(viewportWidthPx)
             if (reservedPage in visibleStartPage..visibleEndPage && visibleRight - visibleLeft > 1f) {
@@ -834,7 +972,7 @@ internal fun AllDayViewportOverlay(
         }
         draftEvent?.takeIf { it.allDay }?.let { draft ->
             val draftPage = draft.date.toDayPage()
-            val left = anchorOffsetPx + (draftPage - anchorPage) * dayStepPx
+            val left = allDayPageLeftX(draftPage, anchorPage, anchorOffsetPx, dayStepPx)
             val visibleLeft = left.coerceAtLeast(0f)
             val visibleRight = (left + dayWidthPx).coerceAtMost(viewportWidthPx)
             val draftLane = if (renderExpandedItems) {
@@ -993,20 +1131,145 @@ private fun AllDayOverflowChip(
     }
 }
 
+private fun Modifier.leadingContinuationFade(
+    color: Color,
+    progress: Float,
+    leadingRadius: Dp,
+    alphaMultiplier: Float = 1f,
+    edgeWidth: Dp = 20.dp,
+): Modifier {
+    val strength = allDayContinuationFadeVisualProgress(
+        continuationProgress = progress,
+        transitionProgress = alphaMultiplier,
+    )
+    if (strength <= 0.001f) return this
+    return drawBehind {
+        val edge = edgeWidth.toPx() * strength
+        val radius = leadingRadius.toPx().coerceIn(0f, size.height / 2f)
+        val curveOverlap = radius * 0.1f
+        val fadePath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(-edge, 0f)
+            lineTo(radius, 0f)
+            if (radius > 0f) {
+                quadraticTo(curveOverlap, curveOverlap, 0f, radius)
+            }
+            lineTo(0f, size.height - radius)
+            if (radius > 0f) {
+                quadraticTo(curveOverlap, size.height - curveOverlap, radius, size.height)
+            }
+            lineTo(-edge, size.height)
+            close()
+        }
+        drawPath(
+            path = fadePath,
+            brush = Brush.horizontalGradient(
+                0f to color.copy(alpha = 0f),
+                0.45f to color.copy(alpha = 0.12f * strength),
+                0.78f to color.copy(alpha = 0.58f * strength),
+                1f to color.copy(alpha = strength),
+                startX = -edge,
+                endX = 0f,
+            ),
+        )
+    }
+}
+
+private fun Modifier.allDayCardSurface(
+    color: Color,
+    borderColor: Color?,
+    dashedBorder: Boolean,
+    leadingRadius: Dp,
+    trailingRadius: Dp,
+): Modifier = drawWithContent {
+    val leadingRadiusPx = leadingRadius.toPx()
+    val trailingRadiusPx = trailingRadius.toPx()
+    val borderStroke = when {
+        borderColor == null -> 0f
+        dashedBorder -> 1.8.dp.toPx()
+        else -> 1.dp.toPx()
+    }
+    val pathLeft = allDayStableSurfaceLeft(
+        visibleWidthPx = size.width,
+        leadingRadiusPx = leadingRadiusPx,
+        trailingRadiusPx = trailingRadiusPx,
+        borderStrokePx = borderStroke,
+    )
+    val backgroundPath = androidx.compose.ui.graphics.Path().apply {
+        addRoundRect(
+            androidx.compose.ui.geometry.RoundRect(
+                rect = androidx.compose.ui.geometry.Rect(
+                    left = pathLeft,
+                    top = 0f,
+                    right = size.width,
+                    bottom = size.height,
+                ),
+                topLeft = CornerRadius(leadingRadiusPx, leadingRadiusPx),
+                topRight = CornerRadius(trailingRadiusPx, trailingRadiusPx),
+                bottomRight = CornerRadius(trailingRadiusPx, trailingRadiusPx),
+                bottomLeft = CornerRadius(leadingRadiusPx, leadingRadiusPx),
+            ),
+        )
+    }
+    clipRect {
+        drawPath(path = backgroundPath, color = color)
+        this@drawWithContent.drawContent()
+        if (borderColor != null) {
+            val inset = borderStroke / 2f
+            val borderLeadingRadius = (leadingRadiusPx - inset).coerceAtLeast(0f)
+            val borderTrailingRadius = (trailingRadiusPx - inset).coerceAtLeast(0f)
+            val borderPath = androidx.compose.ui.graphics.Path().apply {
+                addRoundRect(
+                    androidx.compose.ui.geometry.RoundRect(
+                        rect = androidx.compose.ui.geometry.Rect(
+                            left = pathLeft + inset,
+                            top = inset,
+                            right = size.width - inset,
+                            bottom = size.height - inset,
+                        ),
+                        topLeft = CornerRadius(borderLeadingRadius, borderLeadingRadius),
+                        topRight = CornerRadius(borderTrailingRadius, borderTrailingRadius),
+                        bottomRight = CornerRadius(borderTrailingRadius, borderTrailingRadius),
+                        bottomLeft = CornerRadius(borderLeadingRadius, borderLeadingRadius),
+                    ),
+                )
+            }
+            drawPath(
+                path = borderPath,
+                color = borderColor,
+                style = Stroke(
+                    width = borderStroke,
+                    pathEffect = if (dashedBorder) {
+                        PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 7.dp.toPx()))
+                    } else {
+                        null
+                    },
+                ),
+            )
+        }
+    }
+}
+
 @Composable
 private fun AllDayViewportChip(
     item: AllDayOverlayItem,
+    visualPieceKey: String,
     modifier: Modifier,
     chipLeftPx: Float,
     chipTopDp: Dp,
     allDayHeight: Dp,
+    timedGridTopPadding: Dp,
     hourHeightDp: Float,
     timeScrollPx: Int,
     anchorPage: Int,
     anchorOffsetPx: Float,
     dayStepPx: Float,
     defaultDurationMinutes: Int,
-    shape: RoundedCornerShape = RoundedCornerShape(8.dp),
+    leadingContinuationProgress: Float,
+    leadingCornerProgress: Float,
+    trailingCornerProgress: Float,
+    transitionAlpha: Float = 1f,
+    transitionScaleY: Float = 1f,
+    showPrimaryContent: Boolean = true,
     onTaskStatusChanged: (String, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onMoveToTimed: (AllDayOverlayItem, LocalDate, LocalTime, LocalTime) -> Unit,
@@ -1022,24 +1285,35 @@ private fun AllDayViewportChip(
     val eventTextStyle = tentativeReadableTextStyle(item.event?.isTentative() == true)
     val resourceHref = item.event?.resourceHref ?: item.task?.resourceHref
     val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val density = LocalDensity.current
+    val leadingRadius = 8.dp * allDayLeadingCornerRadiusFraction(leadingCornerProgress)
+    val trailingRadius = 8.dp * allDayLeadingCornerRadiusFraction(trailingCornerProgress)
+    val shape = RoundedCornerShape(
+        topStart = leadingRadius,
+        bottomStart = leadingRadius,
+        topEnd = trailingRadius,
+        bottomEnd = trailingRadius,
+    )
     val alpha by animateFloatAsState(
         targetValue = if (item.completed) 0.48f else 1f,
         animationSpec = tween(MotionMedium, easing = MotionStandard),
         label = "allDayViewportChipAlpha",
     )
+    val stableVisualAlpha = alpha * pendingAlpha
+    val cardVisualAlpha = stableVisualAlpha * transitionAlpha.coerceIn(0f, 1f)
     var lastCompleted by remember(item.task?.uid) { mutableStateOf(item.completed) }
     var burstKey by remember(item.task?.uid) { mutableStateOf(0) }
     LaunchedEffect(item.completed) {
         if (item.completed && !lastCompleted) burstKey++
         lastCompleted = item.completed
     }
-    val density = LocalDensity.current
     var dragX by remember(item.id) { mutableFloatStateOf(0f) }
     var dragY by remember(item.id) { mutableFloatStateOf(0f) }
     var isDragging by remember(item.id) { mutableStateOf(false) }
     var dragPointerOffset by remember(item.id) { mutableStateOf(Offset.Zero) }
     val chipTopPxForDrag = with(density) { chipTopDp.toPx() }
     val allDayHeightPxForDrag = with(density) { allDayHeight.toPx() }
+    val timedGridStartPxForDrag = allDayHeightPxForDrag + with(density) { timedGridTopPadding.toPx() }
     val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
     val laneTopPx = with(density) { 7.dp.toPx() }
     val laneStridePx = with(density) { 29.dp.toPx() }
@@ -1047,7 +1321,7 @@ private fun AllDayViewportChip(
     val rawFingerY = chipTopPxForDrag + dragPointerOffset.y + dragY
     val snappedPageDelta = if (dayStepPx > 0f) floor((rawFingerX - anchorOffsetPx) / dayStepPx).toInt() else 0
     val snappedPage = (anchorPage + snappedPageDelta).coerceIn(0, DayPagerPageCount - 1)
-    val snappedLeftPx = anchorOffsetPx + (snappedPage - anchorPage) * dayStepPx
+    val snappedLeftPx = allDayPageLeftX(snappedPage, anchorPage, anchorOffsetPx, dayStepPx)
     val draggedIntoTimedGrid = rawFingerY >= allDayHeightPxForDrag && hourHeightPxForDrag > 0f && dayStepPx > 0f
     val timedPreviewHeight = ((defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1) / 60f) * hourHeightDp).dp
     val displayHeight by animateDpAsState(
@@ -1058,11 +1332,11 @@ private fun AllDayViewportChip(
     val snappedDragX = snappedLeftPx - chipLeftPx
     val snappedDragY = if (draggedIntoTimedGrid) {
         val duration = defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
-        val gridY = rawFingerY - allDayHeightPxForDrag + timeScrollPx
+        val gridY = (rawFingerY - timedGridStartPxForDrag + timeScrollPx).coerceAtLeast(0f)
         val minuteOffset = ((gridY / hourHeightPxForDrag) * 60f).roundToInt().snapDraftMinute()
         val startMinute = (DayStartHour * 60 + minuteOffset)
             .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
-        allDayHeightPxForDrag +
+        timedGridStartPxForDrag +
             (((startMinute - DayStartHour * 60) / 60f) * hourHeightPxForDrag) -
             timeScrollPx -
             chipTopPxForDrag
@@ -1086,6 +1360,7 @@ private fun AllDayViewportChip(
         chipLeftPx,
         chipTopDp,
         allDayHeight,
+        timedGridTopPadding,
         hourHeightDp,
         timeScrollPx,
         anchorPage,
@@ -1095,6 +1370,7 @@ private fun AllDayViewportChip(
     ) {
         val chipTopPx = chipTopDp.toPx()
         val allDayHeightPx = allDayHeight.toPx()
+        val timedGridStartPx = allDayHeightPx + timedGridTopPadding.toPx()
         val hourHeightPx = hourHeightDp.dp.toPx()
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
@@ -1120,7 +1396,7 @@ private fun AllDayViewportChip(
                 val targetDate = (anchorPage + pageDelta).coerceIn(0, DayPagerPageCount - 1).toDayDate()
                 if (fingerY >= allDayHeightPx && hourHeightPx > 0f && dayStepPx > 0f) {
                     val duration = defaultDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
-                    val gridY = fingerY - allDayHeightPx + timeScrollPx
+                    val gridY = (fingerY - timedGridStartPx + timeScrollPx).coerceAtLeast(0f)
                     val minuteOffset = ((gridY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
                     val startMinute = (DayStartHour * 60 + minuteOffset)
                         .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
@@ -1139,7 +1415,13 @@ private fun AllDayViewportChip(
         modifier = modifier
             .wrapContentHeight(Alignment.Top, unbounded = true)
             .requiredHeight(displayHeight)
-            .testTag("timeline-all-day-item-${item.id}")
+            .testTag(
+                if (showPrimaryContent) {
+                    "timeline-all-day-item-${item.id}"
+                } else {
+                    "timeline-all-day-piece-$visualPieceKey"
+                },
+            )
             .zIndex(
                 when {
                     isDragging -> 80f
@@ -1147,11 +1429,24 @@ private fun AllDayViewportChip(
                     else -> 0f
                 },
             )
-            .graphicsLayer {
-                translationX = displayDragX
-                translationY = displayDragY
+            .offset {
+                IntOffset(
+                    x = displayDragX.roundToInt(),
+                    y = displayDragY.roundToInt(),
+                )
             }
-            .alpha(alpha * pendingAlpha)
+            .then(
+                Modifier.leadingContinuationFade(
+                    color = color,
+                    progress = leadingContinuationProgress,
+                    leadingRadius = leadingRadius,
+                    alphaMultiplier = stableVisualAlpha,
+                ),
+            )
+            .graphicsLayer {
+                this.alpha = cardVisualAlpha
+                scaleY = transitionScaleY.coerceIn(0f, 1f)
+            }
             .then(
                 if (item.task != null && !item.completed) {
                     Modifier.taskPriorityMotion(item.task.priority, color)
@@ -1159,13 +1454,12 @@ private fun AllDayViewportChip(
                     Modifier
                 },
             )
-            .background(color, shape)
-            .then(
-                when {
-                    eventVisuals?.dashedBorder == true && eventVisuals.borderColor != null -> Modifier.dashedBorder(eventVisuals.borderColor, 8.dp)
-                    eventVisuals?.borderColor != null -> Modifier.border(1.dp, eventVisuals.borderColor, shape)
-                    else -> Modifier
-                },
+            .allDayCardSurface(
+                color = color,
+                borderColor = eventVisuals?.borderColor,
+                dashedBorder = eventVisuals?.dashedBorder == true,
+                leadingRadius = leadingRadius,
+                trailingRadius = trailingRadius,
             )
             .then(dragModifier),
     ) {
@@ -1178,37 +1472,41 @@ private fun AllDayViewportChip(
                     item.task?.let { onDetail(DetailSheet.Task(it)) }
                 },
         )
-        TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (item.task != null) {
-                TaskStatusCheckbox(
-                    status = item.task.effectiveStatus(),
-                    tint = textColor,
-                    onStatusChange = { onTaskStatusChanged(item.task.resourceHref, it) },
-                    boxSize = 18.dp,
-                    iconSize = 15.dp,
-                )
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(
-                item.title,
-                color = textColor,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
-                lineHeight = 13.sp,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-                textDecoration = eventVisuals?.textDecoration,
-                style = eventTextStyle,
-            )
+        if (showPrimaryContent) {
+            TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())
         }
-        resourceHref?.let { href ->
+        if (showPrimaryContent) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (item.task != null) {
+                    TaskStatusCheckbox(
+                        status = item.task.effectiveStatus(),
+                        tint = textColor,
+                        onStatusChange = { onTaskStatusChanged(item.task.resourceHref, it) },
+                        boxSize = 18.dp,
+                        iconSize = 15.dp,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    item.title,
+                    color = textColor,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    textDecoration = eventVisuals?.textDecoration,
+                    style = eventTextStyle,
+                )
+            }
+        }
+        resourceHref?.takeIf { showPrimaryContent }?.let { href ->
             PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
@@ -1276,7 +1574,7 @@ private fun AllDayArea(
                 color = Color(it.displayColor()),
                 event = it,
                 continuesFromPrevious = it.isAllDayTopItemOn(day.minusDays(1)) && day > visibleStartDate,
-                continuesToNext = it.isAllDayTopItemOn(day.plusDays(1)) && day < visibleEndDate,
+                continuesToNext = it.continuesAllDayTopItemAfter(day),
                 onClick = { onDetail(DetailSheet.Event(it)) },
                 morphDay = morphThisDay,
             )
@@ -1354,6 +1652,415 @@ private fun DayTasksSheet(
     }
 }
 
+private val OverdueTaskChipHeight = 24.dp
+private val OverdueTaskChipSpacing = 5.dp
+private val OverduePanelContentPadding = 5.dp
+private val OverduePanelFooterHeight = 24.dp
+
+internal fun overdueTasksPanelContentHeight(taskCount: Int): Dp {
+    val count = taskCount.coerceAtLeast(0)
+    val gaps = (count - 1).coerceAtLeast(0)
+    return OverduePanelFooterHeight +
+        OverduePanelContentPadding * 2 +
+        OverdueTaskChipHeight * count +
+        OverdueTaskChipSpacing * gaps
+}
+
+@Composable
+internal fun OverdueTasksBand(
+    tasks: List<TaskEntity>,
+    layoutWidth: Dp,
+    taskColorMode: TaskColorMode,
+    animateHighestPriority: Boolean,
+    expanded: Boolean,
+    maxExpandedHeight: Dp,
+    dragSourceDate: LocalDate,
+    dragStartMinute: Int,
+    onExpandedChange: (Boolean) -> Unit,
+    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskClick: (TaskEntity) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var draggingTaskHref by remember { mutableStateOf<String?>(null) }
+    val expandedContentHeight = overdueTasksPanelContentHeight(tasks.size)
+    val targetHeight = if (expanded) minOf(expandedContentHeight, maxExpandedHeight) else OverduePanelFooterHeight
+    val panelHeight by animateDpAsState(
+        targetValue = targetHeight,
+        animationSpec = tween(
+            durationMillis = if (expanded) 380 else 320,
+            easing = MotionEmphasized,
+        ),
+        label = "overdueTasksPanelHeight",
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(panelHeight),
+    ) {
+        if (tasks.isEmpty()) return@Box
+        val fullLabel = pluralStringResource(R.plurals.overdue_tasks_count, tasks.size, tasks.size)
+        val tasksLabel = pluralStringResource(R.plurals.overdue_tasks_short_count, tasks.size, tasks.size)
+        val countLabel = tasks.size.toString()
+        val minimizeLabel = stringResource(R.string.minimize_overdue_tasks)
+        val labelStyle = TextStyle(
+            fontSize = 12.sp,
+            lineHeight = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        val textMeasurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val availableLabelWidthPx = with(density) {
+            (layoutWidth - 10.dp - 16.dp - 4.dp).coerceAtLeast(0.dp).roundToPx()
+        }
+        val labelCandidates = if (expanded) listOf(minimizeLabel) else listOf(fullLabel, tasksLabel, countLabel)
+        val visibleLabel = labelCandidates.firstOrNull { candidate ->
+            textMeasurer.measure(
+                text = candidate,
+                style = labelStyle,
+                maxLines = 1,
+                softWrap = false,
+            ).size.width <= availableLabelWidthPx
+        }
+        val highestPriority = remember(tasks) { tasks.highestOverduePriority() }
+        val shape = RoundedCornerShape(8.dp)
+        val darkMode = MaterialTheme.colorScheme.background.isDark()
+        val collapsedContainerColor = WarmBrown
+        val containerColor by animateColorAsState(
+            targetValue = if (expanded) WarmGrid else collapsedContainerColor,
+            animationSpec = tween(
+                durationMillis = if (expanded) 380 else 320,
+                easing = MotionEmphasized,
+            ),
+            label = "overdueTasksPanelColor",
+        )
+        val shadowElevation by animateDpAsState(
+            targetValue = if (expanded) 12.dp else 4.dp,
+            animationSpec = tween(
+                durationMillis = if (expanded) 380 else 320,
+                easing = MotionEmphasized,
+            ),
+            label = "overdueTasksPanelShadow",
+        )
+        val collapsedContentColor = if (darkMode) Color.Black else Color.White
+        val collapsedIconColor = if (darkMode) DefaultUiTokens.warmBrown else Color.White
+        val expandedContentColor = if (WarmGrid.isDark()) Color.White else Color(0xFF1C1A18)
+        val contentColor by animateColorAsState(
+            targetValue = if (expanded) expandedContentColor else collapsedContentColor,
+            animationSpec = tween(
+                durationMillis = if (expanded) 380 else 320,
+                easing = MotionEmphasized,
+            ),
+            label = "overdueTasksPanelContentColor",
+        )
+        val iconColor by animateColorAsState(
+            targetValue = if (expanded) WarmBrown else collapsedIconColor,
+            animationSpec = tween(
+                durationMillis = if (expanded) 380 else 320,
+                easing = MotionEmphasized,
+            ),
+            label = "overdueTasksPanelIconColor",
+        )
+        val motionModifier = if (animateHighestPriority) {
+            Modifier.taskPriorityMotion(
+                priority = highestPriority,
+                color = collapsedContainerColor,
+                expandHorizontally = true,
+            )
+        } else {
+            Modifier
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (expanded) Modifier else motionModifier),
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .shadow(shadowElevation, shape, clip = false)
+                    .allDayCardSurface(
+                        color = containerColor,
+                        borderColor = null,
+                        dashedBorder = false,
+                        leadingRadius = 8.dp,
+                        trailingRadius = 8.dp,
+                    )
+                    .clip(shape),
+            ) {
+                AnimatedVisibility(
+                    visible = expanded || draggingTaskHref != null,
+                    enter = fadeIn(
+                        animationSpec = tween(MotionShort, delayMillis = MotionShort / 2, easing = MotionStandard),
+                    ) + slideInVertically(
+                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                        initialOffsetY = { -it / 10 },
+                    ),
+                    exit = fadeOut(animationSpec = tween(MotionShort, easing = MotionStandard)),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (expanded) 1f else 0f)
+                            .padding(bottom = OverduePanelFooterHeight)
+                            .verticalScroll(scrollState)
+                            .padding(
+                                horizontal = OverduePanelContentPadding,
+                                vertical = OverduePanelContentPadding,
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(OverdueTaskChipSpacing),
+                    ) {
+                        tasks.forEach { task ->
+                            key(task.resourceHref) {
+                                OverdueTaskChip(
+                                    task = task,
+                                    color = Color(task.displayColor(taskColorMode)),
+                                    sourceDate = dragSourceDate,
+                                    startMinute = dragStartMinute,
+                                    onDragStarted = {
+                                        draggingTaskHref = task.resourceHref
+                                        onExpandedChange(false)
+                                    },
+                                    onDragFinished = { draggingTaskHref = null },
+                                    onStatusChange = { status ->
+                                        onTaskStatusChanged(task.resourceHref, status)
+                                    },
+                                    onClick = { onTaskClick(task) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // Keep footer content outside the shaped clip. When today's column leaves on the
+            // left, the fixed-width row can translate with it instead of losing letters at its
+            // shrinking right edge.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(OverduePanelFooterHeight)
+                    .clipToBounds()
+                    .clickable { onExpandedChange(!expanded) }
+                    .semantics { contentDescription = if (expanded) minimizeLabel else fullLabel }
+                    .testTag("timeline-overdue-summary"),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .width(layoutWidth)
+                        .fillMaxHeight()
+                        .padding(horizontal = 5.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    AnimatedContent(
+                        targetState = expanded,
+                        transitionSpec = {
+                            (
+                                fadeIn(
+                                    tween(
+                                        durationMillis = MotionShort,
+                                        delayMillis = MotionShort / 2,
+                                        easing = MotionEmphasized,
+                                    ),
+                                ) + scaleIn(
+                                    animationSpec = tween(
+                                        durationMillis = MotionShort,
+                                        delayMillis = MotionShort / 2,
+                                        easing = MotionEmphasized,
+                                    ),
+                                    initialScale = 0.72f,
+                                )
+                                ) togetherWith
+                                (
+                                    fadeOut(tween(MotionShort / 2, easing = MotionStandard)) +
+                                        scaleOut(
+                                            animationSpec = tween(MotionShort / 2, easing = MotionStandard),
+                                            targetScale = 0.72f,
+                                        )
+                                    )
+                        },
+                        label = "overdueTasksFooterIcon",
+                    ) { isExpanded ->
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.TaskAlt,
+                            contentDescription = null,
+                            tint = iconColor,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    if (visibleLabel != null) {
+                        Spacer(Modifier.width(4.dp))
+                        AnimatedContent(
+                            targetState = visibleLabel,
+                            transitionSpec = {
+                                (
+                                    slideInVertically(
+                                        animationSpec = tween(
+                                            durationMillis = MotionShort,
+                                            delayMillis = MotionShort / 2,
+                                            easing = MotionEmphasized,
+                                        ),
+                                    ) { it / 2 } + fadeIn(
+                                        tween(
+                                            durationMillis = MotionShort,
+                                            delayMillis = MotionShort / 2,
+                                            easing = MotionEmphasized,
+                                        ),
+                                    )
+                                    ) togetherWith
+                                    (
+                                        slideOutVertically(
+                                            animationSpec = tween(MotionShort / 2, easing = MotionStandard),
+                                        ) { -it / 2 } + fadeOut(
+                                            tween(MotionShort / 2, easing = MotionStandard),
+                                        )
+                                        )
+                            },
+                            label = "overdueTasksFooterLabel",
+                        ) { label ->
+                            Text(
+                                text = label,
+                                color = contentColor,
+                                style = labelStyle,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverdueTaskChip(
+    task: TaskEntity,
+    color: Color,
+    sourceDate: LocalDate,
+    startMinute: Int,
+    onDragStarted: () -> Unit,
+    onDragFinished: () -> Unit,
+    onStatusChange: (String) -> Unit,
+    onClick: () -> Unit,
+) {
+    val inactive = task.isInactive()
+    val textColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
+    val shape = RoundedCornerShape(10.dp)
+    val dragReporter = LocalTimedDragReporter.current
+    var coordinates by remember(task.resourceHref) { mutableStateOf<LayoutCoordinates?>(null) }
+    var rootOverlayDrag by remember(task.resourceHref) { mutableStateOf(false) }
+    val durationMinutes = (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt()
+    val displayLocation = remember(task.location, task.locationMapVerified) {
+        task.location?.cardLocationText(task.locationMapVerified).orEmpty()
+    }
+    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val dragModifier = Modifier.pointerInput(task.resourceHref, sourceDate, startMinute, dragReporter) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = { offset ->
+                val cardCoordinates = coordinates ?: return@detectDragGesturesAfterLongPress
+                rootOverlayDrag = dragReporter.usesRootOverlay
+                if (rootOverlayDrag) {
+                    val pointer = cardCoordinates.localToRoot(offset)
+                    val topLeft = cardCoordinates.positionInRoot()
+                    dragReporter.start(
+                        TimelineTimedDragStart(
+                            item = TimelineDraggedItem(
+                                kind = TimelineDraggedItemKind.Task,
+                                resourceHref = task.resourceHref,
+                                occurrenceMillis = task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(),
+                                title = task.title,
+                                location = displayLocation,
+                                colorArgb = color.toArgb(),
+                                priority = task.priority,
+                                completed = inactive,
+                                sourceDate = sourceDate,
+                                startMinute = startMinute,
+                                endMinute = startMinute + durationMinutes,
+                                origin = TimelineDraggedItemOrigin.OverduePanel,
+                            ),
+                            pointerInRoot = TimelineDragPoint(pointer.x, pointer.y),
+                            cardBoundsInRoot = TimelineDragBounds(
+                                left = topLeft.x,
+                                top = topLeft.y,
+                                width = cardCoordinates.size.width.toFloat(),
+                                height = cardCoordinates.size.height.toFloat(),
+                            ),
+                        ),
+                    )
+                    onDragStarted()
+                }
+            },
+            onDrag = { change, _ ->
+                change.consume()
+                if (rootOverlayDrag) {
+                    coordinates?.localToRoot(change.position)?.let { pointer ->
+                        dragReporter.update(TimelineDragPoint(pointer.x, pointer.y))
+                    }
+                }
+            },
+            onDragCancel = {
+                if (rootOverlayDrag) dragReporter.cancel()
+                rootOverlayDrag = false
+                onDragFinished()
+            },
+            onDragEnd = {
+                if (rootOverlayDrag) dragReporter.end()
+                rootOverlayDrag = false
+                onDragFinished()
+            },
+        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(OverdueTaskChipHeight)
+            .onGloballyPositioned { coordinates = it }
+            .alpha((if (inactive) 0.48f else 1f) * pendingAlpha)
+            .taskPriorityMotion(if (inactive) null else task.priority, color)
+            .background(color, shape)
+            .then(dragModifier)
+            .testTag("timeline-overdue-task-${task.resourceHref}"),
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(shape)
+                .clickable(onClick = onClick),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TaskStatusCheckbox(
+                status = task.effectiveStatus(),
+                tint = textColor,
+                onStatusChange = onStatusChange,
+                boxSize = 18.dp,
+                iconSize = 15.dp,
+            )
+            Spacer(Modifier.width(4.dp))
+            FadingTimedText(
+                text = task.title,
+                color = textColor,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                lineHeight = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        PendingMutationBadge(
+            task.resourceHref,
+            Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
+        )
+    }
+}
+
 @Composable
 private fun AllDayChip(
     title: String,
@@ -1371,6 +2078,11 @@ private fun AllDayChip(
     val chipColor = visuals?.background ?: color
     val textColor = visuals?.contentColor ?: if (chipColor.isDark()) Color.White else Color(0xFF1C1A18)
     val shape = continuationShape(continuesFromPrevious, continuesToNext)
+    val leadingFadeProgress by animateFloatAsState(
+        targetValue = if (continuesFromPrevious) 1f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "allDayChipLeadingContinuationFade",
+    )
     val eventTextStyle = tentativeReadableTextStyle(event?.isTentative() == true)
     val pendingAlpha = event?.resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
@@ -1388,6 +2100,13 @@ private fun AllDayChip(
                 boundsTransform = MorphItemBoundsTransform,
             )
             .alpha(pendingAlpha)
+            .then(
+                Modifier.leadingContinuationFade(
+                    color = chipColor,
+                    progress = leadingFadeProgress,
+                    leadingRadius = if (continuesFromPrevious) 0.dp else 8.dp,
+                ),
+            )
             .drawContinuationBridge(chipColor, continuesFromPrevious, continuesToNext)
             .background(chipColor, shape)
             .then(
@@ -1452,6 +2171,11 @@ private fun AllDayTaskChip(
         label = "allDayTaskAlpha",
     )
     val shape = continuationShape(continuesFromPrevious, continuesToNext)
+    val leadingFadeProgress by animateFloatAsState(
+        targetValue = if (continuesFromPrevious) 1f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "allDayTaskLeadingContinuationFade",
+    )
     val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
         modifier = Modifier
@@ -1468,6 +2192,13 @@ private fun AllDayTaskChip(
                 boundsTransform = MorphItemBoundsTransform,
             )
             .alpha(alpha * pendingAlpha)
+            .then(
+                Modifier.leadingContinuationFade(
+                    color = color,
+                    progress = leadingFadeProgress,
+                    leadingRadius = if (continuesFromPrevious) 0.dp else 8.dp,
+                ),
+            )
             .taskPriorityMotion(if (completed) null else priority, color)
             .drawContinuationBridge(color, continuesFromPrevious, continuesToNext)
             .background(color, shape),

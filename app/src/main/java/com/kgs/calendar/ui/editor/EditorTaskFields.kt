@@ -478,7 +478,6 @@ internal fun TaskScheduleEditor(
             dateText = schedule.startDateText,
             onDateTextChange = { onScheduleChange(schedule.copy(startDateText = it).recalculatePreview()) },
             hasTime = schedule.hasStartTime,
-            onHasTimeChange = { onScheduleChange(schedule.copy(hasStartTime = it).recalculatePreview()) },
             timeText = schedule.startTimeText,
             onTimeTextChange = { onScheduleChange(schedule.copy(startTimeText = it).recalculatePreview()) },
             allDay = schedule.allDay,
@@ -502,7 +501,6 @@ internal fun TaskScheduleEditor(
             dateText = schedule.endDateText,
             onDateTextChange = { onScheduleChange(schedule.copy(endDateText = it).recalculatePreview()) },
             hasTime = schedule.hasEndTime,
-            onHasTimeChange = { onScheduleChange(schedule.copy(hasEndTime = it).recalculatePreview()) },
             timeText = schedule.endTimeText,
             onTimeTextChange = { onScheduleChange(schedule.copy(endTimeText = it).recalculatePreview()) },
             allDay = schedule.allDay,
@@ -964,7 +962,6 @@ internal fun TaskScheduleRow(
     dateText: String,
     onDateTextChange: (String) -> Unit,
     hasTime: Boolean,
-    onHasTimeChange: (Boolean) -> Unit,
     timeText: String,
     onTimeTextChange: (String) -> Unit,
     allDay: Boolean,
@@ -1011,10 +1008,7 @@ internal fun TaskScheduleRow(
                     )
                 }
                 IconButton(
-                    onClick = {
-                        onHasDateChange(false)
-                        onHasTimeChange(false)
-                    },
+                    onClick = { onHasDateChange(false) },
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = removeLabel, tint = WarmInk, modifier = Modifier.size(20.dp))

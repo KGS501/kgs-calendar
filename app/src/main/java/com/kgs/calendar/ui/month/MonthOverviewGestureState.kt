@@ -32,7 +32,7 @@ internal class MonthOverviewGestureReducer {
         val vertical = abs(accumulated.y)
         val axis = when {
             maxOf(horizontal, vertical) < touchSlop -> MonthGestureAxis.Undecided
-            horizontal >= vertical -> MonthGestureAxis.Horizontal
+            horizontal >= vertical * HORIZONTAL_INTENT_BIAS -> MonthGestureAxis.Horizontal
             else -> MonthGestureAxis.Vertical
         }
         return MonthOverviewGestureState(axis = axis, accumulated = accumulated)
@@ -40,4 +40,8 @@ internal class MonthOverviewGestureReducer {
 
     fun interrupt(settling: MonthSettleTarget, deltaMonths: Long): MonthSettleTarget =
         settling.copy(targetMonth = settling.targetMonth.plusMonths(deltaMonths))
+
+    private companion object {
+        const val HORIZONTAL_INTENT_BIAS = 0.8f
+    }
 }

@@ -373,6 +373,7 @@ import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
+import com.kgs.calendar.ui.model.agendaEventDateSpans
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
 import com.kgs.calendar.ui.model.isAllDayTopItemOn
@@ -383,7 +384,6 @@ import com.kgs.calendar.ui.model.taskDate
 import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
 import com.kgs.calendar.ui.model.toTimeText
-import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
 import com.kgs.calendar.ui.month.MonthRowOrderItem
@@ -736,6 +736,7 @@ internal fun SearchResultsList(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .zIndex(1_000f)
                                 .background(stickyHeaderBackground.copy(alpha = 0.97f))
                                 .padding(start = 62.dp, top = 7.dp, bottom = 7.dp),
                         ) {
@@ -858,62 +859,10 @@ private fun CalendarSearchResult.isFutureSearchSection(today: LocalDate): Boolea
 private fun buildAgendaEventResults(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
-): List<CalendarSearchResult.Event> {
-    val taskDates = tasks
-        .flatMap { it.visibleDates() }
-        .toSet()
-    val eventDatesByResource = events.associate { event ->
-        event.resourceHref to event.visibleAgendaDates()
+): List<CalendarSearchResult.Event> =
+    agendaEventDateSpans(events, tasks).map { span ->
+        CalendarSearchResult.Event(span.event, span.startDate, span.endDate)
     }
-    return events.flatMap { event ->
-        val dates = eventDatesByResource[event.resourceHref].orEmpty()
-        if (dates.size <= 1) {
-            listOf(CalendarSearchResult.Event(event, dates.firstOrNull() ?: event.startsAtMillis.toDate()))
-        } else {
-            val interruptionDates = dates.filterTo(mutableSetOf()) { date ->
-                date in taskDates || events.any { other ->
-                    other.resourceHref != event.resourceHref && eventDatesByResource[other.resourceHref].orEmpty().contains(date)
-                }
-            }
-            event.toAgendaSpanResults(dates, interruptionDates)
-        }
-    }
-}
-
-private fun EventEntity.toAgendaSpanResults(
-    dates: List<LocalDate>,
-    interruptionDates: Set<LocalDate>,
-): List<CalendarSearchResult.Event> {
-    val sortedDates = dates.sorted()
-    if (sortedDates.isEmpty()) return emptyList()
-    val results = mutableListOf<CalendarSearchResult.Event>()
-    var segmentStart: LocalDate? = null
-    var previous: LocalDate? = null
-
-    fun flushSegment(end: LocalDate) {
-        val start = segmentStart ?: return
-        if (!end.isBefore(start)) {
-            results += CalendarSearchResult.Event(this, start, end)
-        }
-        segmentStart = null
-    }
-
-    sortedDates.forEach { date ->
-        val last = previous
-        if (last != null && last.plusDays(1) != date) {
-            flushSegment(last)
-        }
-        if (date in interruptionDates) {
-            flushSegment(date.minusDays(1))
-            results += CalendarSearchResult.Event(this, date, date)
-        } else if (segmentStart == null) {
-            segmentStart = date
-        }
-        previous = date
-    }
-    previous?.let(::flushSegment)
-    return results
-}
 
 @Composable
 private fun SearchPastFutureDivider() {

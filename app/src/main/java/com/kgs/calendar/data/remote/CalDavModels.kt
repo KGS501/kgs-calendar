@@ -120,6 +120,11 @@ data class PutResult(
     val etag: String?,
 )
 
+class CalDavConflictException(
+    method: String,
+    href: String,
+) : IllegalStateException("Conflict while executing $method for $href")
+
 data class SyncCollectionResult(
     val changedResources: List<RemoteResource>,
     val deletedHrefs: Set<String>,
