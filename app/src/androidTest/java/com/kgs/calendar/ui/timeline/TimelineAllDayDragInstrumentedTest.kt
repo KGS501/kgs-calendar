@@ -162,7 +162,7 @@ class TimelineAllDayDragInstrumentedTest {
     }
 
     @Test
-    fun timedDragPreservesTheFingerOffsetInsideTheCard() {
+    fun timedDragOverlayUsesASubtlePickupLift() {
         val event = event(
             resourceHref = "events/anchored.ics",
             title = "Anchored event",
@@ -181,9 +181,13 @@ class TimelineAllDayDragInstrumentedTest {
         composeRule.waitForIdle()
 
         val overlayTop = composeRule.onNodeWithTag("timeline-drag-overlay").fetchSemanticsNode().boundsInRoot.top
+        val pickupLift = sourceBounds.top - overlayTop
+        val minimumLift = with(composeRule.density) { 0.5.dp.toPx() }
+        val maximumLift = with(composeRule.density) { 2.dp.toPx() }
         assertTrue(
-            "Drag overlay should retain its grab offset: source=${sourceBounds.top}, overlay=$overlayTop",
-            abs(overlayTop - sourceBounds.top) <= 3f,
+            "Drag overlay pickup lift should stay subtle: source=${sourceBounds.top}, " +
+                "overlay=$overlayTop, lift=$pickupLift",
+            pickupLift in minimumLift..maximumLift,
         )
 
         card.performTouchInput { cancel() }

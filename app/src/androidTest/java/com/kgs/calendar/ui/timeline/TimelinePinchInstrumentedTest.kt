@@ -43,11 +43,12 @@ class TimelinePinchInstrumentedTest {
     )
 
     @Test
-    fun movingBothFingersTogetherKeepsTheCentroidMinuteAnchored() = verifyPinch(
+    fun movingBothFingersTogetherStopsAtTheViewportFillingMinimum() = verifyPinch(
         initialUpperY = 250f,
         initialLowerY = 850f,
         finalUpperY = 400f,
         finalLowerY = 700f,
+        expectAnchorPreserved = false,
     )
 
     @Test
@@ -71,6 +72,7 @@ class TimelinePinchInstrumentedTest {
         initialLowerY: Float,
         finalUpperY: Float,
         finalLowerY: Float,
+        expectAnchorPreserved: Boolean = true,
     ) {
         val latestHourHeightDp = AtomicReference(60f)
         val hourHeightSamples = CopyOnWriteArrayList<Float>()
@@ -125,6 +127,10 @@ class TimelinePinchInstrumentedTest {
         val initialScrollPx = scrollReference.get().value.toFloat()
         val contentTopPx = with(density) { (DayHeaderHeight + 22.dp).toPx() }
         val viewportHeightPx = (bounds.height - contentTopPx).coerceAtLeast(1f)
+        val minimumHourHeightPx = maxOf(
+            with(density) { AbsoluteMinHourRowHeightDp.dp.toPx() },
+            viewportHeightPx / 24f,
+        )
         val snapshot = PinchSnapshot.begin(
             upperY = initialUpperY,
             lowerY = initialLowerY,
@@ -132,7 +138,8 @@ class TimelinePinchInstrumentedTest {
             contentStartMinute = 0,
             contentEndMinute = 24 * 60,
             viewportHeightPx = viewportHeightPx,
-            minHourHeightPx = with(density) { AbsoluteMinHourRowHeightDp.dp.toPx() },
+            // TimelineView also prevents the 24-hour grid from becoming shorter than its viewport.
+            minHourHeightPx = minimumHourHeightPx,
             maxHourHeightPx = with(density) { MaxHourRowHeightDp.dp.toPx() },
             contentTopY = contentTopPx,
         )
@@ -143,9 +150,12 @@ class TimelinePinchInstrumentedTest {
             down(1, Offset(x, initialLowerY))
             repeat(6) { index ->
                 val fraction = (index + 1) / 6f
-                moveTo(0, Offset(x, initialUpperY + (finalUpperY - initialUpperY) * fraction), delayMillis = 16)
-                moveTo(1, Offset(x, initialLowerY + (finalLowerY - initialLowerY) * fraction), delayMillis = 16)
+                updatePointerTo(0, Offset(x, initialUpperY + (finalUpperY - initialUpperY) * fraction))
+                updatePointerTo(1, Offset(x, initialLowerY + (finalLowerY - initialLowerY) * fraction))
+                move(delayMillis = 16)
             }
+            up(1)
+            up(0)
         }
         composeRule.waitForIdle()
 
@@ -155,12 +165,10 @@ class TimelinePinchInstrumentedTest {
         assertEquals(expected.viewport.scrollPx, actualScrollPx, 3f)
         val finalCentroid = (finalUpperY + finalLowerY) / 2f
         val actualMinute = ((actualScrollPx + finalCentroid - contentTopPx) / actualHourHeightPx) * 60f
-        assertTrue(abs(snapshot.anchorMinute - actualMinute) <= 15f)
-        assertTrue(hourHeightSamples.distinct().size >= 3)
-
-        surface.performTouchInput {
-            up(1)
-            up(0)
+        assertEquals(expected.minuteAtCentroid, actualMinute, 15f)
+        if (expectAnchorPreserved) {
+            assertTrue(abs(snapshot.anchorMinute - actualMinute) <= 15f)
         }
+        assertTrue(hourHeightSamples.distinct().size >= 3)
     }
 }

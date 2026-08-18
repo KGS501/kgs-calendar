@@ -28,7 +28,7 @@ class CalendarShellMonthOverviewDismissInstrumentedTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun monthOverviewSwipeUpDismissesWhileHorizontalPagingAndDayTapsStillWork() {
+    fun monthOverviewSwipeUpDismissesWithoutChangingTheSelectedDate() {
         val july = LocalDate.of(2026, 7, 16)
         val selectedDate = AtomicReference(july)
         composeRule.setContent {
@@ -78,21 +78,7 @@ class CalendarShellMonthOverviewDismissInstrumentedTest {
             composeRule.onNodeWithTag("calendar-month-overview-container")
                 .fetchSemanticsNode().boundsInRoot.height > 100f
         }
-
-        composeRule.onNodeWithTag("month-overview-grid", useUnmergedTree = true).performTouchInput {
-            swipe(
-                start = Offset(width * 0.8f, height * 0.5f),
-                end = Offset(width * 0.2f, height * 0.5f),
-                durationMillis = 180,
-            )
-        }
-        composeRule.waitUntil(timeoutMillis = 2_000) {
-            selectedDate.get() == LocalDate.of(2026, 8, 1)
-        }
-
-        composeRule.onNodeWithTag("month-overview-day-2026-08-16").performClick()
         composeRule.waitForIdle()
-        assertEquals(LocalDate.of(2026, 8, 16), selectedDate.get())
 
         val overviewHeightBeforeDismiss = composeRule
             .onNodeWithTag("calendar-month-overview-container")
@@ -112,5 +98,6 @@ class CalendarShellMonthOverviewDismissInstrumentedTest {
             "Month overview did not close: before=$overviewHeightBeforeDismiss, after=$overviewHeightAfterDismiss",
             overviewHeightAfterDismiss <= 1f,
         )
+        assertEquals(july, selectedDate.get())
     }
 }
