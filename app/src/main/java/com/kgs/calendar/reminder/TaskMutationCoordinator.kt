@@ -11,7 +11,11 @@ fun String.clearsTaskNotifications(): Boolean =
     equals("COMPLETED", ignoreCase = true) || equals("CANCELLED", ignoreCase = true)
 
 class TaskMutationCoordinator(
-    private val persistStatus: suspend (resourceHref: String, status: String) -> Unit,
+    private val persistStatus: suspend (
+        resourceHref: String,
+        status: String,
+        occurrenceId: CalendarOccurrenceId.Task?,
+    ) -> Unit,
     private val pushPendingChanges: suspend (startedAtMillis: Long) -> Unit,
     private val notificationReconciler: TaskNotificationReconciler,
     private val rescheduleReminders: suspend () -> Unit,
@@ -23,7 +27,7 @@ class TaskMutationCoordinator(
         status: String,
         occurrenceId: CalendarOccurrenceId.Task? = null,
     ) = mutateStatus(resourceHref, status, occurrenceId) {
-        persistStatus(resourceHref, status)
+        persistStatus(resourceHref, status, occurrenceId)
     }
 
     suspend fun mutateStatus(

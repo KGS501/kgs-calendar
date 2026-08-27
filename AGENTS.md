@@ -14,6 +14,7 @@
 ## Build Environment
 
 - Gradle/Kotlin must run on JDK 17. Check with `.\gradlew.bat --version`; `Launcher JVM` should be version 17.
+- Google Play publishing: when `PLAY_PUBLISHING.local.md` exists, read it before verifying or publishing a release from this machine.
 - If Java is not 17, set `JAVA_HOME` to a JDK 17 install in the same shell before running Gradle.
 - `local.properties` is local-only and should point `sdk.dir` at an Android SDK. Do not commit machine-specific SDK changes.
 - Release signing uses root `keystore.properties` when present. Do not print, edit, or depend on release signing for debug work.
@@ -25,9 +26,11 @@
 
 - Build debug APK: `.\gradlew.bat :app:assembleDebug`
 - Run unit tests: `.\gradlew.bat :app:testDebugUnitTest`
-- Run connected tests: `.\gradlew.bat :app:connectedDebugAndroidTest`
-- Check connected devices: `.\ADB\adb.exe devices`
-- Install debug APK: `.\ADB\adb.exe install -r app\build\outputs\apk\debug\app-debug.apk`
+- Start the project-owned AVD: `tools/android-emulator.sh start`
+- Run connected tests on the project-owned AVD: `tools/android-emulator.sh connected-test`
+- Check that AVD and its resolved serial: `tools/android-emulator.sh status`
+- Install the debug APK on that AVD: `tools/android-emulator.sh install app/build/outputs/apk/debug/app-debug.apk`
+- Route other ADB operations to that AVD: `tools/android-emulator.sh adb <args...>`
 
 ## Testing Notes
 

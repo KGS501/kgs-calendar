@@ -17,6 +17,7 @@ import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import java.time.DayOfWeek
@@ -51,6 +52,11 @@ data class CalendarUiState(
     val collections: List<CollectionEntity> = emptyList(),
     val events: List<EventEntity> = emptyList(),
     val searchQuery: String = "",
+    val searchMode: CalendarSearchMode = CalendarSearchMode.TextAndLabels,
+    val searchOccurrenceRange: CalendarRange = CalendarRange(
+        LocalDate.now().minusYears(10),
+        LocalDate.now().plusYears(10).plusDays(1),
+    ),
     val searchResults: List<EventEntity> = emptyList(),
     val searchTaskResults: List<TaskEntity> = emptyList(),
     val datedTasks: List<TaskEntity> = emptyList(),
@@ -85,12 +91,17 @@ data class CalendarUiState(
     val focusTitleOnCreate: Boolean = false,
     val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     val showCompletedTasksInCalendar: Boolean = true,
+    val showCalendarWeeks: Boolean = SettingsStore.DEFAULT_SHOW_CALENDAR_WEEKS,
     val priorityAnimationsEnabled: Boolean = true,
     val overdueSummaryPriorityAnimationEnabled: Boolean = true,
     val subtasksExpandedByDefault: Boolean = true,
     val autoLoadMapPreviews: Boolean = false,
     val maxVisibleAllDayItems: Int = 3,
     val multiDayCount: Int = 3,
+    val portraitMultiDayCount: Int = 3,
+    val landscapeMultiDayCount: Int = 3,
+    val portraitTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+    val landscapeTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val weekViewEnabled: Boolean = SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,
     val fullWeekSwipeEnabled: Boolean = SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
     val multiDaySidebarControlsEnabled: Boolean = true,
@@ -109,6 +120,8 @@ data class CalendarUiState(
     val taskFieldOrder: List<String> = SettingsStore.DEFAULT_TASK_FIELD_ORDER,
     val completedTasks: List<TaskEntity> = emptyList(),
     val visibleRange: CalendarRange = CalendarRange(LocalDate.now().withDayOfMonth(1), LocalDate.now().withDayOfMonth(1).plusMonths(1)),
+    val loadedDataRange: CalendarRange? = null,
+    val requestedDataRange: CalendarRange = visibleRange,
     val isBusy: Boolean = false,
     val isManualSyncing: Boolean = false,
     val message: String? = null,

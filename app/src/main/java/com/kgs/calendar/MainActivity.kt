@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.CalendarContract
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.externalCalendarLaunchDate
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.ui.CalendarWidgetLaunchTarget
 import com.kgs.calendar.ui.CalendarViewModel
@@ -47,7 +49,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         initialCalendarLaunchTarget = CalendarLaunchTarget.readFrom(intent)
-        initialWidgetLaunchTarget = if (initialCalendarLaunchTarget == null) intent.toWidgetLaunchTarget() else null
+        initialWidgetLaunchTarget = if (initialCalendarLaunchTarget == null) {
+            intent.toExternalCalendarLaunchTarget() ?: intent.toWidgetLaunchTarget()
+        } else {
+            null
+        }
         maybeRequestNotificationPermission()
         maybeRequestExactAlarmPermission()
         setContent {
@@ -58,7 +64,9 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        CalendarLaunchTarget.readFrom(intent)?.let(calendarViewModel::openFromCalendarLaunch) ?: applyWidgetLaunch(intent)
+        CalendarLaunchTarget.readFrom(intent)?.let(calendarViewModel::openFromCalendarLaunch)
+            ?: applyExternalCalendarLaunch(intent)
+            ?: applyWidgetLaunch(intent)
     }
 
     override fun onResume() {
@@ -110,6 +118,24 @@ class MainActivity : ComponentActivity() {
             openEventUid = target.openEventUid,
             openTaskUid = target.openTaskUid,
         )
+    }
+
+    private fun applyExternalCalendarLaunch(intent: Intent?): Unit? {
+        val target = intent.toExternalCalendarLaunchTarget() ?: return null
+        calendarViewModel.openFromWidget(date = target.date, viewMode = target.viewMode)
+        return Unit
+    }
+
+    private fun Intent?.toExternalCalendarLaunchTarget(): CalendarWidgetLaunchTarget? {
+        val source = this ?: return null
+        val beginTime = source.getLongExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, Long.MIN_VALUE)
+            .takeUnless { it == Long.MIN_VALUE }
+        val date = externalCalendarLaunchDate(
+            action = source.action,
+            uriValue = source.dataString,
+            beginTimeMillis = beginTime,
+        ) ?: return null
+        return CalendarWidgetLaunchTarget(date = date, viewMode = CalendarViewMode.Day)
     }
 
     private fun Intent?.toWidgetLaunchTarget(): CalendarWidgetLaunchTarget? {

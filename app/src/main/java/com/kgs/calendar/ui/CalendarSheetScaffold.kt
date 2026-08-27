@@ -104,6 +104,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -431,6 +432,14 @@ import kotlin.math.floor
 import kotlin.random.Random
 import kotlin.math.ln
 import kotlin.math.tan
+
+internal data class SheetInsetPolicy(
+    val respectsImeBottomInset: Boolean,
+)
+
+internal val sheetInsetPolicy = SheetInsetPolicy(
+    respectsImeBottomInset = true,
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -771,7 +780,17 @@ internal fun KgsModalBottomSheet(
             ) {
                 CompositionLocalProvider(LocalOverscrollFactory provides null) {
                     CompositionLocalProvider(LocalSheetHeaderDragModifier provides sheetHeaderModifier) {
-                    Column(Modifier.fillMaxSize()) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (sheetInsetPolicy.respectsImeBottomInset) {
+                                    Modifier.imePadding()
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    ) {
                         KgsSheetHandle(
                             modifier = sheetHeaderModifier,
                         )

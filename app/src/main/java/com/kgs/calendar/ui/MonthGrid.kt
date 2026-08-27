@@ -435,6 +435,7 @@ import kotlin.math.tan
 internal fun MonthBlock(
     month: YearMonth,
     firstDayOfWeek: DayOfWeek,
+    showCalendarWeeks: Boolean,
     eventsByDay: Map<LocalDate, List<EventEntity>>,
     tasksByDay: Map<LocalDate, List<TaskEntity>>,
     taskColorMode: TaskColorMode,
@@ -453,7 +454,11 @@ internal fun MonthBlock(
             fontSize = 22.sp,
             lineHeight = 26.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 12.dp, top = 22.dp, bottom = 8.dp),
+            modifier = Modifier.padding(
+                start = 12.dp,
+                top = 22.dp,
+                bottom = if (showCalendarWeeks) 2.dp else 8.dp,
+            ),
         )
         Column(
             modifier = Modifier
@@ -468,42 +473,50 @@ internal fun MonthBlock(
                     val dayIndex = row * 7 + column - leading + 1
                     if (dayIndex in 1..length) month.atDay(dayIndex) else null
                 }
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(MonthDayRowHeight),
-                ) {
-                    Row(
-                        modifier = Modifier.matchParentSize(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                Column(Modifier.fillMaxWidth()) {
+                    if (showCalendarWeeks) {
+                        CalendarWeekLabelSpacer(
+                            weekNumber = rowStartDate.calendarWeekNumber(firstDayOfWeek),
+                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(MonthDayRowHeight),
                     ) {
-                        for (column in 0 until 7) {
-                            val dayIndex = row * 7 + column - leading + 1
-                            if (dayIndex in 1..length) {
-                                val day = month.atDay(dayIndex)
-                                MonthDayCard(
-                                    day = day,
-                                    firstDayOfWeek = firstDayOfWeek,
-                                    events = eventsByDay[day].orEmpty(),
-                                    tasks = tasksByDay[day].orEmpty(),
-                                    taskColorMode = taskColorMode,
-                                    morphEnabled = day == morphDay,
-                                    showInlinePills = false,
-                                    onClick = { onOpenDay(day) },
-                                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                                )
-                            } else {
-                                Spacer(Modifier.weight(1f))
+                        Row(
+                            modifier = Modifier.matchParentSize(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            for (column in 0 until 7) {
+                                val dayIndex = row * 7 + column - leading + 1
+                                if (dayIndex in 1..length) {
+                                    val day = month.atDay(dayIndex)
+                                    MonthDayCard(
+                                        day = day,
+                                        firstDayOfWeek = firstDayOfWeek,
+                                        events = eventsByDay[day].orEmpty(),
+                                        tasks = tasksByDay[day].orEmpty(),
+                                        taskColorMode = taskColorMode,
+                                        morphEnabled = day == morphDay,
+                                        showInlinePills = false,
+                                        onClick = { onOpenDay(day) },
+                                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    )
+                                } else {
+                                    Spacer(Modifier.weight(1f))
+                                }
                             }
                         }
+                        MonthRowPillOverlay(
+                            rowDays = rowDays,
+                            rowStartDate = rowStartDate,
+                            rowEndDate = rowEndDate,
+                            eventsByDay = eventsByDay,
+                            tasksByDay = tasksByDay,
+                            taskColorMode = taskColorMode,
+                            modifier = Modifier.matchParentSize(),
+                        )
                     }
-                    MonthRowPillOverlay(
-                        rowDays = rowDays,
-                        rowStartDate = rowStartDate,
-                        rowEndDate = rowEndDate,
-                        eventsByDay = eventsByDay,
-                        tasksByDay = tasksByDay,
-                        taskColorMode = taskColorMode,
-                        modifier = Modifier.matchParentSize(),
-                    )
                 }
             }
         }
@@ -589,6 +602,7 @@ internal fun MonthView(
                 MonthBlock(
                     month = month,
                     firstDayOfWeek = firstDayOfWeek,
+                    showCalendarWeeks = state.showCalendarWeeks,
                     eventsByDay = eventsByDay,
                     tasksByDay = tasksByDay,
                     taskColorMode = state.taskColorMode,

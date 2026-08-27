@@ -6,6 +6,25 @@ import java.time.temporal.TemporalAdjusters
 
 const val WEEK_DAY_COUNT = 7
 
+fun calendarViewModeForOrientation(
+    selectedView: CalendarViewMode,
+    isLandscape: Boolean,
+): CalendarViewMode = if (isLandscape && selectedView == CalendarViewMode.Day) {
+    CalendarViewMode.ThreeDay
+} else {
+    selectedView
+}
+
+fun multiDayCountForOrientation(
+    isLandscape: Boolean,
+    portraitCount: Int,
+    landscapeCount: Int,
+): Int = if (isLandscape) {
+    landscapeCount.coerceMultiDayCount()
+} else {
+    portraitCount.coerceMultiDayCount()
+}
+
 fun LocalDate.startOfWeek(firstDayOfWeek: DayOfWeek): LocalDate =
     with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
 

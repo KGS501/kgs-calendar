@@ -138,7 +138,12 @@ internal fun EventEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): 
     val visibleStart = day.atTime(DayStartHour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val visibleEnd = day.atTime(DayEndHour, 0).plusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val overlapStart = max(startsAtMillis, visibleStart)
-    val overlapEnd = min(endsAtMillis, visibleEnd)
+    val effectiveEnd = if (endsAtMillis - startsAtMillis <= NearZeroTimedEventThresholdMillis) {
+        startsAtMillis + MinimumTimedEventVisualDurationMillis
+    } else {
+        endsAtMillis
+    }
+    val overlapEnd = min(effectiveEnd, visibleEnd)
     if (overlapEnd <= overlapStart) return null
 
     val topMinutes = ((overlapStart - visibleStart) / 60_000.0).roundToInt()
@@ -150,6 +155,9 @@ internal fun EventEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): 
         endMinute = topMinutes + durationMinutes,
     )
 }
+
+private const val NearZeroTimedEventThresholdMillis = 1_000L
+private const val MinimumTimedEventVisualDurationMillis = 15L * 60L * 1_000L
 
 internal fun TaskEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlacement? {
     val startTimed = startAtMillis?.takeIf { startHasTime }

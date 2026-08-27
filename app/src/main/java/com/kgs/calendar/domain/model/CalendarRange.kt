@@ -47,7 +47,7 @@ fun visibleRangeFor(
         // NOTE: the timeline pager anchors on selectedDate (not on this range's start), so a
         // wide, asymmetric range here is safe.
         CalendarViewMode.Day -> CalendarRange(date.minusDays(31), date.plusDays(31))
-        CalendarViewMode.Agenda -> CalendarRange(date.minusYears(5), date.plusYears(10))
+        CalendarViewMode.Agenda -> AgendaWindowPolicy.around(date)
         CalendarViewMode.Tasks -> CalendarRange(date.minusMonths(1), date.plusMonths(6))
     }
 }

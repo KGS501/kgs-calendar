@@ -23,6 +23,69 @@ internal data class TimelineViewportState(
         ((scrollPx + viewportY - contentTopY) / hourHeightPx) * MINUTES_PER_HOUR
 }
 
+internal data class TimelineOrientationZoom(
+    val portraitHourHeightDp: Float,
+    val landscapeHourHeightDp: Float,
+) {
+    init {
+        require(portraitHourHeightDp.isFinite() && portraitHourHeightDp > 0f)
+        require(landscapeHourHeightDp.isFinite() && landscapeHourHeightDp > 0f)
+    }
+
+    fun hourHeightDp(isLandscape: Boolean): Float =
+        if (isLandscape) landscapeHourHeightDp else portraitHourHeightDp
+
+    fun withHourHeightDp(isLandscape: Boolean, hourHeightDp: Float): TimelineOrientationZoom =
+        if (isLandscape) {
+            copy(landscapeHourHeightDp = hourHeightDp)
+        } else {
+            copy(portraitHourHeightDp = hourHeightDp)
+        }
+}
+
+class TimelineOrientationViewportMemory(
+    portraitTopMinute: Float = DEFAULT_TIMELINE_TOP_MINUTE,
+    landscapeTopMinute: Float = DEFAULT_TIMELINE_TOP_MINUTE,
+) {
+    private var portraitTopMinute = portraitTopMinute.normalizedTimelineTopMinute()
+    private var landscapeTopMinute = landscapeTopMinute.normalizedTimelineTopMinute()
+
+    fun topMinute(isLandscape: Boolean): Float =
+        if (isLandscape) landscapeTopMinute else portraitTopMinute
+
+    fun updateTopMinute(isLandscape: Boolean, topMinute: Float) {
+        if (isLandscape) {
+            landscapeTopMinute = topMinute.normalizedTimelineTopMinute()
+        } else {
+            portraitTopMinute = topMinute.normalizedTimelineTopMinute()
+        }
+    }
+}
+
+internal fun TimelineViewportState.withHourHeightPx(
+    hourHeightPx: Float,
+    viewportHeightPx: Float,
+    contentStartMinute: Int,
+    contentEndMinute: Int,
+): TimelineViewportState {
+    require(hourHeightPx.isFinite() && hourHeightPx > 0f)
+    require(viewportHeightPx.isFinite() && viewportHeightPx >= 0f)
+    require(contentEndMinute > contentStartMinute)
+    val topVisibleMinute = minuteAt(
+        viewportY = 0f,
+        contentStartMinute = contentStartMinute,
+    )
+    val contentHeightPx =
+        ((contentEndMinute - contentStartMinute) / MINUTES_PER_HOUR) * hourHeightPx
+    val maxScrollPx = (contentHeightPx - viewportHeightPx).coerceAtLeast(0f)
+    val reprojectedScrollPx =
+        ((topVisibleMinute - contentStartMinute) / MINUTES_PER_HOUR) * hourHeightPx
+    return TimelineViewportState(
+        hourHeightPx = hourHeightPx,
+        scrollPx = reprojectedScrollPx.coerceIn(0f, maxScrollPx),
+    )
+}
+
 internal class PinchSnapshot private constructor(
     val initialUpperY: Float,
     val initialLowerY: Float,
@@ -116,3 +179,8 @@ private fun requireFinite(vararg values: Float) {
 }
 
 private const val MINUTES_PER_HOUR = 60f
+private const val DEFAULT_TIMELINE_TOP_MINUTE = 9f * MINUTES_PER_HOUR
+private const val LAST_TIMELINE_MINUTE = 24f * MINUTES_PER_HOUR
+
+private fun Float.normalizedTimelineTopMinute(): Float =
+    if (isFinite()) coerceIn(0f, LAST_TIMELINE_MINUTE) else DEFAULT_TIMELINE_TOP_MINUTE

@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.model
 
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
+import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import org.junit.After
@@ -82,6 +83,35 @@ class CalendarItemVisibilityTest {
     }
 
     @Test
+    fun agendaSplitsAMultiDaySpanOnlyWhereAnotherItemOverlaps() {
+        val startDate = LocalDate.of(2026, 7, 7)
+        val multiDay = event(
+            start = millis(startDate, LocalTime.MIDNIGHT),
+            end = millis(startDate.plusDays(5), LocalTime.MIDNIGHT),
+            allDay = true,
+            resourceHref = "multi-day.ics",
+        )
+        val overlapping = event(
+            start = millis(startDate.plusDays(2), LocalTime.of(9, 0)),
+            end = millis(startDate.plusDays(2), LocalTime.of(10, 0)),
+            allDay = false,
+            resourceHref = "overlap.ics",
+        )
+
+        val spans = agendaEventDateSpans(listOf(multiDay, overlapping), emptyList())
+            .filter { it.event.resourceHref == multiDay.resourceHref }
+
+        assertEquals(
+            listOf(
+                startDate to startDate.plusDays(1),
+                startDate.plusDays(2) to startDate.plusDays(2),
+                startDate.plusDays(3) to startDate.plusDays(4),
+            ),
+            spans.map { it.startDate to it.endDate },
+        )
+    }
+
+    @Test
     fun timedMultiDayMiddleDateBecomesAllDayTopItemOnlyForInteriorDays() {
         val event = event(
             start = millis(LocalDate.of(2026, 7, 7), LocalTime.of(22, 0)),
@@ -141,6 +171,25 @@ class CalendarItemVisibilityTest {
         )
 
         assertEquals(start, occurrence.occurrenceStartForEdit())
+    }
+
+    @Test
+    fun movedRecurringTaskUsesOriginalOccurrenceStartForStatusChanges() {
+        val originalStart = millis(LocalDate.of(2026, 7, 24), LocalTime.of(9, 0))
+        val movedStart = millis(LocalDate.of(2026, 7, 24), LocalTime.of(15, 0))
+        val moved = task(
+            start = movedStart,
+            due = movedStart + 60 * 60 * 1000L,
+            startHasTime = true,
+            dueHasTime = true,
+        ).copy(recurrenceRule = "FREQ=WEEKLY")
+        val occurrence = moved.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(
+                listOf(TaskRecurrenceOverride.fromTask(originalStart, moved)),
+            ),
+        )
+
+        assertEquals(originalStart, occurrence.occurrenceStartForEdit())
     }
 
     @Test

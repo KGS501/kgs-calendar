@@ -1,7 +1,9 @@
 package com.kgs.calendar.ui.month
 
+import android.content.res.Configuration
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -32,7 +34,13 @@ class CalendarShellMonthOverviewDismissInstrumentedTest {
         val july = LocalDate.of(2026, 7, 16)
         val selectedDate = AtomicReference(july)
         composeRule.setContent {
+            val portraitConfiguration = Configuration(LocalConfiguration.current).apply {
+                orientation = Configuration.ORIENTATION_PORTRAIT
+                screenWidthDp = 400
+                screenHeightDp = 900
+            }
             CompositionLocalProvider(
+                LocalConfiguration provides portraitConfiguration,
                 LocalCalendarTimeSnapshot provides CalendarTimeSnapshot(july, LocalTime.NOON),
             ) {
                 KgsCalendarTheme(

@@ -859,6 +859,7 @@ internal fun ColorOverrideEditor(
     onColorSelected: (Int?) -> Unit,
 ) {
     var colorPickerOpen by remember { mutableStateOf(false) }
+    val customColorPresentation = customColorChipPresentation(selectedColor)
     EditorSection {
         Text(stringResource(R.string.color), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
         FadedHorizontalScrollRow(
@@ -880,7 +881,11 @@ internal fun ColorOverrideEditor(
                     onClick = { onColorSelected(color) },
                 )
             }
-            ColorEditChip(onClick = { colorPickerOpen = true })
+            ColorEditChip(
+                displayedColor = customColorPresentation.displayedColor,
+                selected = customColorPresentation.selected,
+                onClick = { colorPickerOpen = true },
+            )
         }
     }
     if (colorPickerOpen) {
@@ -894,6 +899,19 @@ internal fun ColorOverrideEditor(
         )
     }
 }
+
+internal data class CustomColorChipPresentation(
+    val displayedColor: Int?,
+    val selected: Boolean,
+)
+
+internal fun customColorChipPresentation(
+    selectedColor: Int?,
+    palette: List<Int> = ItemColorPalette,
+): CustomColorChipPresentation = CustomColorChipPresentation(
+    displayedColor = selectedColor?.takeIf { it !in palette },
+    selected = selectedColor != null && selectedColor !in palette,
+)
 
 @Composable
 internal fun ColorChoiceChip(label: String?, color: Color, selected: Boolean, onClick: () -> Unit) {
@@ -919,23 +937,41 @@ internal fun ColorChoiceChip(label: String?, color: Color, selected: Boolean, on
 }
 
 @Composable
-internal fun ColorEditChip(onClick: () -> Unit) {
+internal fun ColorEditChip(
+    displayedColor: Int?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(17.dp)
     Surface(
         modifier = Modifier
+            .testTag("customColorChip")
             .height(34.dp)
             .clip(shape)
             .clickable(onClick = onClick),
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, WarmLine),
+        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            displayedColor?.let { Color(it) } ?: WarmLine,
+        ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Icon(Icons.Default.Palette, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+            if (displayedColor != null) {
+                Box(
+                    Modifier
+                        .testTag("customColorSwatch")
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Color(displayedColor)),
+                )
+            } else {
+                Icon(Icons.Default.Palette, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+            }
             Text(stringResource(R.string.custom), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium)
         }
     }

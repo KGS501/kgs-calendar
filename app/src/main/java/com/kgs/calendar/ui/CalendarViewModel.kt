@@ -8,6 +8,7 @@ import com.kgs.calendar.AppGraph
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -19,13 +20,17 @@ import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.AgendaWindowPolicy
+import com.kgs.calendar.domain.model.calendarViewModeForOrientation
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.multiDayCountForOrientation
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineEntryDate
@@ -33,6 +38,8 @@ import com.kgs.calendar.domain.model.timelineRestoreDate
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
+import com.kgs.calendar.ui.model.occurrenceStartForEdit
+import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolution
@@ -55,6 +62,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
@@ -82,6 +90,11 @@ private data class TimelinePolicySettings(
     val firstDayOfWeek: DayOfWeek,
 )
 
+private data class LoadedCalendarItems<T>(
+    val range: CalendarRange,
+    val items: List<T>,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModel(
     private val repository: CalendarRepository,
@@ -89,6 +102,7 @@ class CalendarViewModel(
     private val sourceCalendarMutationCoordinator: SourceCalendarMutationCoordinator,
     private val taskMutationCoordinator: TaskMutationCoordinator,
     private val calendarLaunchResolver: CalendarLaunchResolver,
+    internal val timelineViewportMemory: TimelineOrientationViewportMemory,
     private val appContext: Context,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
@@ -106,6 +120,10 @@ class CalendarViewModel(
     private val message = MutableStateFlow<String?>(null)
     private val externalLoginUrl = MutableStateFlow<String?>(null)
     private val searchQuery = MutableStateFlow("")
+    private val searchMode = MutableStateFlow(CalendarSearchMode.TextAndLabels)
+    private val searchOccurrenceRange = MutableStateFlow(initialSearchOccurrenceRange(LocalDate.now(zoneId)))
+    private val isLandscape = MutableStateFlow(false)
+    private val useLandscapeEntryView = MutableStateFlow(false)
     private val hiddenAndroidProviderCalendarNames = MutableStateFlow<List<String>>(emptyList())
     private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
         initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode,
@@ -187,7 +205,20 @@ class CalendarViewModel(
         }
     }
 
-    private val selectedView = combine(settingsStore.selectedView, selectedViewOverride) { stored, override -> override ?: stored }
+    private val requestedSelectedView = combine(settingsStore.selectedView, selectedViewOverride) { stored, override -> override ?: stored }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
+    private val selectedView = combine(
+        requestedSelectedView,
+        isLandscape,
+        useLandscapeEntryView,
+    ) { requestedView, landscape, applyLandscapeEntry ->
+        if (applyLandscapeEntry) {
+            calendarViewModeForOrientation(requestedView, landscape)
+        } else {
+            requestedView
+        }
+    }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
     private val restoredSelectedDate = restorePersistedSelectedDate(
@@ -202,9 +233,20 @@ class CalendarViewModel(
     }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
+    private val agendaDataRange = MutableStateFlow(AgendaWindowPolicy.around(initialSelectedDate))
     private val hiddenCollectionHrefs = settingsStore.hiddenCollectionHrefs
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
-    private val multiDayCount = settingsStore.multiDayCount
+    private val portraitMultiDayCount = settingsStore.portraitMultiDayCount
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
+    private val landscapeMultiDayCount = settingsStore.landscapeMultiDayCount
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
+    private val multiDayCount = combine(
+        portraitMultiDayCount,
+        landscapeMultiDayCount,
+        isLandscape,
+    ) { portrait, landscape, landscapeOrientation ->
+        multiDayCountForOrientation(landscapeOrientation, portrait, landscape)
+    }
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
     private val firstDayOfWeek = settingsStore.firstDayOfWeek
         .stateIn(viewModelScope, SharingStarted.Eagerly, DayOfWeek.MONDAY)
@@ -229,19 +271,34 @@ class CalendarViewModel(
             DayOfWeek.MONDAY,
         ),
     )
-    private val visibleRange = combine(selectedDate, selectedView, timelinePolicySettings) { date, view, policy ->
-        val anchor = timelineVisibleAnchor(
-            date,
-            view,
-            policy.weekViewEnabled,
-            policy.fullWeekSwipeEnabled,
-            policy.firstDayOfWeek,
-        )
-        visibleRangeFor(anchor, view, policy.multiDayCount, policy.weekViewEnabled)
+    private val visibleRange = combine(
+        selectedDate,
+        selectedView,
+        timelinePolicySettings,
+        agendaDataRange,
+    ) { date, view, policy, agendaRange ->
+        if (view == CalendarViewMode.Agenda) {
+            agendaRange
+        } else {
+            val anchor = timelineVisibleAnchor(
+                date,
+                view,
+                policy.weekViewEnabled,
+                policy.fullWeekSwipeEnabled,
+                policy.firstDayOfWeek,
+            )
+            visibleRangeFor(anchor, view, policy.multiDayCount, policy.weekViewEnabled)
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, visibleRangeFor(initialSelectedDate, initialSelectedView))
-    private val dataRange = combine(selectedDate, selectedView, timelinePolicySettings) { date, view, policy ->
-        if (view == CalendarViewMode.ThreeDay) {
-            timelineVisibleAnchor(
+    private val dataRange = combine(
+        selectedDate,
+        selectedView,
+        timelinePolicySettings,
+        agendaDataRange,
+    ) { date, view, policy, agendaRange ->
+        when (view) {
+            CalendarViewMode.Agenda -> agendaRange
+            CalendarViewMode.ThreeDay -> timelineVisibleAnchor(
                 date,
                 view,
                 policy.weekViewEnabled,
@@ -250,25 +307,45 @@ class CalendarViewModel(
             ).multiDayDataRange(
                 timelineDayCount(view, policy.weekViewEnabled, policy.multiDayCount),
             )
-        } else {
-            visibleRangeFor(date, view)
+            else -> visibleRangeFor(date, view)
         }
-    }.distinctUntilChanged()
-    private val events = dataRange.flatMapLatest { range ->
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, visibleRangeFor(initialSelectedDate, initialSelectedView))
+    private val loadedEvents = dataRange.flatMapLatest { range ->
         combine(
             repository.observeEvents(range.startMillis(zoneId), range.endMillis(zoneId)),
             hiddenCollectionHrefs,
         ) { events, hidden ->
-            events.filterNot { it.collectionHref in hidden }
+            LoadedCalendarItems(
+                range = range,
+                items = events.filterNot { it.collectionHref in hidden },
+            )
         }
-    }
-    private val datedTasks = dataRange.flatMapLatest { range ->
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        LoadedCalendarItems(dataRange.value, emptyList()),
+    )
+    private val loadedDatedTasks = dataRange.flatMapLatest { range ->
         combine(
             repository.observeDatedTasks(range.startMillis(zoneId), range.endMillis(zoneId)),
             hiddenCollectionHrefs,
         ) { tasks, hidden ->
-            tasks.filterNot { it.collectionHref in hidden }
+            LoadedCalendarItems(
+                range = range,
+                items = tasks.filterNot { it.collectionHref in hidden },
+            )
         }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        LoadedCalendarItems(dataRange.value, emptyList()),
+    )
+    private val events = loadedEvents.map { it.items }
+    private val datedTasks = loadedDatedTasks.map { it.items }
+    private val loadedDataRange = combine(loadedEvents, loadedDatedTasks) { eventWindow, taskWindow ->
+        eventWindow.range.takeIf { it == taskWindow.range }
     }
     private val inboxTasks = combine(repository.observeInboxTasks(), hiddenCollectionHrefs) { tasks, hidden ->
         tasks.filterNot { it.collectionHref in hidden }
@@ -279,24 +356,42 @@ class CalendarViewModel(
     private val completedTasks = combine(repository.observeCompletedTasks(), hiddenCollectionHrefs) { tasks, hidden ->
         tasks.filterNot { it.collectionHref in hidden }
     }
-    private val searchResults = searchQuery
-        .flatMapLatest { query ->
-            val trimmed = query.trim()
+    private val searchRequest = combine(searchQuery, searchMode, searchOccurrenceRange, ::SearchRequest)
+        .distinctUntilChanged()
+    private val searchResults = searchRequest
+        .flatMapLatest { request ->
+            val trimmed = request.query.trim()
             if (trimmed.isBlank()) {
                 flowOf(emptyList())
             } else {
-                combine(repository.searchEvents(trimmed), hiddenCollectionHrefs) { events, hidden ->
+                combine(
+                    repository.searchEvents(
+                        query = trimmed,
+                        mode = request.mode,
+                        rangeStartMillis = request.range.startMillis(zoneId),
+                        rangeEndMillis = request.range.endMillis(zoneId),
+                    ),
+                    hiddenCollectionHrefs,
+                ) { events, hidden ->
                     events.filterNot { it.collectionHref in hidden }
                 }
             }
         }
-    private val searchTaskResults = searchQuery
-        .flatMapLatest { query ->
-            val trimmed = query.trim()
+    private val searchTaskResults = searchRequest
+        .flatMapLatest { request ->
+            val trimmed = request.query.trim()
             if (trimmed.isBlank()) {
                 flowOf(emptyList())
             } else {
-                combine(repository.searchTasks(trimmed), hiddenCollectionHrefs) { tasks, hidden ->
+                combine(
+                    repository.searchTasks(
+                        query = trimmed,
+                        mode = request.mode,
+                        rangeStartMillis = request.range.startMillis(zoneId),
+                        rangeEndMillis = request.range.endMillis(zoneId),
+                    ),
+                    hiddenCollectionHrefs,
+                ) { tasks, hidden ->
                     tasks.filterNot { it.collectionHref in hidden }
                 }
             }
@@ -316,6 +411,9 @@ class CalendarViewModel(
         widgetOpenTaskSerial = if (initialWidgetOpenTaskUid != null) initialWidgetSerial else 0,
         selectedView = initialSelectedView,
         visibleRange = visibleRangeFor(initialSelectedDate, initialSelectedView),
+        loadedDataRange = dataRange.value,
+        requestedDataRange = dataRange.value,
+        searchOccurrenceRange = searchOccurrenceRange.value,
     )
 
     val uiState: StateFlow<CalendarUiState> = combine(
@@ -404,6 +502,13 @@ class CalendarViewModel(
         weekViewEnabled,
         fullWeekSwipeEnabled,
         settingsStore.overdueSummaryPriorityAnimationEnabled,
+        portraitMultiDayCount,
+        landscapeMultiDayCount,
+        searchMode,
+        searchOccurrenceRange,
+        settingsStore.showCalendarWeeks,
+        loadedDataRange,
+        dataRange,
     ) { values ->
         CalendarUiState(
             initialDataLoaded = true,
@@ -494,6 +599,13 @@ class CalendarViewModel(
             weekViewEnabled = values[82] as Boolean,
             fullWeekSwipeEnabled = values[83] as Boolean,
             overdueSummaryPriorityAnimationEnabled = values[84] as Boolean,
+            portraitMultiDayCount = values[85] as Int,
+            landscapeMultiDayCount = values[86] as Int,
+            searchMode = values[87] as CalendarSearchMode,
+            searchOccurrenceRange = values[88] as CalendarRange,
+            showCalendarWeeks = values[89] as Boolean,
+            loadedDataRange = values[90] as CalendarRange?,
+            requestedDataRange = values[91] as CalendarRange,
         )
     }
         .combine(initialDataReady) { uiState, ready ->
@@ -509,9 +621,18 @@ class CalendarViewModel(
         .combine(foregroundRecenterSerial) { uiState, serial ->
             uiState.copy(foregroundRecenterSerial = serial)
         }
+        .combine(settingsStore.portraitTimelineHourHeightDp) { uiState, hourHeightDp ->
+            uiState.copy(portraitTimelineHourHeightDp = hourHeightDp)
+        }
+        .combine(settingsStore.landscapeTimelineHourHeightDp) { uiState, hourHeightDp ->
+            uiState.copy(landscapeTimelineHourHeightDp = hourHeightDp)
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialUiState)
 
     fun selectView(viewMode: CalendarViewMode) {
+        // Once the user deliberately chooses a view in landscape, respect that choice. The
+        // automatic Day -> multi-day handoff only applies when entering landscape.
+        useLandscapeEntryView.value = false
         val state = uiState.value
         val entryDate = timelineEntryDate(
             date = state.selectedDate,
@@ -521,6 +642,9 @@ class CalendarViewModel(
         )
         if (entryDate != state.selectedDate) {
             selectDate(entryDate)
+        }
+        if (viewMode == CalendarViewMode.Agenda) {
+            agendaDataRange.update { AgendaWindowPolicy.recenterIfNeeded(it, entryDate) }
         }
         selectedViewOverride.value = viewMode
         viewModelScope.launch { settingsStore.setSelectedView(viewMode) }
@@ -536,6 +660,9 @@ class CalendarViewModel(
     ) {
         suppressAutomaticRecenterForExplicitLaunch()
         selectedViewOverride.value = viewMode
+        if (viewMode == CalendarViewMode.Agenda) {
+            agendaDataRange.update { AgendaWindowPolicy.recenterIfNeeded(it, date) }
+        }
         selectedDateOverride.value = date
         dateNavigationSerial.update { it + 1 }
         if (createEvent) {
@@ -563,6 +690,9 @@ class CalendarViewModel(
         viewModelScope.launch {
             val resolution = calendarLaunchResolver.resolve(target) ?: return@launch
             selectedViewOverride.value = resolution.viewMode
+            if (resolution.viewMode == CalendarViewMode.Agenda) {
+                agendaDataRange.update { AgendaWindowPolicy.recenterIfNeeded(it, resolution.date) }
+            }
             selectedDateOverride.value = resolution.date
             dateNavigationSerial.update { it + 1 }
             nextCalendarLaunchSerial += 1
@@ -580,6 +710,9 @@ class CalendarViewModel(
     }
 
     fun selectDate(date: LocalDate) {
+        if (selectedView.value == CalendarViewMode.Agenda) {
+            agendaDataRange.update { AgendaWindowPolicy.recenterIfNeeded(it, date) }
+        }
         if (selectedDate.value == date) return
         selectedDateOverride.value = date
         selectedDatePersistJob?.cancel()
@@ -590,6 +723,9 @@ class CalendarViewModel(
     }
 
     fun recenterToToday(today: LocalDate = LocalDate.now(zoneId)) {
+        if (selectedView.value == CalendarViewMode.Agenda) {
+            agendaDataRange.update { AgendaWindowPolicy.recenterIfNeeded(it, today) }
+        }
         selectedDateOverride.value = today
         dateNavigationSerial.update { it + 1 }
         foregroundRecenterSerial.update { it + 1 }
@@ -597,6 +733,14 @@ class CalendarViewModel(
         selectedDatePersistJob = viewModelScope.launch {
             settingsStore.setSelectedDate(today)
         }
+    }
+
+    fun loadEarlierAgenda() {
+        agendaDataRange.update(AgendaWindowPolicy::extendEarlier)
+    }
+
+    fun loadLaterAgenda() {
+        agendaDataRange.update(AgendaWindowPolicy::extendLater)
     }
 
     private fun suppressAutomaticRecenterForExplicitLaunch() {
@@ -749,6 +893,10 @@ class CalendarViewModel(
         viewModelScope.launch { settingsStore.setShowCompletedTasksInCalendar(show) }
     }
 
+    fun setShowCalendarWeeks(show: Boolean) {
+        viewModelScope.launch { settingsStore.setShowCalendarWeeks(show) }
+    }
+
     fun setPriorityAnimationsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.setPriorityAnimationsEnabled(enabled)
@@ -777,8 +925,35 @@ class CalendarViewModel(
         viewModelScope.launch { settingsStore.setMaxVisibleAllDayItems(maxItems) }
     }
 
+    fun setDeviceOrientation(landscape: Boolean) {
+        isLandscape.value = landscape
+        useLandscapeEntryView.value = landscape
+    }
+
     fun setMultiDayCount(count: Int) {
-        viewModelScope.launch { settingsStore.setMultiDayCount(count.coerceMultiDayCount()) }
+        if (isLandscape.value) {
+            setLandscapeMultiDayCount(count)
+        } else {
+            setPortraitMultiDayCount(count)
+        }
+    }
+
+    fun setPortraitMultiDayCount(count: Int) {
+        viewModelScope.launch { settingsStore.setPortraitMultiDayCount(count.coerceMultiDayCount()) }
+    }
+
+    fun setLandscapeMultiDayCount(count: Int) {
+        viewModelScope.launch { settingsStore.setLandscapeMultiDayCount(count.coerceMultiDayCount()) }
+    }
+
+    fun setTimelineHourHeight(isLandscape: Boolean, hourHeightDp: Float) {
+        viewModelScope.launch {
+            if (isLandscape) {
+                settingsStore.setLandscapeTimelineHourHeightDp(hourHeightDp)
+            } else {
+                settingsStore.setPortraitTimelineHourHeightDp(hourHeightDp)
+            }
+        }
     }
 
     fun setWeekViewEnabled(enabled: Boolean) {
@@ -971,6 +1146,21 @@ class CalendarViewModel(
 
     fun setSearchQuery(query: String) {
         searchQuery.value = query
+        if (query.isBlank()) {
+            searchOccurrenceRange.value = initialSearchOccurrenceRange(LocalDate.now(zoneId))
+        }
+    }
+
+    fun setSearchMode(mode: CalendarSearchMode) {
+        searchMode.value = mode
+    }
+
+    fun loadEarlierSearchOccurrences() {
+        searchOccurrenceRange.update { SearchOccurrenceLoadingPolicy.extend(it, SearchOccurrenceEdge.Earlier) }
+    }
+
+    fun loadLaterSearchOccurrences() {
+        searchOccurrenceRange.update { SearchOccurrenceLoadingPolicy.extend(it, SearchOccurrenceEdge.Later) }
     }
 
     fun syncNow() {
@@ -1104,9 +1294,14 @@ class CalendarViewModel(
         }
     }
 
-    fun setTaskStatus(resourceHref: String, status: String) {
+    fun setTaskStatus(task: TaskEntity, status: String) {
         runTaskStatusMutation {
-            taskMutationCoordinator.setStatus(resourceHref, status)
+            val occurrenceId = if (task.recurrenceRule.isNullOrBlank() && task.rDatesCsv.isNullOrBlank()) {
+                null
+            } else {
+                CalendarOccurrenceId.Task(task.resourceHref, task.occurrenceStartForEdit())
+            }
+            taskMutationCoordinator.setStatus(task.resourceHref, status, occurrenceId)
         }
     }
 
@@ -1320,6 +1515,15 @@ class CalendarViewModel(
 
 }
 
+private data class SearchRequest(
+    val query: String,
+    val mode: CalendarSearchMode,
+    val range: CalendarRange,
+)
+
+private fun initialSearchOccurrenceRange(today: LocalDate): CalendarRange =
+    SearchOccurrenceLoadingPolicy.initialRange(today)
+
 private fun LocalDate.multiDayDataRange(dayCount: Int): CalendarRange {
     val monthStart = withDayOfMonth(1)
     val forwardMonths = if (dayCount.coerceMultiDayCount() > DEFAULT_MULTI_DAY_COUNT) 4L else 3L
@@ -1368,6 +1572,7 @@ class CalendarViewModelFactory(
             sourceCalendarMutationCoordinator = graph.sourceCalendarMutationCoordinator,
             taskMutationCoordinator = graph.taskMutationCoordinator,
             calendarLaunchResolver = graph.calendarLaunchResolver,
+            timelineViewportMemory = graph.timelineViewportMemory,
             appContext = graph.appContext,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,

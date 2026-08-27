@@ -247,6 +247,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -265,6 +266,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -454,7 +457,20 @@ import kotlin.math.ln
 import kotlin.math.tan
 
 private val OverdueTasksFloatOffset = 6.dp
+private val CalendarWeekMinimumFullLabelWidth = 88.dp
+private val CalendarWeekCompactLabelWidth = 36.dp
 private const val OverduePanelExpandedViewportFraction = 0.4f
+
+private fun Modifier.clipTimelineViewport(topOverflow: Dp): Modifier = drawWithContent {
+    clipRect(
+        left = 0f,
+        top = -topOverflow.toPx().coerceAtLeast(0f),
+        right = size.width,
+        bottom = size.height,
+    ) {
+        this@drawWithContent.drawContent()
+    }
+}
 
 private data class TimelineRootDragLayout(
     val rootOrigin: TimelineDragPoint,
@@ -463,6 +479,7 @@ private data class TimelineRootDragLayout(
     val dayWidthPx: Float,
     val dayStepPx: Float,
     val sidebarWidthPx: Float,
+    val dayHeaderHeightPx: Float,
     val fixedAllDayBoundaryY: Float,
     val sourceInsetXPx: Float,
     val initialPointerYPx: Float,
@@ -485,6 +502,11 @@ private interface TimelineVerticalPinchOwner {
     fun end()
 }
 
+internal val TimelineHourHeightDpSemanticsKey =
+    SemanticsPropertyKey<Float>("TimelineHourHeightDp")
+internal val TimelineScrollPxSemanticsKey =
+    SemanticsPropertyKey<Int>("TimelineScrollPx")
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun TimelineView(
@@ -495,7 +517,7 @@ internal fun TimelineView(
     onDateSelected: (LocalDate) -> Unit,
     onViewSelected: (CalendarViewMode) -> Unit,
     onMultiDayCountChanged: (Int) -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
@@ -515,21 +537,53 @@ internal fun TimelineView(
     timeScroll: androidx.compose.foundation.ScrollState,
     hourHeightDp: Float,
     onHourHeightChange: (Float) -> Unit,
+    onTimeScrollChanged: (Int) -> Unit = {},
+    initialTimeScrollMinute: Float = 9f * 60f,
     initialTimeScrollApplied: Boolean,
     onInitialTimeScrollApplied: () -> Unit,
     monthMorphDay: LocalDate,
+    isLandscape: Boolean = false,
+    landscapeCompactRequested: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val calendarTime = LocalCalendarTimeSnapshot.current
     val now = calendarTime.nowMinute
     val density = LocalDensity.current
+    val headerPresentation = timelineHeaderPresentation(
+        isLandscape = isLandscape,
+        landscapeCompactRequested = landscapeCompactRequested,
+        showCalendarWeeks = state.showCalendarWeeks,
+    )
+    val animatedDayHeaderHeight by animateDpAsState(
+        targetValue = headerPresentation.height,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineDayHeaderHeight",
+    )
+    val animatedWeekLabelHeight by animateDpAsState(
+        targetValue = headerPresentation.weekLabelHeight,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineWeekLabelHeight",
+    )
+    val animatedMultiDayControlsTopOffset by animateDpAsState(
+        targetValue = headerPresentation.multiDayControlsTopOffset,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineMultiDayControlsTopOffset",
+    )
+    val calendarWeekAlpha by animateFloatAsState(
+        targetValue = if (state.showCalendarWeeks) 1f else 0f,
+        animationSpec = tween(220, easing = MotionStandard),
+        label = "timelineWeekLabelAlpha",
+    )
+    val calendarWeekFontSize = headerPresentation.weekLabelFontSize
     var timelineRootOffset by remember { mutableStateOf(Offset.Zero) }
     var activeTimedDrag by remember { mutableStateOf<ActiveTimelineTimedDrag?>(null) }
     var dayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
     var timelineViewportHeightPx by remember { mutableStateOf(0) }
+    val currentOnTimeScrollChanged = rememberUpdatedState(onTimeScrollChanged)
     val bodyScrollableState = rememberScrollableState { delta ->
         val consumed = timeScroll.dispatchRawDelta(-delta)
+        currentOnTimeScrollChanged.value(timeScroll.value)
         -consumed
     }
     val daySpacingPx = with(density) { DayColumnSpacing.toPx() }
@@ -688,6 +742,47 @@ internal fun TimelineView(
             layoutViewportWidthPx = dayGeometryViewportWidthPx,
         ).layoutPages
     }
+    val calendarWeekDayWidthPx: Float
+    val calendarWeekVisibleDays: List<VisibleTimelineDay>
+    val activeMorphContext = morphContext
+    if (activeMorphContext == null) {
+        calendarWeekDayWidthPx = pagerDayWidthPx
+        calendarWeekVisibleDays = actualVisiblePages.map { page ->
+            VisibleTimelineDay(
+                date = page.toDayDate(),
+                leftPx = allDayAnchorOffsetPx + (page - allDayAnchorPage) * pagerDayStepPx,
+            )
+        }
+    } else {
+        val columnWidthMulti = (
+            (dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount
+            ).coerceAtLeast(1f)
+        val step = columnWidthMulti + daySpacingPx
+        val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+        calendarWeekDayWidthPx = columnWidthMulti * zoom
+        calendarWeekVisibleDays = activeMorphContext.days.mapIndexed { slot, day ->
+            VisibleTimelineDay(
+                date = day,
+                leftPx = (slot - activeMorphContext.expandSlot) * step * zoom +
+                    activeMorphContext.expandSlot * step * (1f - morphProgress),
+            )
+        }
+    }
+    val calendarWeekLabelMode = timelineCalendarWeekLabelMode(
+        dayWidthPx = calendarWeekDayWidthPx,
+        minimumFullLabelWidthPx = with(density) { CalendarWeekMinimumFullLabelWidth.toPx() },
+    )
+    val calendarWeekLabelWidthPx = when (calendarWeekLabelMode) {
+        TimelineCalendarWeekLabelMode.Full -> calendarWeekDayWidthPx
+        TimelineCalendarWeekLabelMode.Compact -> with(density) { CalendarWeekCompactLabelWidth.toPx() }
+    }
+    val calendarWeekPlacements = timelineCalendarWeekPlacements(
+        visibleDays = calendarWeekVisibleDays,
+        dayWidthPx = calendarWeekDayWidthPx,
+        viewportWidthPx = dayViewportWidthPx.toFloat(),
+        firstDayOfWeek = state.firstDayOfWeek,
+        labelWidthPx = calendarWeekLabelWidthPx,
+    )
     val visibleStartDate = actualVisiblePages.minOrNull()?.toDayDate() ?: state.selectedDate
     val visibleEndDate = actualVisiblePages.maxOrNull()?.toDayDate() ?: visibleStartDate.plusDays((clampedDayCount - 1).toLong())
     val pagerVisibleDays = actualVisiblePages.map { it.toDayDate() }
@@ -715,11 +810,17 @@ internal fun TimelineView(
     }
     val visibleReservation = activeTimedDrag?.session?.reservation
         ?.takeIf { reservation -> reservation.date in pagerVisibleDays }
-    val allDayHeight = visibleReservation
+    val visibleAllDayHeight = visibleReservation
         ?.minimumViewportHeight()
         ?.let { reservationHeight -> maxOf(baseAllDayHeight, reservationHeight) }
         ?: baseAllDayHeight
-    val allDayHasOverflow = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems) {
+    val requestedAllDayHeight = if (headerPresentation.showAllDaySection) visibleAllDayHeight else 0.dp
+    val allDayHasOverflow = headerPresentation.showAllDaySection && remember(
+        pagerVisibleDays,
+        state.events,
+        calendarTasks,
+        state.maxVisibleAllDayItems,
+    ) {
         pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems)
     }
     val allDayArrowRotation by animateFloatAsState(
@@ -730,12 +831,12 @@ internal fun TimelineView(
     // The section boundary keeps its normal easing. While it grows, the overlay is temporarily
     // allowed to draw the newly active rows below that boundary so they are never clipped.
     val animatedAllDayHeight by animateDpAsState(
-        targetValue = allDayHeight,
+        targetValue = requestedAllDayHeight,
         animationSpec = tween(MorphDurationMs, easing = MorphEasing),
         label = "allDayHeight",
     )
-    val allowAllDayVerticalOverflow = allDayHeight > animatedAllDayHeight
-    val timedGridTopOffset = DayHeaderHeight + animatedAllDayHeight
+    val allowAllDayVerticalOverflow = requestedAllDayHeight > animatedAllDayHeight
+    val timedGridTopOffset = animatedDayHeaderHeight + animatedAllDayHeight
     val overdueExpandedHeight = if (timelineViewportHeightPx > 0) {
         (
             with(density) { timelineViewportHeightPx.toDp() } -
@@ -818,8 +919,11 @@ internal fun TimelineView(
 
     LaunchedEffect(gridViewportHeightPx, hourHeightDp, timeScroll.maxValue) {
         if (!initialTimeScrollApplied && gridViewportHeightPx > 0 && timeScroll.maxValue > 0) {
-            val target = with(density) { ((9 - DayStartHour) * hourHeightDp).dp.roundToPx() }
+            val target = with(density) {
+                (((initialTimeScrollMinute / 60f) - DayStartHour) * hourHeightDp).dp.roundToPx()
+            }
             timeScroll.scrollTo(target.coerceIn(0, timeScroll.maxValue))
+            currentOnTimeScrollChanged.value(timeScroll.value)
             onInitialTimeScrollApplied()
         }
     }
@@ -851,6 +955,7 @@ internal fun TimelineView(
             pinchTargetScrollPx = update.viewport.scrollPx
             onHourHeightChange(with(density) { update.viewport.hourHeightPx.toDp().value })
             timeScroll.dispatchRawDelta(update.viewport.scrollPx - timeScroll.value)
+            currentOnTimeScrollChanged.value(timeScroll.value)
         },
     )
     val verticalPinchOwner = remember {
@@ -868,6 +973,7 @@ internal fun TimelineView(
                 scope.launch {
                     withFrameNanos { }
                     timeScroll.scrollTo(targetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue))
+                    currentOnTimeScrollChanged.value(timeScroll.value)
                     pinchTargetScrollPx = Float.NaN
                 }
             }
@@ -877,6 +983,7 @@ internal fun TimelineView(
         if (!pinchTargetScrollPx.isFinite()) return@LaunchedEffect
         val target = pinchTargetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue)
         timeScroll.dispatchRawDelta((target - timeScroll.value).toFloat())
+        currentOnTimeScrollChanged.value(timeScroll.value)
     }
     var previousTimelineInsetPx by remember { mutableStateOf(0) }
     LaunchedEffect(timelineBottomInset, gridViewportHeightPx) {
@@ -885,6 +992,7 @@ internal fun TimelineView(
         if (delta != 0 && gridViewportHeightPx > 0 && timeScroll.maxValue > 0) {
             withFrameNanos { }
             timeScroll.animateScrollTo((timeScroll.value + delta).coerceIn(0, timeScroll.maxValue))
+            currentOnTimeScrollChanged.value(timeScroll.value)
         }
         previousTimelineInsetPx = insetPx
     }
@@ -1032,7 +1140,8 @@ internal fun TimelineView(
                 dayWidthPx = dayWidthPx,
                 dayStepPx = dayStepPx,
                 sidebarWidthPx = sidebarWidthPx,
-                fixedAllDayBoundaryY = with(density) { (DayHeaderHeight + animatedAllDayHeight).toPx() },
+                dayHeaderHeightPx = with(density) { animatedDayHeaderHeight.toPx() },
+                fixedAllDayBoundaryY = with(density) { (animatedDayHeaderHeight + animatedAllDayHeight).toPx() },
                 sourceInsetXPx = sourceLeft - sourcePageLeft,
                 initialPointerYPx = start.pointerInRoot.y - rootOrigin.y,
                 initialTimeScrollPx = timeScroll.value,
@@ -1166,6 +1275,10 @@ internal fun TimelineView(
                 timelineViewportHeightPx = it.size.height
             }
             .timelineVerticalPinch(verticalPinchOwner)
+            .semantics {
+                this[TimelineHourHeightDpSemanticsKey] = hourHeightDp
+                this[TimelineScrollPxSemanticsKey] = timeScroll.value
+            }
             .testTag("timeline-gesture-surface")
             // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
             // element for the month-cell <-> day morph, so the entire view scales up out of (and
@@ -1174,34 +1287,21 @@ internal fun TimelineView(
             // No solid backing: the real elements (grid, time bar, cards) fade in from transparency
             // and the month cross-fades out underneath, so nothing flashes to a flat colour.
             .morphBounds("dayblock-$monthMorphDay", enabled = isDayMode)
-            .clipToBounds(),
+            .clipTimelineViewport(
+                topOverflow = if (headerPresentation.allowTopOverflow) {
+                    -headerPresentation.weekLabelTopOffset
+                } else {
+                    0.dp
+                },
+            ),
     ) {
         Row(Modifier.matchParentSize()) {
             Column(Modifier.width(TimeSidebarWidth)) {
-                Box(
+                Spacer(
                     modifier = Modifier
-                        .height(DayHeaderHeight)
+                        .height(animatedDayHeaderHeight)
                         .fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = !isDayMode && !state.weekViewEnabled && state.multiDaySidebarControlsEnabled,
-                        enter = slideInHorizontally(
-                            initialOffsetX = { -it },
-                            animationSpec = tween(280, easing = MotionEmphasized),
-                        ) + fadeIn(animationSpec = tween(180, easing = MotionStandard)),
-                        exit = slideOutHorizontally(
-                            targetOffsetX = { -it },
-                            animationSpec = tween(280, easing = MotionEmphasized),
-                        ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        MultiDayCountControls(
-                            dayCount = multiDayCount,
-                            onDayCountChanged = onMultiDayCountChanged,
-                        )
-                    }
-                }
+                )
                 Spacer(Modifier.height(animatedAllDayHeight))
                 Box(
                     modifier = Modifier
@@ -1284,6 +1384,9 @@ internal fun TimelineView(
                     onDetail = onDetail,
                     onGridViewportHeight = { gridViewportHeightPx = it },
                     drawTimedGrid = true,
+                    dayHeaderHeight = animatedDayHeaderHeight,
+                    weekLabelHeight = animatedWeekLabelHeight,
+                    dayHeaderMode = headerPresentation.mode,
                 )
                 }
             }
@@ -1350,6 +1453,9 @@ internal fun TimelineView(
                             onTaskMovedAllDay = onTaskMovedAllDay,
                             onDetail = onDetail,
                             onGridViewportHeight = {},
+                            dayHeaderHeight = animatedDayHeaderHeight,
+                            weekLabelHeight = animatedWeekLabelHeight,
+                            dayHeaderMode = headerPresentation.mode,
                         )
                     }
                 }
@@ -1368,7 +1474,7 @@ internal fun TimelineView(
                     dayStepPx = step * zoom,
                     viewportWidthPx = dayViewportWidthPx.toFloat(),
                     layoutViewportWidthPx = dayGeometryViewportWidthPx,
-                    topOffset = DayHeaderHeight,
+                    topOffset = animatedDayHeaderHeight,
                     height = animatedAllDayHeight,
                     timedGridTopPadding = 0.dp,
                     hourHeightDp = hourHeightDp,
@@ -1391,6 +1497,18 @@ internal fun TimelineView(
                     allowVerticalOverflow = allowAllDayVerticalOverflow,
                 )
             }
+            CalendarWeekHeaderBand(
+                placements = calendarWeekPlacements,
+                labelWidthPx = calendarWeekLabelWidthPx,
+                height = animatedWeekLabelHeight,
+                alpha = calendarWeekAlpha,
+                fontSize = calendarWeekFontSize,
+                labelMode = calendarWeekLabelMode,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(y = headerPresentation.weekLabelTopOffset)
+                    .zIndex(12f),
+            )
             // Normal pager-driven current-time line + all-day band, only when NOT morphing (during
             // the morph the affine all-day overlay above takes over and the time line is hidden).
             if (morphContext == null) {
@@ -1404,7 +1522,7 @@ internal fun TimelineView(
                     dayStepPx = pagerDayStepPx,
                     viewportWidthPx = dayViewportWidthPx.toFloat(),
                     layoutViewportWidthPx = dayGeometryViewportWidthPx,
-                    topOffset = DayHeaderHeight,
+                    topOffset = animatedDayHeaderHeight,
                     height = animatedAllDayHeight,
                     timedGridTopPadding = 0.dp,
                     hourHeightDp = hourHeightDp,
@@ -1432,7 +1550,7 @@ internal fun TimelineView(
         if (allDayHasOverflow || allDayExpanded) {
             Box(
                 modifier = Modifier
-                    .offset(y = DayHeaderHeight)
+                    .offset(y = animatedDayHeaderHeight)
                     .width(TimeSidebarWidth)
                     .height(animatedAllDayHeight)
                     .padding(bottom = 4.dp)
@@ -1551,6 +1669,31 @@ internal fun TimelineView(
                 }
             }
         }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !isLandscape &&
+                !isDayMode &&
+                !state.weekViewEnabled &&
+                state.multiDaySidebarControlsEnabled,
+            enter = slideInHorizontally(
+                initialOffsetX = { -it },
+                animationSpec = tween(280, easing = MotionEmphasized),
+            ) + fadeIn(animationSpec = tween(180, easing = MotionStandard)),
+            exit = slideOutHorizontally(
+                targetOffsetX = { -it },
+                animationSpec = tween(280, easing = MotionEmphasized),
+            ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(y = animatedMultiDayControlsTopOffset)
+                .width(TimeSidebarWidth)
+                .height(headerPresentation.multiDayControlsHeight)
+                .zIndex(4f),
+        ) {
+            MultiDayCountControls(
+                dayCount = multiDayCount,
+                onDayCountChanged = onMultiDayCountChanged,
+            )
+        }
         activeTimedDrag?.let { active ->
             TimelineTimedDragOverlay(
                 active = active,
@@ -1562,7 +1705,7 @@ internal fun TimelineView(
 }
 
 @Composable
-private fun MultiDayCountControls(
+internal fun MultiDayCountControls(
     dayCount: Int,
     onDayCountChanged: (Int) -> Unit,
 ) {
@@ -1573,6 +1716,7 @@ private fun MultiDayCountControls(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .testTag("multiDayCountRail")
             .clip(railShape)
             .background(multiDayCountRailColor())
             .fillMaxWidth()
@@ -1625,7 +1769,7 @@ private fun MultiDayCountIconButton(
 }
 
 @Composable
-private fun multiDayCountRailColor(): Color =
+internal fun multiDayCountRailColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) {
         MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.08f)
     } else {
@@ -1678,7 +1822,66 @@ private fun DraftEventSelection?.forDay(day: LocalDate): DraftEventSelection? {
 }
 
 @Composable
-private fun DayHeader(day: LocalDate, selected: Boolean, modifier: Modifier = Modifier) {
+private fun CalendarWeekHeaderBand(
+    placements: List<TimelineCalendarWeekPlacement>,
+    labelWidthPx: Float,
+    height: Dp,
+    alpha: Float,
+    fontSize: Float,
+    labelMode: TimelineCalendarWeekLabelMode,
+    modifier: Modifier = Modifier,
+) {
+    if (height <= 0.dp || alpha <= 0f || labelWidthPx <= 0f) return
+
+    val density = LocalDensity.current
+    val labelWidth = with(density) { labelWidthPx.toDp() }
+    Box(
+        modifier = modifier
+            .height(height)
+            .alpha(alpha),
+    ) {
+        placements.forEach { placement ->
+            key(placement.weekStart) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(placement.leftPx.roundToInt(), 0) }
+                        .width(labelWidth)
+                        .fillMaxHeight()
+                        .alpha(placement.visualAlpha)
+                        .testTag("timeline-calendar-week-${placement.weekStart}"),
+                    contentAlignment = Alignment.TopStart,
+                ) {
+                    when (labelMode) {
+                        TimelineCalendarWeekLabelMode.Full -> Text(
+                            text = stringResource(R.string.calendar_week_label, placement.weekNumber),
+                            modifier = Modifier.padding(start = 6.dp, end = 4.dp),
+                            color = WarmInk.copy(alpha = 0.72f),
+                            fontSize = fontSize.sp,
+                            lineHeight = fontSize.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Start,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                        )
+                        TimelineCalendarWeekLabelMode.Compact -> CalendarWeekNumberPill(
+                            weekNumber = placement.weekNumber,
+                            modifier = Modifier.padding(start = 6.dp),
+                            backgroundColor = multiDayCountRailColor(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayHeader(
+    day: LocalDate,
+    selected: Boolean,
+    mode: TimelineDayHeaderMode,
+    modifier: Modifier = Modifier,
+) {
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val compact = maxWidth < 44.dp
         val selectedDayTextColor = if (MaterialTheme.colorScheme.background.isDark()) {
@@ -1691,31 +1894,79 @@ private fun DayHeader(day: LocalDate, selected: Boolean, modifier: Modifier = Mo
         val weekdayLine = if (compact) 13.sp else 16.sp
         val dayFont = if (compact) 17.sp else 22.sp
         val dayLine = if (compact) 19.sp else 24.sp
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                day.format(DateTimeFormatter.ofPattern("EE", LocalAppLocale.current)).replace(".", ""),
-                color = if (selected) WarmBrown else WarmInk,
-                fontWeight = FontWeight.Bold,
-                fontSize = weekdayFont,
-                lineHeight = weekdayLine,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-            )
-            Box(
-                modifier = Modifier
-                    .size(circleSize)
-                    .clip(CircleShape)
-                    .background(if (selected) WarmBrown else Color.Transparent),
-                contentAlignment = Alignment.Center,
-            ) {
+        val weekday = day.format(DateTimeFormatter.ofPattern("EE", LocalAppLocale.current)).replace(".", "")
+        when (mode) {
+            TimelineDayHeaderMode.Portrait -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    day.dayOfMonth.toString(),
-                    color = if (selected) selectedDayTextColor else WarmInk,
-                    fontSize = dayFont,
-                    lineHeight = dayLine,
-                    fontWeight = FontWeight.SemiBold,
+                    weekday,
+                    color = if (selected) WarmBrown else WarmInk,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = weekdayFont,
+                    lineHeight = weekdayLine,
                     maxLines = 1,
+                    overflow = TextOverflow.Clip,
                 )
+                Box(
+                    modifier = Modifier
+                        .size(circleSize)
+                        .clip(CircleShape)
+                        .background(if (selected) WarmBrown else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        day.dayOfMonth.toString(),
+                        color = if (selected) selectedDayTextColor else WarmInk,
+                        fontSize = dayFont,
+                        lineHeight = dayLine,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+            TimelineDayHeaderMode.Landscape,
+            TimelineDayHeaderMode.LandscapeCompact -> {
+                val landscapeCompact = mode == TimelineDayHeaderMode.LandscapeCompact
+                val horizontalPadding by animateDpAsState(
+                    targetValue = if (landscapeCompact || compact) 3.dp else 7.dp,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateHorizontalPadding",
+                )
+                val weekdaySize by animateFloatAsState(
+                    targetValue = if (landscapeCompact || compact) 9f else 13f,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateWeekdaySize",
+                )
+                val dateSize by animateFloatAsState(
+                    targetValue = if (landscapeCompact || compact) 14f else 19f,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateDateSize",
+                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (selected) WarmBrown else Color.Transparent)
+                        .padding(horizontal = horizontalPadding, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(if (landscapeCompact || compact) 2.dp else 4.dp),
+                ) {
+                    val landscapeTextColor = if (selected) selectedDayTextColor else WarmInk
+                    Text(
+                        weekday,
+                        color = landscapeTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = weekdaySize.sp,
+                        lineHeight = (weekdaySize + 2f).sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        day.dayOfMonth.toString(),
+                        color = landscapeTextColor,
+                        fontSize = dateSize.sp,
+                        lineHeight = (dateSize + 2f).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
@@ -1752,7 +2003,7 @@ private fun DayPagerColumn(
     onDateSelected: (LocalDate) -> Unit,
     onDayHeaderClick: (LocalDate) -> Unit,
     onSlotSelected: (LocalDate, LocalTime) -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
@@ -1761,6 +2012,9 @@ private fun DayPagerColumn(
     onGridViewportHeight: (Int) -> Unit,
     taskColorMode: TaskColorMode,
     drawTimedGrid: Boolean = true,
+    dayHeaderHeight: Dp = DayHeaderHeight,
+    weekLabelHeight: Dp = 0.dp,
+    dayHeaderMode: TimelineDayHeaderMode = TimelineDayHeaderMode.Portrait,
 ) {
     // Just the day's own content (header + timed grid + cards). The month-cell <-> day morph is
     // now applied one level up, on the whole timeline Row (so the time bar and all-day band scale
@@ -1778,16 +2032,18 @@ private fun DayPagerColumn(
         DayHeader(
             day = day,
             selected = day == LocalCalendarTimeSnapshot.current.today,
+            mode = dayHeaderMode,
             modifier = Modifier
                 .zIndex(4f)
-                .height(DayHeaderHeight)
+                .height(dayHeaderHeight)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .clickable(
                     interactionSource = headerInteraction,
                     indication = null,
                     onClick = { onDayHeaderClick(day) },
-                ),
+                )
+                .padding(top = weekLabelHeight),
         )
         Spacer(
             modifier = Modifier
@@ -1935,8 +2191,8 @@ private fun TimelineTimedDragOverlay(
             }
     }
     val targetY = when (target) {
-        is TimelineDropTarget.AllDay -> with(density) {
-            (DayHeaderHeight + 7.dp + (target.lane * 29).dp).toPx()
+        is TimelineDropTarget.AllDay -> layout.dayHeaderHeightPx + with(density) {
+            (7.dp + (target.lane * 29).dp).toPx()
         }
 
         is TimelineDropTarget.Timed -> layout.fixedAllDayBoundaryY +

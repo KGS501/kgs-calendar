@@ -48,6 +48,20 @@ class TimedCalendarLayoutTest {
     }
 
     @Test
+    fun nearZeroDurationProviderEventGetsAReadableMinimumVisualDuration() {
+        val day = LocalDate.of(2026, 7, 7)
+        val start = millis(day, LocalTime.of(8, 15))
+        val event = event(start = start, end = start + 1L)
+
+        val placement = event.timedPlacementOn(day, hourHeightDp = 60f)
+
+        assertEquals(
+            TimedPlacement(topDp = 495f, heightDp = 15f, startMinute = 495, endMinute = 510),
+            placement,
+        )
+    }
+
+    @Test
     fun timedLayoutGroupsOverlappingItemsIntoLanes() {
         val day = LocalDate.of(2026, 7, 7)
         val eventA = event("a", millis(day, LocalTime.of(9, 0)), millis(day, LocalTime.of(10, 0)))

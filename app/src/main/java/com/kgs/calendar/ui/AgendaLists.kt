@@ -353,6 +353,8 @@ import com.kgs.calendar.ui.calendar.toMonth
 import com.kgs.calendar.ui.calendar.toMonthPage
 import com.kgs.calendar.ui.calendar.toMonthViewPage
 import com.kgs.calendar.ui.calendar.weekHeaderLabels
+import com.kgs.calendar.ui.agenda.AgendaNavigationRequest
+import com.kgs.calendar.ui.agenda.AgendaTimeline
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.labels.RecurrenceOption
@@ -503,7 +505,7 @@ internal fun TaskCardCompletionBurst(playKey: Int, color: Color, modifier: Modif
 }
 
 @Composable
-private fun OneDayList(state: CalendarUiState, onTaskStatusChanged: (String, String) -> Unit, onDetail: (DetailSheet) -> Unit) {
+private fun OneDayList(state: CalendarUiState, onTaskStatusChanged: (TaskEntity, String) -> Unit, onDetail: (DetailSheet) -> Unit) {
     AgendaDaySection(
         state.selectedDate,
         state.events.filter { it.occursOn(state.selectedDate) },
@@ -518,32 +520,30 @@ private fun OneDayList(state: CalendarUiState, onTaskStatusChanged: (String, Str
 @Composable
 internal fun AgendaList(
     state: CalendarUiState,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
-    todayScrollRequest: Int,
-    scrollTargetDate: LocalDate?,
+    navigationRequest: AgendaNavigationRequest,
+    onLoadEarlier: () -> Unit,
+    onLoadLater: () -> Unit,
 ) {
     val calendarTasks = remember(state.datedTasks, state.showCompletedTasksInCalendar) {
         if (state.showCompletedTasksInCalendar) state.datedTasks else state.datedTasks.filterNot { it.isCompleted }
     }
-    SearchResultsList(
-        query = "",
-        eventResults = state.events,
-        taskResults = calendarTasks,
-        allTasksForHierarchy = emptyList(),
+    AgendaTimeline(
+        events = state.events,
+        tasks = calendarTasks,
+        loadedRange = state.loadedDataRange.takeIf { it == state.requestedDataRange },
+        navigationRequest = navigationRequest,
+        today = LocalCalendarTimeSnapshot.current.today,
         taskColorMode = state.taskColorMode,
-        subtasksExpandedByDefault = state.subtasksExpandedByDefault,
-        onEventClick = { onDetail(DetailSheet.Event(it)) },
-        onTaskClick = { onDetail(DetailSheet.Task(it)) },
-        onTaskStatusChanged = onTaskStatusChanged,
-        showSearchIntro = false,
-        autoScrollToNow = true,
-        emptyMessage = stringResource(R.string.no_events_or_tasks),
-        scrollRequestKey = todayScrollRequest,
-        scrollTargetDate = scrollTargetDate,
         stickyHeaderBackground = MaterialTheme.colorScheme.background,
-        showTaskChains = false,
-        expandMultiDayEventSpans = true,
+        emptyMessage = stringResource(R.string.no_events_or_tasks),
+        showCalendarWeeks = state.showCalendarWeeks,
+        firstDayOfWeek = state.firstDayOfWeek,
+        onTaskStatusChanged = onTaskStatusChanged,
+        onDetail = onDetail,
+        onLoadEarlier = onLoadEarlier,
+        onLoadLater = onLoadLater,
     )
 }
 
@@ -554,7 +554,7 @@ private fun AgendaDaySection(
     tasks: List<TaskEntity>,
     taskColorMode: TaskColorMode,
     subtasksExpandedByDefault: Boolean,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
 ) {
     val hierarchy = rememberTaskHierarchyPresentation(
@@ -706,7 +706,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
 @Composable
 internal fun TaskInbox(
     state: CalendarUiState,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onShowCompleted: (() -> Unit)? = null,
 ) {
@@ -896,7 +896,7 @@ internal fun CompletedTasksView(
     tasks: List<TaskEntity>,
     taskColorMode: TaskColorMode,
     subtasksExpandedByDefault: Boolean,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -912,7 +912,11 @@ internal fun CompletedTasksView(
                 (it.categories?.lowercase(Locale.ROOT)?.contains(q) == true)
         }
     }
-    val hierarchy = rememberTaskHierarchyPresentation(filtered, subtasksExpandedByDefault)
+    val hierarchy = rememberTaskHierarchyPresentation(
+        tasks = filtered,
+        expandedByDefault = subtasksExpandedByDefault,
+        distinguishOccurrences = true,
+    )
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -1089,7 +1093,7 @@ private fun ScheduledTaskRow(
     showDate: Boolean,
     date: LocalDate?,
     taskColorMode: TaskColorMode,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     hierarchyDepth: Int = 0,
     hierarchyContinuationLevels: Set<Int> = emptySet(),
     hierarchyLastSibling: Boolean = true,
@@ -1204,7 +1208,7 @@ private fun EventRow(event: EventEntity, onClick: () -> Unit) {
 internal fun TaskRow(
     task: TaskEntity,
     taskColorMode: TaskColorMode,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     prominent: Boolean = false,
     hierarchyDepth: Int = 0,
     hierarchyContinuationLevels: Set<Int> = emptySet(),
@@ -1237,6 +1241,7 @@ internal fun TaskRow(
         lastCompleted = task.isCompleted
     }
     val inactive = task.isInactive()
+    val textDecoration = task.cardTextDecoration()
     val taskAlpha by animateFloatAsState(
         targetValue = if (inactive) 0.62f else 1f,
         animationSpec = tween(MotionMedium, easing = MotionStandard),
@@ -1373,7 +1378,7 @@ internal fun TaskRow(
                     TaskStatusCheckbox(
                         status = task.effectiveStatus(),
                         tint = contentColor,
-                        onStatusChange = { onTaskStatusChanged(task.resourceHref, it) },
+                        onStatusChange = { onTaskStatusChanged(task, it) },
                         boxSize = checkboxBoxSize,
                         iconSize = checkboxIconSize,
                     )
@@ -1400,6 +1405,7 @@ internal fun TaskRow(
                                 lineHeight = titleLineHeight,
                                 fontWeight = titleFontWeight,
                                 maxLines = if (prominent) 2 else 1,
+                                textDecoration = textDecoration,
                             )
                             AnimatedContent(
                                 targetState = subtitleText,
@@ -1414,6 +1420,7 @@ internal fun TaskRow(
                                     color = contentColor.copy(alpha = 0.74f),
                                     fontSize = subtitleFontSize,
                                     lineHeight = subtitleLineHeight,
+                                    textDecoration = textDecoration,
                                 )
                             }
                         } else {
@@ -1425,6 +1432,7 @@ internal fun TaskRow(
                                 fontSize = titleFontSize,
                                 lineHeight = titleLineHeight,
                                 fontWeight = titleFontWeight,
+                                textDecoration = textDecoration,
                             )
                             AnimatedContent(
                                 targetState = subtitleText,
@@ -1439,6 +1447,7 @@ internal fun TaskRow(
                                     color = contentColor.copy(alpha = 0.74f),
                                     fontSize = subtitleFontSize,
                                     lineHeight = subtitleLineHeight,
+                                    textDecoration = textDecoration,
                                 )
                             }
                         }

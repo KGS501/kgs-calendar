@@ -589,6 +589,51 @@ class IcalCodecTest {
     }
 
     @Test
+    fun completedTaskOccurrenceSerializesWithoutCompletingMaster() {
+        val start = LocalDate.of(2026, 8, 18).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val secondStart = LocalDate.of(2026, 8, 19).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val master = TaskEntity(
+            uid = "task-series-status",
+            collectionHref = "/tasks/",
+            resourceHref = "/tasks/task-series-status.ics",
+            title = "Daily task",
+            notes = null,
+            dueAtMillis = start + 60 * 60 * 1000L,
+            startAtMillis = start,
+            completedAtMillis = null,
+            isCompleted = false,
+            status = "NEEDS-ACTION",
+            priority = null,
+            recurrenceRule = "FREQ=DAILY;COUNT=3",
+            timezoneId = zone.id,
+            color = 0xff176b5d.toInt(),
+        )
+        val completedSecond = master.copy(
+            startAtMillis = secondStart,
+            dueAtMillis = secondStart + 60 * 60 * 1000L,
+            completedAtMillis = secondStart + 30 * 60 * 1000L,
+            isCompleted = true,
+            status = "COMPLETED",
+            recurrenceRule = null,
+        )
+        val task = master.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(
+                listOf(TaskRecurrenceOverride.fromTask(secondStart, completedSecond)),
+            ),
+        )
+
+        val raw = codec.serializeTask(task)
+        val parsed = codec.parse(raw, task.collectionHref, task.resourceHref, task.color)!!.task!!
+
+        assertTrue(raw.contains("RRULE:FREQ=DAILY;COUNT=3"))
+        assertTrue(raw.contains("RECURRENCE-ID;TZID=Europe/Berlin:20260819T090000"))
+        assertEquals(1, Regex("STATUS:COMPLETED").findAll(raw).count())
+        assertFalse(parsed.isCompleted)
+        assertEquals("NEEDS-ACTION", parsed.status)
+        assertEquals(true, RecurrenceOverrideCodec.decodeTasks(parsed.recurrenceOverridesJson).single().isCompleted)
+    }
+
+    @Test
     fun parsesTzidDurationRdateAndSequence() {
         val raw = """
             BEGIN:VCALENDAR

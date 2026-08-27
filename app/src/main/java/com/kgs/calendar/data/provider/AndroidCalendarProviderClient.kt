@@ -134,11 +134,16 @@ class AndroidCalendarProviderClient(
                     val calendarId = cursor.getLong(1)
                     val providerStartsAt = cursor.getLong(5)
                     val dtEnd = if (cursor.isNull(6)) null else cursor.getLong(6)
-                    val durationMillis = cursor.getString(7)?.parseCalendarDurationMillis()
+                    val duration = cursor.getString(7)
                     val allDay = cursor.getInt(8) == 1
-                    val providerEndsAt = dtEnd
-                        ?: durationMillis?.let { providerStartsAt + it }
-                        ?: if (allDay) providerStartsAt + Duration.ofDays(1).toMillis() else providerStartsAt + Duration.ofHours(1).toMillis()
+                    val recurrenceRule = cursor.getString(9)
+                    val providerEndsAt = resolveAndroidProviderEventEndMillis(
+                        startsAtMillis = providerStartsAt,
+                        dtEndMillis = dtEnd,
+                        duration = duration,
+                        allDay = allDay,
+                        recurrenceRule = recurrenceRule,
+                    )
                     val startsAt = if (allDay) androidAllDayProviderMillisToLocalMillis(providerStartsAt, zoneId) else providerStartsAt
                     val endsAt = if (allDay) androidAllDayProviderMillisToLocalMillis(providerEndsAt, zoneId) else providerEndsAt
                     rawEvents += AndroidProviderEvent(
@@ -148,9 +153,9 @@ class AndroidCalendarProviderClient(
                         description = cursor.getString(3),
                         location = cursor.getString(4),
                         startsAtMillis = startsAt,
-                        endsAtMillis = max(endsAt, startsAt + 1L),
+                        endsAtMillis = endsAt,
                         allDay = allDay,
-                        recurrenceRule = cursor.getString(9),
+                        recurrenceRule = recurrenceRule,
                         exDates = cursor.getString(10),
                         status = cursor.getIntOrNull(11),
                         accessLevel = cursor.getIntOrNull(12),
@@ -348,9 +353,6 @@ class AndroidCalendarProviderClient(
             }
         }.getOrNull()
 
-    private fun String.parseCalendarDurationMillis(): Long? =
-        runCatching { Duration.parse(this).toMillis() }.getOrNull()
-
     private fun mergeAndroidExDates(existing: String?, exceptionMillis: List<Long>, allDay: Boolean): String? {
         val merged = existing
             ?.split(',')
@@ -385,6 +387,66 @@ class AndroidCalendarProviderClient(
         )
     }
 }
+
+internal fun parseAndroidCalendarDurationMillis(raw: String?): Long? {
+    val value = raw?.trim()?.uppercase()?.takeIf(String::isNotEmpty) ?: return null
+    runCatching { Duration.parse(value).toMillis() }.getOrNull()?.let { return it }
+
+    val weekMatch = ANDROID_CALENDAR_WEEK_DURATION.matchEntire(value)
+    if (weekMatch != null) {
+        val sign = if (weekMatch.groupValues[1] == "-") -1L else 1L
+        val weeks = weekMatch.groupValues[2].toLongOrNull() ?: return null
+        return runCatching {
+            Math.multiplyExact(
+                Math.multiplyExact(weeks, 7L),
+                Duration.ofDays(1).toMillis(),
+            ) * sign
+        }.getOrNull()
+    }
+
+    val componentMatch = ANDROID_CALENDAR_COMPONENT_DURATION.matchEntire(value) ?: return null
+    val parts = componentMatch.groupValues.drop(2)
+    if (parts.none(String::isNotEmpty)) return null
+    val sign = if (componentMatch.groupValues[1] == "-") -1L else 1L
+    return runCatching {
+        val days = parts[0].ifEmpty { "0" }.toLong()
+        val hours = parts[1].ifEmpty { "0" }.toLong()
+        val minutes = parts[2].ifEmpty { "0" }.toLong()
+        val seconds = parts[3].ifEmpty { "0" }.toLong()
+        Duration.ofDays(days)
+            .plusHours(hours)
+            .plusMinutes(minutes)
+            .plusSeconds(seconds)
+            .toMillis() * sign
+    }.getOrNull()
+}
+
+internal fun resolveAndroidProviderEventEndMillis(
+    startsAtMillis: Long,
+    dtEndMillis: Long?,
+    duration: String?,
+    allDay: Boolean,
+    recurrenceRule: String?,
+): Long {
+    val durationMillis = parseAndroidCalendarDurationMillis(duration)?.takeIf { it > 0L }
+    val durationEnd = durationMillis?.let { parsedDuration ->
+        runCatching { Math.addExact(startsAtMillis, parsedDuration) }.getOrNull()
+    }
+    val validDtEnd = dtEndMillis?.takeIf { it > startsAtMillis }
+    val resolved = when {
+        !recurrenceRule.isNullOrBlank() && durationEnd != null -> durationEnd
+        recurrenceRule.isNullOrBlank() && validDtEnd != null -> validDtEnd
+        durationEnd != null -> durationEnd
+        validDtEnd != null -> validDtEnd
+        allDay -> startsAtMillis + Duration.ofDays(1).toMillis()
+        else -> startsAtMillis + Duration.ofHours(1).toMillis()
+    }
+    return max(resolved, startsAtMillis + 1L)
+}
+
+private val ANDROID_CALENDAR_WEEK_DURATION = Regex("^([+-])?P(\\d+)W$")
+private val ANDROID_CALENDAR_COMPONENT_DURATION =
+    Regex("^([+-])?P(?:(\\d+)D)?(?:T)?(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?$")
 
 data class AndroidProviderCalendar(
     val id: Long,

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -135,6 +136,10 @@ class SettingsStore(private val context: Context) {
         prefs[KEY_SHOW_COMPLETED_TASKS] ?: true
     }
 
+    val showCalendarWeeks: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHOW_CALENDAR_WEEKS] ?: DEFAULT_SHOW_CALENDAR_WEEKS
+    }
+
     val priorityAnimationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_PRIORITY_ANIMATIONS_ENABLED] ?: true
     }
@@ -155,8 +160,26 @@ class SettingsStore(private val context: Context) {
         (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
     }
 
-    val multiDayCount: Flow<Int> = context.dataStore.data.map { prefs ->
-        (prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT).coerceMultiDayCount()
+    val portraitMultiDayCount: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_PORTRAIT_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    val landscapeMultiDayCount: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_LANDSCAPE_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    val portraitTimelineHourHeightDp: Flow<Float> = context.dataStore.data.map { prefs ->
+        normalizeTimelineHourHeightDp(
+            prefs[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+        )
+    }
+
+    val landscapeTimelineHourHeightDp: Flow<Float> = context.dataStore.data.map { prefs ->
+        normalizeTimelineHourHeightDp(
+            prefs[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+        )
     }
 
     val weekViewEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -354,6 +377,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_SHOW_COMPLETED_TASKS] = show }
     }
 
+    suspend fun setShowCalendarWeeks(show: Boolean) {
+        context.dataStore.edit { it[KEY_SHOW_CALENDAR_WEEKS] = show }
+    }
+
     suspend fun setPriorityAnimationsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_PRIORITY_ANIMATIONS_ENABLED] = enabled }
     }
@@ -374,8 +401,24 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
     }
 
-    suspend fun setMultiDayCount(count: Int) {
-        context.dataStore.edit { it[KEY_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    suspend fun setPortraitMultiDayCount(count: Int) {
+        context.dataStore.edit { it[KEY_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLandscapeMultiDayCount(count: Int) {
+        context.dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setPortraitTimelineHourHeightDp(hourHeightDp: Float) {
+        context.dataStore.edit {
+            it[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
+        }
+    }
+
+    suspend fun setLandscapeTimelineHourHeightDp(hourHeightDp: Float) {
+        context.dataStore.edit {
+            it[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
+        }
     }
 
     suspend fun setWeekViewEnabled(enabled: Boolean) {
@@ -508,12 +551,19 @@ class SettingsStore(private val context: Context) {
         private val KEY_FOCUS_TITLE_ON_CREATE = booleanPreferencesKey("focus_title_on_create")
         private val KEY_FIRST_DAY_OF_WEEK = intPreferencesKey("first_day_of_week")
         private val KEY_SHOW_COMPLETED_TASKS = booleanPreferencesKey("show_completed_tasks_in_calendar")
+        private val KEY_SHOW_CALENDAR_WEEKS = booleanPreferencesKey("show_calendar_weeks")
         private val KEY_PRIORITY_ANIMATIONS_ENABLED = booleanPreferencesKey("priority_animations_enabled")
         private val KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED = booleanPreferencesKey("overdue_summary_priority_animation_enabled")
         private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
+        private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")
+        private val KEY_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("landscape_multi_day_count")
+        private val KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP =
+            floatPreferencesKey("portrait_timeline_hour_height_dp")
+        private val KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP =
+            floatPreferencesKey("landscape_timeline_hour_height_dp")
         private val KEY_WEEK_VIEW_ENABLED = booleanPreferencesKey("week_view_enabled")
         private val KEY_FULL_WEEK_SWIPE_ENABLED = booleanPreferencesKey("full_week_swipe_enabled")
         private val KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED = booleanPreferencesKey("multi_day_sidebar_controls_enabled")
@@ -546,6 +596,10 @@ class SettingsStore(private val context: Context) {
         const val MAX_MULTI_WIDGET_MONTH_PERCENT = 70
         const val DEFAULT_WEEK_VIEW_ENABLED = false
         const val DEFAULT_FULL_WEEK_SWIPE_ENABLED = true
+        const val DEFAULT_SHOW_CALENDAR_WEEKS = false
+        const val DEFAULT_TIMELINE_HOUR_HEIGHT_DP = 46f
+        const val MIN_TIMELINE_HOUR_HEIGHT_DP = 18f
+        const val MAX_TIMELINE_HOUR_HEIGHT_DP = 92f
 
         fun normalizeDayWidgetScalePercent(scalePercent: Int): Int =
             scalePercent.coerceIn(MIN_DAY_WIDGET_SCALE_PERCENT, MAX_DAY_WIDGET_SCALE_PERCENT)
@@ -555,6 +609,13 @@ class SettingsStore(private val context: Context) {
 
         fun normalizeMultiWidgetMonthPercent(monthPercent: Int): Int =
             monthPercent.coerceIn(MIN_MULTI_WIDGET_MONTH_PERCENT, MAX_MULTI_WIDGET_MONTH_PERCENT)
+
+        fun normalizeTimelineHourHeightDp(hourHeightDp: Float): Float =
+            if (hourHeightDp.isFinite()) {
+                hourHeightDp.coerceIn(MIN_TIMELINE_HOUR_HEIGHT_DP, MAX_TIMELINE_HOUR_HEIGHT_DP)
+            } else {
+                DEFAULT_TIMELINE_HOUR_HEIGHT_DP
+            }
     }
 }
 

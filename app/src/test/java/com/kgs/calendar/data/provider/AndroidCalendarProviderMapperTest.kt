@@ -1,6 +1,7 @@
 package com.kgs.calendar.data.provider
 
 import android.provider.CalendarContract
+import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -8,8 +9,75 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.Duration
 
 class AndroidCalendarProviderMapperTest {
+    @Test
+    fun recurringProviderEventUsesDurationInsteadOfItsNonDurationDtEnd() {
+        val start = LocalDate.of(2026, 1, 5).atTime(8, 15).toInstant(ZoneOffset.UTC).toEpochMilli()
+
+        val end = resolveAndroidProviderEventEndMillis(
+            startsAtMillis = start,
+            dtEndMillis = start,
+            duration = "PT1H30M",
+            allDay = false,
+            recurrenceRule = "FREQ=WEEKLY;UNTIL=20261228T071500Z",
+        )
+
+        assertEquals(start + Duration.ofMinutes(90).toMillis(), end)
+    }
+
+    @Test
+    fun parsesCalendarProviderWeekAndAndroidSecondDurations() {
+        assertEquals(Duration.ofDays(14).toMillis(), parseAndroidCalendarDurationMillis("P2W"))
+        assertEquals(Duration.ofMinutes(75).toMillis(), parseAndroidCalendarDurationMillis("P4500S"))
+    }
+
+    @Test
+    fun importedRecurringOccurrencesKeepTheProviderDuration() {
+        val firstDay = LocalDate.of(2026, 1, 5)
+        val start = firstDay.atTime(8, 15).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val duration = Duration.ofMinutes(75).toMillis()
+        val rule = "FREQ=WEEKLY;UNTIL=20261228T071500Z"
+        val end = resolveAndroidProviderEventEndMillis(
+            startsAtMillis = start,
+            dtEndMillis = start,
+            duration = "P4500S",
+            allDay = false,
+            recurrenceRule = rule,
+        )
+        val master = androidProviderEventToEntity(
+            event = AndroidProviderEvent(
+                id = 99,
+                calendarId = 7,
+                title = "Recurring class",
+                description = null,
+                location = null,
+                startsAtMillis = start,
+                endsAtMillis = end,
+                allDay = false,
+                recurrenceRule = rule,
+                exDates = null,
+                status = null,
+                accessLevel = null,
+                availability = null,
+                organizer = null,
+            ),
+            collectionHref = "android://calendar/7",
+            color = 0xff176b5d.toInt(),
+            zoneId = ZoneOffset.UTC,
+        )
+
+        val occurrences = RecurrenceExpander(ZoneOffset.UTC).expand(
+            master = master,
+            rangeStartMillis = firstDay.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            rangeEndMillis = firstDay.plusWeeks(4).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+
+        assertTrue(occurrences.isNotEmpty())
+        assertTrue(occurrences.all { it.endsAtMillis - it.startsAtMillis == duration })
+    }
+
     @Test
     fun mapsProviderEventToKgsEvent() {
         val start = LocalDate.of(2026, 6, 8).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()

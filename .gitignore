@@ -2,6 +2,10 @@
 keystore.properties
 *.jks
 *.keystore
+google-play-*.json
+publisher-config.json
+PLAY_PUBLISHING.local.md
+keystone-secrets.properties
 
 # Build / IDE artifacts
 .gradle/
@@ -20,6 +24,8 @@ captures/
 .device-debug/
 .worktrees/
 .kotlin/
+__pycache__/
+*.py[cod]
 ADB/
 tmp/
 

@@ -147,18 +147,10 @@ interface TaskDao {
         SELECT tasks.* FROM tasks
         INNER JOIN collections ON collections.href = tasks.collectionHref
         WHERE collections.isEnabled = 1
-          AND (
-            LOWER(tasks.title) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(tasks.notes, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(tasks.location, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(tasks.url, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(tasks.categories, '')) LIKE '%' || LOWER(:query) || '%'
-          )
         ORDER BY isCompleted ASC, COALESCE(tasks.startAtMillis, tasks.dueAtMillis) ASC, tasks.title COLLATE NOCASE ASC
-        LIMIT 200
         """,
     )
-    fun search(query: String): Flow<List<TaskEntity>>
+    fun observeSearchCandidates(): Flow<List<TaskEntity>>
 
     @Query(
         """

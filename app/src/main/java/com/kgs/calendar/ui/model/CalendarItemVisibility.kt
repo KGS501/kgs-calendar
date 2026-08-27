@@ -37,15 +37,20 @@ internal fun agendaEventDateSpans(
         .flatMap { it.visibleDates() }
         .toSet()
     val eventDates = events.map { event -> event to event.visibleAgendaDates() }
+    val eventCountByDate = buildMap<LocalDate, Int> {
+        eventDates.forEach { (_, dates) ->
+            dates.forEach { date ->
+                put(date, getOrDefault(date, 0) + 1)
+            }
+        }
+    }
 
-    return eventDates.flatMapIndexed { eventIndex, (event, dates) ->
+    return eventDates.flatMap { (event, dates) ->
         if (dates.size <= 1) {
             listOf(AgendaEventDateSpan(event, dates.firstOrNull() ?: event.startsAtMillis.toDate()))
         } else {
             val interruptionDates = dates.filterTo(mutableSetOf()) { date ->
-                date in taskDates || eventDates.withIndex().any { (otherIndex, other) ->
-                    otherIndex != eventIndex && date in other.second
-                }
+                date in taskDates || eventCountByDate.getOrDefault(date, 0) > 1
             }
             event.toAgendaDateSpans(dates, interruptionDates)
         }
@@ -145,7 +150,12 @@ internal fun TaskEntity.agendaSortMillis(): Long? =
     startAtMillis ?: dueAtMillis
 
 internal fun TaskEntity.occurrenceStartForEdit(): Long =
-    startAtMillis ?: dueAtMillis ?: System.currentTimeMillis()
+    RecurrenceOverrideCodec.decodeTasks(recurrenceOverridesJson)
+        .firstOrNull { it.matchesOccurrence(this) }
+        ?.recurrenceIdMillis
+        ?: startAtMillis
+        ?: dueAtMillis
+        ?: System.currentTimeMillis()
 
 internal fun EventEntity.occurrenceStartForEdit(): Long =
     RecurrenceOverrideCodec.decodeEvents(recurrenceOverridesJson)

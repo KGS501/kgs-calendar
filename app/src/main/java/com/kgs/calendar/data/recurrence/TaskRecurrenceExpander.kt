@@ -49,7 +49,6 @@ class TaskRecurrenceExpander(
             )
             val override = overrides[recurrenceId]
             when {
-                override?.status.equals("CANCELLED", ignoreCase = true) -> null
                 override != null -> override.applyTo(expanded)
                 else -> expanded
             }
@@ -62,7 +61,6 @@ class TaskRecurrenceExpander(
         rangeEndMillis: Long,
     ): List<CalendarOccurrenceEnvelope<TaskEntity>> {
         val overrides = RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
         return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
             val recurrenceIdMillis = overrides.firstOrNull { override ->
                 override.startAtMillis == occurrence.startAtMillis &&
@@ -75,6 +73,21 @@ class TaskRecurrenceExpander(
             )
         }
     }
+
+    /**
+     * Materializes terminal per-occurrence overrides without expanding the whole series.
+     * These exceptions are persisted inside their recurring master, so the task sidebar
+     * cannot discover them through the normal completed-task database query.
+     */
+    fun inactiveOverrides(master: TaskEntity): List<TaskEntity> =
+        RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
+            .filter { override ->
+                override.isCompleted ||
+                    override.status.equals("COMPLETED", ignoreCase = true) ||
+                    override.status.equals("CANCELLED", ignoreCase = true)
+            }
+            .sortedBy { it.recurrenceIdMillis }
+            .map { it.applyTo(master) }
 
     companion object {
         private const val DEFAULT_TASK_DURATION_MILLIS = 30L * 60L * 1000L

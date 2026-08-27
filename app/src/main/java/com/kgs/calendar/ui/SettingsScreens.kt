@@ -305,6 +305,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
 import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.data.isSupportedReadOnlyCalendarUrl
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -465,12 +466,14 @@ internal fun SettingsPage(
     onAutoLoadMapPreviewsChanged: (Boolean) -> Unit,
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
     onMultiDaySidebarControlsChanged: (Boolean) -> Unit,
-    onMultiDayCountChanged: (Int) -> Unit,
+    onPortraitMultiDayCountChanged: (Int) -> Unit,
+    onLandscapeMultiDayCountChanged: (Int) -> Unit,
     onWeekViewEnabledChanged: (Boolean) -> Unit,
     onFullWeekSwipeEnabledChanged: (Boolean) -> Unit,
     onFocusTitleOnCreateChanged: (Boolean) -> Unit,
     onFirstDayOfWeekSelected: (DayOfWeek) -> Unit,
     onShowCompletedTasksChanged: (Boolean) -> Unit,
+    onShowCalendarWeeksChanged: (Boolean) -> Unit,
     onDefaultEventDurationChanged: (Int) -> Unit,
     onDefaultTaskHasDateChanged: (Boolean) -> Unit,
     onDefaultTaskHasTimeChanged: (Boolean) -> Unit,
@@ -930,7 +933,7 @@ internal fun SettingsPage(
                                         readOnlyUrl = ""
                                         navigateToRoot(SettingsDestination.Accounts)
                                     },
-                                    enabled = readOnlyUrl.startsWith("http://", ignoreCase = true) || readOnlyUrl.startsWith("https://", ignoreCase = true),
+                                    enabled = isSupportedReadOnlyCalendarUrl(readOnlyUrl),
                                     shape = SettingsControlShape,
                                     colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
                                     modifier = Modifier.fillMaxWidth().height(SettingsControlHeight),
@@ -1067,6 +1070,12 @@ internal fun SettingsPage(
                                     onCheckedChange = onShowCompletedTasksChanged,
                                 )
                                 SettingsSwitchRow(
+                                    title = stringResource(R.string.show_calendar_weeks),
+                                    checked = state.showCalendarWeeks,
+                                    onCheckedChange = onShowCalendarWeeksChanged,
+                                    subtitle = stringResource(R.string.show_calendar_weeks_help),
+                                )
+                                SettingsSwitchRow(
                                     title = stringResource(R.string.subtasks_expanded),
                                     checked = state.subtasksExpandedByDefault,
                                     onCheckedChange = onSubtasksExpandedByDefaultChanged,
@@ -1120,13 +1129,22 @@ internal fun SettingsPage(
                                             exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
                                                 shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
                                         ) {
-                                            SettingsSliderRow(
-                                                title = stringResource(R.string.multi_day_count_setting),
-                                                subtitle = stringResource(R.string.multi_day_count_setting_help),
-                                                value = state.multiDayCount.coerceMultiDayCount(),
-                                                range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                                onValueChanged = onMultiDayCountChanged,
-                                            )
+                                            Column {
+                                                SettingsSliderRow(
+                                                    title = stringResource(R.string.multi_day_count_portrait),
+                                                    subtitle = stringResource(R.string.multi_day_count_portrait_help),
+                                                    value = state.portraitMultiDayCount.coerceMultiDayCount(),
+                                                    range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
+                                                    onValueChanged = onPortraitMultiDayCountChanged,
+                                                )
+                                                SettingsSliderRow(
+                                                    title = stringResource(R.string.multi_day_count_landscape),
+                                                    subtitle = stringResource(R.string.multi_day_count_landscape_help),
+                                                    value = state.landscapeMultiDayCount.coerceMultiDayCount(),
+                                                    range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
+                                                    onValueChanged = onLandscapeMultiDayCountChanged,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1447,7 +1465,7 @@ internal fun SettingsPage(
                                         readOnlyUrl = ""
                                         navigateToRoot(SettingsDestination.Accounts)
                                     },
-                                    enabled = readOnlyUrl.startsWith("http://", ignoreCase = true) || readOnlyUrl.startsWith("https://", ignoreCase = true),
+                                    enabled = isSupportedReadOnlyCalendarUrl(readOnlyUrl),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
                                     modifier = Modifier.fillMaxWidth(),

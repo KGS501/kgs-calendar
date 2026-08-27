@@ -452,7 +452,7 @@ internal fun DayTimedColumn(
     timeScroll: androidx.compose.foundation.ScrollState,
     gridViewportHeightPx: Int,
     onSlotSelected: (LocalDate, LocalTime) -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
     onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
@@ -1010,7 +1010,7 @@ private fun TimedTaskBlock(
     hourHeightDp: Float,
     color: Int,
     dayWidthPx: Float,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onMove: (LocalDate, LocalTime, LocalTime) -> Unit,
     onMoveAllDay: (LocalDate) -> Unit,
     onClick: () -> Unit,
@@ -1025,6 +1025,7 @@ private fun TimedTaskBlock(
         lastCompleted = task.isCompleted
     }
     val inactive = task.isInactive()
+    val textDecoration = task.cardTextDecoration()
     val taskAlpha by animateFloatAsState(
         targetValue = if (inactive) 0.48f else 1f,
         animationSpec = tween(MotionMedium, easing = MotionStandard),
@@ -1227,7 +1228,7 @@ private fun TimedTaskBlock(
                 TaskStatusCheckbox(
                     status = task.effectiveStatus(),
                     tint = textColor,
-                    onStatusChange = { onTaskStatusChanged(task.resourceHref, it) },
+                    onStatusChange = { onTaskStatusChanged(task, it) },
                     boxSize = checkboxBoxSize.dp,
                     iconSize = checkboxIconSize.dp,
                     modifier = Modifier.offset(y = checkboxTopOffset),
@@ -1249,6 +1250,7 @@ private fun TimedTaskBlock(
                             lineHeight = 13.sp,
                             fontWeight = FontWeight.Medium,
                             textScale = compactTitleScale,
+                            textDecoration = textDecoration,
                         )
                         if (showLocation) {
                             FadingTimedText(
@@ -1257,6 +1259,7 @@ private fun TimedTaskBlock(
                                 fontSize = 11.sp,
                                 lineHeight = 12.sp,
                                 maxLines = locationMaxLines,
+                                textDecoration = textDecoration,
                             )
                         }
                     }

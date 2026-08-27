@@ -65,19 +65,10 @@ interface EventDao {
         SELECT events.* FROM events
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
-          AND (
-            LOWER(events.title) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(events.description, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(events.location, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(events.categories, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(events.organizerJson, '')) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(events.attendeesJson, '')) LIKE '%' || LOWER(:query) || '%'
-          )
         ORDER BY startsAtMillis ASC
-        LIMIT 200
         """,
     )
-    fun search(query: String): Flow<List<EventEntity>>
+    fun observeSearchCandidates(): Flow<List<EventEntity>>
 
     @Query(
         """

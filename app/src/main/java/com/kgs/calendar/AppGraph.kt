@@ -16,6 +16,7 @@ import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
@@ -35,6 +36,7 @@ class AppGraph(context: Context) {
         .build()
 
     val settingsStore = SettingsStore(appContext)
+    internal val timelineViewportMemory = TimelineOrientationViewportMemory()
     private val credentialsStore = CredentialsStore(appContext)
     private val loginFlowClient = NextcloudLoginFlowClient(okHttpClient)
     private val calDavHttpClient = CalDavHttpClient(okHttpClient)
@@ -74,7 +76,13 @@ class AppGraph(context: Context) {
     )
 
     val taskMutationCoordinator = TaskMutationCoordinator(
-        persistStatus = repository::setTaskStatus,
+        persistStatus = { resourceHref, status, occurrenceId ->
+            if (occurrenceId == null) {
+                repository.setTaskStatus(resourceHref, status)
+            } else {
+                repository.setTaskOccurrenceStatus(resourceHref, occurrenceId.recurrenceIdMillis, status)
+            }
+        },
         pushPendingChanges = repository::pushPendingChangesCreatedSince,
         notificationReconciler = reminderRegistry,
         rescheduleReminders = { ReminderScheduler.reschedule(appContext) },

@@ -120,6 +120,43 @@ class TimelineWindowPolicyTest {
     }
 
     @Test
+    fun multiDayCountUsesTheValueForTheCurrentOrientation() {
+        assertEquals(
+            2,
+            multiDayCountForOrientation(isLandscape = false, portraitCount = 2, landscapeCount = 5),
+        )
+        assertEquals(
+            5,
+            multiDayCountForOrientation(isLandscape = true, portraitCount = 2, landscapeCount = 5),
+        )
+    }
+
+    @Test
+    fun landscapeUsesTheMultiDayTimelineWhenThePortraitSelectionIsDay() {
+        assertEquals(
+            CalendarViewMode.ThreeDay,
+            calendarViewModeForOrientation(
+                selectedView = CalendarViewMode.Day,
+                isLandscape = true,
+            ),
+        )
+        assertEquals(
+            CalendarViewMode.Day,
+            calendarViewModeForOrientation(
+                selectedView = CalendarViewMode.Day,
+                isLandscape = false,
+            ),
+        )
+        assertEquals(
+            CalendarViewMode.Month,
+            calendarViewModeForOrientation(
+                selectedView = CalendarViewMode.Month,
+                isLandscape = true,
+            ),
+        )
+    }
+
+    @Test
     fun weekVisibleRangeStartsOnPreferredWeekdayAndContainsSevenDays() {
         val range = visibleRangeFor(
             date = timelineAnchorDate(

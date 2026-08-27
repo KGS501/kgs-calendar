@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TaskMutationCoordinatorTest {
-    private val statusWrites = mutableListOf<Pair<String, String>>()
+    private val statusWrites = mutableListOf<Triple<String, String, CalendarOccurrenceId.Task?>>()
     private val cancelledOccurrences = mutableListOf<CalendarOccurrenceId.Task>()
     private val cancelledResources = mutableListOf<String>()
     private var pushCount = 0
@@ -25,7 +25,9 @@ class TaskMutationCoordinatorTest {
     }
 
     private val coordinator = TaskMutationCoordinator(
-        persistStatus = { resourceHref, status -> statusWrites += resourceHref to status },
+        persistStatus = { resourceHref, status, occurrenceId ->
+            statusWrites += Triple(resourceHref, status, occurrenceId)
+        },
         pushPendingChanges = { pushCount++ },
         notificationReconciler = reconciler,
         rescheduleReminders = { rescheduleCount++ },
@@ -39,7 +41,10 @@ class TaskMutationCoordinatorTest {
         coordinator.setStatus("tasks/42.ics", "CANCELLED")
 
         assertEquals(
-            listOf("tasks/42.ics" to "COMPLETED", "tasks/42.ics" to "CANCELLED"),
+            listOf(
+                Triple("tasks/42.ics", "COMPLETED", null),
+                Triple("tasks/42.ics", "CANCELLED", null),
+            ),
             statusWrites,
         )
         assertEquals(listOf("tasks/42.ics", "tasks/42.ics"), cancelledResources)
@@ -54,6 +59,7 @@ class TaskMutationCoordinatorTest {
 
         coordinator.setStatus("tasks/42.ics", "COMPLETED", occurrence)
 
+        assertEquals(listOf(Triple("tasks/42.ics", "COMPLETED", occurrence)), statusWrites)
         assertEquals(listOf(occurrence), cancelledOccurrences)
         assertTrue(cancelledResources.isEmpty())
     }

@@ -522,7 +522,7 @@ private fun TaskDetailHeaderCard(
     hiddenCollectionHrefs: Set<String>,
     readOnlySource: Boolean,
     burstKey: Int,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onEditTask: (TaskEntity) -> Unit,
     onDuplicateTask: (TaskEntity) -> Unit,
     onCopyTaskTo: (TaskEntity, String) -> Unit,
@@ -585,7 +585,7 @@ private fun TaskDetailHeaderCard(
                 TaskStatusCheckbox(
                     status = task.effectiveStatus(),
                     tint = contentColor,
-                    onStatusChange = { onTaskStatusChanged(task.resourceHref, it) },
+                    onStatusChange = { onTaskStatusChanged(task, it) },
                     boxSize = checkboxBoxSize,
                     iconSize = checkboxIconSize,
                 )
@@ -704,7 +704,7 @@ internal fun DetailSheetContent(
     allTasks: List<TaskEntity>,
     taskMorphGeneration: Int,
     taskMorphSourceHref: String?,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskPriorityChanged: (String, Int) -> Unit,
     onTaskProgressChanged: (String, Int) -> Unit,
     onEventParticipationChanged: (String, String) -> Unit,
@@ -1072,6 +1072,7 @@ private fun SyncIssueDetailBanner(syncError: String) {
 }
 
 internal data class TaskHierarchyEntry(
+    val identityKey: String,
     val task: TaskEntity,
     val depth: Int,
     val hasChildren: Boolean,
@@ -1102,13 +1103,17 @@ internal fun rememberTaskHierarchyPresentation(
     tasks: List<TaskEntity>,
     expandedByDefault: Boolean,
     defaultExpandedResourceHrefs: Set<String> = emptySet(),
+    distinguishOccurrences: Boolean = false,
 ): TaskHierarchyPresentation {
-    val expansionOverrides = remember(tasks.map { it.resourceHref }.toSet(), expandedByDefault, defaultExpandedResourceHrefs) {
+    fun identity(task: TaskEntity): String =
+        if (distinguishOccurrences) task.smoothRemovalKey() else task.resourceHref
+
+    val expansionOverrides = remember(tasks.map(::identity).toSet(), expandedByDefault, defaultExpandedResourceHrefs) {
         mutableStateMapOf<String, Boolean>()
     }
     val entries = remember(tasks, expandedByDefault, defaultExpandedResourceHrefs, expansionOverrides.toMap()) {
-        val distinctTasks = tasks.distinctBy { it.resourceHref }
-        val position = distinctTasks.withIndex().associate { it.value.resourceHref to it.index }
+        val distinctTasks = tasks.distinctBy(::identity)
+        val position = distinctTasks.withIndex().associate { identity(it.value) to it.index }
         val byCollectionUid = distinctTasks.associateBy { it.collectionHref to it.uid }
         val globallyUniqueByUid = distinctTasks.groupBy { it.uid }
             .filterValues { it.size == 1 }
@@ -1119,19 +1124,19 @@ internal fun rememberTaskHierarchyPresentation(
             return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
         }
 
-        val parentByResource = distinctTasks.associate { task ->
+        val parentByIdentity = distinctTasks.associate { task ->
             var parent = candidateParent(task)
-            val seen = mutableSetOf(task.resourceHref)
-            while (parent != null && seen.add(parent.resourceHref)) {
+            val seen = mutableSetOf(identity(task))
+            while (parent != null && seen.add(identity(parent))) {
                 parent = candidateParent(parent)
             }
-            task.resourceHref to if (parent == null) candidateParent(task) else null
+            identity(task) to if (parent == null) candidateParent(task) else null
         }
         val childrenByParent = distinctTasks
-            .mapNotNull { child -> parentByResource[child.resourceHref]?.resourceHref?.let { it to child } }
+            .mapNotNull { child -> parentByIdentity[identity(child)]?.let { identity(it) to child } }
             .groupBy({ it.first }, { it.second })
-            .mapValues { (_, children) -> children.sortedBy { position[it.resourceHref] } }
-        val roots = distinctTasks.filter { parentByResource[it.resourceHref] == null }
+            .mapValues { (_, children) -> children.sortedBy { position[identity(it)] } }
+        val roots = distinctTasks.filter { parentByIdentity[identity(it)] == null }
         val out = mutableListOf<TaskHierarchyEntry>()
         val emitted = mutableSetOf<String>()
 
@@ -1142,11 +1147,13 @@ internal fun rememberTaskHierarchyPresentation(
             continuationLevels: Set<Int>,
             lastSibling: Boolean,
         ) {
-            if (!emitted.add(task.resourceHref)) return
-            val children = childrenByParent[task.resourceHref].orEmpty()
-            val expanded = expansionOverrides[task.resourceHref]
+            val taskIdentity = identity(task)
+            if (!emitted.add(taskIdentity)) return
+            val children = childrenByParent[taskIdentity].orEmpty()
+            val expanded = expansionOverrides[taskIdentity]
                 ?: if (task.resourceHref in defaultExpandedResourceHrefs) true else expandedByDefault
             out += TaskHierarchyEntry(
+                identityKey = taskIdentity,
                 task = task,
                 depth = depth,
                 hasChildren = children.isNotEmpty(),
@@ -1176,7 +1183,7 @@ internal fun rememberTaskHierarchyPresentation(
                 lastSibling = index == roots.lastIndex,
             )
         }
-        distinctTasks.filterNot { it.resourceHref in emitted }.forEach {
+        distinctTasks.filterNot { identity(it) in emitted }.forEach {
             append(it, 0, visible = true, continuationLevels = emptySet(), lastSibling = true)
         }
         out
@@ -1184,9 +1191,10 @@ internal fun rememberTaskHierarchyPresentation(
     return TaskHierarchyPresentation(
         entries = entries,
         toggle = { task ->
-            val current = expansionOverrides[task.resourceHref]
+            val taskIdentity = identity(task)
+            val current = expansionOverrides[taskIdentity]
                 ?: if (task.resourceHref in defaultExpandedResourceHrefs) true else expandedByDefault
-            expansionOverrides[task.resourceHref] = !current
+            expansionOverrides[taskIdentity] = !current
         },
     )
 }
@@ -1298,7 +1306,7 @@ internal fun AnimatedTaskHierarchyEntry(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val visibilityState = remember(entry.task.resourceHref) {
+    val visibilityState = remember(entry.identityKey) {
         MutableTransitionState(entry.visible)
     }
     visibilityState.targetState = entry.visible

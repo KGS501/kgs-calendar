@@ -46,6 +46,35 @@ Run debug unit tests:
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
+## Publish To Google Play Internal Testing
+
+Publishing runs locally from this machine; it does not use GitHub Actions. Complete the one-time
+credential and upload-key setup with the interactive wizard:
+
+```bash
+bash tools/setup_google_play_publishing.sh
+```
+
+The wizard stores the service-account key, upload keystore, and signing configuration under
+`~/.config/kgs-calendar/` with owner-only permissions. Nothing secret is written to this repository.
+If the original upload key is unavailable, the wizard can generate a replacement certificate and
+walk through requesting an upload-key reset in Play Console.
+
+Verify the signed build and Google Play access without uploading anything:
+
+```bash
+python3 tools/play_publisher.py verify
+```
+
+Build, test, and publish a completed release to the `internal` track:
+
+```bash
+python3 tools/play_publisher.py publish --release-notes "Your release notes" --yes
+```
+
+To publish an already-built signed bundle instead, pass `--aab /path/to/app-release.aab`. Each real
+release requires an explicit `--yes`, and publishing refuses to cancel changes already under review.
+
 Connected Android tests and widget rendering checks require an attached device or emulator:
 
 ```powershell

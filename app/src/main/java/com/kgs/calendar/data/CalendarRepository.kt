@@ -17,6 +17,8 @@ import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import com.kgs.calendar.data.recurrence.TaskRecurrenceExpander
+import com.kgs.calendar.data.search.CalendarOccurrenceSearch
+import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.CalDavAccountDiscovery
@@ -35,7 +37,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
@@ -68,6 +74,7 @@ class CalendarRepository(
     private val recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
 ) {
     private val taskRecurrenceExpander = TaskRecurrenceExpander(recurrenceExpander)
+    private val occurrenceSearch = CalendarOccurrenceSearch(zoneId)
     private val readOnlyHttpClient = OkHttpClient()
     private val androidProviderSyncMutex = Mutex()
     private val remoteSyncMutex = Mutex()
@@ -101,11 +108,45 @@ class CalendarRepository(
         return (simple + expanded).sortedBy { it.startsAtMillis }
     }
 
-    fun searchEvents(query: String): Flow<List<EventEntity>> =
-        database.eventDao().search(query)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun searchEvents(
+        query: String,
+        mode: CalendarSearchMode,
+        rangeStartMillis: Long,
+        rangeEndMillis: Long,
+    ): Flow<List<EventEntity>> = database.eventDao().observeSearchCandidates()
+        .mapLatest { masters ->
+            val coroutineContext = currentCoroutineContext()
+            occurrenceSearch.events(
+                masters = masters,
+                query = query,
+                mode = mode,
+                rangeStartMillis = rangeStartMillis,
+                rangeEndMillis = rangeEndMillis,
+                cancellationCheck = { coroutineContext.ensureActive() },
+            )
+        }
+        .flowOn(Dispatchers.Default)
 
-    fun searchTasks(query: String): Flow<List<TaskEntity>> =
-        database.taskDao().search(query)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun searchTasks(
+        query: String,
+        mode: CalendarSearchMode,
+        rangeStartMillis: Long,
+        rangeEndMillis: Long,
+    ): Flow<List<TaskEntity>> = database.taskDao().observeSearchCandidates()
+        .mapLatest { masters ->
+            val coroutineContext = currentCoroutineContext()
+            occurrenceSearch.tasks(
+                masters = masters,
+                query = query,
+                mode = mode,
+                rangeStartMillis = rangeStartMillis,
+                rangeEndMillis = rangeEndMillis,
+                cancellationCheck = { coroutineContext.ensureActive() },
+            )
+        }
+        .flowOn(Dispatchers.Default)
 
     fun observeDatedTasks(startMillis: Long, endMillis: Long): Flow<List<TaskEntity>> =
         combine(
@@ -133,7 +174,21 @@ class CalendarRepository(
 
     suspend fun allTasksSnapshot(): List<TaskEntity> = database.taskDao().all()
 
-    fun observeCompletedTasks(): Flow<List<TaskEntity>> = database.taskDao().observeCompleted()
+    fun observeCompletedTasks(): Flow<List<TaskEntity>> =
+        combine(
+            database.taskDao().observeCompleted(),
+            database.taskDao().observeRecurringMasters(Long.MAX_VALUE),
+        ) { storedTasks, recurringMasters ->
+            (storedTasks + recurringMasters.flatMap(taskRecurrenceExpander::inactiveOverrides))
+                .distinctBy { task ->
+                    Triple(
+                        task.resourceHref,
+                        task.startAtMillis ?: task.dueAtMillis,
+                        task.completedAtMillis,
+                    )
+                }
+                .sortedByDescending { it.completedAtMillis ?: it.dueAtMillis ?: it.startAtMillis ?: Long.MIN_VALUE }
+        }.flowOn(Dispatchers.Default)
 
     fun observePendingMutationCount(): Flow<Int> = database.pendingMutationDao().observeCount()
 
@@ -156,10 +211,7 @@ class CalendarRepository(
         saveAccount(normalizeServer(serverUrl), username.trim(), appPassword)
 
     suspend fun addReadOnlyCalendar(url: String, displayName: String? = null): AccountEntity {
-        val normalizedUrl = url.trim()
-        require(normalizedUrl.startsWith("http://", ignoreCase = true) || normalizedUrl.startsWith("https://", ignoreCase = true)) {
-            "Bitte eine http(s)-URL eingeben."
-        }
+        val normalizedUrl = normalizeReadOnlyCalendarUrl(url)
         val account = AccountEntity(
             id = readOnlyAccountId(normalizedUrl),
             serverUrl = normalizedUrl,
@@ -1072,6 +1124,53 @@ class CalendarRepository(
         upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
         database.taskDao().upsert(updated)
         enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
+    }
+
+    /** Updates one generated occurrence without changing the recurring task master. */
+    suspend fun setTaskOccurrenceStatus(resourceHref: String, occurrenceStartMillis: Long, status: String) {
+        val existing = database.taskDao().byResource(resourceHref) ?: return
+        if (existing.recurrenceRule.isNullOrBlank() && existing.rDatesCsv.isNullOrBlank()) {
+            setTaskStatus(resourceHref, status)
+            return
+        }
+        if (isReadOnlyCollectionHref(existing.collectionHref)) return
+
+        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return
+        val shift = occurrenceStartMillis - recurrenceAnchor
+        val generatedOccurrence = existing.copy(
+            startAtMillis = existing.startAtMillis?.plus(shift),
+            dueAtMillis = existing.dueAtMillis?.plus(shift),
+        )
+        val occurrence = RecurrenceOverrideCodec.decodeTasks(existing.recurrenceOverridesJson)
+            .firstOrNull { it.recurrenceIdMillis == occurrenceStartMillis }
+            ?.applyTo(generatedOccurrence)
+            ?: generatedOccurrence
+        val completed = status.equals("COMPLETED", ignoreCase = true)
+        val updatedOccurrence = occurrence.copy(
+            isCompleted = completed,
+            completedAtMillis = when {
+                completed && occurrence.completedAtMillis != null -> occurrence.completedAtMillis
+                completed -> Instant.now().toEpochMilli()
+                else -> null
+            },
+            status = status.uppercase(),
+            recurrenceRule = null,
+            exDatesCsv = null,
+            rDatesCsv = null,
+            recurrenceOverridesJson = null,
+        ).withValidIcalSchedule()
+        val resource = database.resourceDao().get(existing.resourceHref)
+        val updatedMaster = existing.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.upsertTask(
+                existing.recurrenceOverridesJson,
+                TaskRecurrenceOverride.fromTask(occurrenceStartMillis, updatedOccurrence),
+            ),
+            sequence = existing.sequence + 1,
+        ).withValidIcalSchedule()
+        val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
+        upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
+        database.taskDao().upsert(updatedMaster)
+        enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
     }
 
     suspend fun setTaskPriority(uid: String, priority: Int) {

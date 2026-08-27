@@ -8,16 +8,29 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Release signing is read from keystore.properties at the repo root (gitignored). When the file
-// is absent (CI, a fresh clone, other contributors) the release build simply stays unsigned
-// instead of failing to configure.
+// Release signing comes from the local publishing environment or keystore.properties at the repo
+// root (gitignored). When neither is present, the release build simply stays unsigned instead of
+// failing to configure.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) {
         keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseSigning = keystorePropertiesFile.exists()
+val environmentReleaseSigning = mapOf(
+    "storeFile" to System.getenv("KGS_RELEASE_STORE_FILE"),
+    "storePassword" to System.getenv("KGS_RELEASE_STORE_PASSWORD"),
+    "keyAlias" to System.getenv("KGS_RELEASE_KEY_ALIAS"),
+    "keyPassword" to System.getenv("KGS_RELEASE_KEY_PASSWORD"),
+)
+val hasEnvironmentReleaseSigning = environmentReleaseSigning.values.all { !it.isNullOrBlank() }
+val hasReleaseSigning = keystorePropertiesFile.exists() || hasEnvironmentReleaseSigning
+
+fun releaseSigningValue(propertyName: String): String =
+    environmentReleaseSigning[propertyName]
+        ?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)
+        ?: error("Missing release signing value: $propertyName")
 
 android {
     namespace = "com.kgs.calendar"
@@ -27,8 +40,8 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "V.1.3.6"
+        versionCode = 27
+        versionName = "V.1.3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -37,10 +50,10 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(releaseSigningValue("storeFile"))
+                storePassword = releaseSigningValue("storePassword")
+                keyAlias = releaseSigningValue("keyAlias")
+                keyPassword = releaseSigningValue("keyPassword")
             }
         }
     }

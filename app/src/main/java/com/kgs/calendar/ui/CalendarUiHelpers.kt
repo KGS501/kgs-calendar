@@ -737,6 +737,9 @@ internal fun TaskEntity.displayProgress(): Int =
         else -> 0
     }
 
+internal fun TaskEntity.cardTextDecoration(): TextDecoration? =
+    if (effectiveStatus() == "CANCELLED") TextDecoration.LineThrough else null
+
 internal fun taskPriorityIntensity(priority: Int?): Float {
     val value = priority?.coerceIn(1, 9) ?: 9
     return ((9 - value) / 8f).coerceIn(0f, 1f)
@@ -933,15 +936,26 @@ internal fun <T> rememberSmoothRemoval(
     items: List<T>,
     itemKey: (T) -> String,
     resourceHref: (T) -> String,
-    retainRemoved: (T) -> Boolean,
+    retainedResourceHrefs: Set<String>,
 ): SmoothRemovalResult<T> {
     val scope = rememberCoroutineScope()
     val exitingItems = remember { mutableStateMapOf<String, T>() }
     var previousItems by remember { mutableStateOf<Map<String, T>>(emptyMap()) }
-    val currentByKey = remember(items) { items.associateBy(itemKey) }
+    if (retainedResourceHrefs.isEmpty()) {
+        SideEffect {
+            exitingItems.clear()
+            previousItems = emptyMap()
+        }
+        return SmoothRemovalResult(items = items, exitingResourceHrefs = emptySet())
+    }
+    val currentByKey = remember(items, retainedResourceHrefs) {
+        items.asSequence()
+            .filter { resourceHref(it) in retainedResourceHrefs }
+            .associateBy(itemKey)
+    }
     val removedNow = previousItems
         .filterKeys { it !in currentByKey.keys }
-        .filterValues(retainRemoved)
+        .filterValues { resourceHref(it) in retainedResourceHrefs }
     val exitingSnapshot = (exitingItems + removedNow).filterKeys { it !in currentByKey.keys }
 
     SideEffect {

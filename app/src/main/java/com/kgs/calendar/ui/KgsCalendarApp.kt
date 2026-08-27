@@ -449,6 +449,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
     }
     val baseContext = LocalContext.current
     val configuration = LocalConfiguration.current
+    LaunchedEffect(configuration.orientation) {
+        viewModel.setDeviceOrientation(
+            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
+        )
+    }
     val appLocale = remember(state.languageMode, configuration) {
         state.languageMode.resolveLocale(baseContext)
     }
@@ -494,6 +499,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var detailTaskMorphGeneration by remember { mutableStateOf(0) }
         var detailTaskMorphSourceHref by remember { mutableStateOf<String?>(null) }
         var searchOpen by remember { mutableStateOf(false) }
+        val searchScope = rememberCoroutineScope()
         var drawerOpen by remember { mutableStateOf(false) }
         var taskDrawerOpen by remember { mutableStateOf(false) }
         var completedTasksOpen by remember { mutableStateOf(false) }
@@ -542,13 +548,48 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             }
         }
         val retainedDeleteHrefs = deleteFadeResourceHrefs.keys.toSet() + pendingDeleteHrefs
-        val smoothEvents = rememberSmoothRemoval(state.events, EventEntity::smoothRemovalKey, EventEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothSearchEvents = rememberSmoothRemoval(state.searchResults, EventEntity::smoothRemovalKey, EventEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothDatedTasks = rememberSmoothRemoval(state.datedTasks, TaskEntity::smoothRemovalKey, TaskEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothInboxTasks = rememberSmoothRemoval(state.inboxTasks, TaskEntity::smoothRemovalKey, TaskEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothScheduledOpenTasks = rememberSmoothRemoval(state.scheduledOpenTasks, TaskEntity::smoothRemovalKey, TaskEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothCompletedTasks = rememberSmoothRemoval(state.completedTasks, TaskEntity::smoothRemovalKey, TaskEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
-        val smoothSearchTasks = rememberSmoothRemoval(state.searchTaskResults, TaskEntity::smoothRemovalKey, TaskEntity::resourceHref) { it.resourceHref in retainedDeleteHrefs }
+        val smoothEvents = rememberSmoothRemoval(
+            state.events,
+            EventEntity::smoothRemovalKey,
+            EventEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothSearchEvents = rememberSmoothRemoval(
+            state.searchResults,
+            { "${it.resourceHref}:${it.occurrenceStartForEdit()}" },
+            EventEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothDatedTasks = rememberSmoothRemoval(
+            state.datedTasks,
+            TaskEntity::smoothRemovalKey,
+            TaskEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothInboxTasks = rememberSmoothRemoval(
+            state.inboxTasks,
+            TaskEntity::smoothRemovalKey,
+            TaskEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothScheduledOpenTasks = rememberSmoothRemoval(
+            state.scheduledOpenTasks,
+            TaskEntity::smoothRemovalKey,
+            TaskEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothCompletedTasks = rememberSmoothRemoval(
+            state.completedTasks,
+            TaskEntity::smoothRemovalKey,
+            TaskEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
+        val smoothSearchTasks = rememberSmoothRemoval(
+            state.searchTaskResults,
+            { "${it.resourceHref}:${it.occurrenceStartForEdit()}" },
+            TaskEntity::resourceHref,
+            retainedDeleteHrefs,
+        )
         val renderState = state.copy(
             events = smoothEvents.items,
             searchResults = smoothSearchEvents.items,
@@ -585,13 +626,19 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         // through the view history (e.g. Day -> Month -> Multiple days), and only let the system
         // close the app when there is nothing left to go back to.
         val viewHistory = remember { mutableStateListOf<CalendarViewMode>() }
-        var lastSelectedView by remember { mutableStateOf(state.selectedView) }
-        var poppingViewBack by remember { mutableStateOf(false) }
-        LaunchedEffect(state.selectedView) {
-            if (state.selectedView != lastSelectedView) {
-                if (!poppingViewBack) viewHistory.add(lastSelectedView)
-                poppingViewBack = false
-                lastSelectedView = state.selectedView
+        fun selectCalendarView(viewMode: CalendarViewMode) {
+            if (viewMode != state.selectedView) {
+                if (viewHistory.lastOrNull() != state.selectedView) {
+                    viewHistory.add(state.selectedView)
+                }
+                viewModel.selectView(viewMode)
+            }
+        }
+        fun closeSearch() {
+            searchOpen = false
+            searchScope.launch {
+                delay(MotionMedium.toLong())
+                if (!searchOpen) viewModel.setSearchQuery("")
             }
         }
         val anyOverlayOpen = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
@@ -611,17 +658,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 }
                 creationSheet != null -> creationSheet = null
                 editingCollection != null -> editingCollection = null
-                searchOpen -> {
-                    searchOpen = false
-                    viewModel.setSearchQuery("")
-                }
+                searchOpen -> closeSearch()
                 taskDrawerOpen -> taskDrawerOpen = false
                 drawerOpen -> drawerOpen = false
                 completedTasksOpen -> completedTasksOpen = false
                 problemsOpen -> problemsOpen = false
                 settingsOpen -> settingsOpen = false
                 viewHistory.isNotEmpty() -> {
-                    poppingViewBack = true
                     viewModel.selectView(viewHistory.removeAt(viewHistory.lastIndex))
                 }
             }
@@ -905,8 +948,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             drawerOpen = true
                         },
                         onDateSelected = viewModel::selectDate,
-                        onViewSelected = viewModel::selectView,
+                        onViewSelected = ::selectCalendarView,
                         onMultiDayCountChanged = viewModel::setMultiDayCount,
+                        onTimelineHourHeightChanged = viewModel::setTimelineHourHeight,
                         onToday = viewModel::today,
                         onSearch = {
                             drawerOpen = false
@@ -1002,6 +1046,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onDetail = { detailSheet = it },
                         overdueTasksExpanded = overdueTasksExpanded,
                         onOverdueTasksExpandedChange = { overdueTasksExpanded = it },
+                        onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
+                        onLoadLaterAgenda = viewModel::loadLaterAgenda,
+                        timelineViewportMemory = viewModel.timelineViewportMemory,
                     )
                 }
                 AnimatedVisibility(
@@ -1037,7 +1084,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     state = renderState,
                     onDismiss = { drawerOpen = false },
                     onViewSelected = {
-                        viewModel.selectView(it)
+                        selectCalendarView(it)
                         drawerOpen = false
                     },
                     onSync = {
@@ -1075,12 +1122,16 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 CalendarSearchOverlay(
                     visible = searchOpen,
                     query = renderState.searchQuery,
+                    searchMode = renderState.searchMode,
                     results = renderState.searchResults,
                     taskResults = renderState.searchTaskResults,
                     allTasksForHierarchy = renderState.allTasks,
                     taskColorMode = renderState.taskColorMode,
                     subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
                     onQueryChange = viewModel::setSearchQuery,
+                    onSearchModeChange = viewModel::setSearchMode,
+                    onLoadEarlierOccurrences = viewModel::loadEarlierSearchOccurrences,
+                    onLoadLaterOccurrences = viewModel::loadLaterSearchOccurrences,
                     onTaskStatusChanged = viewModel::setTaskStatus,
                     onEventClick = {
                         detailSheet = DetailSheet.Event(it)
@@ -1090,10 +1141,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailTaskMorphSourceHref = null
                         detailSheet = DetailSheet.Task(it)
                     },
-                    onClose = {
-                        searchOpen = false
-                        viewModel.setSearchQuery("")
-                    },
+                    onClose = ::closeSearch,
+                    showCalendarWeeks = renderState.showCalendarWeeks,
+                    firstDayOfWeek = renderState.firstDayOfWeek,
                 )
             }
             }
@@ -1455,7 +1505,16 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         ?: sameResource.firstOrNull()
                     refreshed?.let { DetailSheet.Event(it) } ?: detail
                 }
-                is DetailSheet.Task -> renderState.allTasks.firstOrNull { it.resourceHref == detail.task.resourceHref }?.let { DetailSheet.Task(it) } ?: detail
+                is DetailSheet.Task -> {
+                    val occurrenceStart = detail.task.occurrenceStartForEdit()
+                    val refreshed = renderState.datedTasks.firstOrNull {
+                        it.resourceHref == detail.task.resourceHref && it.occurrenceStartForEdit() == occurrenceStart
+                    } ?: renderState.allTasks.firstOrNull {
+                        it.resourceHref == detail.task.resourceHref &&
+                            (detail.task.recurrenceRule.isNullOrBlank() || it.occurrenceStartForEdit() == occurrenceStart)
+                    }
+                    refreshed?.let { DetailSheet.Task(it) } ?: detail
+                }
             }
             KgsModalBottomSheet(
                 onDismissRequest = {
@@ -1643,12 +1702,14 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onAutoLoadMapPreviewsChanged = viewModel::setAutoLoadMapPreviews,
                 onMaxVisibleAllDayItemsChanged = viewModel::setMaxVisibleAllDayItems,
                 onMultiDaySidebarControlsChanged = viewModel::setMultiDaySidebarControlsEnabled,
-                onMultiDayCountChanged = viewModel::setMultiDayCount,
+                onPortraitMultiDayCountChanged = viewModel::setPortraitMultiDayCount,
+                onLandscapeMultiDayCountChanged = viewModel::setLandscapeMultiDayCount,
                 onWeekViewEnabledChanged = viewModel::setWeekViewEnabled,
                 onFullWeekSwipeEnabledChanged = viewModel::setFullWeekSwipeEnabled,
                 onFocusTitleOnCreateChanged = viewModel::setFocusTitleOnCreate,
                 onFirstDayOfWeekSelected = viewModel::setFirstDayOfWeek,
                 onShowCompletedTasksChanged = viewModel::setShowCompletedTasksInCalendar,
+                onShowCalendarWeeksChanged = viewModel::setShowCalendarWeeks,
                 onDefaultEventDurationChanged = viewModel::setDefaultEventDurationMinutes,
                 onDefaultTaskHasDateChanged = viewModel::setDefaultTaskHasDate,
                 onDefaultTaskHasTimeChanged = viewModel::setDefaultTaskHasTime,
@@ -2101,7 +2162,7 @@ internal val MorphRoundedClip: SharedTransitionScope.OverlayClip =
 
 
 @Composable
-private fun CreateFabMenu(
+internal fun CreateFabMenu(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onCreateTask: () -> Unit,
@@ -2128,6 +2189,16 @@ private fun CreateFabMenu(
         targetValue = if (expanded) 16.dp else 12.dp,
         animationSpec = tween(MotionMedium, easing = MotionStandard),
         label = "fabElevation",
+    )
+    val fabIconRotation by animateFloatAsState(
+        targetValue = if (expanded) 45f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "fabIconRotation",
+    )
+    val fabIconScale by animateFloatAsState(
+        targetValue = if (expanded) 32f / 34f else 1f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "fabIconScale",
     )
     val overlayProgress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
@@ -2199,26 +2270,21 @@ private fun CreateFabMenu(
                 .clickable { onExpandedChange(!expanded) },
             contentAlignment = Alignment.Center,
         ) {
-            AnimatedContent(
-                targetState = expanded,
-                transitionSpec = {
-                    (scaleIn(initialScale = 0.75f, animationSpec = tween(MotionShort, easing = MotionStandard)) +
-                        fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard))) togetherWith
-                        (scaleOut(targetScale = 0.75f, animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) +
-                            fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)))
-                },
-                label = "fabIcon",
-            ) { isExpanded ->
-                // Tint must contrast the FAB's own background, which is a light accent container
-                // in BOTH light and dark mode — so a light WarmInk icon vanished in dark mode.
-                val iconBackground = if (isExpanded) WarmBrown else accentContainerColor()
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.Close else Icons.Default.Add,
-                    contentDescription = if (isExpanded) stringResource(R.string.close) else stringResource(R.string.create),
-                    tint = if (iconBackground.isDark()) Color.White else Color(0xFF1C1A18),
-                    modifier = Modifier.size(if (isExpanded) 32.dp else 34.dp),
-                )
-            }
+            // A plus rotated by 45 degrees is the close glyph. Keeping one vector alive makes the
+            // icon, corner radius, size, colour and elevation read as one continuous FAB morph.
+            val iconBackground = if (expanded) WarmBrown else accentContainerColor()
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = if (expanded) stringResource(R.string.close) else stringResource(R.string.create),
+                tint = if (iconBackground.isDark()) Color.White else Color(0xFF1C1A18),
+                modifier = Modifier
+                    .size(34.dp)
+                    .graphicsLayer {
+                        rotationZ = fabIconRotation
+                        scaleX = fabIconScale
+                        scaleY = fabIconScale
+                    },
+            )
         }
     }
 }

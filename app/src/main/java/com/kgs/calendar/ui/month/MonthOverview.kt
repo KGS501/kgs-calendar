@@ -66,7 +66,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -387,7 +386,11 @@ import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthGestureAxis
 import com.kgs.calendar.ui.month.MonthOverviewGestureReducer
 import com.kgs.calendar.ui.month.MonthOverviewGestureState
+import com.kgs.calendar.ui.month.MonthOverviewPresentation
 import com.kgs.calendar.ui.month.MonthSettleTarget
+import com.kgs.calendar.ui.month.MonthStripAxis
+import com.kgs.calendar.ui.month.monthOverviewDayChrome
+import com.kgs.calendar.ui.month.monthOverviewPresentation
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
@@ -439,6 +442,9 @@ internal fun MonthOverview(
     month: YearMonth,
     state: CalendarUiState,
     firstDayOfWeek: DayOfWeek,
+    isLandscape: Boolean = false,
+    onVerticalDismissDrag: ((Float) -> Unit)? = null,
+    onVerticalDismissEnd: (() -> Unit)? = null,
     onDaySelected: (LocalDate) -> Unit,
     onMonthSelected: (YearMonth) -> Unit,
 ) {
@@ -490,21 +496,10 @@ internal fun MonthOverview(
         dragX.snapTo(0f)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .zIndex(25f)
-            .background(MaterialTheme.colorScheme.background)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
-            )
-            .padding(top = 8.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    val presentation = monthOverviewPresentation(isLandscape)
+    val gridContent: @Composable (Modifier) -> Unit = { gridModifier ->
         Column(
-            modifier = Modifier
+            modifier = gridModifier
                 .testTag("month-overview-grid")
                 .pointerInput(monthViewportWidthPx) {
                     detectDragGestures(
@@ -548,10 +543,13 @@ internal fun MonthOverview(
                                             .coerceIn(-monthViewportWidthPx, monthViewportWidthPx),
                                     )
                                 }
+                            } else if (gestureState.axis == MonthGestureAxis.Vertical) {
+                                onVerticalDismissDrag?.invoke(dragAmount.y)
                             }
                         },
                         onDragEnd = {
                             if (gestureState.axis == MonthGestureAxis.Vertical) {
+                                onVerticalDismissEnd?.invoke()
                                 interruptedSettle = null
                                 monthGestureMoved = false
                                 settleJob = scope.launch {
@@ -595,6 +593,9 @@ internal fun MonthOverview(
                             }
                         },
                         onDragCancel = {
+                            if (gestureState.axis == MonthGestureAxis.Vertical) {
+                                onVerticalDismissEnd?.invoke()
+                            }
                             interruptedSettle = null
                             monthGestureMoved = false
                             settleJob = scope.launch {
@@ -610,6 +611,17 @@ internal fun MonthOverview(
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                if (state.showCalendarWeeks) {
+                    Text(
+                        text = stringResource(R.string.calendar_week_abbreviation),
+                        modifier = Modifier.width(34.dp),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 weekHeaderLabels(firstDayOfWeek, locale).forEach { label ->
                     Text(
                         text = label,
@@ -653,6 +665,7 @@ internal fun MonthOverview(
                                 state.taskColorMode,
                             ),
                             firstDayOfWeek = firstDayOfWeek,
+                            showCalendarWeeks = state.showCalendarWeeks,
                             selectedStart = state.selectedDate,
                             daysEnabled = !monthGestureMoved &&
                                 abs(dragX.value) < 1f &&
@@ -663,12 +676,54 @@ internal fun MonthOverview(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        MonthStrip(
-            month = month,
-            formatter = monthFormatter,
-            onMonthSelected = onMonthSelected,
-        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(25f)
+            .background(MaterialTheme.colorScheme.background)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+            )
+            .padding(top = 8.dp, bottom = 8.dp),
+    ) {
+        when (presentation) {
+            MonthOverviewPresentation.Stacked -> Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                gridContent(Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                MonthStrip(
+                    month = month,
+                    formatter = monthFormatter,
+                    axis = presentation.monthStripAxis,
+                    onMonthSelected = onMonthSelected,
+                )
+            }
+
+            MonthOverviewPresentation.SideBySide -> Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                gridContent(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                )
+                MonthStrip(
+                    month = month,
+                    formatter = monthFormatter,
+                    axis = presentation.monthStripAxis,
+                    onMonthSelected = onMonthSelected,
+                    modifier = Modifier
+                        .width(218.dp)
+                        .fillMaxHeight(),
+                )
+            }
+        }
     }
 }
 
@@ -677,6 +732,7 @@ private fun MonthGrid(
     month: YearMonth,
     markersByDay: Map<LocalDate, MonthDayMarkers>,
     firstDayOfWeek: DayOfWeek,
+    showCalendarWeeks: Boolean,
     selectedStart: LocalDate,
     daysEnabled: Boolean = true,
     onDaySelected: (LocalDate) -> Unit,
@@ -684,6 +740,9 @@ private fun MonthGrid(
     val firstDay = month.atDay(1)
     val leadingEmptyDays = firstDay.leadingDaysFrom(firstDayOfWeek)
     val rowCount = month.monthGridRowCount(firstDayOfWeek)
+    val calendarWeekRows = remember(month, firstDayOfWeek) {
+        monthCalendarWeekRows(month, firstDayOfWeek)
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -692,6 +751,17 @@ private fun MonthGrid(
     ) {
         repeat(rowCount) { row ->
             Row(Modifier.fillMaxWidth()) {
+                if (showCalendarWeeks) {
+                    Box(
+                        modifier = Modifier.width(34.dp).height(44.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CalendarWeekNumberPill(
+                            weekNumber = calendarWeekRows[row].weekNumber,
+                            backgroundColor = multiDayCountRailColor(),
+                        )
+                    }
+                }
                 repeat(7) { column ->
                     val dayIndex = row * 7 + column - leadingEmptyDays + 1
                     if (dayIndex in 1..month.lengthOfMonth()) {
@@ -748,8 +818,16 @@ private fun MonthDayCell(
                 .clip(CircleShape)
                 .background(background)
                 .then(
-                    if (isSelectedStart && !isToday) {
-                        Modifier.border(1.2.dp, WarmBrown.copy(alpha = 0.58f), CircleShape)
+                    if (
+                        isSelectedStart &&
+                        !isToday &&
+                        monthOverviewDayChrome.selectedDayBorderWidth > 0.dp
+                    ) {
+                        Modifier.border(
+                            monthOverviewDayChrome.selectedDayBorderWidth,
+                            WarmBrown.copy(alpha = 0.58f),
+                            CircleShape,
+                        )
                     } else {
                         Modifier
                     },
@@ -769,17 +847,21 @@ private fun MonthDayCell(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            colors.forEach { color ->
+            colors.forEachIndexed { index, color ->
                 Box(
                     Modifier
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(color),
+                        .background(color)
+                        .testTag("month-overview-dot-$day-$index"),
                 )
             }
             if (hasMore) {
                 Text(
                     "+",
+                    modifier = Modifier
+                        .offset { IntOffset(0, -1) }
+                        .testTag("month-overview-more-$day"),
                     color = WarmInk,
                     fontSize = 8.sp,
                     lineHeight = 8.sp,
@@ -794,7 +876,9 @@ private fun MonthDayCell(
 private fun MonthStrip(
     month: YearMonth,
     formatter: DateTimeFormatter,
+    axis: MonthStripAxis,
     onMonthSelected: (YearMonth) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val selectedPage = month.toMonthPage()
     val locale = LocalAppLocale.current
@@ -815,22 +899,67 @@ private fun MonthStrip(
         }
     }
 
-    LazyRow(
-        state = listState,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        contentPadding = PaddingValues(horizontal = 0.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .padding(top = 5.dp, bottom = 5.dp)
-            .horizontalEdgeFade(edgeWidth = 8.dp),
-    ) {
-        items(MonthStripPageCount, key = { it }) { page ->
-        val itemMonth = page.toMonth()
-        val selected = itemMonth == month
+    when (axis) {
+        MonthStripAxis.Horizontal -> LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            contentPadding = PaddingValues(horizontal = 0.dp),
+            modifier = modifier
+                .testTag("month-overview-strip")
+                .fillMaxWidth()
+                .height(44.dp)
+                .padding(top = 5.dp, bottom = 5.dp)
+                .horizontalEdgeFade(edgeWidth = 8.dp),
+        ) {
+            items(MonthStripPageCount, key = { it }) { page ->
+                val itemMonth = page.toMonth()
+                MonthStripItem(
+                    itemMonth = itemMonth,
+                    label = itemMonth.shortMonthLabel(formatter, locale),
+                    selected = itemMonth == month,
+                    axis = axis,
+                    onClick = { onMonthSelected(itemMonth) },
+                )
+            }
+        }
+
+        MonthStripAxis.Vertical -> LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            contentPadding = PaddingValues(
+                top = 2.dp,
+                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 2.dp,
+            ),
+            modifier = modifier
+                .testTag("month-overview-strip")
+                .padding(start = 6.dp, end = 86.dp),
+        ) {
+            items(MonthStripPageCount, key = { it }) { page ->
+                val itemMonth = page.toMonth()
+                MonthStripItem(
+                    itemMonth = itemMonth,
+                    label = itemMonth.shortMonthLabel(formatter, locale),
+                    selected = itemMonth == month,
+                    axis = axis,
+                    onClick = { onMonthSelected(itemMonth) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthStripItem(
+    itemMonth: YearMonth,
+    label: String,
+    selected: Boolean,
+    axis: MonthStripAxis,
+    onClick: () -> Unit,
+) {
+    val itemModifier = Modifier.testTag("month-overview-month-$itemMonth")
+    if (axis == MonthStripAxis.Horizontal) {
         Row(
-            modifier = Modifier
-                .height(34.dp),
+            modifier = itemModifier.height(34.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
         ) {
@@ -843,33 +972,63 @@ private fun MonthStrip(
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     softWrap = false,
-                    modifier = Modifier
-                        .padding(horizontal = 8.dp)
-                        .align(Alignment.CenterVertically),
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
-            Surface(
-                onClick = { onMonthSelected(itemMonth) },
-                modifier = Modifier.height(33.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-            ) {
-                Box(
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 3.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = itemMonth.shortMonthLabel(formatter, locale),
-                        color = WarmInk,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                }
-            }
+            MonthStripButton(label, selected, onClick)
         }
+    } else {
+        Column(
+            modifier = itemModifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (itemMonth.monthValue == 1) {
+                Text(
+                    itemMonth.year.toString(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
+            MonthStripButton(
+                label = label,
+                selected = selected,
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MonthStripButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(33.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = WarmInk,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
@@ -903,7 +1062,14 @@ internal fun YearStrip(
                 modifier = Modifier.height(36.dp),
                 shape = RoundedCornerShape(18.dp),
                 color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                border = BorderStroke(1.dp, if (selected) WarmBrown.copy(alpha = 0.42f) else WarmLine.copy(alpha = 0.62f)),
+                border = if (calendarInformationChrome.yearStripItemsHaveBorders) {
+                    androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (selected) WarmBrown.copy(alpha = 0.42f) else WarmLine.copy(alpha = 0.62f),
+                    )
+                } else {
+                    null
+                },
             ) {
                 Box(
                     modifier = Modifier.padding(horizontal = 13.dp),

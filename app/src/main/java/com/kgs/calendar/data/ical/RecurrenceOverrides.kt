@@ -96,6 +96,24 @@ data class TaskRecurrenceOverride(
     val remindersCsv: String?,
     val timezoneId: String?,
 ) {
+    fun matchesOccurrence(task: TaskEntity): Boolean =
+        title == task.title &&
+            notes == task.notes &&
+            location == task.location &&
+            url == task.url &&
+            categories == task.categories &&
+            dueAtMillis == task.dueAtMillis &&
+            dueHasTime == task.dueHasTime &&
+            startAtMillis == task.startAtMillis &&
+            startHasTime == task.startHasTime &&
+            completedAtMillis == task.completedAtMillis &&
+            isCompleted == task.isCompleted &&
+            status == task.status &&
+            priority == task.priority &&
+            percentComplete == task.percentComplete &&
+            remindersCsv == task.remindersCsv &&
+            timezoneId == task.timezoneId
+
     fun applyTo(master: TaskEntity): TaskEntity = master.copy(
         title = title,
         notes = notes,

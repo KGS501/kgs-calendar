@@ -507,7 +507,7 @@ internal fun AllDayViewportOverlay(
     maxVisibleItems: Int,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     priorityPageCount: Int,
     reservation: AllDayReservation? = null,
@@ -1270,7 +1270,7 @@ private fun AllDayViewportChip(
     transitionAlpha: Float = 1f,
     transitionScaleY: Float = 1f,
     showPrimaryContent: Boolean = true,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onMoveToTimed: (AllDayOverlayItem, LocalDate, LocalTime, LocalTime) -> Unit,
     onMoveToAllDay: (AllDayOverlayItem, LocalDate) -> Unit,
@@ -1486,7 +1486,7 @@ private fun AllDayViewportChip(
                     TaskStatusCheckbox(
                         status = item.task.effectiveStatus(),
                         tint = textColor,
-                        onStatusChange = { onTaskStatusChanged(item.task.resourceHref, it) },
+                        onStatusChange = { onTaskStatusChanged(item.task, it) },
                         boxSize = 18.dp,
                         iconSize = 15.dp,
                     )
@@ -1501,7 +1501,7 @@ private fun AllDayViewportChip(
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Clip,
-                    textDecoration = eventVisuals?.textDecoration,
+                    textDecoration = item.task?.cardTextDecoration() ?: eventVisuals?.textDecoration,
                     style = eventTextStyle,
                 )
             }
@@ -1521,7 +1521,7 @@ private fun AllDayArea(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     height: Dp,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1599,7 +1599,7 @@ private fun AllDayArea(
                 status = singleTask?.effectiveStatus(),
                 resourceHref = singleTask?.resourceHref,
                 onStatusChange = if (singleTask != null) {
-                    { status -> onTaskStatusChanged(singleTask.resourceHref, status) }
+                    { status -> onTaskStatusChanged(singleTask, status) }
                 } else {
                     null
                 },
@@ -1621,7 +1621,7 @@ private fun AllDayArea(
 private fun DayTasksSheet(
     day: LocalDate,
     tasks: List<TaskEntity>,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
 ) {
     val sheetScrollState = rememberScrollState()
@@ -1677,7 +1677,7 @@ internal fun OverdueTasksBand(
     dragSourceDate: LocalDate,
     dragStartMinute: Int,
     onExpandedChange: (Boolean) -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1824,7 +1824,7 @@ internal fun OverdueTasksBand(
                                     },
                                     onDragFinished = { draggingTaskHref = null },
                                     onStatusChange = { status ->
-                                        onTaskStatusChanged(task.resourceHref, status)
+                                        onTaskStatusChanged(task, status)
                                     },
                                     onClick = { onTaskClick(task) },
                                 )
@@ -2245,6 +2245,7 @@ private fun AllDayTaskChip(
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,
+                textDecoration = if (status.equals("CANCELLED", ignoreCase = true)) TextDecoration.LineThrough else null,
                 modifier = Modifier.wrapContentWidth(unbounded = true),
             )
         }

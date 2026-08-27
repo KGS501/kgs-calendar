@@ -914,7 +914,7 @@ internal fun TaskDrawer(
     visible: Boolean,
     state: CalendarUiState,
     onDismiss: () -> Unit,
-    onTaskStatusChanged: (String, String) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
