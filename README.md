@@ -4,6 +4,11 @@
 
 KGS Calendar is an Android calendar and task app for managing events, tasks, reminders, and synchronized calendar sources. It can be used offline with local app data, with Android device calendars, or with CalDAV/Nextcloud calendars and task lists.
 
+<p>
+  <a href="https://play.google.com/store/apps/details?id=com.kgs501.kgscalendar"><img height="56" alt="Get KGS Calendar on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"></a>
+  <a href="https://github.com/sponsors/KGS501"><img height="56" alt="Sponsor KGS501 on GitHub" src="https://img.shields.io/badge/Sponsor-KGS501-EA4AAA?style=for-the-badge&amp;logo=githubsponsors&amp;logoColor=white"></a>
+</p>
+
 ## Features
 
 - Events and tasks in one app
@@ -21,66 +26,6 @@ KGS Calendar is an Android calendar and task app for managing events, tasks, rem
 - Light and dark themes
 - Home screen widget support
 - English and German app language support
-
-## Build And Test
-
-This repository contains a single-module Android app. Work from the repository root and use the checked-in Gradle wrapper rather than a system Gradle install.
-
-The Android application uses namespace `com.kgs.calendar`, application id `com.kgs501.kgscalendar`, min SDK 26, and compile/target SDK 36. Gradle and Kotlin must run on JDK 17.
-
-Check the Gradle runtime:
-
-```powershell
-.\gradlew.bat --version
-```
-
-Build a debug APK:
-
-```powershell
-.\gradlew.bat :app:assembleDebug
-```
-
-Run debug unit tests:
-
-```powershell
-.\gradlew.bat :app:testDebugUnitTest
-```
-
-## Publish To Google Play Internal Testing
-
-Publishing runs locally from this machine; it does not use GitHub Actions. Complete the one-time
-credential and upload-key setup with the interactive wizard:
-
-```bash
-bash tools/setup_google_play_publishing.sh
-```
-
-The wizard stores the service-account key, upload keystore, and signing configuration under
-`~/.config/kgs-calendar/` with owner-only permissions. Nothing secret is written to this repository.
-If the original upload key is unavailable, the wizard can generate a replacement certificate and
-walk through requesting an upload-key reset in Play Console.
-
-Verify the signed build and Google Play access without uploading anything:
-
-```bash
-python3 tools/play_publisher.py verify
-```
-
-Build, test, and publish a completed release to the `internal` track:
-
-```bash
-python3 tools/play_publisher.py publish --release-notes "Your release notes" --yes
-```
-
-To publish an already-built signed bundle instead, pass `--aab /path/to/app-release.aab`. Each real
-release requires an explicit `--yes`, and publishing refuses to cancel changes already under review.
-
-Connected Android tests and widget rendering checks require an attached device or emulator:
-
-```powershell
-.\ADB\adb.exe devices
-.\gradlew.bat :app:connectedDebugAndroidTest
-```
 
 ## Privacy
 
