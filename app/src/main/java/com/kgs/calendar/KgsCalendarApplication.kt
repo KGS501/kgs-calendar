@@ -72,7 +72,6 @@ class KgsCalendarApplication : Application() {
         registerWidgetRefreshHooks()
         registerAndroidCalendarObserverIfPermitted()
         SyncWorker.schedulePeriodic(this)
-        SyncWorker.enqueueImmediate(this)
         scope.launch {
             runCatching { ReminderScheduler.reschedule(this@KgsCalendarApplication) }
         }
