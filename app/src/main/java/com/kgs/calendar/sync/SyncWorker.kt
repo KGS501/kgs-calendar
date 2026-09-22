@@ -31,7 +31,12 @@ class SyncWorker(
             markRecentSyncActivity(applicationContext)
         }.fold(
             onSuccess = { Result.success() },
-            onFailure = { Result.retry() },
+            onFailure = { error ->
+                when (classifySyncFailure(error, runAttemptCount)) {
+                    SyncFailureOutcome.Retry -> Result.retry()
+                    SyncFailureOutcome.Fail -> Result.failure()
+                }
+            },
         )
     }
 

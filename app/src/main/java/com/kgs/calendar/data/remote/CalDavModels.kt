@@ -120,6 +120,15 @@ data class PutResult(
     val etag: String?,
 )
 
+/**
+ * A non-successful HTTP response. The message is kept human readable because it is surfaced as
+ * the account's sync error; [statusCode] lets callers classify the failure without parsing it.
+ */
+class HttpStatusException(
+    val statusCode: Int,
+    message: String,
+) : IllegalStateException(message)
+
 class CalDavConflictException(
     method: String,
     href: String,

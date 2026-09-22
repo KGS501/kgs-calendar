@@ -22,6 +22,7 @@ import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.CalDavAccountDiscovery
+import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.remote.PutResult
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
@@ -1782,7 +1783,7 @@ class CalendarRepository(
                     .build(),
             ).execute()
             val raw = response.use { body ->
-                if (!body.isSuccessful) error("URL returned HTTP ${body.code}")
+                if (!body.isSuccessful) throw HttpStatusException(body.code, "URL returned HTTP ${body.code}")
                 contentType = body.header("Content-Type")
                 body.body?.string() ?: error("Empty calendar response.")
             }

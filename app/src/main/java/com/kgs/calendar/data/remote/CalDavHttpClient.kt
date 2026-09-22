@@ -192,7 +192,7 @@ class CalDavHttpClient(
         okHttpClient.newCall(request).execute().use { response ->
             if (response.code in setOf(400, 403, 405, 409, 501)) return@withContext null
             if (!response.isSuccessful) {
-                error("REPORT sync-collection $collectionHref failed: HTTP ${response.code}")
+                throw HttpStatusException(response.code, "REPORT sync-collection $collectionHref failed: HTTP ${response.code}")
             }
             val xml = response.body?.string().orEmpty()
             val token = parseDocumentFirstText(xml, "sync-token") ?: return@withContext null
@@ -221,7 +221,7 @@ class CalDavHttpClient(
                 .header("Accept", "text/calendar")
                 .build()
             okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("GET $href failed: HTTP ${response.code}")
+                if (!response.isSuccessful) throw HttpStatusException(response.code, "GET $href failed: HTTP ${response.code}")
                 response.body?.string().orEmpty()
             }
         }
@@ -262,7 +262,7 @@ class CalDavHttpClient(
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("REPORT calendar-multiget $collectionHref failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-multiget $collectionHref failed: HTTP ${response.code}")
             parseDavResponses(response.body?.string().orEmpty()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
@@ -304,7 +304,7 @@ class CalDavHttpClient(
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("REPORT calendar-query $collectionHref failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-query $collectionHref failed: HTTP ${response.code}")
             parseDavResponses(response.body?.string().orEmpty()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
@@ -333,7 +333,7 @@ class CalDavHttpClient(
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             if (response.code == 412) throw CalDavConflictException("PUT", href)
-            if (!response.isSuccessful) error("PUT $href failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "PUT $href failed: HTTP ${response.code}")
             PutResult(href, response.header("ETag"))
         }
     }
@@ -352,7 +352,7 @@ class CalDavHttpClient(
         okHttpClient.newCall(request).execute().use { response ->
             if (response.code == 404) return@use
             if (response.code == 412) throw CalDavConflictException("DELETE", href)
-            if (!response.isSuccessful) error("DELETE $href failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "DELETE $href failed: HTTP ${response.code}")
         }
     }
 
@@ -395,7 +395,7 @@ class CalDavHttpClient(
                     error("The server does not allow creating a calendar at $href (HTTP 405).")
                 }
                 if (response.code != 409) {
-                    error("MKCALENDAR failed: HTTP ${response.code}")
+                    throw HttpStatusException(response.code, "MKCALENDAR failed: HTTP ${response.code}")
                 }
             }
             href = discovery.calendarHomeUrl.trimEnd('/') + "/$slug-${suffix++}/"
@@ -430,7 +430,7 @@ class CalDavHttpClient(
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("PROPPATCH $collectionHref failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "PROPPATCH $collectionHref failed: HTTP ${response.code}")
         }
     }
 
@@ -531,7 +531,7 @@ class CalDavHttpClient(
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("PROPFIND $url failed: HTTP ${response.code}")
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "PROPFIND $url failed: HTTP ${response.code}")
             val effectiveUrl = response.request.url.toString()
             return parseDavResponses(response.body?.string().orEmpty())
                 .map { it.copy(requestUrl = effectiveUrl) }
