@@ -25,7 +25,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
         PendingMutationEntity::class,
     ],
     version = 19,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class KgsDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
