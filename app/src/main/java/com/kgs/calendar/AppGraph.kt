@@ -50,6 +50,7 @@ class AppGraph(context: Context) {
         calDavClient = calDavHttpClient,
         androidCalendarProviderClient = androidCalendarProviderClient,
         icalCodec = icalCodec,
+        readOnlyHttpClient = okHttpClient,
     )
 
     val sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(

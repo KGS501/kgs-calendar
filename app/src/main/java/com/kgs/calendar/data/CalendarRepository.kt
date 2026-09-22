@@ -71,12 +71,12 @@ class CalendarRepository(
     private val calDavClient: CalDavHttpClient,
     private val androidCalendarProviderClient: AndroidCalendarProviderClient,
     private val icalCodec: IcalCodec,
+    private val readOnlyHttpClient: OkHttpClient,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     private val recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
 ) {
     private val taskRecurrenceExpander = TaskRecurrenceExpander(recurrenceExpander)
     private val occurrenceSearch = CalendarOccurrenceSearch(zoneId)
-    private val readOnlyHttpClient = OkHttpClient()
     private val androidProviderSyncMutex = Mutex()
     private val remoteSyncMutex = Mutex()
     private val recentCalDavLocalWrites = ConcurrentHashMap<String, Long>()
