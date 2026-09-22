@@ -6,28 +6,24 @@ google-play-*.json
 publisher-config.json
 PLAY_PUBLISHING.local.md
 keystone-secrets.properties
+.env
+.env.*
+!.env.example
 
 # Build / IDE artifacts
 .gradle/
 build/
-app/build/
 local.properties
 .idea/
 *.iml
-.android-sdk/
 captures/
 .externalNativeBuild/
 .cxx/
 
-# Local runtime/tooling caches
-.codex-remote-attachments/
-.device-debug/
-.worktrees/
+# Generated caches
 .kotlin/
 __pycache__/
 *.py[cod]
-ADB/
-tmp/
 
 # Generated release/test artifacts
 artifacts/
@@ -38,6 +34,3 @@ artifacts/
 *.db
 *.db-shm
 *.db-wal
-tools/*.jar
-kgs-debug-base.xml
-kgs-tiny.xml
