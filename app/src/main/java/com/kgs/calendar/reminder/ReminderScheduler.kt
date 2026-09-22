@@ -12,6 +12,8 @@ import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -32,6 +34,7 @@ object ReminderScheduler {
     private const val WINDOW_DAYS = 21L
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yy")
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    private val rescheduleMutex = Mutex()
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -48,8 +51,15 @@ object ReminderScheduler {
         }
     }
 
-    /** Reschedules all reminders. Safe to call repeatedly (e.g. after every sync). */
-    suspend fun reschedule(context: Context) {
+    /**
+     * Reschedules all reminders. Safe to call repeatedly (e.g. after every sync); concurrent
+     * callers are serialized so their cancel/replace passes cannot interleave.
+     */
+    suspend fun reschedule(context: Context) = rescheduleMutex.withLock {
+        rescheduleLocked(context)
+    }
+
+    private suspend fun rescheduleLocked(context: Context) {
         ensureChannel(context)
         val graph = KgsCalendarApplication.graph(context)
         val repository = graph.repository
