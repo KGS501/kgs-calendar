@@ -501,6 +501,19 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[KEY_PARSER_REPARSE_VERSION] = version }
     }
 
+    /**
+     * Records that the exact alarm settings screen has been offered. Returns true only for the
+     * first caller, so the prompt is shown at most once per install.
+     */
+    suspend fun markExactAlarmPromptShown(): Boolean {
+        var firstPrompt = false
+        context.dataStore.edit { prefs ->
+            firstPrompt = prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] != true
+            prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] = true
+        }
+        return firstPrompt
+    }
+
     val defaultEventCollectionHref: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_EVENT_COLLECTION]?.takeIf { it.isNotBlank() }
     }
@@ -582,6 +595,7 @@ class SettingsStore(private val context: Context) {
         private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
         private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
         private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")
+        private val KEY_EXACT_ALARM_PROMPT_SHOWN = booleanPreferencesKey("exact_alarm_prompt_shown")
         private val KEY_DEFAULT_EVENT_COLLECTION = stringPreferencesKey("default_event_collection_href")
         private val KEY_DEFAULT_TASK_COLLECTION = stringPreferencesKey("default_task_collection_href")
         val DEFAULT_EVENT_FIELD_ORDER = listOf("time", "recurrence", "reminders", "location", "notes", "status", "categories", "color", "participants")

@@ -55,7 +55,9 @@ class MainActivity : ComponentActivity() {
             null
         }
         maybeRequestNotificationPermission()
-        maybeRequestExactAlarmPermission()
+        if (savedInstanceState == null) {
+            maybeRequestExactAlarmPermission()
+        }
         setContent {
             KgsCalendarApp(viewModel = calendarViewModel)
         }
@@ -97,13 +99,20 @@ class MainActivity : ComponentActivity() {
     private fun maybeRequestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (!alarmManager.canScheduleExactAlarms()) {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                        Uri.parse("package:$packageName"),
-                    ),
-                )
+            if (alarmManager.canScheduleExactAlarms()) return
+            // Offer the settings screen only once per install; reminders fall back to inexact
+            // alarms when the user declines (see ReminderScheduler.scheduleExactCompat).
+            lifecycleScope.launch {
+                if (graph.settingsStore.markExactAlarmPromptShown()) {
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:$packageName"),
+                            ),
+                        )
+                    }
+                }
             }
         }
     }
