@@ -803,3 +803,21 @@ internal fun KgsModalBottomSheet(
             }
         }
 }
+
+@Composable
+internal fun KgsSheetHandle(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(64.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(2.5.dp))
+                .background(WarmLine),
+        )
+    }
+}
