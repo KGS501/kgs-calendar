@@ -358,6 +358,16 @@ import com.kgs.calendar.ui.calendar.toMonthViewPage
 import com.kgs.calendar.ui.calendar.weekHeaderLabels
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.shell.allDaySlotDraftPreview
+import com.kgs.calendar.ui.shell.editorSchedule
+import com.kgs.calendar.ui.shell.eventDraftColor
+import com.kgs.calendar.ui.shell.initialEditorSchedule
+import com.kgs.calendar.ui.shell.newEventSchedule
+import com.kgs.calendar.ui.shell.newSubtaskSchedule
+import com.kgs.calendar.ui.shell.newTaskSchedule
+import com.kgs.calendar.ui.shell.taskDraftColor
+import com.kgs.calendar.ui.shell.timelineSlotDraftPreview
+import com.kgs.calendar.ui.shell.transferredSchedule
 import com.kgs.calendar.ui.labels.RecurrenceOption
 import com.kgs.calendar.ui.labels.ReminderChoice
 import com.kgs.calendar.ui.labels.ReminderUnit
@@ -507,17 +517,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var foregroundRecenterRequest by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
-        var editorSchedule by remember {
-            mutableStateOf(
-                EditorScheduleState.fromPreview(
-                    EditorSchedulePreview(
-                        date = calendarTime.today,
-                        start = LocalTime.of(15, 0),
-                        end = LocalTime.of(16, 0),
-                    ),
-                ),
-            )
-        }
+        var editorSchedule by remember { mutableStateOf(initialEditorSchedule(calendarTime.today)) }
         var draftWireframeColor by remember { mutableStateOf(defaultWireframeColor) }
         var editorWireframeMode by remember { mutableStateOf(false) }
         var editorTransferDraft by remember { mutableStateOf<EditorTransferDraft?>(null) }
@@ -680,87 +680,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             if (detailSheet == null) detailTaskMorphGeneration = 0
         }
 
-        fun scheduleState(
-            date: LocalDate,
-            start: LocalTime,
-            end: LocalTime,
-            hasStartDate: Boolean = true,
-            hasEndDate: Boolean = true,
-            hasStartTime: Boolean = true,
-            hasEndTime: Boolean = true,
-            allDay: Boolean = false,
-            endDate: LocalDate = date,
-        ): EditorScheduleState = EditorScheduleState(
-            startDateText = date.toString(),
-            endDateText = endDate.toString(),
-            startTimeText = start.toString().take(5),
-            endTimeText = end.toString().take(5),
-            hasStartDate = hasStartDate,
-            hasEndDate = hasEndDate,
-            hasStartTime = hasStartTime && !allDay,
-            hasEndTime = hasEndTime && !allDay,
-            allDay = allDay,
-            lastValidPreview = null,
-        ).recalculatePreview()
-
-        fun scheduleForEvent(event: EventEntity): EditorScheduleState = scheduleState(
-            date = event.startsAtMillis.toDate(),
-            endDate = if (event.allDay) (event.endsAtMillis - 1).toDate() else event.endsAtMillis.toDate(),
-            start = if (event.allDay) LocalTime.MIDNIGHT else event.startsAtMillis.toTime(),
-            end = if (event.allDay) LocalTime.of(23, 59) else event.endsAtMillis.toTime(),
-            hasStartTime = !event.allDay,
-            hasEndTime = !event.allDay,
-            allDay = event.allDay,
-        )
-
-        fun scheduleForTask(task: TaskEntity): EditorScheduleState {
-            val startDate = task.startAtMillis?.toDate()
-            val endDate = task.dueAtMillis?.toDate()
-            val fallbackDate = startDate ?: endDate ?: calendarTime.today
-            val start = task.startAtMillis?.toTime() ?: task.dueAtMillis?.toTime()?.minusMinutes(30) ?: LocalTime.of(15, 0)
-            val end = task.dueAtMillis?.toTime() ?: start.defaultDraftEnd()
-            val hasStartTime = task.startAtMillis != null && task.startHasTime
-            val hasEndTime = task.dueAtMillis != null && task.dueHasTime
-            return scheduleState(
-                date = startDate ?: fallbackDate,
-                endDate = endDate ?: fallbackDate,
-                start = start,
-                end = end,
-                hasStartDate = startDate != null,
-                hasEndDate = endDate != null,
-                hasStartTime = hasStartTime,
-                hasEndTime = hasEndTime,
-                allDay = (startDate != null || endDate != null) && !hasStartTime && !hasEndTime,
-            )
-        }
-
         fun applyTransferScheduleToDraft(transfer: EditorTransferDraft) {
-            editorSchedule = transfer.schedule ?: scheduleState(
-                date = transfer.date ?: editorSchedule.lastValidPreview?.date ?: calendarTime.today,
-                endDate = transfer.endDate ?: transfer.date ?: editorSchedule.lastValidPreview?.date ?: calendarTime.today,
-                start = transfer.startTime ?: editorSchedule.lastValidPreview?.start ?: LocalTime.of(15, 0),
-                end = transfer.endTime ?: editorSchedule.lastValidPreview?.end ?: LocalTime.of(16, 0),
-                hasStartDate = transfer.date != null,
-                hasEndDate = transfer.endDate != null,
-                hasStartTime = transfer.startTime != null,
-                hasEndTime = transfer.endTime != null,
-                allDay = transfer.allDay == true,
-            )
+            editorSchedule = transfer.transferredSchedule(editorSchedule, calendarTime.today)
         }
 
         fun openEventCreation(date: LocalDate) {
-            val start = LocalTime.now().nextDraftStart()
-            editorSchedule = scheduleState(
-                date = date,
-                start = start,
-                end = start.defaultDraftEnd(state.defaultEventDurationMinutes),
-            )
-            draftWireframeColor = state.collections
-                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
-                .sortedWithDefaultFirst(state.defaultEventCollectionHref)
-                .firstOrNull()
-                ?.color
-                ?: defaultWireframeColor
+            editorSchedule = newEventSchedule(date, LocalTime.now(), state.defaultEventDurationMinutes)
+            draftWireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor)
             editorTransferDraft = null
             conversionSource = null
             createMenuOpen = false
@@ -776,26 +702,16 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         }
 
         fun openTaskCreation(date: LocalDate, scheduledForDay: Boolean, useTaskDefaults: Boolean = false) {
-            val start = LocalTime.now().nextDraftStart()
-            val hasDate = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate)
-            val allDay = scheduledForDay || (useTaskDefaults && state.defaultTaskHasDate && !state.defaultTaskHasTime)
-            val usesTime = !scheduledForDay && useTaskDefaults && state.defaultTaskHasTime
-            editorSchedule = scheduleState(
+            editorSchedule = newTaskSchedule(
                 date = date,
-                start = start,
-                end = start.defaultDraftEnd(state.defaultEventDurationMinutes),
-                hasStartDate = hasDate,
-                hasEndDate = usesTime,
-                hasStartTime = usesTime,
-                hasEndTime = usesTime,
-                allDay = allDay,
+                now = LocalTime.now(),
+                scheduledForDay = scheduledForDay,
+                useTaskDefaults = useTaskDefaults,
+                defaultTaskHasDate = state.defaultTaskHasDate,
+                defaultTaskHasTime = state.defaultTaskHasTime,
+                defaultEventDurationMinutes = state.defaultEventDurationMinutes,
             )
-            draftWireframeColor = state.collections
-                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() }
-                .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
-                .firstOrNull()
-                ?.color
-                ?: defaultWireframeColor
+            draftWireframeColor = state.collections.taskDraftColor(state.defaultTaskCollectionHref, defaultWireframeColor)
             editorTransferDraft = null
             conversionSource = null
             createMenuOpen = false
@@ -908,47 +824,18 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onSlotSelected = { date, start ->
                             editorWireframeMode = true
                             if (creationSheet != null) creationCollapseRequest++
-                            val duration = state.defaultEventDurationMinutes.coerceIn(DraftMinDurationMinutes, 24 * 60 - 1)
-                            val minStartMinute = DayStartHour * 60
-                            val maxStartMinute = ((DayEndHour + 1) * 60 - duration).coerceAtLeast(minStartMinute)
-                            val centeredStartMinute = (start.minuteOfDay() - duration / 2)
-                                .snapDraftMinute()
-                                .coerceIn(minStartMinute, maxStartMinute)
                             editorSchedule = editorSchedule.applyTimelineChange(
-                                EditorSchedulePreview(
-                                    date = date,
-                                    start = centeredStartMinute.toDraftLocalTime(),
-                                    end = (centeredStartMinute + duration)
-                                        .coerceAtMost((DayEndHour + 1) * 60 - 1)
-                                        .toDraftLocalTime(),
-                                ),
+                                timelineSlotDraftPreview(date, start, state.defaultEventDurationMinutes),
                             )
-                            draftWireframeColor = state.collections
-                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
-                                .sortedWithDefaultFirst(state.defaultEventCollectionHref)
-                                .firstOrNull()
-                                ?.color
-                                ?: defaultWireframeColor
+                            draftWireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor)
                             editorTransferDraft = null
                             creationSheet = CreationSheet.EventLow
                         },
                         onAllDaySlotSelected = { date ->
                             editorWireframeMode = true
                             if (creationSheet != null) creationCollapseRequest++
-                            editorSchedule = editorSchedule.applyTimelineChange(
-                                EditorSchedulePreview(
-                                    date = date,
-                                    start = LocalTime.MIDNIGHT,
-                                    end = LocalTime.of(23, 59),
-                                    allDay = true,
-                                ),
-                            )
-                            draftWireframeColor = state.collections
-                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
-                                .sortedWithDefaultFirst(state.defaultEventCollectionHref)
-                                .firstOrNull()
-                                ?.color
-                                ?: defaultWireframeColor
+                            editorSchedule = editorSchedule.applyTimelineChange(allDaySlotDraftPreview(date))
+                            draftWireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor)
                             editorTransferDraft = null
                             creationSheet = CreationSheet.EventLow
                         },
@@ -1516,12 +1403,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onTaskProgressChanged = viewModel.edits::setTaskProgress,
                         onEventParticipationChanged = viewModel.edits::setEventParticipation,
                     onEditEvent = {
-                        editorSchedule = scheduleForEvent(it)
+                        editorSchedule = it.editorSchedule()
                         creationSheet = CreationSheet.EditEvent(it)
                         detailSheet = null
                     },
                     onDuplicateEvent = {
-                        editorSchedule = scheduleForEvent(it)
+                        editorSchedule = it.editorSchedule()
                         creationSheet = CreationSheet.DuplicateEvent(it)
                         detailSheet = null
                     },
@@ -1538,13 +1425,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = null
                     },
                     onEditTask = {
-                        editorSchedule = scheduleForTask(it)
+                        editorSchedule = it.editorSchedule(calendarTime.today)
                         creationSheet = CreationSheet.EditTask(it)
                         detailSheet = null
                         detailTaskBackStack.clear()
                     },
                     onDuplicateTask = {
-                        editorSchedule = scheduleForTask(it)
+                        editorSchedule = it.editorSchedule(calendarTime.today)
                         creationSheet = CreationSheet.DuplicateTask(it)
                         detailSheet = null
                         detailTaskBackStack.clear()
@@ -1579,16 +1466,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = DetailSheet.Task(parent)
                     },
                     onAddSubtask = { parent ->
-                        val start = LocalTime.now().nextDraftStart()
-                        editorSchedule = scheduleState(
-                            date = parent.taskDate() ?: state.selectedDate,
-                            start = start,
-                            end = start.defaultDraftEnd(),
-                            hasStartDate = false,
-                            hasEndDate = false,
-                            hasStartTime = false,
-                            hasEndTime = false,
-                        )
+                        editorSchedule = newSubtaskSchedule(parent.taskDate() ?: state.selectedDate, LocalTime.now())
                         detailTaskBackStack.clear()
                         detailSheet = null
                         creationSheet = CreationSheet.TaskForParent(parent)
