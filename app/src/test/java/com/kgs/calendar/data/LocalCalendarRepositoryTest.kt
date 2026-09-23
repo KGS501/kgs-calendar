@@ -54,8 +54,7 @@ class LocalCalendarRepositoryTest {
 
         val collection = harness.collection(LOCAL_COLLECTION)!!
         assertEquals("Private", collection.displayName)
-        // NOTE: current behaviour - the rebuilt row keeps displayName but drops customDisplayName.
-        assertNull(collection.customDisplayName)
+        assertEquals("Private", collection.customDisplayName)
         assertEquals(0xFF112233.toInt(), collection.color)
         assertEquals(0xFF112233.toInt(), collection.customColor)
         assertEquals(Color.rgb(23, 107, 93), collection.automaticColor)

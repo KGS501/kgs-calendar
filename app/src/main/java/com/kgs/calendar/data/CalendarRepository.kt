@@ -315,6 +315,8 @@ class CalendarRepository(
                     isEnabled = existingCollection?.isEnabled ?: true,
                     sortOrder = existingCollection?.sortOrder ?: -10_000,
                     readOnly = false,
+                    remoteDisplayName = existingCollection?.remoteDisplayName,
+                    customDisplayName = existingCollection?.customDisplayName,
                     automaticColor = automaticColor,
                     customColor = existingCollection?.customColor,
                     sourceType = SourceType.Local,
