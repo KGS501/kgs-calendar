@@ -137,6 +137,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.ical4j)
     implementation(libs.kotlinx.coroutines.android)
+    // Transitively pinned to 1.7.3 by AndroidX; Room's migration test helper needs >= 1.8.1 at runtime.
+    implementation(libs.kotlinx.serialization.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
