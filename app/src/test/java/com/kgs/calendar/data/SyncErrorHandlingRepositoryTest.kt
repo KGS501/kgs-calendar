@@ -2,6 +2,7 @@ package com.kgs.calendar.data
 
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -35,11 +36,11 @@ class SyncErrorHandlingRepositoryTest {
         assertTrue(error.message!!.endsWith("HTTP 401"))
         assertEquals(401, (error.cause as HttpStatusException).statusCode)
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
-        assertEquals("error", account.syncState)
+        assertEquals(SyncState.Error, account.syncState)
         assertEquals(error.message, account.syncError)
         assertEquals(lastSync, account.lastSyncAtMillis)
         assertEquals("Kickoff", harness.event(eventHref)!!.title)
-        assertEquals("idle", harness.account("local")!!.syncState)
+        assertEquals(SyncState.Idle, harness.account("local")!!.syncState)
     }
 
     @Test
@@ -52,10 +53,10 @@ class SyncErrorHandlingRepositoryTest {
         repository.syncNow()
 
         val calDav = harness.account(AccountEntity.PRIMARY_ID)!!
-        assertEquals("error", calDav.syncState)
+        assertEquals(SyncState.Error, calDav.syncState)
         assertTrue(calDav.syncError!!.endsWith("HTTP 401"))
         val feed = harness.account(readOnly.id)!!
-        assertEquals("idle", feed.syncState)
+        assertEquals(SyncState.Idle, feed.syncState)
         assertNull(feed.syncError)
     }
 
@@ -69,7 +70,7 @@ class SyncErrorHandlingRepositoryTest {
         repository.syncNow()
 
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
-        assertEquals("idle", account.syncState)
+        assertEquals(SyncState.Idle, account.syncState)
         assertNull(account.syncError)
     }
 }

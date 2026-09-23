@@ -3,6 +3,7 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.expectFailure
 import com.kgs.calendar.data.local.entity.AccountEntity
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -67,10 +68,10 @@ class SyncOrchestratorTest {
 
         assertEquals(listOf("a", "b"), engine.synced.map { it.first })
         val failed = harness.account("a")!!
-        assertEquals("error", failed.syncState)
+        assertEquals(SyncState.Error, failed.syncState)
         assertEquals("Source \"Alpha\": boom", failed.syncError)
         assertEquals(42L, failed.lastSyncAtMillis)
-        assertEquals("idle", harness.account("b")!!.syncState)
+        assertEquals(SyncState.Idle, harness.account("b")!!.syncState)
         assertNull(harness.account("b")!!.syncError)
     }
 
@@ -115,8 +116,8 @@ class SyncOrchestratorTest {
 
         assertEquals("Source \"Failing\": down", error.message)
         assertEquals(setOf("skipped", "failing"), engine.synced.map { it.first }.toSet())
-        assertEquals("idle", harness.account("skipped")!!.syncState)
-        assertEquals("idle", harness.account("unclaimed")!!.syncState)
+        assertEquals(SyncState.Idle, harness.account("skipped")!!.syncState)
+        assertEquals(SyncState.Idle, harness.account("unclaimed")!!.syncState)
     }
 
     @Test

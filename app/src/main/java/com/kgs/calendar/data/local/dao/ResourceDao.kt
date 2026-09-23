@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
+import com.kgs.calendar.domain.model.ComponentType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -15,7 +16,7 @@ interface ResourceDao {
     suspend fun all(): List<CalendarResourceEntity>
 
     @Query("SELECT * FROM calendar_resources WHERE componentType = :componentType")
-    suspend fun forComponentType(componentType: String): List<CalendarResourceEntity>
+    suspend fun forComponentType(componentType: ComponentType): List<CalendarResourceEntity>
 
     @Query(
         """

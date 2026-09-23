@@ -304,7 +304,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -321,6 +320,7 @@ import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.event.displayColor
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
@@ -329,10 +329,20 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.task.isInactive
+import com.kgs.calendar.domain.task.taskPriorityIntensity
+import com.kgs.calendar.domain.task.treeParents
+import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -375,14 +385,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -673,7 +679,7 @@ private fun TaskDetailHeaderActions(
                 Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = contentColor)
             }
             DetailOverflowMenu(
-                copyTargets = collections.filter { it.supportsTasks && it.href != task.collectionHref && !it.isReadOnlyForUi() },
+                copyTargets = collections.filter { it.supportsTasks && it.href != task.collectionHref && !it.isReadOnlyCollection() },
                 hiddenCollectionHrefs = hiddenCollectionHrefs,
                 recurringScopes = false,
                 itemLabel = stringResource(R.string.task),
@@ -761,7 +767,7 @@ internal fun DetailSheetContent(
             }
         }
     }
-    val readOnlySource = sourceCollection?.isReadOnlyForUi() == true
+    val readOnlySource = sourceCollection?.isReadOnlyCollection() == true
     val eventDetailCapabilities = sourceCollection?.eventEditorCapabilities() ?: EventEditorCapabilities.Full
     var lastCompleted by remember(task?.resourceHref) { mutableStateOf(task?.isCompleted ?: false) }
     var burstKey by remember(task?.resourceHref) { mutableStateOf(0) }
@@ -829,7 +835,7 @@ internal fun DetailSheetContent(
                             Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = WarmInk)
                         }
                         DetailOverflowMenu(
-                            copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyForUi() },
+                            copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
                             hiddenCollectionHrefs = hiddenCollectionHrefs,
                             recurringScopes = recurring,
                             itemLabel = stringResource(R.string.event),
@@ -1114,24 +1120,7 @@ internal fun rememberTaskHierarchyPresentation(
     val entries = remember(tasks, expandedByDefault, defaultExpandedResourceHrefs, expansionOverrides.toMap()) {
         val distinctTasks = tasks.distinctBy(::identity)
         val position = distinctTasks.withIndex().associate { identity(it.value) to it.index }
-        val byCollectionUid = distinctTasks.associateBy { it.collectionHref to it.uid }
-        val globallyUniqueByUid = distinctTasks.groupBy { it.uid }
-            .filterValues { it.size == 1 }
-            .mapValues { it.value.single() }
-
-        fun candidateParent(task: TaskEntity): TaskEntity? {
-            val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-            return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-        }
-
-        val parentByIdentity = distinctTasks.associate { task ->
-            var parent = candidateParent(task)
-            val seen = mutableSetOf(identity(task))
-            while (parent != null && seen.add(identity(parent))) {
-                parent = candidateParent(parent)
-            }
-            identity(task) to if (parent == null) candidateParent(task) else null
-        }
+        val parentByIdentity = distinctTasks.treeParents(::identity)
         val childrenByParent = distinctTasks
             .mapNotNull { child -> parentByIdentity[identity(child)]?.let { identity(it) to child } }
             .groupBy({ it.first }, { it.second })
@@ -1415,9 +1404,9 @@ private fun DetailSheet.sourceFootnoteText(
     val collection = collections.firstOrNull { it.href == href } ?: return null
     val account = accounts.firstOrNull { it.id == collection.accountId }
     val source = when {
-        collection.href.isLocalCollectionHrefUi() -> stringResource(R.string.local_calendar)
-        collection.isAndroidProviderForUi() -> account?.displayName ?: stringResource(R.string.android_device_calendars)
-        collection.isReadOnlyForUi() -> account?.displayName ?: collection.displayName
+        collection.href.isLocalCollectionHref() -> stringResource(R.string.local_calendar)
+        collection.isAndroidProviderCollection() -> account?.displayName ?: stringResource(R.string.android_device_calendars)
+        collection.isReadOnlyCollection() -> account?.displayName ?: collection.displayName
         else -> account?.displayName ?: account?.username ?: stringResource(R.string.source)
     }
     return stringResource(R.string.source_line, source, collection.displayName)

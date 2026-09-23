@@ -3,13 +3,9 @@ package com.kgs.calendar.data.mutation
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.canCreateResources
 import com.kgs.calendar.data.canDeleteResources
-import com.kgs.calendar.data.endDateInclusive
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
-import com.kgs.calendar.data.isAndroidProviderCollection
-import com.kgs.calendar.data.isLocalCollectionHref
-import com.kgs.calendar.data.isReadOnlyCollection
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -17,13 +13,17 @@ import com.kgs.calendar.data.newResourceHref
 import com.kgs.calendar.data.newUid
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
-import com.kgs.calendar.data.toDate
 import com.kgs.calendar.data.toMinutesList
-import com.kgs.calendar.data.updateAttendeePartstat
 import com.kgs.calendar.data.withRecurrenceUntilBefore
+import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.EventEditPayload
+import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.time.toDate
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -396,7 +396,7 @@ class EventMutations internal constructor(
         val existing = database.eventDao().get(uid) ?: return@writeTransaction
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref) || localWrites.isAndroidProviderCollectionHref(existing.collectionHref)) return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
-        val updatedAttendees = existing.attendeesJson.updateAttendeePartstat(attendeeEmails, partstat)
+        val updatedAttendees = ParticipantJson.withPartstat(existing.attendeesJson, attendeeEmails, partstat)
             ?: return@writeTransaction
         val updated = existing.copy(attendeesJson = updatedAttendees, sequence = existing.sequence + 1)
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)

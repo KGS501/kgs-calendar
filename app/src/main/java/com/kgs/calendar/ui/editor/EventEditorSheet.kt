@@ -302,7 +302,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -325,11 +324,15 @@ import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.Organizer
+import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -371,14 +374,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
@@ -397,7 +396,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
-import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.DayOfWeek
 import java.time.Instant
@@ -448,7 +446,7 @@ internal fun EventEditorSheet(
             state.collections.filter { it.href == initialEvent.collectionHref }
         } else {
             state.collections
-                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
         }
     }
@@ -496,10 +494,12 @@ internal fun EventEditorSheet(
         val account = state.accounts.firstOrNull { it.id == accountId }
         val email = account?.username?.trim()?.takeIf { it.isLikelyEmailAddress() }
         email?.let {
-            JSONObject()
-                .put("name", account.displayName?.takeIf { name -> name.isNotBlank() } ?: email)
-                .put("email", email)
-                .toString()
+            ParticipantJson.encodeOrganizer(
+                Organizer(
+                    email = email,
+                    name = account.displayName?.takeIf { name -> name.isNotBlank() } ?: email,
+                ),
+            )
         }
     }
     var attendeesJson by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }

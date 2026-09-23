@@ -2,6 +2,8 @@ package com.kgs.calendar.data
 
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -100,7 +102,7 @@ class CalDavSyncRepositoryTest {
         assertEquals(server.stored(taskHref)!!.etag, harness.resource(taskHref)!!.etag)
 
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
-        assertEquals("idle", account.syncState)
+        assertEquals(SyncState.Idle, account.syncState)
         assertNull(account.syncError)
         assertNotNull(account.lastSyncAtMillis)
         assertTrue(harness.pendingMutations().isEmpty())

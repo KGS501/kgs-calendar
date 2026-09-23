@@ -1,9 +1,8 @@
 package com.kgs.calendar.domain.model
 
+import com.kgs.calendar.domain.task.isOpenTask
+
 internal fun isMonthSurfaceTaskVisible(
     isCompleted: Boolean,
     status: String?,
-): Boolean =
-    !isCompleted &&
-        !status.equals("COMPLETED", ignoreCase = true) &&
-        !status.equals("CANCELLED", ignoreCase = true)
+): Boolean = isOpenTask(isCompleted, status)

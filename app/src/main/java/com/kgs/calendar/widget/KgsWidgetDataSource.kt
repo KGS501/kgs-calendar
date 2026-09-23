@@ -49,6 +49,21 @@ import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.event.displayColor
+import com.kgs.calendar.domain.event.endDateInclusive
+import com.kgs.calendar.domain.event.isAllDayTopItemOn
+import com.kgs.calendar.domain.event.isCancelled
+import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
+import com.kgs.calendar.domain.model.TaskStatus
+import com.kgs.calendar.domain.task.TaskParentLookup
+import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.task.isOpen
+import com.kgs.calendar.domain.task.statusSortRank
+import com.kgs.calendar.domain.task.taskStatus
+import com.kgs.calendar.domain.task.treeParents
+import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.domain.time.toTimeText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -153,14 +168,14 @@ internal class KgsWidgetDataSource(
         val end = day.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
         val events = graph.repository.eventsSnapshot(start, end)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+            .filterNot { it.isCancelled() }
         val tasks = graph.repository.datedTasksSnapshot(start, end)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+            .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val allDayItems = buildList {
             events
-                .filter { it.isWidgetAllDayTopItemOn(day, zoneId) }
+                .filter { it.isAllDayTopItemOn(day, zoneId) }
                 .sortedWith(compareBy<EventEntity> { it.startsAtMillis }.thenBy { it.title.lowercase(settings.locale) })
                 .forEach { event ->
                     add(
@@ -343,10 +358,10 @@ internal class KgsWidgetDataSource(
         val endDateExclusive = Instant.ofEpochMilli(endMillis).atZone(zoneId).toLocalDate()
         val eventSnapshot = graph.repository.eventsSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+            .filterNot { it.isCancelled() }
         val taskSnapshot = graph.repository.datedTasksSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+            .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val events = if (launchKind == KgsWidgetKind.Agenda) {
             buildAgendaEventRows(
@@ -392,7 +407,7 @@ internal class KgsWidgetDataSource(
         val allTasks = graph.repository.allTasksSnapshot()
             .distinctBy { it.resourceHref }
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-        val activeTasks = allTasks.filter { it.isWidgetActiveTask() }
+        val activeTasks = allTasks.filter { it.isOpen() }
         val selectedTasks = when (settings.tasksWidgetDisplayMode) {
             WidgetTaskDisplayMode.Planned -> activeTasks.filter { it.widgetTaskDate(zoneId) != null }
             WidgetTaskDisplayMode.Unplanned -> activeTasks.filter { it.widgetTaskDate(zoneId) == null }
@@ -421,7 +436,7 @@ internal class KgsWidgetDataSource(
                 if (traversed.add(child.resourceHref)) {
                     queue.add(child)
                 }
-                if (child.isWidgetActiveTask()) {
+                if (child.isOpen()) {
                     included.putIfAbsent(child.resourceHref, child)
                 }
             }
@@ -431,24 +446,10 @@ internal class KgsWidgetDataSource(
 
     private fun includeAncestorTasks(selectedTasks: List<TaskEntity>, allTasks: List<TaskEntity>): List<TaskEntity> {
         if (selectedTasks.isEmpty()) return emptyList()
-        val byCollectionUid = allTasks.associateBy { it.collectionHref to it.uid }
-        val globallyUniqueByUid = allTasks.groupBy { it.uid }
-            .filterValues { it.size == 1 }
-            .mapValues { it.value.single() }
+        val parents = TaskParentLookup(allTasks)
         val included = LinkedHashMap<String, TaskEntity>()
-
-        fun candidateParent(task: TaskEntity): TaskEntity? {
-            val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-            return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-        }
-
         selectedTasks.forEach { task ->
-            var cursor: TaskEntity? = task
-            val seen = mutableSetOf<String>()
-            while (cursor != null && seen.add(cursor.resourceHref)) {
-                included.putIfAbsent(cursor.resourceHref, cursor)
-                cursor = candidateParent(cursor)
-            }
+            parents.selfAndAncestors(task).forEach { included.putIfAbsent(it.resourceHref, it) }
         }
         return included.values.toList()
     }
@@ -456,25 +457,8 @@ internal class KgsWidgetDataSource(
     private fun List<TaskEntity>.toTaskHierarchy(settings: WidgetRenderSettings, appWidgetId: Int): List<WidgetListRow> {
         if (isEmpty()) return emptyList()
         val distinctTasks = distinctBy { it.resourceHref }
-        val byCollectionUid = distinctTasks.associateBy { it.collectionHref to it.uid }
-        val globallyUniqueByUid = distinctTasks.groupBy { it.uid }
-            .filterValues { it.size == 1 }
-            .mapValues { it.value.single() }
         val comparator = settings.taskComparator()
-
-        fun candidateParent(task: TaskEntity): TaskEntity? {
-            val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-            return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-        }
-
-        val parentByResource = distinctTasks.associate { task ->
-            var parent = candidateParent(task)
-            val seen = mutableSetOf(task.resourceHref)
-            while (parent != null && seen.add(parent.resourceHref)) {
-                parent = candidateParent(parent)
-            }
-            task.resourceHref to if (parent == null) candidateParent(task) else null
-        }
+        val parentByResource = distinctTasks.treeParents { it.resourceHref }
         val childrenByParent = distinctTasks
             .mapNotNull { child -> parentByResource[child.resourceHref]?.resourceHref?.let { it to child } }
             .groupBy({ it.first }, { it.second })
@@ -2290,11 +2274,6 @@ internal fun WidgetTaskSortMode.widgetLabel(context: Context): String = when (th
 internal fun WidgetTaskSortMode.next(): WidgetTaskSortMode =
     WidgetTaskSortMode.entries[(ordinal + 1) % WidgetTaskSortMode.entries.size]
 
-internal fun taskPriorityIntensity(priority: Int?): Float {
-    val value = priority?.coerceIn(1, 9) ?: 9
-    return ((9 - value) / 8f).coerceIn(0f, 1f)
-}
-
 internal fun priorityMotionFrameIntervalMillis(priority: Int?, intensity: Float, frameCount: Int): Int {
     val cycleMillis = (1050 - (intensity * 420f)).roundToInt().coerceAtLeast(520)
     return if (priority == 1) {
@@ -2367,28 +2346,11 @@ private fun cubicBezierCoordinate(t: Float, p1: Float, p2: Float): Float {
 private fun TaskEntity.widgetTaskDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate? =
     (startAtMillis ?: dueAtMillis)?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
 
-private fun TaskEntity.effectiveStatus(): String =
-    status?.uppercase(Locale.ROOT) ?: if (isCompleted) "COMPLETED" else "NEEDS-ACTION"
-
 private fun TaskEntity.widgetStatusGlyph(): String = when (effectiveStatus()) {
     "COMPLETED" -> "\u2713"
     "IN-PROCESS" -> "\u25D0"
     "CANCELLED" -> "\u00D7"
     else -> "\u25CB"
-}
-
-private fun TaskEntity.isWidgetActiveTask(): Boolean =
-    when (effectiveStatus()) {
-        "COMPLETED", "CANCELLED" -> false
-        else -> !isCompleted
-    }
-
-private fun TaskEntity.statusSortRank(): Int = when (effectiveStatus()) {
-    "IN-PROCESS" -> 0
-    "NEEDS-ACTION" -> 1
-    "COMPLETED" -> 2
-    "CANCELLED" -> 3
-    else -> 4
 }
 
 internal fun AppLanguageMode.toLocale(context: Context): Locale =
@@ -2419,32 +2381,6 @@ internal fun WidgetTaskSubtaskDefaultMode.resolveSubtasksExpandedByDefault(appDe
     WidgetTaskSubtaskDefaultMode.FollowApp -> appDefault
     WidgetTaskSubtaskDefaultMode.Open -> true
     WidgetTaskSubtaskDefaultMode.Closed -> false
-}
-
-internal fun EventEntity.displayColor(): Int = manualColor ?: color
-
-internal fun TaskEntity.displayColor(mode: TaskColorMode): Int =
-    manualColor ?: when (mode) {
-        TaskColorMode.Priority -> priority?.let(::priorityColor) ?: color
-        TaskColorMode.Collection -> color
-    }
-
-internal fun EventEntity.monthOccurrenceKey(): String =
-    "${resourceHref.ifBlank { uid }}:$startsAtMillis"
-
-internal fun EventEntity.endDateInclusive(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
-    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(zoneId).toLocalDate()
-
-private fun priorityColor(priority: Int): Int = when (priority.coerceIn(1, 9)) {
-    1 -> 0xFFD93025.toInt()
-    2 -> 0xFFE7602A.toInt()
-    3 -> 0xFFF29900.toInt()
-    4 -> 0xFFF8C542.toInt()
-    5 -> 0xFFFFD84D.toInt()
-    6 -> 0xFF55A8F5.toInt()
-    7 -> 0xFF2E8FD8.toInt()
-    8 -> 0xFF20A386.toInt()
-    else -> 0xFF2E7D32.toInt()
 }
 
 internal fun Int.monthChipStyle(): WidgetMonthChipStyle {
@@ -2490,16 +2426,6 @@ private fun rgbHue(r: Int, g: Int, b: Int, max: Int, min: Int): Float {
     return if (hue < 0f) hue + 360f else hue
 }
 
-private fun EventEntity.visibleDates(start: LocalDate, endExclusive: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): List<LocalDate> {
-    val first = startsAtMillis.toDate(zoneId)
-    val last = endDateInclusive(zoneId)
-    val from = if (first.isBefore(start)) start else first
-    val to = if (!last.isBefore(endExclusive)) endExclusive.minusDays(1) else last
-    if (to.isBefore(from)) return emptyList()
-    val days = ChronoUnit.DAYS.between(from, to).toInt()
-    return (0..days).map { from.plusDays(it.toLong()) }
-}
-
 private fun TaskEntity.visibleDates(start: LocalDate, endExclusive: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): List<LocalDate> {
     val first = startAtMillis?.toDate(zoneId) ?: dueAtMillis?.toDate(zoneId) ?: return emptyList()
     val last = (dueAtMillis?.toDate(zoneId) ?: startAtMillis?.toDate(zoneId) ?: first).coerceAtLeast(first)
@@ -2511,7 +2437,7 @@ private fun TaskEntity.visibleDates(start: LocalDate, endExclusive: LocalDate, z
 }
 
 private fun EventEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Pair<Int, Int>? {
-    if (allDay || isWidgetTimedMultiDayMiddleOn(day, zoneId)) return null
+    if (allDay || isTimedMultiDayMiddleOn(day, zoneId)) return null
     val visibleStart = day.atTime(WIDGET_DAY_START_HOUR, 0).atZone(zoneId).toInstant().toEpochMilli()
     val visibleEnd = day.atTime(WIDGET_DAY_END_HOUR, 0).plusHours(1).atZone(zoneId).toInstant().toEpochMilli()
     val overlapStart = max(startsAtMillis, visibleStart)
@@ -2542,16 +2468,6 @@ private fun TaskEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = Z
     return startMinute to (startMinute + duration).coerceIn(startMinute + 1, 24 * 60)
 }
 
-private fun EventEntity.isWidgetAllDayTopItemOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean =
-    if (allDay) day in visibleDates(day, day.plusDays(1), zoneId) else isWidgetTimedMultiDayMiddleOn(day, zoneId)
-
-private fun EventEntity.isWidgetTimedMultiDayMiddleOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
-    if (allDay) return false
-    val start = startsAtMillis.toDate(zoneId)
-    val end = endDateInclusive(zoneId)
-    return start.isBefore(end) && day.isAfter(start) && day.isBefore(end)
-}
-
 private fun TaskEntity.isWidgetFullDayTaskOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
     if (startAtMillis == null && dueAtMillis == null) return false
     if ((startAtMillis != null && startHasTime) || (dueAtMillis != null && dueHasTime)) return false
@@ -2567,12 +2483,6 @@ private fun Int.minuteOfDayText(): String {
     val minute = bounded % 60
     return "%02d:%02d".format(hour, minute)
 }
-
-internal fun Long.toDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
-    Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()
-
-private fun Long.toTimeText(zoneId: ZoneId = ZoneId.systemDefault()): String =
-    Instant.ofEpochMilli(this).atZone(zoneId).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
 
 internal fun dayPendingIntentRequestCode(appWidgetId: Int, day: LocalDate): Int =
     appWidgetId * 10_000 + day.year % 100 * 400 + day.dayOfYear

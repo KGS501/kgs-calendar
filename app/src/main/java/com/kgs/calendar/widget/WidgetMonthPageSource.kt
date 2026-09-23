@@ -3,7 +3,13 @@ package com.kgs.calendar.widget
 import android.content.Context
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
+import com.kgs.calendar.domain.event.displayColor
+import com.kgs.calendar.domain.event.endDateInclusive
+import com.kgs.calendar.domain.event.isCancelled
+import com.kgs.calendar.domain.event.monthOccurrenceKey
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
+import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.time.toDate
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -49,13 +55,13 @@ internal class WidgetMonthPageSource(
         val candidates = mutableListOf<WidgetMonthCandidate>()
         graph.repository.eventsSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
+            .filterNot { it.isCancelled() }
             .forEach { event ->
                 val itemStart = event.startsAtMillis.toDate(zoneId)
                 val itemEnd = event.endDateInclusive(zoneId).coerceAtLeast(itemStart)
                 if (itemEnd < start || !itemStart.isBefore(endExclusive)) return@forEach
                 candidates += WidgetMonthCandidate(
-                    id = "event:${event.monthOccurrenceKey()}",
+                    id = "event:${event.monthOccurrenceKey(uidFallbackForBlankHref = true)}",
                     title = event.title.ifBlank { labels.getString(R.string.no_title) },
                     color = event.displayColor(),
                     sortMillis = event.startsAtMillis,

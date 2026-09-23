@@ -304,7 +304,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -329,10 +328,14 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -375,14 +378,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -761,7 +760,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 end = start.defaultDraftEnd(state.defaultEventDurationMinutes),
             )
             draftWireframeColor = state.collections
-                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                 .firstOrNull()
                 ?.color
@@ -796,7 +795,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 allDay = allDay,
             )
             draftWireframeColor = state.collections
-                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() }
+                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() }
                 .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
                 .firstOrNull()
                 ?.color
@@ -988,7 +987,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 ),
                             )
                             draftWireframeColor = state.collections
-                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                                 .firstOrNull()
                                 ?.color
@@ -1008,7 +1007,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                                 ),
                             )
                             draftWireframeColor = state.collections
-                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
                                 .firstOrNull()
                                 ?.color
@@ -1297,11 +1296,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onScheduleChange = { editorSchedule = it },
                         expanded = true,
                         initialEvent = sheet.event,
-                        readOnlyRemote = state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyForUi() == true,
+                        readOnlyRemote = state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true,
                         transferDraft = null,
                         requestTitleFocus = false,
                         onSave = { payload ->
-                            if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyForUi() == true) {
+                            if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true) {
                                 viewModel.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
                                 showHiddenSaveNotice(sheet.event.collectionHref, HiddenSaveKind.Event)
                                 creationSheet = null
@@ -1398,10 +1397,10 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onScheduleChange = { editorSchedule = it },
                         requestTitleFocus = false,
                         initialTask = sheet.task,
-                        readOnlyRemote = state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyForUi() == true,
+                        readOnlyRemote = state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true,
                         transferDraft = null,
                         onSave = { payload ->
-                            if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyForUi() == true) {
+                            if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true) {
                                 viewModel.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
                                 showHiddenSaveNotice(sheet.task.collectionHref, HiddenSaveKind.Task)
                                 creationSheet = null
@@ -1737,7 +1736,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onSync = viewModel::syncNow,
                 onCollectionSettings = { editingCollection = it },
                 onLocalCalendarEnabledChanged = { enabled ->
-                    state.collections.firstOrNull { it.href.isLocalCollectionHrefUi() }?.let { local ->
+                    state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->
                         viewModel.setCollectionEnabled(local.href, enabled)
                     }
                 },

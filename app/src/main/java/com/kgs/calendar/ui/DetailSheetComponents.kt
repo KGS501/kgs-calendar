@@ -304,7 +304,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -321,14 +320,17 @@ import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.model.Attendee
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
@@ -375,14 +377,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -402,8 +400,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
-import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.DayOfWeek
 import java.time.Instant
@@ -776,60 +772,39 @@ private fun Color.participantMuted(muted: Boolean, alpha: Float): Color =
     if (muted) greyedOut(0.78f).copy(alpha = alpha) else this
 
 internal fun String?.toCalendarParticipant(): CalendarParticipant? =
-    runCatching {
-        if (isNullOrBlank()) return@runCatching null
-        val obj = JSONObject(this)
-        val email = obj.optString("email")
+    ParticipantJson.decodeOrganizer(this)?.let { organizer ->
         CalendarParticipant(
-            name = obj.optString("name", email),
-            email = email,
-            partstat = obj.optString("partstat", "NEEDS-ACTION"),
-            role = obj.optString("role", "REQ-PARTICIPANT"),
-            rsvp = obj.optString("rsvp").equals("TRUE", ignoreCase = true),
-            scheduleStatus = obj.optString("scheduleStatus").takeIf { it.isNotBlank() },
+            name = organizer.name ?: organizer.email,
+            email = organizer.email,
         )
-    }.getOrNull()
+    }
 
 internal fun String?.toCalendarParticipants(): List<CalendarParticipant> =
-    runCatching {
-        if (isNullOrBlank()) return@runCatching emptyList()
-        val array = JSONArray(this)
-        buildList {
-            repeat(array.length()) { index ->
-                val obj = array.optJSONObject(index) ?: return@repeat
-                val email = obj.optString("email")
-                if (email.isBlank()) return@repeat
-                add(
-                    CalendarParticipant(
-                        name = obj.optString("name", email),
-                        email = email,
-                        partstat = obj.optString("partstat", "NEEDS-ACTION"),
-                        role = obj.optString("role", "REQ-PARTICIPANT"),
-                        rsvp = obj.optString("rsvp").equals("TRUE", ignoreCase = true),
-                        scheduleStatus = obj.optString("scheduleStatus").takeIf { it.isNotBlank() },
-                    ),
-                )
-            }
-        }
-    }.getOrDefault(emptyList())
-
-internal fun List<CalendarParticipant>.toAttendeesJson(): String? =
-    takeIf { it.isNotEmpty() }?.let { participants ->
-        JSONArray().apply {
-            participants.forEach { attendee ->
-                put(
-                    JSONObject().apply {
-                        put("name", attendee.name)
-                        put("email", attendee.email)
-                        put("partstat", attendee.partstat)
-                        put("role", attendee.role)
-                        put("rsvp", if (attendee.rsvp) "TRUE" else "FALSE")
-                        attendee.scheduleStatus?.let { put("scheduleStatus", it) }
-                    },
-                )
-            }
-        }.toString()
+    ParticipantJson.decodeAttendees(this).map { attendee ->
+        CalendarParticipant(
+            name = attendee.name ?: attendee.email,
+            email = attendee.email,
+            partstat = attendee.partstat ?: "NEEDS-ACTION",
+            role = attendee.role ?: "REQ-PARTICIPANT",
+            rsvp = attendee.rsvp.equals("TRUE", ignoreCase = true),
+            scheduleStatus = attendee.scheduleStatus?.takeIf { it.isNotBlank() },
+        )
     }
+
+/** Writes only the fields the editor shows; other stored attendee parameters are not carried over. */
+internal fun List<CalendarParticipant>.toAttendeesJson(): String? =
+    ParticipantJson.encodeAttendees(
+        map { attendee ->
+            Attendee(
+                email = attendee.email,
+                name = attendee.name,
+                partstat = attendee.partstat,
+                role = attendee.role,
+                rsvp = if (attendee.rsvp) "TRUE" else "FALSE",
+                scheduleStatus = attendee.scheduleStatus,
+            )
+        },
+    )
 
 internal fun String.isLikelyEmailAddress(): Boolean =
     matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
@@ -848,18 +823,6 @@ private fun taskStatusOptionLabel(value: String): String = when (value) {
     "CANCELLED" -> appString(R.string.aborted)
     else -> appString(R.string.status_open)
 }
-
-/** Normalised effective status, falling back to the legacy isCompleted boolean. */
-internal fun TaskEntity.effectiveStatus(): String = status?.uppercase()
-    ?: if (isCompleted) "COMPLETED" else "NEEDS-ACTION"
-
-/**
- * A task is "inactive" when it's done OR cancelled — both should be greyed out and have
- * their priority animation suppressed.
- */
-internal fun TaskEntity.isInactive(): Boolean = isCompleted || effectiveStatus() == "CANCELLED"
-
-/** Sort weight for the "Status" sort: In Bearbeitung first, then Offen, then others. */
 
 internal enum class PlannedTaskSort(val label: String) {
     Date("Date"),

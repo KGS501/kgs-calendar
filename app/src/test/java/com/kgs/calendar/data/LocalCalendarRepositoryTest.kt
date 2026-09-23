@@ -2,6 +2,7 @@ package com.kgs.calendar.data
 
 import android.graphics.Color
 import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.SourceType
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals

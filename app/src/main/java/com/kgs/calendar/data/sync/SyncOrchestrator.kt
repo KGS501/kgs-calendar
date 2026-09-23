@@ -5,6 +5,7 @@ import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.kgs.calendar.domain.model.SyncState
 
 /**
  * Runs a full sync: the local repairs, then every account through the first engine that handles
@@ -39,7 +40,7 @@ class SyncOrchestrator(
                 if (engine.sync(account, options)) successfulAccounts++
             } catch (error: Throwable) {
                 val syncError = account.describeSyncError(error)
-                database.accountDao().updateSyncState("error", syncError, account.lastSyncAtMillis, account.id)
+                database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
                 firstError = firstError ?: IllegalStateException(syncError, error)
             }
         }

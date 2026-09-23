@@ -2,7 +2,7 @@ package com.kgs.calendar.data.local
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.domain.model.SourceType
 
 internal object KgsDatabaseMigrations {
     val ALL: Array<Migration> get() = arrayOf(
@@ -281,14 +281,14 @@ internal object KgsDatabaseMigrations {
 
     private val MIGRATION_16_17 = object : Migration(16, 17) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE accounts ADD COLUMN sourceType TEXT NOT NULL DEFAULT '${SourceType.CalDav}'")
-            db.execSQL("ALTER TABLE collections ADD COLUMN sourceType TEXT NOT NULL DEFAULT '${SourceType.CalDav}'")
+            db.execSQL("ALTER TABLE accounts ADD COLUMN sourceType TEXT NOT NULL DEFAULT '${SourceType.CalDav.value}'")
+            db.execSQL("ALTER TABLE collections ADD COLUMN sourceType TEXT NOT NULL DEFAULT '${SourceType.CalDav.value}'")
             db.execSQL("ALTER TABLE collections ADD COLUMN externalId TEXT DEFAULT NULL")
             db.execSQL("ALTER TABLE collections ADD COLUMN capabilitiesJson TEXT DEFAULT NULL")
-            db.execSQL("UPDATE accounts SET sourceType = '${SourceType.Local}' WHERE id = 'local' OR serverUrl LIKE 'local://%'")
-            db.execSQL("UPDATE accounts SET sourceType = '${SourceType.ReadOnlyUrl}' WHERE id LIKE 'readonly-%' OR username = 'Read-only URL'")
-            db.execSQL("UPDATE collections SET sourceType = '${SourceType.Local}' WHERE href LIKE 'local://%'")
-            db.execSQL("UPDATE collections SET sourceType = '${SourceType.ReadOnlyUrl}' WHERE href LIKE 'readonly-%'")
+            db.execSQL("UPDATE accounts SET sourceType = '${SourceType.Local.value}' WHERE id = 'local' OR serverUrl LIKE 'local://%'")
+            db.execSQL("UPDATE accounts SET sourceType = '${SourceType.ReadOnlyUrl.value}' WHERE id LIKE 'readonly-%' OR username = 'Read-only URL'")
+            db.execSQL("UPDATE collections SET sourceType = '${SourceType.Local.value}' WHERE href LIKE 'local://%'")
+            db.execSQL("UPDATE collections SET sourceType = '${SourceType.ReadOnlyUrl.value}' WHERE href LIKE 'readonly-%'")
         }
     }
 

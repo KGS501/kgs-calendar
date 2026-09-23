@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kgs.calendar.data.local.entity.AccountEntity
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -31,7 +32,7 @@ interface AccountDao {
 
     @Query("UPDATE accounts SET syncState = :state, syncError = :error, lastSyncAtMillis = :lastSyncAtMillis WHERE id = :id")
     suspend fun updateSyncState(
-        state: String,
+        state: SyncState,
         error: String?,
         lastSyncAtMillis: Long?,
         id: String = AccountEntity.PRIMARY_ID,

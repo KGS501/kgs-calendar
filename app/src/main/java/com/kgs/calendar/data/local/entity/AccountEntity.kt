@@ -2,7 +2,8 @@ package com.kgs.calendar.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
 
 @Entity(tableName = "accounts")
 data class AccountEntity(
@@ -11,9 +12,9 @@ data class AccountEntity(
     val username: String,
     val displayName: String?,
     val lastSyncAtMillis: Long?,
-    val syncState: String = "idle",
+    val syncState: SyncState = SyncState.Idle,
     val syncError: String? = null,
-    val sourceType: String = SourceType.CalDav,
+    val sourceType: SourceType = SourceType.CalDav,
     val principalUrl: String? = null,
     val calendarHomeUrl: String? = null,
     val capabilitiesJson: String? = null,

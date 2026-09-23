@@ -6,7 +6,6 @@ import com.kgs.calendar.data.LOCAL_COLLECTION_PREFIX
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.READ_ONLY_PREFIX
 import com.kgs.calendar.data.READ_ONLY_USERNAME
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.accountId
 import com.kgs.calendar.data.canWriteProperties
 import com.kgs.calendar.data.local.KgsDatabase
@@ -22,6 +21,8 @@ import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.source.isAndroidProviderAccount
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
@@ -170,7 +171,7 @@ class CalendarSourceManager internal constructor(
 
     suspend fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
         val existing = database.accountDao().get(accountId) ?: return
-        if (existing.sourceType == SourceType.AndroidProvider || existing.id == AndroidCalendarProviderClient.ANDROID_ACCOUNT_ID) {
+        if (existing.isAndroidProviderAccount()) {
             database.accountDao().upsert(existing.copy(displayName = displayName.trim().ifBlank { existing.displayName ?: "Android device calendars" }))
             return
         }

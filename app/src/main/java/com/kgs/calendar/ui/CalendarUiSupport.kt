@@ -50,11 +50,8 @@ internal val SettingsControlHeight = DefaultUiTokens.settingsControlHeight
 internal val SettingsControlShape = DefaultUiTokens.settingsControlShape
 internal val EditorTinyVisibleHeight = DefaultUiTokens.editorTinyVisibleHeight
 internal val EditorSmallVisibleHeight = DefaultUiTokens.editorSmallVisibleHeight
-internal const val UiReadOnlyCollectionPrefix = "readonly-"
 internal const val UiLocalAccountId = "local"
 internal const val UiLocalCollectionPrefix = "local://"
-internal const val UiAndroidAccountId = "android-provider"
-internal const val UiAndroidCollectionPrefix = "android://calendar/"
 internal val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
 
 @Composable

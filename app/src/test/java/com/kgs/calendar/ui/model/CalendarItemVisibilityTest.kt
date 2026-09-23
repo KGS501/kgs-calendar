@@ -5,6 +5,9 @@ import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.event.endDateInclusive
+import com.kgs.calendar.domain.event.isAllDayTopItemOn
+import com.kgs.calendar.domain.event.occursOn
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

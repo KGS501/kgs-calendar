@@ -3,15 +3,12 @@ package com.kgs.calendar.data
 import android.graphics.Color
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
-import com.kgs.calendar.data.local.entity.EventEntity
-import org.json.JSONArray
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
 import java.net.UnknownHostException
 import java.nio.charset.StandardCharsets
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -44,27 +41,6 @@ internal fun String.looksLikeHtmlResponse(contentType: String?): Boolean {
     val prefix = trimStart().take(256)
     return prefix.startsWith("<!DOCTYPE html", ignoreCase = true) ||
         prefix.startsWith("<html", ignoreCase = true)
-}
-
-internal fun String?.updateAttendeePartstat(attendeeEmails: List<String>, partstat: String): String? {
-    val normalizedPartstat = partstat.trim().uppercase()
-    if (normalizedPartstat !in setOf("ACCEPTED", "DECLINED", "TENTATIVE", "NEEDS-ACTION")) return null
-    val matches = attendeeEmails
-        .map { it.trim().lowercase() }
-        .filter { it.isNotBlank() }
-        .toSet()
-    if (matches.isEmpty()) return null
-    val attendees = runCatching { JSONArray(this.orEmpty()) }.getOrNull() ?: return null
-    var changed = false
-    repeat(attendees.length()) { index ->
-        val obj = attendees.optJSONObject(index) ?: return@repeat
-        val email = obj.optString("email").trim().lowercase()
-        if (email in matches) {
-            obj.put("partstat", normalizedPartstat)
-            changed = true
-        }
-    }
-    return attendees.takeIf { changed }?.toString()
 }
 
 internal fun newUid(): String = "${UUID.randomUUID()}@kgs-calendar"
@@ -104,9 +80,6 @@ internal val DEFAULT_COLORS = listOf(
     Color.rgb(238, 147, 45),
 )
 
-internal fun String.isLocalCollectionHref(): Boolean =
-    startsWith(LOCAL_COLLECTION_PREFIX)
-
 internal fun String.normalizedIcsText(): String =
     replace("\r\n", "\n").replace('\r', '\n').trim()
 
@@ -143,12 +116,6 @@ internal fun AccountEntity.describeSyncError(error: Throwable): String {
     }
     return "Source \"$source\": ${error.message ?: "Sync failed."}"
 }
-
-internal fun Long.toDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
-
-internal fun EventEntity.endDateInclusive(): LocalDate =
-    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(ZoneId.systemDefault()).toLocalDate()
 
 internal fun CollectionEntity.newResourceHref(uid: String): String =
     href.trimEnd('/') + "/" + uid.calendarObjectPathSegment() + ".ics"

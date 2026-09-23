@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.domain.model.SourceType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -140,7 +141,7 @@ interface EventDao {
         WHERE collections.sourceType = :sourceType
         """,
     )
-    suspend fun countForCollectionSource(sourceType: String): Int
+    suspend fun countForCollectionSource(sourceType: SourceType): Int
 
     @Upsert
     suspend fun upsert(event: EventEntity)

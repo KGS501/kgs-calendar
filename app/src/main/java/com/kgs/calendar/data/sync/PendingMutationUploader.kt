@@ -116,11 +116,13 @@ class PendingMutationUploader internal constructor(
                             when (mutation.componentType) {
                                 ComponentType.Event -> database.eventDao().deleteByResource(mutation.resourceHref)
                                 ComponentType.Task -> database.taskDao().deleteByResource(mutation.resourceHref)
+                                ComponentType.Unknown -> Unit
                             }
                             database.resourceDao().delete(mutation.resourceHref)
                             database.pendingMutationDao().delete(mutation)
                         }
                     }
+                    MutationAction.Unknown -> Unit
                 }
             } catch (error: Throwable) {
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")

@@ -2,7 +2,6 @@ package com.kgs.calendar.data.sync
 
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.hasTimedIcalProperty
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.ParsedCalendarComponent
@@ -24,6 +23,8 @@ import com.kgs.calendar.domain.model.MutationAction
 import java.net.URI
 import java.time.Instant
 import java.time.ZoneId
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
 
 /** Two-way CalDAV sync of one account: ETag repair, upload of queued changes, discovery and collection pulls. */
 class CalDavSyncEngine internal constructor(
@@ -40,7 +41,7 @@ class CalDavSyncEngine internal constructor(
 
     override suspend fun sync(account: AccountEntity, options: SourceSyncOptions): Boolean {
         val credentials = credentialsStore.get(account.id) ?: return false
-        database.accountDao().updateSyncState("syncing", null, account.lastSyncAtMillis, account.id)
+        database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         repairMissingCalDavEtags(credentials, account.id)
         uploader.pushPending(credentials, account.id)
         val discovery = calDavClient.discoverAccount(
@@ -104,7 +105,7 @@ class CalDavSyncEngine internal constructor(
                 val remote = remoteCollections.firstOrNull { it.href.davHrefKey() == collection.href.davHrefKey() }
                 syncCollection(credentials, collection, remote, forceFullRefresh = options.forceFullCalDavRefresh)
             }
-        database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
+        database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
         return true
     }
 
@@ -166,7 +167,7 @@ class CalDavSyncEngine internal constructor(
                 calDavClient.queryResources(
                     serverUrl = credentials.serverUrl,
                     collectionHref = collection.href,
-                    componentName = ComponentType.Task,
+                    componentName = ComponentType.Task.value,
                     username = credentials.username,
                     appPassword = credentials.appPassword,
                 )
@@ -350,7 +351,7 @@ class CalDavSyncEngine internal constructor(
                 href = resourceHref,
                 collectionHref = collectionHref,
                 etag = etag ?: existing?.etag,
-                componentType = retainedRaw.inferComponentType() ?: existing?.componentType ?: UNKNOWN_COMPONENT_TYPE,
+                componentType = retainedRaw.inferComponentType() ?: existing?.componentType ?: ComponentType.Unknown,
                 uid = retainedRaw.inferUid() ?: existing?.uid ?: resourceHref.substringAfterLast('/').ifBlank { resourceHref },
                 rawIcs = retainedRaw,
                 syncError = error.take(MAX_SYNC_ERROR_LENGTH),
@@ -381,7 +382,6 @@ class CalDavSyncEngine internal constructor(
 
     private companion object {
         const val RESOURCE_MULTIGET_BATCH_SIZE = 50
-        const val UNKNOWN_COMPONENT_TYPE = "UNKNOWN"
         const val MAX_SYNC_ERROR_LENGTH = 500
     }
 }
@@ -392,7 +392,7 @@ private fun String.davHrefKey(): String =
         uri.path ?: uri.rawPath ?: this
     }.getOrDefault(this).trimEnd('/')
 
-private fun String.inferComponentType(): String? =
+private fun String.inferComponentType(): ComponentType? =
     when {
         contains("BEGIN:VEVENT", ignoreCase = true) -> ComponentType.Event
         contains("BEGIN:VTODO", ignoreCase = true) -> ComponentType.Task

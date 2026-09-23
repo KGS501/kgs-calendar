@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
+import com.kgs.calendar.domain.model.MutationAction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -41,13 +42,13 @@ interface PendingMutationDao {
         LIMIT 1
         """,
     )
-    suspend fun latestForResourceAndAction(resourceHref: String, action: String): PendingMutationEntity?
+    suspend fun latestForResourceAndAction(resourceHref: String, action: MutationAction): PendingMutationEntity?
 
     @Insert
     suspend fun insert(mutation: PendingMutationEntity): Long
 
     @Query("DELETE FROM pending_mutations WHERE resourceHref = :resourceHref AND action = :action")
-    suspend fun deleteForResourceAndAction(resourceHref: String, action: String)
+    suspend fun deleteForResourceAndAction(resourceHref: String, action: MutationAction)
 
     @Query("DELETE FROM pending_mutations WHERE resourceHref = :resourceHref")
     suspend fun deleteForResource(resourceHref: String)

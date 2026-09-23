@@ -8,7 +8,11 @@ import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
+import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
 import org.json.JSONObject
 
 /**
@@ -32,7 +36,7 @@ internal class LocalWriteSupport(
         collectionHref: String,
         resourceHref: String,
         etag: String?,
-        componentType: String,
+        componentType: ComponentType,
         uid: String,
         rawIcs: String,
     ) {
@@ -51,7 +55,7 @@ internal class LocalWriteSupport(
     suspend fun enqueuePut(
         collectionHref: String,
         resourceHref: String,
-        componentType: String,
+        componentType: ComponentType,
         rawIcs: String,
         baseEtag: String?,
     ) {
@@ -76,7 +80,7 @@ internal class LocalWriteSupport(
     suspend fun enqueueDelete(
         collectionHref: String,
         resourceHref: String,
-        componentType: String,
+        componentType: ComponentType,
         baseEtag: String?,
     ) {
         if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
@@ -124,9 +128,6 @@ internal class LocalWriteSupport(
     }
 }
 
-internal fun CollectionEntity.isReadOnlyCollection(): Boolean =
-    readOnly || href.startsWith(READ_ONLY_PREFIX)
-
 private fun CollectionEntity.capability(name: String, defaultValue: Boolean): Boolean =
     runCatching {
         val json = capabilitiesJson?.let(::JSONObject) ?: return@runCatching defaultValue
@@ -146,6 +147,3 @@ internal fun CollectionEntity.isCalDavScheduleInbox(): Boolean =
     sourceType == SourceType.CalDav &&
         capabilitiesJson
             ?.let { runCatching { JSONObject(it).optBoolean("isScheduleInbox", false) }.getOrDefault(false) } == true
-
-internal fun CollectionEntity.isAndroidProviderCollection(): Boolean =
-    sourceType == SourceType.AndroidProvider || href.startsWith(AndroidCalendarProviderClient.ANDROID_CALENDAR_PREFIX)

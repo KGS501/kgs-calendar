@@ -4,6 +4,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.MutationAction
 
 @Entity(
     tableName = "pending_mutations",
@@ -26,8 +28,8 @@ data class PendingMutationEntity(
     val accountId: String,
     val collectionHref: String,
     val resourceHref: String,
-    val componentType: String,
-    val action: String,
+    val componentType: ComponentType,
+    val action: MutationAction,
     val payloadIcs: String?,
     val baseEtag: String?,
     val createdAtMillis: Long,

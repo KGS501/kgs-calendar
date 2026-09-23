@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -52,7 +54,7 @@ class ReadOnlyCalendarRepositoryTest {
         assertEquals(server.url(feedPath), account.serverUrl)
         assertEquals("Read-only URL", account.username)
         val stored = harness.account(account.id)!!
-        assertEquals("idle", stored.syncState)
+        assertEquals(SyncState.Idle, stored.syncState)
         assertNotNull(stored.lastSyncAtMillis)
         // NOTE: current behaviour - the collection href repeats the prefix: "readonly-readonly-<uuid>".
         val collectionHref = "readonly-${account.id}"
@@ -128,7 +130,7 @@ class ReadOnlyCalendarRepositoryTest {
         // NOTE: current behaviour - the account row is persisted before the first fetch and stays behind in error state.
         val account = harness.database.accountDao().getAll().single()
         assertEquals(url, account.serverUrl)
-        assertEquals("error", account.syncState)
+        assertEquals(SyncState.Error, account.syncState)
         assertEquals("Source \"Broken\": URL returned a web page instead of an iCalendar feed.", account.syncError)
         assertTrue(harness.database.collectionDao().all().isEmpty())
     }

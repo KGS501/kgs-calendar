@@ -3,7 +3,10 @@ package com.kgs.calendar.data.ical
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
+import com.kgs.calendar.domain.model.Attendee
 import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.Organizer
+import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
@@ -155,43 +158,44 @@ class IcalCodec(
     }
 
     private fun StringBuilder.appendOrganizer(organizerJson: String?) {
-        val email = organizerJson.jsonField("email")?.trim().orEmpty()
+        val organizer = ParticipantJson.decodeOrganizer(organizerJson) ?: return
+        val email = organizer.email.trim()
         if (email.isBlank()) return
-        val name = organizerJson.jsonField("name")?.trim().orEmpty()
+        val name = organizer.name?.trim().orEmpty()
         val params = buildString {
             if (name.isNotBlank()) append(";CN=${escapeParam(name)}")
-            organizerJson.jsonField("sentBy")?.takeIf { it.isNotBlank() }?.let { append(";SENT-BY=${escapeParam(it)}") }
-            organizerJson.jsonField("directory")?.takeIf { it.isNotBlank() }?.let { append(";DIR=${escapeParam(it)}") }
-            organizerJson.jsonField("language")?.takeIf { it.isNotBlank() }?.let { append(";LANGUAGE=${escapeParam(it)}") }
+            organizer.sentBy?.takeIf { it.isNotBlank() }?.let { append(";SENT-BY=${escapeParam(it)}") }
+            organizer.directory?.takeIf { it.isNotBlank() }?.let { append(";DIR=${escapeParam(it)}") }
+            organizer.language?.takeIf { it.isNotBlank() }?.let { append(";LANGUAGE=${escapeParam(it)}") }
         }
         appendLine("ORGANIZER$params:${calendarUserAddress(email)}")
     }
 
     private fun StringBuilder.appendAttendees(attendeesJson: String?) {
-        attendeesJson.jsonObjectBodies().forEach { attendeeJson ->
-            val email = attendeeJson.jsonField("email")?.trim().orEmpty()
+        ParticipantJson.decodeAttendees(attendeesJson).forEach { attendee ->
+            val email = attendee.email.trim()
             if (email.isBlank()) return@forEach
-            val name = attendeeJson.jsonField("name")?.trim().orEmpty()
-            val partstat = attendeeJson.jsonField("partstat")?.takeIf { it.isNotBlank() }
+            val name = attendee.name?.trim().orEmpty()
+            val partstat = attendee.partstat?.takeIf { it.isNotBlank() }
                 ?.uppercase(Locale.US) ?: "NEEDS-ACTION"
-            val role = attendeeJson.jsonField("role")?.takeIf { it.isNotBlank() }
+            val role = attendee.role?.takeIf { it.isNotBlank() }
                 ?.uppercase(Locale.US) ?: "REQ-PARTICIPANT"
-            val rsvp = attendeeJson.jsonField("rsvp")?.trim().orEmpty()
-            val scheduleStatus = attendeeJson.jsonField("scheduleStatus")?.trim().orEmpty()
+            val rsvp = attendee.rsvp?.trim().orEmpty()
+            val scheduleStatus = attendee.scheduleStatus?.trim().orEmpty()
             val params = buildString {
                 if (name.isNotBlank()) append(";CN=${escapeParam(name)}")
-                attendeeJson.jsonField("calendarUserType")?.takeIf { it.isNotBlank() }?.let { append(";CUTYPE=${it.uppercase(Locale.US)}") }
-                attendeeJson.jsonField("member")?.takeIf { it.isNotBlank() }?.let { append(";MEMBER=${escapeParam(it)}") }
+                attendee.calendarUserType?.takeIf { it.isNotBlank() }?.let { append(";CUTYPE=${it.uppercase(Locale.US)}") }
+                attendee.member?.takeIf { it.isNotBlank() }?.let { append(";MEMBER=${escapeParam(it)}") }
                 if (role.isNotBlank()) append(";ROLE=$role")
                 if (partstat.isNotBlank()) append(";PARTSTAT=$partstat")
                 if (rsvp.isNotBlank()) append(";RSVP=${rsvp.uppercase(Locale.US)}")
-                attendeeJson.jsonField("delegatedTo")?.takeIf { it.isNotBlank() }?.let { append(";DELEGATED-TO=${escapeParam(it)}") }
-                attendeeJson.jsonField("delegatedFrom")?.takeIf { it.isNotBlank() }?.let { append(";DELEGATED-FROM=${escapeParam(it)}") }
-                attendeeJson.jsonField("sentBy")?.takeIf { it.isNotBlank() }?.let { append(";SENT-BY=${escapeParam(it)}") }
-                attendeeJson.jsonField("directory")?.takeIf { it.isNotBlank() }?.let { append(";DIR=${escapeParam(it)}") }
-                attendeeJson.jsonField("language")?.takeIf { it.isNotBlank() }?.let { append(";LANGUAGE=${escapeParam(it)}") }
-                attendeeJson.jsonField("scheduleAgent")?.takeIf { it.isNotBlank() }?.let { append(";SCHEDULE-AGENT=${it.uppercase(Locale.US)}") }
-                attendeeJson.jsonField("scheduleForceSend")?.takeIf { it.isNotBlank() }?.let { append(";SCHEDULE-FORCE-SEND=${it.uppercase(Locale.US)}") }
+                attendee.delegatedTo?.takeIf { it.isNotBlank() }?.let { append(";DELEGATED-TO=${escapeParam(it)}") }
+                attendee.delegatedFrom?.takeIf { it.isNotBlank() }?.let { append(";DELEGATED-FROM=${escapeParam(it)}") }
+                attendee.sentBy?.takeIf { it.isNotBlank() }?.let { append(";SENT-BY=${escapeParam(it)}") }
+                attendee.directory?.takeIf { it.isNotBlank() }?.let { append(";DIR=${escapeParam(it)}") }
+                attendee.language?.takeIf { it.isNotBlank() }?.let { append(";LANGUAGE=${escapeParam(it)}") }
+                attendee.scheduleAgent?.takeIf { it.isNotBlank() }?.let { append(";SCHEDULE-AGENT=${it.uppercase(Locale.US)}") }
+                attendee.scheduleForceSend?.takeIf { it.isNotBlank() }?.let { append(";SCHEDULE-FORCE-SEND=${it.uppercase(Locale.US)}") }
                 if (scheduleStatus.isNotBlank()) append(";SCHEDULE-STATUS=${escapeParam(scheduleStatus)}")
             }
             appendLine("ATTENDEE$params:${calendarUserAddress(email)}")
@@ -434,9 +438,9 @@ class IcalCodec(
         return ParsedCalendarComponent(uid, ComponentType.Task, null, task)
     }
 
-    private fun components(rawIcs: String): Map<String, List<ComponentBlock>> {
-        val result = mutableMapOf<String, MutableList<ComponentBlock>>()
-        var activeName: String? = null
+    private fun components(rawIcs: String): Map<ComponentType, List<ComponentBlock>> {
+        val result = mutableMapOf<ComponentType, MutableList<ComponentBlock>>()
+        var activeName: ComponentType? = null
         var activeLines = mutableListOf<IcalLine>()
         var activeReminders = mutableListOf<Int>()
         // Depth of nested BEGIN blocks (VALARM, VTIMEZONE, STANDARD, DAYLIGHT, ...) within
@@ -718,10 +722,10 @@ class IcalCodec(
     private fun preserveUnsupportedData(
         originalRawIcs: String?,
         generatedRawIcs: String,
-        componentType: String,
+        componentType: ComponentType,
     ): String {
         if (originalRawIcs.isNullOrBlank()) return generatedRawIcs
-        val originalBlocks = extractComponentBlocks(originalRawIcs, componentType)
+        val originalBlocks = extractComponentBlocks(originalRawIcs, componentType.value)
         if (originalBlocks.isEmpty()) return generatedRawIcs
         val unknownByKey = originalBlocks.associate { block ->
             componentIdentity(block) to extractUnsupportedComponentLines(block, componentType)
@@ -734,8 +738,8 @@ class IcalCodec(
             val tzid = block.firstOrNull { propertyName(it) == "TZID" }?.substringAfter(':')?.trim()
             if (tzid != null && !generatedUpper.contains("TZID:${tzid.uppercase(Locale.US)}")) {
                 merged = merged.replaceFirst(
-                    "BEGIN:$componentType",
-                    block.joinToString("\r\n", postfix = "\r\n") + "BEGIN:$componentType",
+                    "BEGIN:${componentType.value}",
+                    block.joinToString("\r\n", postfix = "\r\n") + "BEGIN:${componentType.value}",
                 )
             }
         }
@@ -753,9 +757,9 @@ class IcalCodec(
         return merged
     }
 
-    private fun extractComponentBlocks(rawIcs: String, componentType: String): List<List<String>> {
-        val begin = "BEGIN:${componentType.uppercase(Locale.US)}"
-        val end = "END:${componentType.uppercase(Locale.US)}"
+    private fun extractComponentBlocks(rawIcs: String, componentName: String): List<List<String>> {
+        val begin = "BEGIN:${componentName.uppercase(Locale.US)}"
+        val end = "END:${componentName.uppercase(Locale.US)}"
         val result = mutableListOf<List<String>>()
         var active: MutableList<String>? = null
         var depth = 0
@@ -783,7 +787,7 @@ class IcalCodec(
         return recurrence?.substringAfter(':')?.trim()?.let { "override:$it" } ?: "master"
     }
 
-    private fun extractUnsupportedComponentLines(block: List<String>, componentType: String): List<String> {
+    private fun extractUnsupportedComponentLines(block: List<String>, componentType: ComponentType): List<String> {
         val known = if (componentType == ComponentType.Event) KNOWN_EVENT_PROPERTIES else KNOWN_TASK_PROPERTIES
         val result = mutableListOf<String>()
         var index = 1
@@ -821,7 +825,7 @@ class IcalCodec(
 
     private fun injectUnsupportedComponentLines(
         generated: String,
-        componentType: String,
+        componentType: ComponentType,
         unknownByKey: Map<String, List<String>>,
     ): String {
         val normalized = generated.replace("\r\n", "\n").replace('\r', '\n')
@@ -831,7 +835,7 @@ class IcalCodec(
         var depth = 0
         normalized.lines().forEach { line ->
             val upper = line.uppercase(Locale.US)
-            if (!inComponent && upper == "BEGIN:$componentType") {
+            if (!inComponent && upper == "BEGIN:${componentType.value}") {
                 inComponent = true
                 depth = 1
                 block = mutableListOf(line)
@@ -839,7 +843,7 @@ class IcalCodec(
                 block += line
                 if (upper.startsWith("BEGIN:")) depth++
                 if (upper.startsWith("END:")) depth--
-                if (upper == "END:$componentType" && depth == 0) {
+                if (upper == "END:${componentType.value}" && depth == 0) {
                     val identity = componentIdentity(block)
                     val unsupported = unknownByKey[identity].orEmpty()
                     if (unsupported.any { propertyName(it) == "RDATE" }) {
@@ -969,12 +973,14 @@ class IcalCodec(
     private fun IcalLine.toOrganizerJson(): String? {
         val email = value.stripMailto().ifBlank { return null }
         val name = params["CN"]?.unquoteParam()?.ifBlank { null }
-        return jsonObject(
-            "name" to (name ?: email),
-            "email" to email,
-            "sentBy" to params["SENT-BY"]?.unquoteParam(),
-            "directory" to params["DIR"]?.unquoteParam(),
-            "language" to params["LANGUAGE"]?.unquoteParam(),
+        return ParticipantJson.encodeOrganizer(
+            Organizer(
+                email = email,
+                name = name ?: email,
+                sentBy = params["SENT-BY"]?.unquoteParam(),
+                directory = params["DIR"]?.unquoteParam(),
+                language = params["LANGUAGE"]?.unquoteParam(),
+            ),
         )
     }
 
@@ -984,25 +990,25 @@ class IcalCodec(
             val email = line.value.stripMailto()
             if (email.isBlank()) return@mapNotNull null
             val name = line.params["CN"]?.unquoteParam()?.ifBlank { null } ?: email
-            jsonObject(
-                "name" to name,
-                "email" to email,
-                "partstat" to (line.params["PARTSTAT"]?.uppercase(Locale.US) ?: "NEEDS-ACTION"),
-                "role" to (line.params["ROLE"]?.uppercase(Locale.US) ?: "REQ-PARTICIPANT"),
-                "rsvp" to line.params["RSVP"]?.uppercase(Locale.US),
-                "calendarUserType" to line.params["CUTYPE"]?.uppercase(Locale.US),
-                "member" to line.params["MEMBER"]?.unquoteParam(),
-                "delegatedTo" to line.params["DELEGATED-TO"]?.unquoteParam(),
-                "delegatedFrom" to line.params["DELEGATED-FROM"]?.unquoteParam(),
-                "sentBy" to line.params["SENT-BY"]?.unquoteParam(),
-                "directory" to line.params["DIR"]?.unquoteParam(),
-                "language" to line.params["LANGUAGE"]?.unquoteParam(),
-                "scheduleAgent" to line.params["SCHEDULE-AGENT"]?.uppercase(Locale.US),
-                "scheduleForceSend" to line.params["SCHEDULE-FORCE-SEND"]?.uppercase(Locale.US),
-                "scheduleStatus" to line.params["SCHEDULE-STATUS"]?.unquoteParam(),
+            Attendee(
+                email = email,
+                name = name,
+                partstat = line.params["PARTSTAT"]?.uppercase(Locale.US) ?: "NEEDS-ACTION",
+                role = line.params["ROLE"]?.uppercase(Locale.US) ?: "REQ-PARTICIPANT",
+                rsvp = line.params["RSVP"]?.uppercase(Locale.US),
+                calendarUserType = line.params["CUTYPE"]?.uppercase(Locale.US),
+                member = line.params["MEMBER"]?.unquoteParam(),
+                delegatedTo = line.params["DELEGATED-TO"]?.unquoteParam(),
+                delegatedFrom = line.params["DELEGATED-FROM"]?.unquoteParam(),
+                sentBy = line.params["SENT-BY"]?.unquoteParam(),
+                directory = line.params["DIR"]?.unquoteParam(),
+                language = line.params["LANGUAGE"]?.unquoteParam(),
+                scheduleAgent = line.params["SCHEDULE-AGENT"]?.uppercase(Locale.US),
+                scheduleForceSend = line.params["SCHEDULE-FORCE-SEND"]?.uppercase(Locale.US),
+                scheduleStatus = line.params["SCHEDULE-STATUS"]?.unquoteParam(),
             )
         }
-        return attendees.takeIf { it.isNotEmpty() }?.joinToString(prefix = "[", postfix = "]")
+        return ParticipantJson.encodeAttendees(attendees)
     }
 
     private fun String.stripMailto(): String =
@@ -1020,97 +1026,6 @@ class IcalCodec(
         }
         return unquoted.replace("\\\"", "\"").replace("\\\\", "\\").unescapeIcal()
     }
-
-    private fun jsonObject(vararg fields: Pair<String, String?>): String =
-        fields.joinToString(prefix = "{", postfix = "}") { (key, value) ->
-            val encodedValue = value?.let { "\"${it.escapeJson()}\"" } ?: "null"
-            "\"${key.escapeJson()}\":$encodedValue"
-        }
-
-    private fun String.escapeJson(): String =
-        buildString(length) {
-            this@escapeJson.forEach { char ->
-                when (char) {
-                    '\\' -> append("\\\\")
-                    '"' -> append("\\\"")
-                    '\n' -> append("\\n")
-                    '\r' -> append("\\r")
-                    '\t' -> append("\\t")
-                    else -> append(char)
-                }
-            }
-        }
-
-    private fun String?.jsonField(field: String): String? {
-        if (isNullOrBlank()) return null
-        val pattern = Regex("\"${Regex.escape(field)}\"\\s*:\\s*(null|\"((?:\\\\.|[^\"\\\\])*)\")")
-        val match = pattern.find(this) ?: return null
-        if (match.groupValues[1] == "null") return null
-        return match.groupValues[2].unescapeJson()
-    }
-
-    private fun String?.jsonObjectBodies(): List<String> {
-        val text = this?.trim().orEmpty()
-        if (text.isBlank()) return emptyList()
-        val result = mutableListOf<String>()
-        var depth = 0
-        var start = -1
-        var inString = false
-        var escaped = false
-        text.forEachIndexed { index, char ->
-            when {
-                escaped -> escaped = false
-                inString && char == '\\' -> escaped = true
-                inString && char == '"' -> inString = false
-                inString -> Unit
-                char == '"' -> inString = true
-                char == '{' -> {
-                    if (depth == 0) start = index
-                    depth++
-                }
-                char == '}' && depth > 0 -> {
-                    depth--
-                    if (depth == 0 && start >= 0) {
-                        result += text.substring(start, index + 1)
-                        start = -1
-                    }
-                }
-            }
-        }
-        return result
-    }
-
-    private fun String.unescapeJson(): String =
-        buildString(length) {
-            var index = 0
-            while (index < this@unescapeJson.length) {
-                val char = this@unescapeJson[index]
-                if (char == '\\' && index + 1 < this@unescapeJson.length) {
-                    when (val escaped = this@unescapeJson[index + 1]) {
-                        '\\' -> append('\\')
-                        '"' -> append('"')
-                        'n' -> append('\n')
-                        'r' -> append('\r')
-                        't' -> append('\t')
-                        'u' -> {
-                            val hex = this@unescapeJson.drop(index + 2).take(4)
-                            val decoded = hex.takeIf { it.length == 4 }?.toIntOrNull(16)
-                            if (decoded != null) {
-                                append(decoded.toChar())
-                                index += 4
-                            } else {
-                                append("\\u")
-                            }
-                        }
-                        else -> append(escaped)
-                    }
-                    index += 2
-                } else {
-                    append(char)
-                    index++
-                }
-            }
-        }
 
     private fun Int.toColorText(): String =
         "#%06X".format(this and 0x00FFFFFF)

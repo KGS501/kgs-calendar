@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.domain.model.SourceType
 
 @Entity(
     tableName = "collections",
@@ -35,7 +35,7 @@ data class CollectionEntity(
     val automaticColor: Int? = null,
     val sourceColor: Int? = null,
     val customColor: Int? = null,
-    val sourceType: String = SourceType.CalDav,
+    val sourceType: SourceType = SourceType.CalDav,
     val externalId: String? = null,
     val capabilitiesJson: String? = null,
 )

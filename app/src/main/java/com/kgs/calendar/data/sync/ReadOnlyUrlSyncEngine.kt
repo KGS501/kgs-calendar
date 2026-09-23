@@ -3,7 +3,6 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.READ_ONLY_PREFIX
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.isTransientReadOnlySyncFailure
@@ -12,6 +11,8 @@ import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.looksLikeHtmlResponse
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.math.abs
@@ -31,11 +32,11 @@ class ReadOnlyUrlSyncEngine internal constructor(
     }
 
     suspend fun sync(account: AccountEntity) {
-        database.accountDao().updateSyncState("syncing", null, account.lastSyncAtMillis, account.id)
+        database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         val collectionHref = "$READ_ONLY_PREFIX${account.id}"
         val existing = database.collectionDao().get(collectionHref)
         if (existing?.isEnabled == false) {
-            database.accountDao().updateSyncState("idle", null, account.lastSyncAtMillis, account.id)
+            database.accountDao().updateSyncState(SyncState.Idle, null, account.lastSyncAtMillis, account.id)
             return
         }
         try {
@@ -119,15 +120,15 @@ class ReadOnlyUrlSyncEngine internal constructor(
                     database.eventDao().updateColorForCollection(collection.href, collection.color)
                     database.taskDao().updateColorForCollection(collection.href, collection.color)
                 }
-                database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
+                database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
             }
         } catch (error: Throwable) {
             if (existing != null && error.isTransientReadOnlySyncFailure()) {
-                database.accountDao().updateSyncState("idle", null, account.lastSyncAtMillis, account.id)
+                database.accountDao().updateSyncState(SyncState.Idle, null, account.lastSyncAtMillis, account.id)
                 return
             }
             val syncError = account.describeSyncError(error)
-            database.accountDao().updateSyncState("error", syncError, account.lastSyncAtMillis, account.id)
+            database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
             throw IllegalStateException(syncError, error)
         }
     }

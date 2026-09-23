@@ -10,6 +10,9 @@ import android.graphics.Color
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.domain.model.EventClassification
+import com.kgs.calendar.domain.model.EventStatus
+import com.kgs.calendar.domain.model.EventTransparency
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -577,46 +580,52 @@ private fun android.database.Cursor.getLongOrNull(index: Int): Long? =
 
 private fun Int?.toIcalStatus(): String? =
     when (this) {
-        CalendarContract.Events.STATUS_TENTATIVE -> "TENTATIVE"
-        CalendarContract.Events.STATUS_CANCELED -> "CANCELLED"
-        CalendarContract.Events.STATUS_CONFIRMED -> "CONFIRMED"
+        CalendarContract.Events.STATUS_TENTATIVE -> EventStatus.Tentative.value
+        CalendarContract.Events.STATUS_CANCELED -> EventStatus.Cancelled.value
+        CalendarContract.Events.STATUS_CONFIRMED -> EventStatus.Confirmed.value
         else -> null
     }
 
 private fun Int?.toIcalClass(): String? =
     when (this) {
-        CalendarContract.Events.ACCESS_PRIVATE -> "PRIVATE"
-        CalendarContract.Events.ACCESS_CONFIDENTIAL -> "CONFIDENTIAL"
-        CalendarContract.Events.ACCESS_PUBLIC -> "PUBLIC"
+        CalendarContract.Events.ACCESS_PRIVATE -> EventClassification.Private.value
+        CalendarContract.Events.ACCESS_CONFIDENTIAL -> EventClassification.Confidential.value
+        CalendarContract.Events.ACCESS_PUBLIC -> EventClassification.Public.value
         else -> null
     }
 
 private fun Int?.toIcalTransparency(): String? =
     when (this) {
-        CalendarContract.Events.AVAILABILITY_FREE -> "TRANSPARENT"
+        CalendarContract.Events.AVAILABILITY_FREE -> EventTransparency.Transparent.value
         CalendarContract.Events.AVAILABILITY_BUSY,
         CalendarContract.Events.AVAILABILITY_TENTATIVE,
-        -> "OPAQUE"
+        -> EventTransparency.Opaque.value
         else -> null
     }
 
 private fun String?.toAndroidStatus(): Int =
-    when (this?.uppercase()) {
-        "TENTATIVE" -> CalendarContract.Events.STATUS_TENTATIVE
-        "CANCELLED", "CANCELED" -> CalendarContract.Events.STATUS_CANCELED
+    when (val status = EventStatus.from(this)) {
+        EventStatus.Tentative -> CalendarContract.Events.STATUS_TENTATIVE
+        EventStatus.Cancelled -> CalendarContract.Events.STATUS_CANCELED
+        is EventStatus.Other ->
+            if (status.value.equals("CANCELED", ignoreCase = true)) {
+                CalendarContract.Events.STATUS_CANCELED
+            } else {
+                CalendarContract.Events.STATUS_CONFIRMED
+            }
         else -> CalendarContract.Events.STATUS_CONFIRMED
     }
 
 private fun String?.toAndroidAccessLevel(): Int =
-    when (this?.uppercase()) {
-        "PRIVATE" -> CalendarContract.Events.ACCESS_PRIVATE
-        "CONFIDENTIAL" -> CalendarContract.Events.ACCESS_CONFIDENTIAL
-        "PUBLIC" -> CalendarContract.Events.ACCESS_PUBLIC
+    when (EventClassification.from(this)) {
+        EventClassification.Private -> CalendarContract.Events.ACCESS_PRIVATE
+        EventClassification.Confidential -> CalendarContract.Events.ACCESS_CONFIDENTIAL
+        EventClassification.Public -> CalendarContract.Events.ACCESS_PUBLIC
         else -> CalendarContract.Events.ACCESS_DEFAULT
     }
 
 private fun String?.toAndroidAvailability(): Int =
-    when (this?.uppercase()) {
-        "TRANSPARENT" -> CalendarContract.Events.AVAILABILITY_FREE
+    when (EventTransparency.from(this)) {
+        EventTransparency.Transparent -> CalendarContract.Events.AVAILABILITY_FREE
         else -> CalendarContract.Events.AVAILABILITY_BUSY
     }

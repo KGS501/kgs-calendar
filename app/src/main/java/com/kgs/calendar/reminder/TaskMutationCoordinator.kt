@@ -1,14 +1,14 @@
 package com.kgs.calendar.reminder
 
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.domain.model.TaskStatus
 
 interface TaskNotificationReconciler {
     suspend fun cancelOccurrence(occurrenceId: CalendarOccurrenceId.Task)
     suspend fun cancelResource(resourceHref: String)
 }
 
-fun String.clearsTaskNotifications(): Boolean =
-    equals("COMPLETED", ignoreCase = true) || equals("CANCELLED", ignoreCase = true)
+fun String.clearsTaskNotifications(): Boolean = TaskStatus.from(this)?.closesTask == true
 
 class TaskMutationCoordinator(
     private val persistStatus: suspend (

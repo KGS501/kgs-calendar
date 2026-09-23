@@ -2,6 +2,7 @@ package com.kgs.calendar.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.kgs.calendar.data.local.dao.AccountDao
 import com.kgs.calendar.data.local.dao.CollectionDao
 import com.kgs.calendar.data.local.dao.EventDao
@@ -27,6 +28,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
     version = 19,
     exportSchema = true,
 )
+@TypeConverters(KgsTypeConverters::class)
 abstract class KgsDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun collectionDao(): CollectionDao

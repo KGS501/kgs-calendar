@@ -2,10 +2,10 @@ package com.kgs.calendar.ui.layout
 
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis
-import com.kgs.calendar.ui.model.isTimedMultiDayMiddleOn
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.max

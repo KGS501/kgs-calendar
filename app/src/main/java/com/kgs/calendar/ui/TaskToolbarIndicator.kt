@@ -1,6 +1,7 @@
 package com.kgs.calendar.ui
 
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.ui.model.isOverdueTask
 import com.kgs.calendar.ui.model.taskDate
 import java.time.LocalDate

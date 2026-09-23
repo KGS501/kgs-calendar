@@ -2,7 +2,6 @@ package com.kgs.calendar.data.sync
 
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -12,6 +11,9 @@ import com.kgs.calendar.data.provider.AndroidProviderWriteShield
 import com.kgs.calendar.domain.model.ComponentType
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
+import com.kgs.calendar.domain.source.isAndroidProviderAccount
 
 /** Mirrors the Android calendar provider's calendars and events into the local database. */
 class AndroidProviderSyncEngine internal constructor(
@@ -22,8 +24,7 @@ class AndroidProviderSyncEngine internal constructor(
 ) : CalendarSourceSyncEngine {
     private val syncMutex = Mutex()
 
-    override fun handles(account: AccountEntity): Boolean =
-        account.sourceType == SourceType.AndroidProvider || account.id == AndroidCalendarProviderClient.ANDROID_ACCOUNT_ID
+    override fun handles(account: AccountEntity): Boolean = account.isAndroidProviderAccount()
 
     override suspend fun sync(account: AccountEntity, options: SourceSyncOptions): Boolean {
         sync(
@@ -39,7 +40,7 @@ class AndroidProviderSyncEngine internal constructor(
         removeStale: Boolean,
         includeDisabledProviderCalendars: Boolean,
     ) = syncMutex.withLock {
-        database.accountDao().updateSyncState("syncing", null, account.lastSyncAtMillis, account.id)
+        database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         try {
             if (!androidCalendarProviderClient.hasCalendarPermissions()) {
                 error("Android calendar permission is required.")
@@ -139,11 +140,11 @@ class AndroidProviderSyncEngine internal constructor(
                             }
                     }
                 }
-                database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
+                database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
             }
         } catch (error: Throwable) {
             val syncError = account.describeSyncError(error)
-            database.accountDao().updateSyncState("error", syncError, account.lastSyncAtMillis, account.id)
+            database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
             throw IllegalStateException(syncError, error)
         }
     }

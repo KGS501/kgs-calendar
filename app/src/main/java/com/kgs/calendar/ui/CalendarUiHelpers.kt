@@ -304,10 +304,8 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
-import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -321,6 +319,9 @@ import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.event.displayColor
+import com.kgs.calendar.domain.event.isCancelled
+import com.kgs.calendar.domain.event.isTentative
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
@@ -329,12 +330,17 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
+import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.domain.time.toTimeText
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -378,14 +384,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -740,13 +742,6 @@ internal fun TaskEntity.displayProgress(): Int =
 internal fun TaskEntity.cardTextDecoration(): TextDecoration? =
     if (effectiveStatus() == "CANCELLED") TextDecoration.LineThrough else null
 
-internal fun taskPriorityIntensity(priority: Int?): Float {
-    val value = priority?.coerceIn(1, 9) ?: 9
-    return ((9 - value) / 8f).coerceIn(0f, 1f)
-}
-
-internal fun EventEntity.displayColor(): Int = manualColor ?: color
-
 internal data class EventCardVisuals(
     val baseColor: Color,
     val background: Color,
@@ -785,12 +780,6 @@ internal fun EventEntity.cardVisuals(muted: Boolean = false, darkPalette: Boolea
         textDecoration = if (cancelled) TextDecoration.LineThrough else null,
     )
 }
-
-internal fun EventEntity.isTentative(): Boolean =
-    status.equals("TENTATIVE", ignoreCase = true)
-
-private fun EventEntity.isCancelled(): Boolean =
-    status.equals("CANCELLED", ignoreCase = true)
 
 internal fun Color.greyedOut(amount: Float): Color {
     val gray = (red * 0.299f + green * 0.587f + blue * 0.114f).coerceIn(0f, 1f)
@@ -873,8 +862,8 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
             val typeLabel = when {
                 event != null -> stringResource(R.string.event)
                 task != null -> stringResource(R.string.task)
-                resource.componentType.equals(com.kgs.calendar.domain.model.ComponentType.Event, ignoreCase = true) -> stringResource(R.string.event)
-                resource.componentType.equals(com.kgs.calendar.domain.model.ComponentType.Task, ignoreCase = true) -> stringResource(R.string.task)
+                resource.componentType == com.kgs.calendar.domain.model.ComponentType.Event -> stringResource(R.string.event)
+                resource.componentType == com.kgs.calendar.domain.model.ComponentType.Task -> stringResource(R.string.task)
                 else -> stringResource(R.string.item)
             }
             val itemTitle = (event?.title ?: task?.title)
@@ -1075,22 +1064,10 @@ internal fun List<CollectionEntity>.sortedWithDefaultFirst(defaultHref: String?)
     return listOf(default) + filter { it.href != defaultHref }
 }
 
-internal fun String.isReadOnlyCollectionHrefUi(): Boolean = startsWith(UiReadOnlyCollectionPrefix)
-
-internal fun CollectionEntity.isReadOnlyForUi(): Boolean = readOnly || href.isReadOnlyCollectionHrefUi()
-
 internal fun CollectionEntity.canDeleteFromServerForUi(): Boolean =
     sourceType == SourceType.CalDav &&
         !readOnly &&
         capabilitiesJson.toJsonObjectOrNull()?.optBooleanOrNull("canDeleteResources") != false
-
-internal fun String.isLocalCollectionHrefUi(): Boolean = startsWith(UiLocalCollectionPrefix)
-
-internal fun CollectionEntity.isAndroidProviderForUi(): Boolean =
-    sourceType == SourceType.AndroidProvider || href.startsWith(UiAndroidCollectionPrefix)
-
-internal fun AccountEntity.isAndroidProviderForUi(): Boolean =
-    sourceType == SourceType.AndroidProvider || id == UiAndroidAccountId
 
 internal data class EventEditorCapabilities(
     val recurrence: Boolean,
@@ -1128,12 +1105,6 @@ internal data class EventEditorCapabilities(
         )
     }
 }
-
-internal fun TaskEntity.displayColor(mode: TaskColorMode): Int =
-    manualColor ?: when (mode) {
-        TaskColorMode.Collection -> color
-        TaskColorMode.Priority -> priority?.let { priorityColor(it).toArgb() } ?: color
-    }
 
 internal fun String.cleanCalendarDisplayText(): String {
     var normalized = trim().trimHtmlDataPrefixForDisplay()
@@ -1481,9 +1452,6 @@ internal fun List<EventEntity>.indexEventsByDay(): Map<LocalDate, List<EventEnti
     }
     return result
 }
-
-internal fun EventEntity.monthOccurrenceKey(): String =
-    "${resourceHref ?: uid}:${startsAtMillis}"
 
 internal fun EventEntity.smoothRemovalKey(): String =
     "${resourceHref}:${startsAtMillis}"

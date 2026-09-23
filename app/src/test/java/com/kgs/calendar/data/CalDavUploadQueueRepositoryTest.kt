@@ -3,6 +3,7 @@ package com.kgs.calendar.data
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
@@ -141,7 +142,7 @@ class CalDavUploadQueueRepositoryTest {
         // NOTE: current behaviour - the conflict retry overwrites the concurrent remote edit (last writer wins).
         assertTrue(stored.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
         assertEquals("Local edit", harness.event(eventHref)!!.title)
-        assertEquals("idle", harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+        assertEquals(SyncState.Idle, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
     }
 
     @Test
@@ -283,7 +284,7 @@ class CalDavUploadQueueRepositoryTest {
         assertEquals("PUT ${event.resourceHref} failed: HTTP 500", harness.resource(event.resourceHref)!!.syncError)
         assertNull(harness.resource(event.resourceHref)!!.etag)
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
-        assertEquals("error", account.syncState)
+        assertEquals(SyncState.Error, account.syncState)
         assertEquals("Source \"alice\": PUT ${event.resourceHref} failed: HTTP 500", account.syncError)
         assertEquals(lastSyncBefore, account.lastSyncAtMillis)
         // NOTE: current behaviour - a failed upload aborts the account before remote changes are pulled.
