@@ -827,4 +827,63 @@ class IcalCodecTest {
         assertTrue(event.attendeesJson!!.contains("Doe; Alice"))
         assertTrue(event.attendeesJson.contains("alice@example.test"))
     }
+
+    @Test
+    fun participantParametersSurviveParseAndSerialize() {
+        val raw = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            BEGIN:VEVENT
+            UID:event-participants
+            DTSTART:20260601T090000Z
+            DTEND:20260601T100000Z
+            SUMMARY:Meeting
+            ORGANIZER;CN="Host";SENT-BY="mailto:assistant@example.test";LANGUAGE=de:mailto:host@example.test
+            ATTENDEE;CN="Doe, Alice";CUTYPE=INDIVIDUAL;ROLE=CHAIR;PARTSTAT=TENTATIVE;RSVP=TRUE;DELEGATED-FROM="mailto:bob@example.test";SCHEDULE-STATUS=2.0:mailto:alice@example.test
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent()
+
+        val event = codec.parse(raw, "/cal/", "/cal/event.ics", 0xff176b5d.toInt())!!.event!!
+        val serialized = codec.serializeEvent(event).replace("\r\n ", "").replace("\r\n", "\n")
+
+        assertTrue(serialized, serialized.contains("ORGANIZER;CN=\"Host\";SENT-BY=\"mailto:assistant@example.test\";LANGUAGE=\"de\":mailto:host@example.test"))
+        assertTrue(
+            serialized,
+            serialized.contains(
+                "ATTENDEE;CN=\"Doe, Alice\";CUTYPE=INDIVIDUAL;ROLE=CHAIR;PARTSTAT=TENTATIVE;RSVP=TRUE;" +
+                    "DELEGATED-FROM=\"mailto:bob@example.test\";SCHEDULE-STATUS=\"2.0\":mailto:alice@example.test",
+            ),
+        )
+    }
+
+    @Test
+    fun serializesParticipantsStoredInTheLegacyJsonFormats() {
+        val start = LocalDate.of(2026, 6, 1).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val event = EventEntity(
+            uid = "event-legacy-participants",
+            collectionHref = "/cal/",
+            resourceHref = "/cal/event-legacy-participants.ics",
+            title = "Meeting",
+            description = null,
+            location = null,
+            startsAtMillis = start,
+            endsAtMillis = start + 3_600_000,
+            allDay = false,
+            recurrenceRule = null,
+            isRecurring = false,
+            organizerJson = """{"name":"Host \"H\"","email":" host@example.test ","sentBy":null,"directory":null,"language":null}""",
+            attendeesJson = """[{"name":"J\u00fcrgen","email":"j@example.test","partstat":"accepted","role":null,"rsvp":null},""" +
+                """{"name":"b@example.test","email":"b@example.test","partstat":"NEEDS-ACTION","role":"REQ-PARTICIPANT","rsvp":"FALSE"},""" +
+                """{"name":"No mail","email":""}]""",
+            color = 0xff176b5d.toInt(),
+        )
+
+        val serialized = codec.serializeEvent(event).replace("\r\n ", "").replace("\r\n", "\n")
+
+        assertTrue(serialized, serialized.contains("ORGANIZER;CN=\"Host \\\"H\\\"\":mailto:host@example.test"))
+        assertTrue(serialized, serialized.contains("ATTENDEE;CN=\"Jürgen\";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:j@example.test"))
+        assertTrue(serialized, serialized.contains("ATTENDEE;CN=\"b@example.test\";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:b@example.test"))
+        assertEquals(2, serialized.lines().count { it.startsWith("ATTENDEE") })
+    }
 }
