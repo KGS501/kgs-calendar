@@ -1,10 +1,7 @@
 package com.kgs.calendar.data
 
-import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.ParsedCalendarComponent
-import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
-import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
@@ -13,10 +10,12 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
+import com.kgs.calendar.data.mutation.EventMutations
+import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
+import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
-import com.kgs.calendar.data.recurrence.TaskRecurrenceExpander
 import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.HttpStatusException
@@ -24,7 +23,6 @@ import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.remote.PutResult
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
-import com.kgs.calendar.data.search.CalendarOccurrenceSearch
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
@@ -32,16 +30,8 @@ import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.TaskEditPayload
-import com.kgs.calendar.domain.model.normalizedReminderOffsets
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
@@ -52,7 +42,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.math.abs
 
@@ -67,130 +56,67 @@ class CalendarRepository(
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     private val recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
 ) {
-    private val taskRecurrenceExpander = TaskRecurrenceExpander(recurrenceExpander)
-    private val occurrenceSearch = CalendarOccurrenceSearch(zoneId)
     private val androidProviderSyncMutex = Mutex()
     private val remoteSyncMutex = Mutex()
     private val localWrites = LocalWriteSupport(database, icalCodec)
     private val androidWriteShield = AndroidProviderWriteShield()
+    private val queries = CalendarQueries(database, recurrenceExpander, zoneId)
+    private val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, zoneId)
+    private val taskMutations = TaskMutations(database, localWrites, icalCodec, zoneId)
 
-    fun observeAccount(): Flow<AccountEntity?> = database.accountDao().observeAll().map { it.firstOrNull() }
+    fun observeAccount(): Flow<AccountEntity?> = queries.observeAccount()
 
-    fun observeAccounts(): Flow<List<AccountEntity>> = database.accountDao().observeAll()
+    fun observeAccounts(): Flow<List<AccountEntity>> = queries.observeAccounts()
 
-    fun observeCollections(): Flow<List<CollectionEntity>> = database.collectionDao().observeAll()
+    fun observeCollections(): Flow<List<CollectionEntity>> = queries.observeCollections()
 
     fun observeEvents(startMillis: Long, endMillis: Long): Flow<List<EventEntity>> =
-        combine(
-            database.eventDao().observeNonRecurringBetween(startMillis, endMillis),
-            database.eventDao().observeRecurringMasters(endMillis),
-        ) { simple, recurringMasters ->
-            val expanded = recurringMasters.flatMap { master ->
-                recurrenceExpander.expand(master, startMillis, endMillis)
-            }
-            (simple + expanded).sortedBy { it.startsAtMillis }
-        }.flowOn(Dispatchers.Default)
+        queries.observeEvents(startMillis, endMillis)
 
-    suspend fun eventsSnapshot(startMillis: Long, endMillis: Long): List<EventEntity> {
-        val simple = database.eventDao().snapshotNonRecurringBetween(startMillis, endMillis)
-        val recurringMasters = database.eventDao().snapshotRecurringMasters(endMillis)
-        val expanded = recurringMasters.flatMap { master ->
-            recurrenceExpander.expand(master, startMillis, endMillis)
-        }
-        return (simple + expanded).sortedBy { it.startsAtMillis }
-    }
+    suspend fun eventsSnapshot(startMillis: Long, endMillis: Long): List<EventEntity> =
+        queries.eventsSnapshot(startMillis, endMillis)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     fun searchEvents(
         query: String,
         mode: CalendarSearchMode,
         rangeStartMillis: Long,
         rangeEndMillis: Long,
-    ): Flow<List<EventEntity>> = database.eventDao().observeSearchCandidates()
-        .mapLatest { masters ->
-            val coroutineContext = currentCoroutineContext()
-            occurrenceSearch.events(
-                masters = masters,
-                query = query,
-                mode = mode,
-                rangeStartMillis = rangeStartMillis,
-                rangeEndMillis = rangeEndMillis,
-                cancellationCheck = { coroutineContext.ensureActive() },
-            )
-        }
-        .flowOn(Dispatchers.Default)
+    ): Flow<List<EventEntity>> = queries.searchEvents(query, mode, rangeStartMillis, rangeEndMillis)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     fun searchTasks(
         query: String,
         mode: CalendarSearchMode,
         rangeStartMillis: Long,
         rangeEndMillis: Long,
-    ): Flow<List<TaskEntity>> = database.taskDao().observeSearchCandidates()
-        .mapLatest { masters ->
-            val coroutineContext = currentCoroutineContext()
-            occurrenceSearch.tasks(
-                masters = masters,
-                query = query,
-                mode = mode,
-                rangeStartMillis = rangeStartMillis,
-                rangeEndMillis = rangeEndMillis,
-                cancellationCheck = { coroutineContext.ensureActive() },
-            )
-        }
-        .flowOn(Dispatchers.Default)
+    ): Flow<List<TaskEntity>> = queries.searchTasks(query, mode, rangeStartMillis, rangeEndMillis)
 
     fun observeDatedTasks(startMillis: Long, endMillis: Long): Flow<List<TaskEntity>> =
-        combine(
-            database.taskDao().observeDatedBetween(startMillis, endMillis),
-            database.taskDao().observeRecurringMasters(endMillis),
-        ) { simple, recurring ->
-            (simple + recurring.flatMap { taskRecurrenceExpander.expand(it, startMillis, endMillis) })
-                .sortedBy { it.startAtMillis ?: it.dueAtMillis ?: Long.MAX_VALUE }
-        }.flowOn(Dispatchers.Default)
+        queries.observeDatedTasks(startMillis, endMillis)
 
-    suspend fun datedTasksSnapshot(startMillis: Long, endMillis: Long): List<TaskEntity> {
-        val simple = database.taskDao().snapshotDatedBetween(startMillis, endMillis)
-        val recurring = database.taskDao().snapshotRecurringMasters(endMillis)
-        return (simple + recurring.flatMap { taskRecurrenceExpander.expand(it, startMillis, endMillis) })
-            .sortedBy { it.startAtMillis ?: it.dueAtMillis ?: Long.MAX_VALUE }
-    }
+    suspend fun datedTasksSnapshot(startMillis: Long, endMillis: Long): List<TaskEntity> =
+        queries.datedTasksSnapshot(startMillis, endMillis)
 
-    fun observeInboxTasks(): Flow<List<TaskEntity>> = database.taskDao().observeInbox()
+    fun observeInboxTasks(): Flow<List<TaskEntity>> = queries.observeInboxTasks()
 
-    fun observeScheduledOpenTasks(): Flow<List<TaskEntity>> = database.taskDao().observeScheduledOpen()
+    fun observeScheduledOpenTasks(): Flow<List<TaskEntity>> = queries.observeScheduledOpenTasks()
 
-    suspend fun inboxTasksSnapshot(): List<TaskEntity> = database.taskDao().snapshotInbox()
+    suspend fun inboxTasksSnapshot(): List<TaskEntity> = queries.inboxTasksSnapshot()
 
-    suspend fun scheduledOpenTasksSnapshot(): List<TaskEntity> = database.taskDao().snapshotScheduledOpen()
+    suspend fun scheduledOpenTasksSnapshot(): List<TaskEntity> = queries.scheduledOpenTasksSnapshot()
 
-    suspend fun allTasksSnapshot(): List<TaskEntity> = database.taskDao().all()
+    suspend fun allTasksSnapshot(): List<TaskEntity> = queries.allTasksSnapshot()
 
-    fun observeCompletedTasks(): Flow<List<TaskEntity>> =
-        combine(
-            database.taskDao().observeCompleted(),
-            database.taskDao().observeRecurringMasters(Long.MAX_VALUE),
-        ) { storedTasks, recurringMasters ->
-            (storedTasks + recurringMasters.flatMap(taskRecurrenceExpander::inactiveOverrides))
-                .distinctBy { task ->
-                    Triple(
-                        task.resourceHref,
-                        task.startAtMillis ?: task.dueAtMillis,
-                        task.completedAtMillis,
-                    )
-                }
-                .sortedByDescending { it.completedAtMillis ?: it.dueAtMillis ?: it.startAtMillis ?: Long.MIN_VALUE }
-        }.flowOn(Dispatchers.Default)
+    fun observeCompletedTasks(): Flow<List<TaskEntity>> = queries.observeCompletedTasks()
 
-    fun observePendingMutationCount(): Flow<Int> = database.pendingMutationDao().observeCount()
+    fun observePendingMutationCount(): Flow<Int> = queries.observePendingMutationCount()
 
-    fun observePendingMutations(): Flow<List<PendingMutationEntity>> = database.pendingMutationDao().observeAll()
+    fun observePendingMutations(): Flow<List<PendingMutationEntity>> = queries.observePendingMutations()
 
-    fun observeProblemResources(): Flow<List<CalendarResourceEntity>> = database.resourceDao().observeSyncErrors()
+    fun observeProblemResources(): Flow<List<CalendarResourceEntity>> = queries.observeProblemResources()
 
-    fun observeProblemEvents(): Flow<List<EventEntity>> = database.eventDao().observeProblemEvents()
+    fun observeProblemEvents(): Flow<List<EventEntity>> = queries.observeProblemEvents()
 
-    fun observeProblemTasks(): Flow<List<TaskEntity>> = database.taskDao().observeProblemTasks()
+    fun observeProblemTasks(): Flow<List<TaskEntity>> = queries.observeProblemTasks()
 
     suspend fun startLoginFlow(serverUrl: String) = loginFlowClient.start(serverUrl)
 
@@ -498,996 +424,75 @@ class CalendarRepository(
         }
     }
 
-    private suspend fun writableEventCollectionOrNull(requestedHref: String?): CollectionEntity? =
-        requestedHref?.let { database.collectionDao().get(it) }
-            ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
-            ?: database.collectionDao().eventCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
+    suspend fun createEvent(payload: EventEditPayload) = eventMutations.createEvent(payload)
 
-    suspend fun createEvent(payload: EventEditPayload) {
-        val collection = writableEventCollectionOrNull(payload.collectionHref)
-            ?: error("No writable event calendar has been synced yet.")
-        val uid = newUid()
-        val resourceHref = collection.newResourceHref(uid)
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val event = EventEntity(
-            uid = uid,
-            collectionHref = collection.href,
-            resourceHref = resourceHref,
-            title = payload.title.ifBlank { "Untitled event" },
-            description = payload.description?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
-            startsAtMillis = start,
-            endsAtMillis = if (end > start) {
-                end
-            } else if (payload.allDay) {
-                payload.date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            } else {
-                start + 60L * 60L * 1000L
-            },
-            allDay = payload.allDay,
-            recurrenceRule = payload.recurrenceRule?.ifBlank { null },
-            isRecurring = !payload.recurrenceRule.isNullOrBlank(),
-            timezoneId = if (payload.allDay) null else zoneId.id,
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            status = payload.status?.ifBlank { null },
-            classification = payload.classification?.ifBlank { null },
-            transparency = payload.transparency?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            organizerJson = payload.organizerJson,
-            attendeesJson = payload.attendeesJson,
-            color = collection.color,
-            manualColor = payload.manualColor,
-        ).sanitizedFor(collection)
-        if (collection.isAndroidProviderCollection()) {
-            val calendarId = collection.androidCalendarId()
-            val eventId = androidCalendarProviderClient.insertEvent(calendarId, event)
-            val androidEvent = event.copy(
-                uid = "android-event-$eventId",
-                resourceHref = androidCalendarProviderClient.eventHref(eventId),
-            )
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(collection.href, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidEvent)
-            }
-            androidWriteShield.markLocalWrite(androidEvent.resourceHref)
-            return
-        }
-        val raw = icalCodec.serializeEvent(event)
-        localWrites.writeTransaction {
-            localWrites.upsertLocalResource(collection.href, resourceHref, null, ComponentType.Event, uid, raw)
-            database.eventDao().upsert(event)
-            localWrites.enqueuePut(collection.href, resourceHref, ComponentType.Event, raw, null)
-        }
-    }
+    suspend fun updateEventManualColor(uid: String, manualColor: Int?) = eventMutations.updateEventManualColor(uid, manualColor)
 
-    suspend fun updateEventManualColor(uid: String, manualColor: Int?): Unit = localWrites.writeTransaction {
-        val existing = database.eventDao().get(uid) ?: return@writeTransaction
-        database.eventDao().upsert(existing.copy(manualColor = manualColor))
-    }
+    suspend fun updateEvent(uid: String, payload: EventEditPayload) = eventMutations.updateEvent(uid, payload)
 
-    suspend fun updateEvent(uid: String, payload: EventEditPayload) {
-        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(existingCollectionHref, payload.collectionHref) { updateEventUnit(uid, payload) }
-    }
+    suspend fun updateEventOccurrence(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) =
+        eventMutations.updateEventOccurrence(uid, occurrenceStartMillis, payload)
 
-    private suspend fun updateEventUnit(uid: String, payload: EventEditPayload) {
-        val existing = database.eventDao().get(uid) ?: return
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val existingCollection = database.collectionDao().get(existing.collectionHref)
-            ?: error("Calendar not found.")
-        val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?: database.collectionDao().get(existing.collectionHref)
-            ?: error("Calendar not found.")
-        if (targetCollection.isReadOnlyCollection()) error("Read-only calendars cannot be edited.")
-        val moved = targetCollection.href != existing.collectionHref
-        val targetIsAndroid = targetCollection.isAndroidProviderCollection()
-        val existingIsAndroid = existingCollection.isAndroidProviderCollection()
-        val resourceHref = when {
-            targetIsAndroid -> existing.resourceHref
-            moved -> targetCollection.newResourceHref(existing.uid)
-            else -> existing.resourceHref
-        }
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val updated = existing.copy(
-            collectionHref = targetCollection.href,
-            resourceHref = resourceHref,
-            title = payload.title.ifBlank { "Untitled event" },
-            description = payload.description?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
-            startsAtMillis = start,
-            endsAtMillis = if (end > start) {
-                end
-            } else if (payload.allDay) {
-                payload.date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            } else {
-                start + 60L * 60L * 1000L
-            },
-            allDay = payload.allDay,
-            recurrenceRule = payload.recurrenceRule?.ifBlank { null },
-            isRecurring = !payload.recurrenceRule.isNullOrBlank() || !existing.rDatesCsv.isNullOrBlank(),
-            timezoneId = if (payload.allDay) null else existing.timezoneId ?: zoneId.id,
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            status = payload.status?.ifBlank { null },
-            classification = payload.classification?.ifBlank { null },
-            transparency = payload.transparency?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            organizerJson = payload.organizerJson,
-            attendeesJson = payload.attendeesJson,
-            color = targetCollection.color,
-            manualColor = payload.manualColor,
-            sequence = existing.sequence + 1,
-        ).sanitizedFor(targetCollection)
-        if (existingIsAndroid && targetIsAndroid) {
-            val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
-                ?: error("Android event id is missing.")
-            val androidUpdated = updated.copy(resourceHref = existing.resourceHref, uid = existing.uid)
-            androidCalendarProviderClient.updateEvent(eventId, targetCollection.androidCalendarId(), androidUpdated)
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(androidUpdated.collectionHref, androidUpdated.resourceHref, null, ComponentType.Event, androidUpdated.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidUpdated)
-            }
-            androidWriteShield.markLocalWrite(androidUpdated.resourceHref)
-            return
-        }
-        if (!existingIsAndroid && targetIsAndroid) {
-            val eventId = androidCalendarProviderClient.insertEvent(targetCollection.androidCalendarId(), updated)
-            val androidEvent = updated.copy(
-                uid = "android-event-$eventId",
-                resourceHref = androidCalendarProviderClient.eventHref(eventId),
-            )
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidEvent)
-                if (!existing.collectionHref.isLocalCollectionHref()) {
-                    localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
-                }
-                database.eventDao().deleteByResource(existing.resourceHref)
-                database.resourceDao().delete(existing.resourceHref)
-            }
-            androidWriteShield.markLocalWrite(androidEvent.resourceHref)
-            return
-        }
-        if (existingIsAndroid && !targetIsAndroid) {
-            val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
-                ?: error("Android event id is missing.")
-            androidCalendarProviderClient.deleteEvent(eventId)
-        }
-        val raw = icalCodec.serializeEvent(updated, originalRawIcs = resource?.rawIcs.takeUnless { moved })
-        localWrites.writeTransaction {
-            if (moved) {
-                database.eventDao().deleteByResource(existing.resourceHref)
-                database.resourceDao().delete(existing.resourceHref)
-                localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
-                localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Event, updated.uid, raw)
-                localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, null)
-            } else {
-                localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-                localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
-            }
-            database.eventDao().upsert(updated)
-        }
-        if (existingIsAndroid) androidWriteShield.markLocalDelete(existing.resourceHref)
-    }
+    suspend fun updateEventFollowing(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) =
+        eventMutations.updateEventFollowing(uid, occurrenceStartMillis, payload)
 
-    suspend fun updateEventOccurrence(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
-        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(
-            existingCollectionHref,
-            payload.collectionHref,
-            writableEventCollectionOrNull(payload.collectionHref)?.href,
-        ) { updateEventOccurrenceUnit(uid, occurrenceStartMillis, payload) }
-    }
+    suspend fun moveTimedEvent(uid: String, date: LocalDate, startTime: LocalTime, endTime: LocalTime) =
+        eventMutations.moveTimedEvent(uid, date, startTime, endTime)
 
-    private suspend fun updateEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
-        val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateEvent(uid, payload)
-            return
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only calendars cannot be edited.")
-        val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?: database.collectionDao().get(existing.collectionHref)
-            ?: error("Calendar not found.")
-        if (targetCollection.href != existing.collectionHref || targetCollection.isAndroidProviderCollection()) {
-            deleteEventOccurrence(uid, occurrenceStartMillis)
-            createEvent(payload.copy(recurrenceRule = null))
-            return
-        }
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1))
-                .atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val replacement = existing.copy(
-            title = payload.title.ifBlank { "Untitled event" },
-            description = payload.description?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            startsAtMillis = start,
-            endsAtMillis = if (end > start) end else start + HOUR_MILLIS,
-            allDay = payload.allDay,
-            recurrenceRule = null,
-            isRecurring = false,
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            status = payload.status?.ifBlank { null },
-            classification = payload.classification?.ifBlank { null },
-            transparency = payload.transparency?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            organizerJson = payload.organizerJson,
-            attendeesJson = payload.attendeesJson,
-            timezoneId = if (payload.allDay) null else existing.timezoneId ?: zoneId.id,
-            manualColor = payload.manualColor,
-        )
-        val exDates = existing.exDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filterNot { it == occurrenceStartMillis }
-        val updated = existing.copy(
-            exDatesCsv = exDates?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            recurrenceOverridesJson = RecurrenceOverrideCodec.upsertEvent(
-                existing.recurrenceOverridesJson,
-                EventRecurrenceOverride.fromEvent(occurrenceStartMillis, replacement),
-            ),
-            sequence = existing.sequence + 1,
-        )
-        val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
-        localWrites.writeTransaction {
-            localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-            database.eventDao().upsert(updated)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
-        }
-    }
+    suspend fun moveTimedEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime) =
+        eventMutations.moveTimedEvent(uid, occurrenceStartMillis, date, startTime, endTime)
 
-    suspend fun updateEventFollowing(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
-        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(
-            existingCollectionHref,
-            payload.collectionHref,
-            writableEventCollectionOrNull(payload.collectionHref)?.href,
-        ) {
-            val existing = database.eventDao().get(uid) ?: return@localWriteUnit
-            if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
-                updateEvent(uid, payload)
-                return@localWriteUnit
-            }
-            deleteEventFollowing(uid, occurrenceStartMillis)
-            createEvent(payload)
-        }
-    }
+    suspend fun moveAllDayEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate) =
+        eventMutations.moveAllDayEvent(uid, occurrenceStartMillis, date)
 
-    suspend fun moveTimedEvent(uid: String, date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
-        val existing = database.eventDao().get(uid) ?: return
-        moveTimedEvent(uid, existing.startsAtMillis, date, startTime, endTime)
-    }
+    suspend fun setEventParticipation(uid: String, attendeeEmails: List<String>, partstat: String) =
+        eventMutations.setEventParticipation(uid, attendeeEmails, partstat)
 
-    suspend fun moveTimedEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
-        val existing = database.eventDao().get(uid) ?: return
-        val payload = EventEditPayload(
-            title = existing.title,
-            collectionHref = existing.collectionHref,
-            date = date,
-            endDate = date,
-            startTime = startTime,
-            endTime = endTime,
-            allDay = false,
-            description = existing.description,
-            location = existing.location,
-            locationMapVerified = existing.locationMapVerified,
-            manualColor = existing.manualColor,
-            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
-            reminderMinutes = existing.remindersCsv.toMinutesList(),
-            status = existing.status,
-            classification = existing.classification,
-            transparency = existing.transparency,
-            categories = existing.categories,
-            organizerJson = existing.organizerJson,
-            attendeesJson = existing.attendeesJson,
-        )
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateEvent(uid, payload)
-        } else {
-            updateEventOccurrence(uid, occurrenceStartMillis, payload)
-        }
-    }
+    suspend fun copyEventTo(uid: String, collectionHref: String) = eventMutations.copyEventTo(uid, collectionHref)
 
-    suspend fun moveAllDayEvent(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
-        val existing = database.eventDao().get(uid) ?: return
-        val currentStart = existing.startsAtMillis.toDate()
-        val currentEnd = existing.endDateInclusive().coerceAtLeast(currentStart)
-        val spanDays = ChronoUnit.DAYS.between(currentStart, currentEnd).coerceAtLeast(0L)
-        val payload = EventEditPayload(
-            title = existing.title,
-            collectionHref = existing.collectionHref,
-            date = date,
-            endDate = date.plusDays(spanDays),
-            startTime = null,
-            endTime = null,
-            allDay = true,
-            description = existing.description,
-            location = existing.location,
-            locationMapVerified = existing.locationMapVerified,
-            manualColor = existing.manualColor,
-            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
-            reminderMinutes = existing.remindersCsv.toMinutesList(),
-            status = existing.status,
-            classification = existing.classification,
-            transparency = existing.transparency,
-            categories = existing.categories,
-            organizerJson = existing.organizerJson,
-            attendeesJson = existing.attendeesJson,
-        )
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateEvent(uid, payload)
-        } else {
-            updateEventOccurrence(uid, occurrenceStartMillis, payload)
-        }
-    }
+    suspend fun createTask(payload: TaskEditPayload) = taskMutations.createTask(payload)
 
-    suspend fun setEventParticipation(uid: String, attendeeEmails: List<String>, partstat: String): Unit = localWrites.writeTransaction {
-        val existing = database.eventDao().get(uid) ?: return@writeTransaction
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref) || localWrites.isAndroidProviderCollectionHref(existing.collectionHref)) return@writeTransaction
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val updatedAttendees = existing.attendeesJson.updateAttendeePartstat(attendeeEmails, partstat)
-            ?: return@writeTransaction
-        val updated = existing.copy(attendeesJson = updatedAttendees, sequence = existing.sequence + 1)
-        val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        database.eventDao().upsert(updated)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
-    }
+    suspend fun updateTaskManualColor(uid: String, manualColor: Int?) = taskMutations.updateTaskManualColor(uid, manualColor)
 
-    suspend fun copyEventTo(uid: String, collectionHref: String) {
-        val existing = database.eventDao().get(uid) ?: return
-        val targetCollection = database.collectionDao().get(collectionHref) ?: return
-        if (!targetCollection.supportsEvents || targetCollection.isReadOnlyCollection() || !targetCollection.canCreateResources()) return
-        val newUid = newUid()
-        val resourceHref = targetCollection.newResourceHref(newUid)
-        val event = existing.copy(
-            uid = newUid,
-            collectionHref = targetCollection.href,
-            resourceHref = resourceHref,
-            color = targetCollection.color,
-            syncError = null,
-        ).sanitizedFor(targetCollection)
-        if (targetCollection.isAndroidProviderCollection()) {
-            val eventId = androidCalendarProviderClient.insertEvent(targetCollection.androidCalendarId(), event)
-            val androidEvent = event.copy(
-                uid = "android-event-$eventId",
-                resourceHref = androidCalendarProviderClient.eventHref(eventId),
-            )
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidEvent)
-            }
-            androidWriteShield.markLocalWrite(androidEvent.resourceHref)
-            return
-        }
-        val raw = icalCodec.serializeEvent(event)
-        localWrites.writeTransaction {
-            localWrites.upsertLocalResource(event.collectionHref, event.resourceHref, null, ComponentType.Event, event.uid, raw)
-            database.eventDao().upsert(event)
-            localWrites.enqueuePut(event.collectionHref, event.resourceHref, ComponentType.Event, raw, null)
-        }
-    }
+    suspend fun updateTask(uid: String, payload: TaskEditPayload) = taskMutations.updateTask(uid, payload)
 
-    suspend fun createTask(payload: TaskEditPayload): Unit = localWrites.writeTransaction {
-        val collection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
-            ?: database.collectionDao().taskCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
-            ?: error("No writable task list has been synced yet.")
-        val uid = newUid()
-        val resourceHref = collection.newResourceHref(uid)
-        val parentUid = validatedParentUid(collection.href, payload.parentUid, taskUid = uid)
-        val task = TaskEntity(
-            uid = uid,
-            collectionHref = collection.href,
-            resourceHref = resourceHref,
-            title = payload.title.ifBlank { "Untitled task" },
-            notes = payload.notes?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
-            url = payload.url?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            dueAtMillis = payload.dueDate.toTaskMillis(payload.dueTime, payload.dueHasTime, LocalTime.of(17, 0)),
-            dueHasTime = payload.dueDate != null && payload.dueHasTime,
-            startAtMillis = payload.startDate.toTaskMillis(payload.startTime, payload.startHasTime, LocalTime.of(9, 0)),
-            startHasTime = payload.startDate != null && payload.startHasTime,
-            completedAtMillis = if (payload.isCompleted) Instant.now().toEpochMilli() else null,
-            isCompleted = payload.isCompleted,
-            status = payload.status?.takeIf { it.isNotBlank() }
-                ?: if (payload.isCompleted) "COMPLETED" else "NEEDS-ACTION",
-            priority = payload.priority?.coerceIn(1, 9),
-            percentComplete = payload.percentComplete?.coerceIn(0, 100),
-            parentUid = parentUid,
-            recurrenceRule = payload.recurrenceRule?.ifBlank { null },
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            timezoneId = if (
-                (payload.startDate != null && payload.startHasTime) ||
-                (payload.dueDate != null && payload.dueHasTime)
-            ) zoneId.id else null,
-            color = collection.color,
-            manualColor = payload.manualColor,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(task)
-        localWrites.upsertLocalResource(collection.href, resourceHref, null, ComponentType.Task, uid, raw)
-        database.taskDao().upsert(task)
-        localWrites.enqueuePut(collection.href, resourceHref, ComponentType.Task, raw, null)
-    }
+    suspend fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) =
+        taskMutations.updateTaskOccurrence(uid, occurrenceStartMillis, payload)
 
-    suspend fun updateTaskManualColor(uid: String, manualColor: Int?): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        database.taskDao().upsert(existing.copy(manualColor = manualColor))
-    }
+    suspend fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) =
+        taskMutations.updateTaskFollowing(uid, occurrenceStartMillis, payload)
 
-    suspend fun updateTask(uid: String, payload: TaskEditPayload): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?: database.collectionDao().get(existing.collectionHref)
-            ?: error("Task list not found.")
-        if (targetCollection.isReadOnlyCollection()) error("Read-only task lists cannot be edited.")
-        val moved = targetCollection.href != existing.collectionHref
-        if (moved && database.taskDao().children(existing.collectionHref, existing.uid).isNotEmpty()) {
-            error("Move or detach this task's subtasks before changing its task list.")
-        }
-        val parentUid = validatedParentUid(targetCollection.href, payload.parentUid, existing.uid)
-        val resourceHref = if (moved) targetCollection.newResourceHref(existing.uid) else existing.resourceHref
-        val updated = existing.copy(
-            collectionHref = targetCollection.href,
-            resourceHref = resourceHref,
-            title = payload.title.ifBlank { "Untitled task" },
-            notes = payload.notes?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
-            url = payload.url?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            dueAtMillis = payload.dueDate.toTaskMillis(payload.dueTime, payload.dueHasTime, LocalTime.of(17, 0)),
-            dueHasTime = payload.dueDate != null && payload.dueHasTime,
-            startAtMillis = payload.startDate.toTaskMillis(payload.startTime, payload.startHasTime, LocalTime.of(9, 0)),
-            startHasTime = payload.startDate != null && payload.startHasTime,
-            completedAtMillis = when {
-                payload.isCompleted && existing.completedAtMillis == null -> Instant.now().toEpochMilli()
-                payload.isCompleted -> existing.completedAtMillis
-                else -> null
-            },
-            isCompleted = payload.isCompleted,
-            status = payload.status?.takeIf { it.isNotBlank() }
-                ?: existing.status?.takeIf {
-                    // Preserve IN-PROCESS / CANCELLED when the editor didn't override it
-                    // and the completion state hasn't changed.
-                    payload.isCompleted == existing.isCompleted
-                }
-                ?: if (payload.isCompleted) "COMPLETED" else "NEEDS-ACTION",
-            priority = payload.priority?.coerceIn(1, 9),
-            percentComplete = payload.percentComplete?.coerceIn(0, 100),
-            parentUid = parentUid,
-            recurrenceRule = payload.recurrenceRule?.ifBlank { null },
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            timezoneId = if (
-                (payload.startDate != null && payload.startHasTime) ||
-                (payload.dueDate != null && payload.dueHasTime)
-            ) existing.timezoneId ?: zoneId.id else null,
-            color = targetCollection.color,
-            manualColor = payload.manualColor,
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updated, originalRawIcs = resource?.rawIcs.takeUnless { moved })
-        if (moved) {
-            database.taskDao().deleteByResource(existing.resourceHref)
-            database.resourceDao().delete(existing.resourceHref)
-            localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Task, resource?.etag)
-            localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Task, updated.uid, raw)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, null)
-        } else {
-            localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
-        }
-        database.taskDao().upsert(updated)
-    }
+    suspend fun setTaskCompleted(resourceHref: String, completed: Boolean) = taskMutations.setTaskCompleted(resourceHref, completed)
 
-    suspend fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateTask(uid, payload)
-            return@writeTransaction
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only task lists cannot be edited.")
-        val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?: database.collectionDao().get(existing.collectionHref)
-            ?: error("Task list not found.")
-        if (targetCollection.href != existing.collectionHref) {
-            val resource = database.resourceDao().get(existing.resourceHref)
-            val exSet = existing.exDatesCsv
-                ?.split(',')
-                ?.mapNotNull { it.trim().toLongOrNull() }
-                ?.toMutableSet()
-                ?: mutableSetOf()
-            exSet += occurrenceStartMillis
-            val updatedMaster = existing.copy(
-                exDatesCsv = exSet.sorted().joinToString(","),
-                sequence = existing.sequence + 1,
-            ).withValidIcalSchedule()
-            val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
-            localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-            localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
-            database.taskDao().upsert(updatedMaster)
-            createTask(payload.copy(recurrenceRule = null))
-            return@writeTransaction
-        }
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val exDates = existing.exDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filterNot { it == occurrenceStartMillis }
-        val replacement = existing.copy(
-            title = payload.title.ifBlank { "Untitled task" },
-            notes = payload.notes?.ifBlank { null },
-            location = payload.location?.ifBlank { null },
-            url = payload.url?.ifBlank { null },
-            categories = payload.categories?.ifBlank { null },
-            dueAtMillis = payload.dueDate.toTaskMillis(payload.dueTime, payload.dueHasTime, LocalTime.of(17, 0)),
-            dueHasTime = payload.dueDate != null && payload.dueHasTime,
-            startAtMillis = payload.startDate.toTaskMillis(payload.startTime, payload.startHasTime, LocalTime.of(9, 0)),
-            startHasTime = payload.startDate != null && payload.startHasTime,
-            completedAtMillis = if (payload.isCompleted) existing.completedAtMillis ?: Instant.now().toEpochMilli() else null,
-            isCompleted = payload.isCompleted,
-            status = payload.status?.takeIf { it.isNotBlank() }
-                ?: if (payload.isCompleted) "COMPLETED" else "NEEDS-ACTION",
-            priority = payload.priority?.coerceIn(1, 9),
-            percentComplete = payload.percentComplete?.coerceIn(0, 100),
-            recurrenceRule = null,
-            exDatesCsv = null,
-            rDatesCsv = null,
-            recurrenceOverridesJson = null,
-            remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
-            timezoneId = if (
-                (payload.startDate != null && payload.startHasTime) ||
-                (payload.dueDate != null && payload.dueHasTime)
-            ) existing.timezoneId ?: zoneId.id else null,
-        ).withValidIcalSchedule()
-        val updatedMaster = existing.copy(
-            exDatesCsv = exDates?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            recurrenceOverridesJson = RecurrenceOverrideCodec.upsertTask(
-                existing.recurrenceOverridesJson,
-                TaskRecurrenceOverride.fromTask(occurrenceStartMillis, replacement),
-            ),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
-        localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
-        database.taskDao().upsert(updatedMaster)
-    }
+    suspend fun setTaskStatus(resourceHref: String, status: String) = taskMutations.setTaskStatus(resourceHref, status)
 
-    suspend fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateTask(uid, payload)
-            return@writeTransaction
-        }
-        val masterStart = existing.startAtMillis ?: existing.dueAtMillis ?: Long.MAX_VALUE
-        if (occurrenceStartMillis <= masterStart) {
-            updateTask(uid, payload)
-            return@writeTransaction
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only task lists cannot be edited.")
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val newRule = existing.recurrenceRule.withRecurrenceUntilBefore(occurrenceStartMillis, existing.startHasTime.not() && existing.dueHasTime.not(), zoneId)
-        val keptEx = existing.exDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filter { it < occurrenceStartMillis }
-        val keptRDates = existing.rDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filter { it < occurrenceStartMillis }
-        val updatedMaster = existing.copy(
-            recurrenceRule = newRule,
-            exDatesCsv = keptEx?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            rDatesCsv = keptRDates?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(
-                RecurrenceOverrideCodec.decodeTasks(existing.recurrenceOverridesJson)
-                    .filter { it.recurrenceIdMillis < occurrenceStartMillis },
-            ),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
-        localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
-        database.taskDao().upsert(updatedMaster)
-        createTask(payload)
-    }
+    suspend fun setTaskOccurrenceStatus(resourceHref: String, occurrenceStartMillis: Long, status: String) =
+        taskMutations.setTaskOccurrenceStatus(resourceHref, occurrenceStartMillis, status)
 
-    suspend fun setTaskCompleted(resourceHref: String, completed: Boolean) {
-        setTaskStatus(resourceHref, if (completed) "COMPLETED" else "NEEDS-ACTION")
-    }
+    suspend fun setTaskPriority(uid: String, priority: Int) = taskMutations.setTaskPriority(uid, priority)
 
-    /**
-     * Sets the iCal STATUS (NEEDS-ACTION / IN-PROCESS / COMPLETED / CANCELLED) of a
-     * task and keeps the derived [TaskEntity.isCompleted] / completedAtMillis fields
-     * in sync. COMPLETED is the only status that counts as "done".
-     */
-    suspend fun setTaskStatus(resourceHref: String, status: String): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().byResource(resourceHref) ?: return@writeTransaction
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val completed = status.equals("COMPLETED", ignoreCase = true)
-        val updated = existing.copy(
-            isCompleted = completed,
-            completedAtMillis = when {
-                completed && existing.completedAtMillis != null -> existing.completedAtMillis
-                completed -> Instant.now().toEpochMilli()
-                else -> null
-            },
-            status = status.uppercase(),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
-        database.taskDao().upsert(updated)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
-    }
+    suspend fun setTaskProgress(uid: String, progress: Int) = taskMutations.setTaskProgress(uid, progress)
 
-    /** Updates one generated occurrence without changing the recurring task master. */
-    suspend fun setTaskOccurrenceStatus(resourceHref: String, occurrenceStartMillis: Long, status: String): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().byResource(resourceHref) ?: return@writeTransaction
-        if (existing.recurrenceRule.isNullOrBlank() && existing.rDatesCsv.isNullOrBlank()) {
-            setTaskStatus(resourceHref, status)
-            return@writeTransaction
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
+    suspend fun moveTimedTask(uid: String, date: LocalDate, startTime: LocalTime, endTime: LocalTime) =
+        taskMutations.moveTimedTask(uid, date, startTime, endTime)
 
-        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return@writeTransaction
-        val shift = occurrenceStartMillis - recurrenceAnchor
-        val generatedOccurrence = existing.copy(
-            startAtMillis = existing.startAtMillis?.plus(shift),
-            dueAtMillis = existing.dueAtMillis?.plus(shift),
-        )
-        val occurrence = RecurrenceOverrideCodec.decodeTasks(existing.recurrenceOverridesJson)
-            .firstOrNull { it.recurrenceIdMillis == occurrenceStartMillis }
-            ?.applyTo(generatedOccurrence)
-            ?: generatedOccurrence
-        val completed = status.equals("COMPLETED", ignoreCase = true)
-        val updatedOccurrence = occurrence.copy(
-            isCompleted = completed,
-            completedAtMillis = when {
-                completed && occurrence.completedAtMillis != null -> occurrence.completedAtMillis
-                completed -> Instant.now().toEpochMilli()
-                else -> null
-            },
-            status = status.uppercase(),
-            recurrenceRule = null,
-            exDatesCsv = null,
-            rDatesCsv = null,
-            recurrenceOverridesJson = null,
-        ).withValidIcalSchedule()
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val updatedMaster = existing.copy(
-            recurrenceOverridesJson = RecurrenceOverrideCodec.upsertTask(
-                existing.recurrenceOverridesJson,
-                TaskRecurrenceOverride.fromTask(occurrenceStartMillis, updatedOccurrence),
-            ),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
-        localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        database.taskDao().upsert(updatedMaster)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
-    }
+    suspend fun moveTimedTask(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime) =
+        taskMutations.moveTimedTask(uid, occurrenceStartMillis, date, startTime, endTime)
 
-    suspend fun setTaskPriority(uid: String, priority: Int): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val updated = existing.copy(
-            priority = priority.coerceIn(1, 9),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
-        database.taskDao().upsert(updated)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
-    }
+    suspend fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate) =
+        taskMutations.moveAllDayTask(uid, occurrenceStartMillis, date)
 
-    suspend fun setTaskProgress(uid: String, progress: Int): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val updated = existing.copy(
-            percentComplete = progress.coerceIn(0, 100),
-            sequence = existing.sequence + 1,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
-        database.taskDao().upsert(updated)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
-    }
+    suspend fun copyTaskTo(uid: String, collectionHref: String) = taskMutations.copyTaskTo(uid, collectionHref)
 
-    suspend fun moveTimedTask(uid: String, date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
-        val existing = database.taskDao().get(uid) ?: return
-        moveTimedTask(uid, existing.startAtMillis ?: existing.dueAtMillis ?: System.currentTimeMillis(), date, startTime, endTime)
-    }
+    suspend fun deleteTask(uid: String) = taskMutations.deleteTask(uid)
 
-    suspend fun moveTimedTask(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        val payload = TaskEditPayload(
-            title = existing.title,
-            collectionHref = existing.collectionHref,
-            notes = existing.notes,
-            location = existing.location,
-            locationMapVerified = existing.locationMapVerified,
-            manualColor = existing.manualColor,
-            url = existing.url,
-            categories = existing.categories,
-            startDate = date,
-            startTime = startTime,
-            startHasTime = true,
-            dueDate = date,
-            dueTime = endTime,
-            dueHasTime = true,
-            priority = existing.priority,
-            percentComplete = existing.percentComplete,
-            isCompleted = existing.isCompleted,
-            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
-            parentUid = existing.parentUid,
-            status = existing.status,
-            reminderMinutes = existing.remindersCsv.toMinutesList(),
-        )
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateTask(uid, payload)
-        } else {
-            updateTaskOccurrence(uid, occurrenceStartMillis, payload)
-        }
-    }
+    suspend fun deleteEvent(uid: String) = eventMutations.deleteEvent(uid)
 
-    suspend fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        val currentStart = existing.startAtMillis?.toDate() ?: existing.dueAtMillis?.toDate() ?: date
-        val currentEnd = (existing.dueAtMillis?.toDate() ?: existing.startAtMillis?.toDate() ?: currentStart).coerceAtLeast(currentStart)
-        val spanDays = ChronoUnit.DAYS.between(currentStart, currentEnd).coerceAtLeast(0L)
-        val payload = TaskEditPayload(
-            title = existing.title,
-            collectionHref = existing.collectionHref,
-            notes = existing.notes,
-            location = existing.location,
-            locationMapVerified = existing.locationMapVerified,
-            manualColor = existing.manualColor,
-            url = existing.url,
-            categories = existing.categories,
-            startDate = date,
-            startTime = null,
-            startHasTime = false,
-            dueDate = date.plusDays(spanDays),
-            dueTime = null,
-            dueHasTime = false,
-            priority = existing.priority,
-            percentComplete = existing.percentComplete,
-            isCompleted = existing.isCompleted,
-            recurrenceRule = if (existing.recurrenceRule.isNullOrBlank()) existing.recurrenceRule else null,
-            parentUid = existing.parentUid,
-            status = existing.status,
-            reminderMinutes = existing.remindersCsv.toMinutesList(),
-        )
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            updateTask(uid, payload)
-        } else {
-            updateTaskOccurrence(uid, occurrenceStartMillis, payload)
-        }
-    }
+    suspend fun deleteEventOccurrence(uid: String, occurrenceStartMillis: Long) =
+        eventMutations.deleteEventOccurrence(uid, occurrenceStartMillis)
 
-    suspend fun copyTaskTo(uid: String, collectionHref: String): Unit = localWrites.writeTransaction {
-        val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        val targetCollection = database.collectionDao().get(collectionHref) ?: return@writeTransaction
-        if (!targetCollection.supportsTasks || targetCollection.isReadOnlyCollection() || !targetCollection.canCreateResources()) return@writeTransaction
-        val newUid = newUid()
-        val resourceHref = targetCollection.newResourceHref(newUid)
-        val task = existing.copy(
-            uid = newUid,
-            collectionHref = targetCollection.href,
-            resourceHref = resourceHref,
-            parentUid = existing.parentUid
-                ?.takeIf { database.taskDao().byUidInCollection(targetCollection.href, it) != null },
-            color = targetCollection.color,
-            syncError = null,
-        ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(task)
-        localWrites.upsertLocalResource(task.collectionHref, task.resourceHref, null, ComponentType.Task, task.uid, raw)
-        database.taskDao().upsert(task)
-        localWrites.enqueuePut(task.collectionHref, task.resourceHref, ComponentType.Task, raw, null)
-    }
-
-    suspend fun deleteTask(uid: String): Unit = localWrites.writeTransaction {
-        val task = database.taskDao().get(uid) ?: return@writeTransaction
-        val collection = database.collectionDao().get(task.collectionHref) ?: return@writeTransaction
-        if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return@writeTransaction
-        reparentTaskChildren(task)
-        val resource = database.resourceDao().get(task.resourceHref)
-        if (task.collectionHref.isLocalCollectionHref()) {
-            database.taskDao().deleteByResource(task.resourceHref)
-            database.resourceDao().delete(task.resourceHref)
-        } else {
-            localWrites.enqueueDelete(task.collectionHref, task.resourceHref, ComponentType.Task, resource?.etag)
-        }
-    }
-
-    private suspend fun validatedParentUid(
-        collectionHref: String,
-        requestedParentUid: String?,
-        taskUid: String,
-    ): String? {
-        val parentUid = requestedParentUid?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        require(parentUid != taskUid) { "A task cannot be its own parent." }
-        require(database.taskDao().byUidInCollection(collectionHref, parentUid) != null) {
-            "The selected parent task is not in this task list."
-        }
-        var cursor: String? = parentUid
-        val visited = mutableSetOf(taskUid)
-        while (cursor != null && visited.add(cursor)) {
-            val parent = database.taskDao().byUidInCollection(collectionHref, cursor) ?: break
-            cursor = parent.parentUid
-        }
-        require(cursor == null || cursor !in visited) { "This parent would create a task cycle." }
-        return parentUid
-    }
-
-    private suspend fun reparentTaskChildren(parent: TaskEntity) {
-        database.taskDao().children(parent.collectionHref, parent.uid).forEach { child ->
-            val resource = database.resourceDao().get(child.resourceHref)
-            val updated = child.copy(
-                parentUid = parent.parentUid,
-                sequence = child.sequence + 1,
-            )
-            val raw = icalCodec.serializeTask(updated, resource?.rawIcs)
-            localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
-            database.taskDao().upsert(updated)
-            if (!updated.collectionHref.isLocalCollectionHref()) {
-                localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
-            }
-        }
-    }
-
-    suspend fun deleteEvent(uid: String) {
-        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(collectionHref) { deleteEventUnit(uid) }
-    }
-
-    private suspend fun deleteEventUnit(uid: String) {
-        val event = database.eventDao().get(uid) ?: return
-        val collection = database.collectionDao().get(event.collectionHref) ?: return
-        if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return
-        if (localWrites.isAndroidProviderCollectionHref(event.collectionHref)) {
-            val eventId = androidCalendarProviderClient.eventIdFromHref(event.resourceHref) ?: return
-            androidCalendarProviderClient.deleteEvent(eventId)
-            localWrites.writeTransaction {
-                database.eventDao().deleteByResource(event.resourceHref)
-                database.resourceDao().delete(event.resourceHref)
-            }
-            androidWriteShield.markLocalDelete(event.resourceHref)
-            return
-        }
-        val resource = database.resourceDao().get(event.resourceHref)
-        if (event.collectionHref.isLocalCollectionHref()) {
-            database.eventDao().deleteByResource(event.resourceHref)
-            database.resourceDao().delete(event.resourceHref)
-        } else {
-            localWrites.enqueueDelete(event.collectionHref, event.resourceHref, ComponentType.Event, resource?.etag)
-        }
-    }
-
-    /**
-     * Deletes a single occurrence of a recurring event by adding its start to the master's
-     * EXDATE set. The rest of the series is untouched. Falls back to deleting the whole event
-     * when it isn't actually recurring.
-     */
-    suspend fun deleteEventOccurrence(uid: String, occurrenceStartMillis: Long) {
-        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(collectionHref) { deleteEventOccurrenceUnit(uid, occurrenceStartMillis) }
-    }
-
-    private suspend fun deleteEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long) {
-        val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank()) {
-            deleteEvent(uid)
-            return
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only calendars cannot be edited.")
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val exSet = existing.exDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.toMutableSet()
-            ?: mutableSetOf()
-        exSet += occurrenceStartMillis
-        val updated = existing.copy(
-            exDatesCsv = exSet.sorted().joinToString(","),
-            sequence = existing.sequence + 1,
-        )
-        if (localWrites.isAndroidProviderCollectionHref(existing.collectionHref)) {
-            cancelAndroidEventOccurrence(updated, occurrenceStartMillis)
-            return
-        }
-        val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
-        database.eventDao().upsert(updated)
-    }
-
-    /**
-     * Deletes the given occurrence and every later one by capping the RRULE with an UNTIL just
-     * before this occurrence (and stripping any COUNT). When the cut lands on or before the very
-     * first occurrence, the whole event is removed instead.
-     */
-    suspend fun deleteEventFollowing(uid: String, occurrenceStartMillis: Long) {
-        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(collectionHref) { deleteEventFollowingUnit(uid, occurrenceStartMillis) }
-    }
-
-    private suspend fun deleteEventFollowingUnit(uid: String, occurrenceStartMillis: Long) {
-        val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
-            deleteEvent(uid)
-            return
-        }
-        if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only calendars cannot be edited.")
-        val resource = database.resourceDao().get(existing.resourceHref)
-        val newRule = existing.recurrenceRule.withRecurrenceUntilBefore(occurrenceStartMillis, existing.allDay, zoneId)
-        val keptEx = existing.exDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filter { it < occurrenceStartMillis }
-        val keptRDates = existing.rDatesCsv
-            ?.split(',')
-            ?.mapNotNull { it.trim().toLongOrNull() }
-            ?.filter { it < occurrenceStartMillis }
-        val updated = existing.copy(
-            recurrenceRule = newRule,
-            isRecurring = !newRule.isNullOrBlank() || !keptRDates.isNullOrEmpty(),
-            exDatesCsv = keptEx?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            rDatesCsv = keptRDates?.takeIf { it.isNotEmpty() }?.joinToString(","),
-            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(
-                RecurrenceOverrideCodec.decodeEvents(existing.recurrenceOverridesJson)
-                    .filter { it.recurrenceIdMillis < occurrenceStartMillis },
-            ),
-            sequence = existing.sequence + 1,
-        )
-        if (localWrites.isAndroidProviderCollectionHref(existing.collectionHref)) {
-            persistAndroidEventUpdate(updated)
-            return
-        }
-        val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
-        localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
-        database.eventDao().upsert(updated)
-    }
+    suspend fun deleteEventFollowing(uid: String, occurrenceStartMillis: Long) =
+        eventMutations.deleteEventFollowing(uid, occurrenceStartMillis)
 
     /**
      * Repairs VTODO rows written by early prototypes before uploading them.
@@ -2358,58 +1363,6 @@ class CalendarRepository(
     private fun readOnlyAccountId(url: String): String =
         READ_ONLY_PREFIX + UUID.nameUUIDFromBytes(url.toByteArray(StandardCharsets.UTF_8)).toString()
 
-    private fun CollectionEntity.androidCalendarId(): Long =
-        externalId?.toLongOrNull()
-            ?: androidCalendarProviderClient.calendarIdFromHref(href)
-            ?: error("Android calendar id is missing.")
-
-    private fun EventEntity.sanitizedFor(collection: CollectionEntity): EventEntity =
-        if (!collection.isAndroidProviderCollection()) {
-            this
-        } else {
-            copy(
-                categories = null,
-                organizerJson = null,
-                attendeesJson = null,
-            )
-        }
-
-    private suspend fun persistAndroidEventUpdate(event: EventEntity) {
-        val collection = database.collectionDao().get(event.collectionHref)
-            ?: error("Android calendar not found.")
-        val eventId = androidCalendarProviderClient.eventIdFromHref(event.resourceHref)
-            ?: error("Android event id is missing.")
-        val sanitized = event.sanitizedFor(collection)
-        androidCalendarProviderClient.updateEvent(eventId, collection.androidCalendarId(), sanitized)
-        localWrites.writeTransaction {
-            localWrites.upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
-            database.eventDao().upsert(sanitized)
-        }
-        androidWriteShield.markLocalWrite(sanitized.resourceHref)
-    }
-
-    private suspend fun cancelAndroidEventOccurrence(eventWithExDate: EventEntity, occurrenceStartMillis: Long) {
-        val collection = database.collectionDao().get(eventWithExDate.collectionHref)
-            ?: error("Android calendar not found.")
-        val eventId = androidCalendarProviderClient.eventIdFromHref(eventWithExDate.resourceHref)
-            ?: error("Android event id is missing.")
-        val durationMillis = (eventWithExDate.endsAtMillis - eventWithExDate.startsAtMillis)
-            .coerceAtLeast(60L * 60L * 1000L)
-        androidCalendarProviderClient.cancelRecurringInstance(
-            eventId = eventId,
-            calendarId = collection.androidCalendarId(),
-            occurrenceStartMillis = occurrenceStartMillis,
-            occurrenceEndMillis = occurrenceStartMillis + durationMillis,
-            allDay = eventWithExDate.allDay,
-        )
-        val sanitized = eventWithExDate.sanitizedFor(collection)
-        localWrites.writeTransaction {
-            localWrites.upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
-            database.eventDao().upsert(sanitized)
-        }
-        androidWriteShield.markLocalWrite(sanitized.resourceHref)
-    }
-
     private fun TaskEntity.preserveLocalTimedFields(localRawIcs: String?, localTask: TaskEntity?): TaskEntity {
         if (localTask == null || localTask.uid != uid) return this
         val keepStart = localTask.startHasTime &&
@@ -2431,44 +1384,26 @@ class CalendarRepository(
     private fun Long?.sameLocalDateOrMissing(other: Long?): Boolean =
         other == null || (this != null && Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate() == Instant.ofEpochMilli(other).atZone(zoneId).toLocalDate())
 
-    /**
-     * Returns all events and tasks (master rows) that carry at least one reminder, used
-     * by the reminder scheduler. Recurrence expansion for reminders is handled by the
-     * scheduler using the recurrence rule + expander.
-     */
-    suspend fun reminderCandidates(): Pair<List<EventEntity>, List<TaskEntity>> {
-        val events = database.eventDao().withReminders()
-        val tasks = database.taskDao().withReminders()
-        return events to tasks
-    }
+    suspend fun reminderCandidates(): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates()
 
-    suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> {
-        val events = database.eventDao().notificationCandidates(nowMillis, windowEndMillis)
-        val tasks = database.taskDao().notificationCandidates(nowMillis, windowEndMillis)
-        return events to tasks
-    }
+    suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> =
+        queries.notificationCandidates(nowMillis, windowEndMillis)
 
     fun expandEventReminders(master: EventEntity, fromMillis: Long, toMillis: Long): List<EventEntity> =
-        recurrenceExpander.expand(master, fromMillis, toMillis)
+        queries.expandEventReminders(master, fromMillis, toMillis)
 
     fun expandEventReminderOccurrences(master: EventEntity, fromMillis: Long, toMillis: Long) =
-        recurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
+        queries.expandEventReminderOccurrences(master, fromMillis, toMillis)
 
     fun expandTaskReminders(master: TaskEntity, fromMillis: Long, toMillis: Long): List<TaskEntity> =
-        taskRecurrenceExpander.expand(master, fromMillis, toMillis)
+        queries.expandTaskReminders(master, fromMillis, toMillis)
 
     fun expandTaskReminderOccurrences(master: TaskEntity, fromMillis: Long, toMillis: Long) =
-        taskRecurrenceExpander.expandWithIdentity(master, fromMillis, toMillis)
+        queries.expandTaskReminderOccurrences(master, fromMillis, toMillis)
 
-    suspend fun eventByResource(resourceHref: String): EventEntity? = database.eventDao().byResource(resourceHref)
+    suspend fun eventByResource(resourceHref: String): EventEntity? = queries.eventByResource(resourceHref)
 
-    suspend fun taskByResource(resourceHref: String): TaskEntity? = database.taskDao().byResource(resourceHref)
-
-    private fun LocalDate?.toTaskMillis(time: LocalTime?, hasTime: Boolean, defaultTime: LocalTime): Long? {
-        val date = this ?: return null
-        val localTime = if (hasTime) time ?: defaultTime else LocalTime.MIDNIGHT
-        return date.atTime(localTime).atZone(zoneId).toInstant().toEpochMilli()
-    }
+    suspend fun taskByResource(resourceHref: String): TaskEntity? = queries.taskByResource(resourceHref)
 
     companion object {
         private const val READ_ONLY_CALENDAR_ACCEPT = "text/calendar, application/calendar+ics, text/plain, */*"
@@ -2481,7 +1416,6 @@ class CalendarRepository(
         private const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L
         private const val UNKNOWN_COMPONENT_TYPE = "UNKNOWN"
         private const val MAX_SYNC_ERROR_LENGTH = 500
-        private const val HOUR_MILLIS = 60L * 60L * 1000L
     }
 }
 
