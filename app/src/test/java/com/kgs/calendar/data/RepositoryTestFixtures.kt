@@ -369,6 +369,7 @@ class FakeCalDavServer(
     private val feeds = ConcurrentHashMap<String, () -> MockResponse>()
     private val overrides = CopyOnWriteArrayList<Override>()
     private val etagCounter = AtomicInteger(0)
+    private val putsWithoutEtag = ConcurrentHashMap.newKeySet<String>()
     private val lock = Any()
 
     val requests = CopyOnWriteArrayList<CapturedRequest>()
@@ -432,6 +433,11 @@ class FakeCalDavServer(
     /** The next [times] requests whose method matches and whose path contains [pathContains] get [response]. */
     fun respondNext(method: String, pathContains: String, times: Int = 1, response: () -> MockResponse) {
         overrides += Override(method, pathContains, response, times)
+    }
+
+    /** The next PUT to [href] is stored as usual but answered without an ETag header. */
+    fun answerNextPutWithoutEtag(href: String) {
+        putsWithoutEtag += href
     }
 
     fun requests(method: String): List<CapturedRequest> = requests.filter { it.method == method }
@@ -519,7 +525,9 @@ class FakeCalDavServer(
                 if (ifNoneMatch == "*" && existing != null) return MockResponse().setResponseCode(412)
                 if (ifMatch != null && ifMatch != existing?.etag) return MockResponse().setResponseCode(412)
                 val stored = store(collection, path, request.body)
-                MockResponse().setResponseCode(if (existing == null) 201 else 204).addHeader("ETag", stored.etag)
+                MockResponse().setResponseCode(if (existing == null) 201 else 204).apply {
+                    if (!putsWithoutEtag.remove(path)) addHeader("ETag", stored.etag)
+                }
             }
             "DELETE" -> {
                 val collection = collectionFor(path) ?: return MockResponse().setResponseCode(404)
