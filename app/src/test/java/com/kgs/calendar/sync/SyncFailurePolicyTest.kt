@@ -69,6 +69,6 @@ class SyncFailurePolicyTest {
 
     private fun http(code: Int) = HttpStatusException(code, "PROPFIND https://example.com/ failed: HTTP $code")
 
-    // Mirrors CalendarRepository.syncNowLocked, which wraps source errors with a readable message.
+    // Mirrors SyncOrchestrator.syncNowLocked, which wraps source errors with a readable message.
     private fun wrapped(cause: Throwable) = IllegalStateException("Source \"user\": ${cause.message}", cause)
 }

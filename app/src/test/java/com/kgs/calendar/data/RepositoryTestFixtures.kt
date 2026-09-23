@@ -63,9 +63,10 @@ class InMemoryCredentialsStore : CredentialsStore {
 }
 
 /**
- * Builds a [CalendarRepository] over an in-memory Room database, an in-memory credential store
- * and (lazily) a [FakeCalDavServer]. The inspection helpers read the database directly so the
- * tests only depend on the persisted state, not on how the repository is split internally.
+ * Builds the [CalendarDataComponents] and the [CalendarRepository] facade over an in-memory Room
+ * database, an in-memory credential store and (lazily) a [FakeCalDavServer]. The inspection helpers
+ * read the database directly so the tests only depend on the persisted state, not on how the
+ * repository is split internally.
  */
 class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
     val context: Context = ApplicationProvider.getApplicationContext()
@@ -78,7 +79,7 @@ class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
         .readTimeout(5, TimeUnit.SECONDS)
         .writeTimeout(5, TimeUnit.SECONDS)
         .build()
-    val repository = CalendarRepository(
+    val components = CalendarDataComponents(
         database = database,
         credentialsStore = credentials,
         loginFlowClient = NextcloudLoginFlowClient(httpClient),
@@ -87,6 +88,14 @@ class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
         icalCodec = IcalCodec(zone),
         readOnlyHttpClient = httpClient,
         zoneId = zone,
+    )
+    val repository = CalendarRepository(
+        queries = components.queries,
+        eventMutations = components.eventMutations,
+        taskMutations = components.taskMutations,
+        sources = components.sources,
+        syncOrchestrator = components.syncOrchestrator,
+        repairs = components.repairs,
     )
 
     private var startedServer: FakeCalDavServer? = null

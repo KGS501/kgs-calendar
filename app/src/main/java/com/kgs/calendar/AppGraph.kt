@@ -2,16 +2,23 @@ package com.kgs.calendar
 
 import android.content.Context
 import androidx.room.Room
+import com.kgs.calendar.data.CalendarDataComponents
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.account.CalendarSourceManager
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.KgsDatabaseMigrations
+import com.kgs.calendar.data.mutation.EventMutations
+import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
+import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.EncryptedCredentialsStore
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.data.sync.SyncOrchestrator
+import com.kgs.calendar.data.sync.SyncRepairs
 import com.kgs.calendar.reminder.ReminderRegistry
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
@@ -44,7 +51,7 @@ class AppGraph(context: Context) {
     private val androidCalendarProviderClient = AndroidCalendarProviderClient(appContext)
     private val icalCodec = IcalCodec()
 
-    val repository = CalendarRepository(
+    private val calendarData = CalendarDataComponents(
         database = database,
         credentialsStore = credentialsStore,
         loginFlowClient = loginFlowClient,
@@ -52,6 +59,21 @@ class AppGraph(context: Context) {
         androidCalendarProviderClient = androidCalendarProviderClient,
         icalCodec = icalCodec,
         readOnlyHttpClient = okHttpClient,
+    )
+    val calendarQueries: CalendarQueries = calendarData.queries
+    val eventMutations: EventMutations = calendarData.eventMutations
+    val taskMutations: TaskMutations = calendarData.taskMutations
+    val calendarSources: CalendarSourceManager = calendarData.sources
+    val syncOrchestrator: SyncOrchestrator = calendarData.syncOrchestrator
+    val syncRepairs: SyncRepairs = calendarData.repairs
+
+    val repository = CalendarRepository(
+        queries = calendarQueries,
+        eventMutations = eventMutations,
+        taskMutations = taskMutations,
+        sources = calendarSources,
+        syncOrchestrator = syncOrchestrator,
+        repairs = syncRepairs,
     )
 
     val sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(
