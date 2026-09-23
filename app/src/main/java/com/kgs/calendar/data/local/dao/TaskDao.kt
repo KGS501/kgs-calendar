@@ -246,6 +246,17 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     suspend fun all(): List<TaskEntity>
 
+    /** Rows that [com.kgs.calendar.data.local.entity.withValidIcalSchedule] would change. */
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE (startAtMillis IS NULL AND startHasTime = 1)
+           OR (dueAtMillis IS NULL AND dueHasTime = 1)
+           OR (startAtMillis IS NOT NULL AND dueAtMillis IS NOT NULL AND startHasTime != dueHasTime)
+        """,
+    )
+    suspend fun invalidIcalSchedules(): List<TaskEntity>
+
     @Upsert
     suspend fun upsert(task: TaskEntity)
 

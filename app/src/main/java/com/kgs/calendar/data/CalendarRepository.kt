@@ -1,9 +1,11 @@
 package com.kgs.calendar.data
 
 import android.graphics.Color
+import androidx.room.withTransaction
 import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
+import com.kgs.calendar.data.ical.ParsedCalendarComponent
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.KgsDatabase
@@ -79,7 +81,6 @@ class CalendarRepository(
     private val occurrenceSearch = CalendarOccurrenceSearch(zoneId)
     private val androidProviderSyncMutex = Mutex()
     private val remoteSyncMutex = Mutex()
-    private val recentCalDavLocalWrites = ConcurrentHashMap<String, Long>()
     private val recentAndroidLocalWrites = ConcurrentHashMap<String, Long>()
     private val recentAndroidLocalDeletes = ConcurrentHashMap<String, Long>()
 
@@ -286,7 +287,7 @@ class CalendarRepository(
         return database.eventDao().countForCollectionSource(SourceType.AndroidProvider) == 0
     }
 
-    suspend fun ensureLocalCalendar() {
+    suspend fun ensureLocalCalendar(): Unit = writeTransaction {
         val account = database.accountDao().get(LOCAL_ACCOUNT_ID) ?: AccountEntity(
             id = LOCAL_ACCOUNT_ID,
             serverUrl = LOCAL_SERVER_URL,
@@ -473,12 +474,14 @@ class CalendarRepository(
                         capabilitiesJson = remote.capabilities.toJson(),
                     )
                 }
-                database.collectionDao().upsertAll(collectionEntities)
-                collectionEntities.forEach { collection ->
-                    database.eventDao().updateColorForCollection(collection.href, collection.color)
-                    database.taskDao().updateColorForCollection(collection.href, collection.color)
+                writeTransaction {
+                    database.collectionDao().upsertAll(collectionEntities)
+                    collectionEntities.forEach { collection ->
+                        database.eventDao().updateColorForCollection(collection.href, collection.color)
+                        database.taskDao().updateColorForCollection(collection.href, collection.color)
+                    }
+                    removeStaleRemoteCollections(account.id, collectionEntities.map { it.href }.toSet())
                 }
-                removeStaleRemoteCollections(account.id, collectionEntities.map { it.href }.toSet())
                 collectionEntities
                     .filter { it.isEnabled }
                     .forEach { collection ->
@@ -505,10 +508,13 @@ class CalendarRepository(
         }
     }
 
-    suspend fun createEvent(payload: EventEditPayload) {
-        val collection = payload.collectionHref?.let { database.collectionDao().get(it) }
+    private suspend fun writableEventCollectionOrNull(requestedHref: String?): CollectionEntity? =
+        requestedHref?.let { database.collectionDao().get(it) }
             ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
             ?: database.collectionDao().eventCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
+
+    suspend fun createEvent(payload: EventEditPayload) {
+        val collection = writableEventCollectionOrNull(payload.collectionHref)
             ?: error("No writable event calendar has been synced yet.")
         val uid = newUid()
         val resourceHref = collection.newResourceHref(uid)
@@ -560,23 +566,32 @@ class CalendarRepository(
                 uid = "android-event-$eventId",
                 resourceHref = androidCalendarProviderClient.eventHref(eventId),
             )
-            upsertLocalResource(collection.href, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-            database.eventDao().upsert(androidEvent)
+            writeTransaction {
+                upsertLocalResource(collection.href, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
+                database.eventDao().upsert(androidEvent)
+            }
             markRecentAndroidLocalWrite(androidEvent.resourceHref)
             return
         }
         val raw = icalCodec.serializeEvent(event)
-        upsertLocalResource(collection.href, resourceHref, null, ComponentType.Event, uid, raw)
-        database.eventDao().upsert(event)
-        enqueuePut(collection.href, resourceHref, ComponentType.Event, raw, null)
+        writeTransaction {
+            upsertLocalResource(collection.href, resourceHref, null, ComponentType.Event, uid, raw)
+            database.eventDao().upsert(event)
+            enqueuePut(collection.href, resourceHref, ComponentType.Event, raw, null)
+        }
     }
 
-    suspend fun updateEventManualColor(uid: String, manualColor: Int?) {
-        val existing = database.eventDao().get(uid) ?: return
+    suspend fun updateEventManualColor(uid: String, manualColor: Int?): Unit = writeTransaction {
+        val existing = database.eventDao().get(uid) ?: return@writeTransaction
         database.eventDao().upsert(existing.copy(manualColor = manualColor))
     }
 
     suspend fun updateEvent(uid: String, payload: EventEditPayload) {
+        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(existingCollectionHref, payload.collectionHref) { updateEventUnit(uid, payload) }
+    }
+
+    private suspend fun updateEventUnit(uid: String, payload: EventEditPayload) {
         val existing = database.eventDao().get(uid) ?: return
         val resource = database.resourceDao().get(existing.resourceHref)
         val existingCollection = database.collectionDao().get(existing.collectionHref)
@@ -639,8 +654,10 @@ class CalendarRepository(
                 ?: error("Android event id is missing.")
             val androidUpdated = updated.copy(resourceHref = existing.resourceHref, uid = existing.uid)
             androidCalendarProviderClient.updateEvent(eventId, targetCollection.androidCalendarId(), androidUpdated)
-            upsertLocalResource(androidUpdated.collectionHref, androidUpdated.resourceHref, null, ComponentType.Event, androidUpdated.uid, "android-provider:$eventId")
-            database.eventDao().upsert(androidUpdated)
+            writeTransaction {
+                upsertLocalResource(androidUpdated.collectionHref, androidUpdated.resourceHref, null, ComponentType.Event, androidUpdated.uid, "android-provider:$eventId")
+                database.eventDao().upsert(androidUpdated)
+            }
             markRecentAndroidLocalWrite(androidUpdated.resourceHref)
             return
         }
@@ -650,42 +667,50 @@ class CalendarRepository(
                 uid = "android-event-$eventId",
                 resourceHref = androidCalendarProviderClient.eventHref(eventId),
             )
-            upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-            database.eventDao().upsert(androidEvent)
-            markRecentAndroidLocalWrite(androidEvent.resourceHref)
-            if (existing.collectionHref.isLocalCollectionHref()) {
-                database.eventDao().deleteByResource(existing.resourceHref)
-                database.resourceDao().delete(existing.resourceHref)
-            } else {
-                enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
+            writeTransaction {
+                upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
+                database.eventDao().upsert(androidEvent)
+                if (!existing.collectionHref.isLocalCollectionHref()) {
+                    enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
+                }
                 database.eventDao().deleteByResource(existing.resourceHref)
                 database.resourceDao().delete(existing.resourceHref)
             }
+            markRecentAndroidLocalWrite(androidEvent.resourceHref)
             return
         }
         if (existingIsAndroid && !targetIsAndroid) {
             val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
                 ?: error("Android event id is missing.")
             androidCalendarProviderClient.deleteEvent(eventId)
-            database.eventDao().deleteByResource(existing.resourceHref)
-            database.resourceDao().delete(existing.resourceHref)
-            markRecentAndroidLocalDelete(existing.resourceHref)
         }
         val raw = icalCodec.serializeEvent(updated, originalRawIcs = resource?.rawIcs.takeUnless { moved })
-        if (moved) {
-            database.eventDao().deleteByResource(existing.resourceHref)
-            database.resourceDao().delete(existing.resourceHref)
-            enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
-            upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Event, updated.uid, raw)
-            enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, null)
-        } else {
-            upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-            enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        writeTransaction {
+            if (moved) {
+                database.eventDao().deleteByResource(existing.resourceHref)
+                database.resourceDao().delete(existing.resourceHref)
+                enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
+                upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Event, updated.uid, raw)
+                enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, null)
+            } else {
+                upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
+                enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+            }
+            database.eventDao().upsert(updated)
         }
-        database.eventDao().upsert(updated)
+        if (existingIsAndroid) markRecentAndroidLocalDelete(existing.resourceHref)
     }
 
     suspend fun updateEventOccurrence(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
+        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(
+            existingCollectionHref,
+            payload.collectionHref,
+            writableEventCollectionOrNull(payload.collectionHref)?.href,
+        ) { updateEventOccurrenceUnit(uid, occurrenceStartMillis, payload) }
+    }
+
+    private suspend fun updateEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
         val existing = database.eventDao().get(uid) ?: return
         if (existing.recurrenceRule.isNullOrBlank()) {
             updateEvent(uid, payload)
@@ -745,19 +770,28 @@ class CalendarRepository(
             sequence = existing.sequence + 1,
         )
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
-        upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        database.eventDao().upsert(updated)
-        enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        writeTransaction {
+            upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
+            database.eventDao().upsert(updated)
+            enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        }
     }
 
     suspend fun updateEventFollowing(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
-        val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
-            updateEvent(uid, payload)
-            return
+        val existingCollectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(
+            existingCollectionHref,
+            payload.collectionHref,
+            writableEventCollectionOrNull(payload.collectionHref)?.href,
+        ) {
+            val existing = database.eventDao().get(uid) ?: return@localWriteUnit
+            if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
+                updateEvent(uid, payload)
+                return@localWriteUnit
+            }
+            deleteEventFollowing(uid, occurrenceStartMillis)
+            createEvent(payload)
         }
-        deleteEventFollowing(uid, occurrenceStartMillis)
-        createEvent(payload)
     }
 
     suspend fun moveTimedEvent(uid: String, date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
@@ -828,12 +862,12 @@ class CalendarRepository(
         }
     }
 
-    suspend fun setEventParticipation(uid: String, attendeeEmails: List<String>, partstat: String) {
-        val existing = database.eventDao().get(uid) ?: return
-        if (isReadOnlyCollectionHref(existing.collectionHref) || isAndroidProviderCollectionHref(existing.collectionHref)) return
+    suspend fun setEventParticipation(uid: String, attendeeEmails: List<String>, partstat: String): Unit = writeTransaction {
+        val existing = database.eventDao().get(uid) ?: return@writeTransaction
+        if (isReadOnlyCollectionHref(existing.collectionHref) || isAndroidProviderCollectionHref(existing.collectionHref)) return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
         val updatedAttendees = existing.attendeesJson.updateAttendeePartstat(attendeeEmails, partstat)
-            ?: return
+            ?: return@writeTransaction
         val updated = existing.copy(attendeesJson = updatedAttendees, sequence = existing.sequence + 1)
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
@@ -860,18 +894,22 @@ class CalendarRepository(
                 uid = "android-event-$eventId",
                 resourceHref = androidCalendarProviderClient.eventHref(eventId),
             )
-            upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-            database.eventDao().upsert(androidEvent)
+            writeTransaction {
+                upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
+                database.eventDao().upsert(androidEvent)
+            }
             markRecentAndroidLocalWrite(androidEvent.resourceHref)
             return
         }
         val raw = icalCodec.serializeEvent(event)
-        upsertLocalResource(event.collectionHref, event.resourceHref, null, ComponentType.Event, event.uid, raw)
-        database.eventDao().upsert(event)
-        enqueuePut(event.collectionHref, event.resourceHref, ComponentType.Event, raw, null)
+        writeTransaction {
+            upsertLocalResource(event.collectionHref, event.resourceHref, null, ComponentType.Event, event.uid, raw)
+            database.eventDao().upsert(event)
+            enqueuePut(event.collectionHref, event.resourceHref, ComponentType.Event, raw, null)
+        }
     }
 
-    suspend fun createTask(payload: TaskEditPayload) {
+    suspend fun createTask(payload: TaskEditPayload): Unit = writeTransaction {
         val collection = payload.collectionHref?.let { database.collectionDao().get(it) }
             ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
             ?: database.collectionDao().taskCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
@@ -915,13 +953,13 @@ class CalendarRepository(
         enqueuePut(collection.href, resourceHref, ComponentType.Task, raw, null)
     }
 
-    suspend fun updateTaskManualColor(uid: String, manualColor: Int?) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun updateTaskManualColor(uid: String, manualColor: Int?): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         database.taskDao().upsert(existing.copy(manualColor = manualColor))
     }
 
-    suspend fun updateTask(uid: String, payload: TaskEditPayload) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun updateTask(uid: String, payload: TaskEditPayload): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
         val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
             ?: database.collectionDao().get(existing.collectionHref)
@@ -986,11 +1024,11 @@ class CalendarRepository(
         database.taskDao().upsert(updated)
     }
 
-    suspend fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         if (existing.recurrenceRule.isNullOrBlank()) {
             updateTask(uid, payload)
-            return
+            return@writeTransaction
         }
         if (isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only task lists cannot be edited.")
         val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
@@ -1013,7 +1051,7 @@ class CalendarRepository(
             enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
             database.taskDao().upsert(updatedMaster)
             createTask(payload.copy(recurrenceRule = null))
-            return
+            return@writeTransaction
         }
         val resource = database.resourceDao().get(existing.resourceHref)
         val exDates = existing.exDatesCsv
@@ -1060,16 +1098,16 @@ class CalendarRepository(
         database.taskDao().upsert(updatedMaster)
     }
 
-    suspend fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         if (existing.recurrenceRule.isNullOrBlank()) {
             updateTask(uid, payload)
-            return
+            return@writeTransaction
         }
         val masterStart = existing.startAtMillis ?: existing.dueAtMillis ?: Long.MAX_VALUE
         if (occurrenceStartMillis <= masterStart) {
             updateTask(uid, payload)
-            return
+            return@writeTransaction
         }
         if (isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only task lists cannot be edited.")
         val resource = database.resourceDao().get(existing.resourceHref)
@@ -1108,9 +1146,9 @@ class CalendarRepository(
      * task and keeps the derived [TaskEntity.isCompleted] / completedAtMillis fields
      * in sync. COMPLETED is the only status that counts as "done".
      */
-    suspend fun setTaskStatus(resourceHref: String, status: String) {
-        val existing = database.taskDao().byResource(resourceHref) ?: return
-        if (isReadOnlyCollectionHref(existing.collectionHref)) return
+    suspend fun setTaskStatus(resourceHref: String, status: String): Unit = writeTransaction {
+        val existing = database.taskDao().byResource(resourceHref) ?: return@writeTransaction
+        if (isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
         val completed = status.equals("COMPLETED", ignoreCase = true)
         val updated = existing.copy(
@@ -1130,15 +1168,15 @@ class CalendarRepository(
     }
 
     /** Updates one generated occurrence without changing the recurring task master. */
-    suspend fun setTaskOccurrenceStatus(resourceHref: String, occurrenceStartMillis: Long, status: String) {
-        val existing = database.taskDao().byResource(resourceHref) ?: return
+    suspend fun setTaskOccurrenceStatus(resourceHref: String, occurrenceStartMillis: Long, status: String): Unit = writeTransaction {
+        val existing = database.taskDao().byResource(resourceHref) ?: return@writeTransaction
         if (existing.recurrenceRule.isNullOrBlank() && existing.rDatesCsv.isNullOrBlank()) {
             setTaskStatus(resourceHref, status)
-            return
+            return@writeTransaction
         }
-        if (isReadOnlyCollectionHref(existing.collectionHref)) return
+        if (isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
 
-        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return
+        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return@writeTransaction
         val shift = occurrenceStartMillis - recurrenceAnchor
         val generatedOccurrence = existing.copy(
             startAtMillis = existing.startAtMillis?.plus(shift),
@@ -1176,9 +1214,9 @@ class CalendarRepository(
         enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
     }
 
-    suspend fun setTaskPriority(uid: String, priority: Int) {
-        val existing = database.taskDao().get(uid) ?: return
-        if (isReadOnlyCollectionHref(existing.collectionHref)) return
+    suspend fun setTaskPriority(uid: String, priority: Int): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
+        if (isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
         val updated = existing.copy(
             priority = priority.coerceIn(1, 9),
@@ -1190,9 +1228,9 @@ class CalendarRepository(
         enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
     }
 
-    suspend fun setTaskProgress(uid: String, progress: Int) {
-        val existing = database.taskDao().get(uid) ?: return
-        if (isReadOnlyCollectionHref(existing.collectionHref)) return
+    suspend fun setTaskProgress(uid: String, progress: Int): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
+        if (isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
         val resource = database.resourceDao().get(existing.resourceHref)
         val updated = existing.copy(
             percentComplete = progress.coerceIn(0, 100),
@@ -1209,8 +1247,8 @@ class CalendarRepository(
         moveTimedTask(uid, existing.startAtMillis ?: existing.dueAtMillis ?: System.currentTimeMillis(), date, startTime, endTime)
     }
 
-    suspend fun moveTimedTask(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun moveTimedTask(uid: String, occurrenceStartMillis: Long, date: LocalDate, startTime: LocalTime, endTime: LocalTime): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         val payload = TaskEditPayload(
             title = existing.title,
             collectionHref = existing.collectionHref,
@@ -1241,8 +1279,8 @@ class CalendarRepository(
         }
     }
 
-    suspend fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate) {
-        val existing = database.taskDao().get(uid) ?: return
+    suspend fun moveAllDayTask(uid: String, occurrenceStartMillis: Long, date: LocalDate): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
         val currentStart = existing.startAtMillis?.toDate() ?: existing.dueAtMillis?.toDate() ?: date
         val currentEnd = (existing.dueAtMillis?.toDate() ?: existing.startAtMillis?.toDate() ?: currentStart).coerceAtLeast(currentStart)
         val spanDays = ChronoUnit.DAYS.between(currentStart, currentEnd).coerceAtLeast(0L)
@@ -1276,10 +1314,10 @@ class CalendarRepository(
         }
     }
 
-    suspend fun copyTaskTo(uid: String, collectionHref: String) {
-        val existing = database.taskDao().get(uid) ?: return
-        val targetCollection = database.collectionDao().get(collectionHref) ?: return
-        if (!targetCollection.supportsTasks || targetCollection.isReadOnlyCollection() || !targetCollection.canCreateResources()) return
+    suspend fun copyTaskTo(uid: String, collectionHref: String): Unit = writeTransaction {
+        val existing = database.taskDao().get(uid) ?: return@writeTransaction
+        val targetCollection = database.collectionDao().get(collectionHref) ?: return@writeTransaction
+        if (!targetCollection.supportsTasks || targetCollection.isReadOnlyCollection() || !targetCollection.canCreateResources()) return@writeTransaction
         val newUid = newUid()
         val resourceHref = targetCollection.newResourceHref(newUid)
         val task = existing.copy(
@@ -1297,10 +1335,10 @@ class CalendarRepository(
         enqueuePut(task.collectionHref, task.resourceHref, ComponentType.Task, raw, null)
     }
 
-    suspend fun deleteTask(uid: String) {
-        val task = database.taskDao().get(uid) ?: return
-        val collection = database.collectionDao().get(task.collectionHref) ?: return
-        if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return
+    suspend fun deleteTask(uid: String): Unit = writeTransaction {
+        val task = database.taskDao().get(uid) ?: return@writeTransaction
+        val collection = database.collectionDao().get(task.collectionHref) ?: return@writeTransaction
+        if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return@writeTransaction
         reparentTaskChildren(task)
         val resource = database.resourceDao().get(task.resourceHref)
         if (task.collectionHref.isLocalCollectionHref()) {
@@ -1348,14 +1386,21 @@ class CalendarRepository(
     }
 
     suspend fun deleteEvent(uid: String) {
+        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(collectionHref) { deleteEventUnit(uid) }
+    }
+
+    private suspend fun deleteEventUnit(uid: String) {
         val event = database.eventDao().get(uid) ?: return
         val collection = database.collectionDao().get(event.collectionHref) ?: return
         if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return
         if (isAndroidProviderCollectionHref(event.collectionHref)) {
             val eventId = androidCalendarProviderClient.eventIdFromHref(event.resourceHref) ?: return
             androidCalendarProviderClient.deleteEvent(eventId)
-            database.eventDao().deleteByResource(event.resourceHref)
-            database.resourceDao().delete(event.resourceHref)
+            writeTransaction {
+                database.eventDao().deleteByResource(event.resourceHref)
+                database.resourceDao().delete(event.resourceHref)
+            }
             markRecentAndroidLocalDelete(event.resourceHref)
             return
         }
@@ -1374,6 +1419,11 @@ class CalendarRepository(
      * when it isn't actually recurring.
      */
     suspend fun deleteEventOccurrence(uid: String, occurrenceStartMillis: Long) {
+        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(collectionHref) { deleteEventOccurrenceUnit(uid, occurrenceStartMillis) }
+    }
+
+    private suspend fun deleteEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long) {
         val existing = database.eventDao().get(uid) ?: return
         if (existing.recurrenceRule.isNullOrBlank()) {
             deleteEvent(uid)
@@ -1407,6 +1457,11 @@ class CalendarRepository(
      * first occurrence, the whole event is removed instead.
      */
     suspend fun deleteEventFollowing(uid: String, occurrenceStartMillis: Long) {
+        val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
+        localWriteUnit(collectionHref) { deleteEventFollowingUnit(uid, occurrenceStartMillis) }
+    }
+
+    private suspend fun deleteEventFollowingUnit(uid: String, occurrenceStartMillis: Long) {
         val existing = database.eventDao().get(uid) ?: return
         if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
             deleteEvent(uid)
@@ -1470,7 +1525,12 @@ class CalendarRepository(
      * the UI, so the stale date-only counterpart is removed.
      */
     suspend fun repairInvalidTaskSchedules() {
-        database.taskDao().all().forEach { task ->
+        if (database.taskDao().invalidIcalSchedules().isEmpty()) return
+        writeTransaction { repairInvalidTaskSchedulesInTransaction() }
+    }
+
+    private suspend fun repairInvalidTaskSchedulesInTransaction() {
+        database.taskDao().invalidIcalSchedules().forEach { task ->
             val repaired = task.withValidIcalSchedule()
             if (repaired == task) return@forEach
             val resource = database.resourceDao().get(task.resourceHref)
@@ -1498,11 +1558,12 @@ class CalendarRepository(
     private suspend fun repairPendingTaskMutations(
         pendingMutations: List<PendingMutationEntity>? = null,
     ) {
-        (pendingMutations ?: database.pendingMutationDao().all())
+        val taskPutsByResource = (pendingMutations ?: database.pendingMutationDao().all())
             .filter { it.action == MutationAction.Put && it.componentType == ComponentType.Task }
             .groupBy { it.resourceHref }
-            .values
-            .forEach { mutations ->
+        if (taskPutsByResource.isEmpty()) return
+        writeTransaction {
+            taskPutsByResource.values.forEach { mutations ->
                 val newest = mutations.maxBy { it.id }
                 mutations.filterNot { it.id == newest.id }.forEach { database.pendingMutationDao().delete(it) }
                 val normalizedPayload = normalizedPendingTaskPayload(newest)
@@ -1510,6 +1571,7 @@ class CalendarRepository(
                     database.pendingMutationDao().updatePayload(newest.id, normalizedPayload)
                 }
             }
+        }
     }
 
     /**
@@ -1520,11 +1582,15 @@ class CalendarRepository(
      * an orange sync issue or duplicate task.
      */
     private suspend fun repairDuplicateCalDavResources() {
-        val collectionsByHref = database.collectionDao().all()
-            .associateBy { it.href }
+        if (database.resourceDao().duplicateCalDavCandidates().isEmpty()) return
+        writeTransaction { repairDuplicateCalDavResourcesInTransaction() }
+    }
+
+    private suspend fun repairDuplicateCalDavResourcesInTransaction() {
         val resources = database.resourceDao().duplicateCalDavCandidates()
         if (resources.isEmpty()) return
-
+        val collectionsByHref = database.collectionDao().all()
+            .associateBy { it.href }
         val pendingByResource = database.pendingMutationDao().all()
             .groupBy { it.resourceHref }
 
@@ -1603,6 +1669,11 @@ class CalendarRepository(
      * they only keep the "pending changes" counter stuck.
      */
     private suspend fun discardSupersededPendingMutations() {
+        if (database.pendingMutationDao().all().none { it.action == MutationAction.Put }) return
+        writeTransaction { discardSupersededPendingMutationsInTransaction() }
+    }
+
+    private suspend fun discardSupersededPendingMutationsInTransaction() {
         val now = System.currentTimeMillis()
         database.pendingMutationDao().all()
             .filter { it.action == MutationAction.Put }
@@ -1651,7 +1722,7 @@ class CalendarRepository(
      * Persists a new manual ordering of all collections. Caller supplies the hrefs
      * in the order they should appear; we write the index as sortOrder for each.
      */
-    suspend fun applyCollectionOrder(hrefs: List<String>) {
+    suspend fun applyCollectionOrder(hrefs: List<String>): Unit = writeTransaction {
         hrefs.forEachIndexed { index, href ->
             database.collectionDao().updateSortOrder(href, index)
         }
@@ -1676,9 +1747,11 @@ class CalendarRepository(
                 )
             }
         }
-        database.collectionDao().updateAppearance(href, normalizedName, customDisplayName, effectiveColor, customColor)
-        database.eventDao().updateColorForCollection(href, effectiveColor)
-        database.taskDao().updateColorForCollection(href, effectiveColor)
+        writeTransaction {
+            database.collectionDao().updateAppearance(href, normalizedName, customDisplayName, effectiveColor, customColor)
+            database.eventDao().updateColorForCollection(href, effectiveColor)
+            database.taskDao().updateColorForCollection(href, effectiveColor)
+        }
     }
 
     suspend fun createCalDavCalendar(
@@ -1718,8 +1791,10 @@ class CalendarRepository(
             username = credentials.username,
             appPassword = credentials.appPassword,
         )
-        database.pendingMutationDao().deleteForCollection(collection.href)
-        database.collectionDao().delete(collection.href)
+        writeTransaction {
+            database.pendingMutationDao().deleteForCollection(collection.href)
+            database.collectionDao().delete(collection.href)
+        }
     }
 
     private suspend fun saveAccount(serverUrl: String, username: String, appPassword: String): AccountEntity {
@@ -1821,38 +1896,43 @@ class CalendarRepository(
                 sourceType = SourceType.ReadOnlyUrl,
                 externalId = account.serverUrl,
             )
-            database.collectionDao().upsertAll(listOf(collection))
-            val refreshedResourceHrefs = mutableSetOf<String>()
-            parsed.forEach { component ->
+            val components = parsed.mapNotNull { component ->
+                val resourceHref = component.event?.resourceHref ?: component.task?.resourceHref ?: return@mapNotNull null
                 val rawComponent = when {
                     component.event != null -> icalCodec.serializeEvent(component.event)
                     component.task != null -> icalCodec.serializeTask(component.task)
                     else -> raw
                 }
-                val resourceHref = component.event?.resourceHref ?: component.task?.resourceHref ?: return@forEach
-                refreshedResourceHrefs += resourceHref
-                upsertLocalResource(collection.href, resourceHref, null, component.componentType, component.uid, rawComponent)
-                component.event?.let {
-                    val current = database.eventDao().byResource(resourceHref)
-                    database.eventDao().upsert(it.copy(manualColor = current?.manualColor))
-                }
-                component.task?.let {
-                    val current = database.taskDao().byResource(resourceHref)
-                    database.taskDao().upsert(it.copy(manualColor = current?.manualColor))
-                }
+                Triple(resourceHref, component, rawComponent)
             }
-            database.resourceDao().forCollection(collection.href)
-                .filterNot { it.href in refreshedResourceHrefs }
-                .forEach { stale ->
-                    database.eventDao().deleteByResource(stale.href)
-                    database.taskDao().deleteByResource(stale.href)
-                    database.resourceDao().delete(stale.href)
+            writeTransaction {
+                database.collectionDao().upsertAll(listOf(collection))
+                val refreshedResourceHrefs = mutableSetOf<String>()
+                components.forEach { (resourceHref, component, rawComponent) ->
+                    refreshedResourceHrefs += resourceHref
+                    upsertLocalResource(collection.href, resourceHref, null, component.componentType, component.uid, rawComponent)
+                    component.event?.let {
+                        val current = database.eventDao().byResource(resourceHref)
+                        database.eventDao().upsert(it.copy(manualColor = current?.manualColor))
+                    }
+                    component.task?.let {
+                        val current = database.taskDao().byResource(resourceHref)
+                        database.taskDao().upsert(it.copy(manualColor = current?.manualColor))
+                    }
                 }
-            if (existing?.color != collection.color) {
-                database.eventDao().updateColorForCollection(collection.href, collection.color)
-                database.taskDao().updateColorForCollection(collection.href, collection.color)
+                database.resourceDao().forCollection(collection.href)
+                    .filterNot { it.href in refreshedResourceHrefs }
+                    .forEach { stale ->
+                        database.eventDao().deleteByResource(stale.href)
+                        database.taskDao().deleteByResource(stale.href)
+                        database.resourceDao().delete(stale.href)
+                    }
+                if (existing?.color != collection.color) {
+                    database.eventDao().updateColorForCollection(collection.href, collection.color)
+                    database.taskDao().updateColorForCollection(collection.href, collection.color)
+                }
+                database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
             }
-            database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
         } catch (error: Throwable) {
             if (existing != null && error.isTransientReadOnlySyncFailure()) {
                 database.accountDao().updateSyncState("idle", null, account.lastSyncAtMillis, account.id)
@@ -1906,18 +1986,6 @@ class CalendarRepository(
                     capabilitiesJson = calendar.capabilitiesJson(),
                 )
             }
-            database.collectionDao().upsertAll(collectionEntities)
-            collectionEntities.forEach { collection ->
-                val previous = previousCollectionsByHref[collection.href]
-                if (previous?.color != collection.color) {
-                    database.eventDao().updateColorForCollection(collection.href, collection.color)
-                    database.taskDao().updateColorForCollection(collection.href, collection.color)
-                }
-            }
-            if (removeStale) {
-                removeStaleRemoteCollections(account.id, collectionEntities.map { it.href }.toSet())
-            }
-
             val providerSyncedCalendarIds = calendars.filter { it.syncEvents }.map { it.id }.toSet()
             val collectionByCalendarId = collectionEntities
                 .filter { it.isEnabled }
@@ -1931,44 +1999,58 @@ class CalendarRepository(
                 syncStartMillis = now - ANDROID_SYNC_LOOKBACK_MILLIS,
                 syncEndMillis = now + ANDROID_SYNC_LOOKAHEAD_MILLIS,
             )
-            val refreshedResourceHrefsByCollection = mutableMapOf<String, MutableSet<String>>()
-            events.forEach { androidEvent ->
-                val collection = collectionByCalendarId[androidEvent.calendarId] ?: return@forEach
-                val resourceHref = androidCalendarProviderClient.eventHref(androidEvent.id)
-                if (shouldIgnoreRecentAndroidLocalDelete(resourceHref)) return@forEach
-                val existing = database.eventDao().byResource(resourceHref)
-                val event = androidCalendarProviderClient.toEntity(
-                    event = androidEvent,
-                    collectionHref = collection.href,
-                    color = collection.color,
-                    manualColor = existing?.manualColor,
-                )
-                refreshedResourceHrefsByCollection.getOrPut(collection.href) { mutableSetOf() } += resourceHref
-                if (shouldKeepRecentAndroidLocalWrite(resourceHref, existing, event)) return@forEach
-                upsertLocalResource(
-                    collectionHref = collection.href,
-                    resourceHref = event.resourceHref,
-                    etag = null,
-                    componentType = ComponentType.Event,
-                    uid = event.uid,
-                    rawIcs = "android-provider:${androidEvent.id}",
-                )
-                database.eventDao().upsert(event)
-                database.taskDao().deleteByResource(resourceHref)
-            }
-            if (removeStale) {
-                collectionByCalendarId.values.forEach { collection ->
-                    val refreshed = refreshedResourceHrefsByCollection[collection.href].orEmpty()
-                    database.resourceDao().forCollection(collection.href)
-                        .filterNot { it.href in refreshed }
-                        .forEach { stale ->
-                            database.eventDao().deleteByResource(stale.href)
-                            database.taskDao().deleteByResource(stale.href)
-                            database.resourceDao().delete(stale.href)
-                        }
+            // The provider reads above stay outside the transaction; only the local writes are atomic.
+            writeTransaction {
+                database.collectionDao().upsertAll(collectionEntities)
+                collectionEntities.forEach { collection ->
+                    val previous = previousCollectionsByHref[collection.href]
+                    if (previous?.color != collection.color) {
+                        database.eventDao().updateColorForCollection(collection.href, collection.color)
+                        database.taskDao().updateColorForCollection(collection.href, collection.color)
+                    }
                 }
+                if (removeStale) {
+                    removeStaleRemoteCollections(account.id, collectionEntities.map { it.href }.toSet())
+                }
+                val refreshedResourceHrefsByCollection = mutableMapOf<String, MutableSet<String>>()
+                events.forEach { androidEvent ->
+                    val collection = collectionByCalendarId[androidEvent.calendarId] ?: return@forEach
+                    val resourceHref = androidCalendarProviderClient.eventHref(androidEvent.id)
+                    if (shouldIgnoreRecentAndroidLocalDelete(resourceHref)) return@forEach
+                    val existing = database.eventDao().byResource(resourceHref)
+                    val event = androidCalendarProviderClient.toEntity(
+                        event = androidEvent,
+                        collectionHref = collection.href,
+                        color = collection.color,
+                        manualColor = existing?.manualColor,
+                    )
+                    refreshedResourceHrefsByCollection.getOrPut(collection.href) { mutableSetOf() } += resourceHref
+                    if (shouldKeepRecentAndroidLocalWrite(resourceHref, existing, event)) return@forEach
+                    upsertLocalResource(
+                        collectionHref = collection.href,
+                        resourceHref = event.resourceHref,
+                        etag = null,
+                        componentType = ComponentType.Event,
+                        uid = event.uid,
+                        rawIcs = "android-provider:${androidEvent.id}",
+                    )
+                    database.eventDao().upsert(event)
+                    database.taskDao().deleteByResource(resourceHref)
+                }
+                if (removeStale) {
+                    collectionByCalendarId.values.forEach { collection ->
+                        val refreshed = refreshedResourceHrefsByCollection[collection.href].orEmpty()
+                        database.resourceDao().forCollection(collection.href)
+                            .filterNot { it.href in refreshed }
+                            .forEach { stale ->
+                                database.eventDao().deleteByResource(stale.href)
+                                database.taskDao().deleteByResource(stale.href)
+                                database.resourceDao().delete(stale.href)
+                            }
+                    }
+                }
+                database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
             }
-            database.accountDao().updateSyncState("idle", null, System.currentTimeMillis(), account.id)
         } catch (error: Throwable) {
             val syncError = account.describeSyncError(error)
             database.accountDao().updateSyncState("error", syncError, account.lastSyncAtMillis, account.id)
@@ -2065,7 +2147,8 @@ class CalendarRepository(
             val key = remote.href.davHrefKey()
             if (key in pendingDeletes || !shouldApplyRemoteCalDavState(key, pendingPuts)) return@filter false
             val local = localByKey[key]
-            incremental != null || local == null || local.etag != remote.etag || local.syncError != null
+            // An unchanged ETag means we already hold this version, typically our own upload.
+            local == null || local.syncError != null || (incremental != null && remote.etag == null) || local.etag != remote.etag
         }
         val queriedByHref = queriedResources.associateBy { it.href.davHrefKey() }
         val multigetByHref = changedResources
@@ -2085,71 +2168,86 @@ class CalendarRepository(
             .associateBy { it.href.davHrefKey() }
         val fetchedByHref = multigetByHref + queriedByHref
 
-        changedResources.forEach { remote ->
+        val downloads = changedResources.mapNotNull { remote ->
             val local = localByKey[remote.href.davHrefKey()]
+            val fetched = fetchedByHref[remote.href.davHrefKey()]
+            if (local != null && local.syncError == null && fetched?.etag != null && fetched.etag == local.etag) return@mapNotNull null
             val localHref = local?.href ?: remote.href
-            try {
-                val fetched = fetchedByHref[remote.href.davHrefKey()]
+            val download = runCatching {
                 val raw = fetched?.calendarData
                     ?: calDavClient.getResource(credentials.serverUrl, remote.href, credentials.username, credentials.appPassword)
-                if (shouldKeepRecentCalDavLocalWrite(localHref, local, raw)) return@forEach
-                val effectiveEtag = fetched?.etag ?: remote.etag
-                val parsed = icalCodec.parse(raw, collection.href, localHref, collection.color)
-                if (parsed == null) {
-                    upsertFailedResource(
-                        collectionHref = collection.href,
-                        resourceHref = localHref,
-                        etag = effectiveEtag,
-                        rawIcs = raw,
-                        existing = local,
-                        error = "Import failed: no supported VEVENT or VTODO component was found.",
-                    )
-                    return@forEach
-                }
-                upsertLocalResource(collection.href, localHref, effectiveEtag, parsed.componentType, parsed.uid, raw)
-                parsed.event?.let {
-                    val existingEvent = database.eventDao().byResource(localHref)
-                    database.eventDao().upsert(it.copy(manualColor = it.manualColor ?: existingEvent?.manualColor))
-                    database.taskDao().deleteByResource(localHref)
-                }
-                parsed.task?.let {
-                    val mergedTask = it.preserveLocalTimedFields(local?.rawIcs, database.taskDao().byResource(localHref))
-                        .withValidIcalSchedule()
-                    if (mergedTask != it) {
-                        upsertLocalResource(collection.href, localHref, effectiveEtag, parsed.componentType, parsed.uid, icalCodec.serializeTask(mergedTask))
-                    }
-                    database.taskDao().upsert(mergedTask)
-                    database.eventDao().deleteByResource(localHref)
-                }
-            } catch (error: Throwable) {
-                upsertFailedResource(
-                    collectionHref = collection.href,
-                    resourceHref = localHref,
-                    etag = remote.etag ?: local?.etag,
-                    rawIcs = local?.rawIcs.orEmpty(),
-                    existing = local,
-                    error = "Import failed: ${error.message ?: error::class.java.simpleName}",
-                )
+                raw to icalCodec.parse(raw, collection.href, localHref, collection.color)
             }
+            RemoteCalDavDownload(remote, local, localHref, fetched?.etag ?: remote.etag, download)
         }
-
         val deletedKeys = incremental?.deletedHrefs
             ?.map { it.davHrefKey() }
             ?.toSet()
             ?: localByKey.keys.minus(remoteByKey.keys)
-        deletedKeys.mapNotNull(localByKey::get).forEach { deletedResource ->
-            val deletedHref = deletedResource.href
-            if (!shouldApplyRemoteCalDavState(deletedHref.davHrefKey(), pendingPuts)) return@forEach
-            if (shouldKeepRecentCalDavMissingResource(deletedHref)) return@forEach
-            database.eventDao().deleteByResource(deletedHref)
-            database.taskDao().deleteByResource(deletedHref)
-            database.resourceDao().delete(deletedHref)
+
+        // Everything above talks to the server; the batch and the sync markers that cover it are stored atomically.
+        writeTransaction {
+            downloads.forEach { download -> applyRemoteCalDavDownload(collection, download) }
+            deletedKeys.mapNotNull(localByKey::get).forEach { deletedResource ->
+                val deletedHref = deletedResource.href
+                if (!shouldApplyRemoteCalDavState(deletedHref.davHrefKey(), pendingPuts)) return@forEach
+                if (database.pendingMutationDao().forResource(deletedHref).any { it.action == MutationAction.Put }) return@forEach
+                database.eventDao().deleteByResource(deletedHref)
+                database.taskDao().deleteByResource(deletedHref)
+                database.resourceDao().delete(deletedHref)
+            }
+            database.collectionDao().updateSyncMarkers(
+                href = collection.href,
+                syncToken = incremental?.syncToken ?: discovered?.syncToken,
+                ctag = discovered?.ctag,
+            )
         }
-        database.collectionDao().updateSyncMarkers(
-            href = collection.href,
-            syncToken = incremental?.syncToken ?: discovered?.syncToken,
-            ctag = discovered?.ctag,
-        )
+    }
+
+    private suspend fun applyRemoteCalDavDownload(collection: CollectionEntity, download: RemoteCalDavDownload) {
+        val local = download.local
+        val localHref = download.localHref
+        // A local edit queued while this batch was downloading wins; the push path reconciles it with the server.
+        if (database.pendingMutationDao().forResource(localHref).isNotEmpty()) return
+        try {
+            val (raw, parsed) = download.result.getOrThrow()
+            val effectiveEtag = download.etag
+            if (parsed == null) {
+                upsertFailedResource(
+                    collectionHref = collection.href,
+                    resourceHref = localHref,
+                    etag = effectiveEtag,
+                    rawIcs = raw,
+                    existing = local,
+                    error = "Import failed: no supported VEVENT or VTODO component was found.",
+                )
+                return
+            }
+            upsertLocalResource(collection.href, localHref, effectiveEtag, parsed.componentType, parsed.uid, raw)
+            parsed.event?.let {
+                val existingEvent = database.eventDao().byResource(localHref)
+                database.eventDao().upsert(it.copy(manualColor = it.manualColor ?: existingEvent?.manualColor))
+                database.taskDao().deleteByResource(localHref)
+            }
+            parsed.task?.let {
+                val mergedTask = it.preserveLocalTimedFields(local?.rawIcs, database.taskDao().byResource(localHref))
+                    .withValidIcalSchedule()
+                if (mergedTask != it) {
+                    upsertLocalResource(collection.href, localHref, effectiveEtag, parsed.componentType, parsed.uid, icalCodec.serializeTask(mergedTask))
+                }
+                database.taskDao().upsert(mergedTask)
+                database.eventDao().deleteByResource(localHref)
+            }
+        } catch (error: Throwable) {
+            upsertFailedResource(
+                collectionHref = collection.href,
+                resourceHref = localHref,
+                etag = download.remote.etag ?: local?.etag,
+                rawIcs = local?.rawIcs.orEmpty(),
+                existing = local,
+                error = "Import failed: ${error.message ?: error::class.java.simpleName}",
+            )
+        }
     }
 
     private suspend fun pushPending(credentials: StoredCredentials, accountId: String) {
@@ -2244,17 +2342,20 @@ class CalendarRepository(
                                 )
                             }.getOrNull()
                             ?: putAttempt.submittedBaseEtag
-                        database.resourceDao().markSynced(mutation.resourceHref, uploadedEtag)
-                        if (result.href != mutation.resourceHref) {
-                            database.resourceDao().markSynced(result.href, uploadedEtag)
-                        }
-                        database.pendingMutationDao()
-                            .latestForResourceAndAction(mutation.resourceHref, MutationAction.Put)
-                            ?.takeIf { it.id != mutation.id }
-                            ?.let { newerMutation ->
-                                database.pendingMutationDao().updateBaseEtag(newerMutation.id, uploadedEtag)
+                        // The stored ETag is what later syncs use to recognise this upload as our own write.
+                        writeTransaction {
+                            database.resourceDao().markSynced(mutation.resourceHref, uploadedEtag)
+                            if (result.href != mutation.resourceHref) {
+                                database.resourceDao().markSynced(result.href, uploadedEtag)
                             }
-                        markRecentCalDavLocalWrite(result.href)
+                            database.pendingMutationDao()
+                                .latestForResourceAndAction(mutation.resourceHref, MutationAction.Put)
+                                ?.takeIf { it.id != mutation.id }
+                                ?.let { newerMutation ->
+                                    database.pendingMutationDao().updateBaseEtag(newerMutation.id, uploadedEtag)
+                                }
+                            database.pendingMutationDao().delete(mutation)
+                        }
                     }
                     MutationAction.Delete -> {
                         calDavClient.deleteResource(
@@ -2264,14 +2365,16 @@ class CalendarRepository(
                             appPassword = credentials.appPassword,
                             baseEtag = mutation.baseEtag,
                         )
-                        when (mutation.componentType) {
-                            ComponentType.Event -> database.eventDao().deleteByResource(mutation.resourceHref)
-                            ComponentType.Task -> database.taskDao().deleteByResource(mutation.resourceHref)
+                        writeTransaction {
+                            when (mutation.componentType) {
+                                ComponentType.Event -> database.eventDao().deleteByResource(mutation.resourceHref)
+                                ComponentType.Task -> database.taskDao().deleteByResource(mutation.resourceHref)
+                            }
+                            database.resourceDao().delete(mutation.resourceHref)
+                            database.pendingMutationDao().delete(mutation)
                         }
-                        database.resourceDao().delete(mutation.resourceHref)
                     }
                 }
-                database.pendingMutationDao().delete(mutation)
             } catch (error: Throwable) {
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")
                 if (firstFailure == null) firstFailure = error
@@ -2279,6 +2382,15 @@ class CalendarRepository(
         }
         firstFailure?.let { throw it }
     }
+
+    private suspend fun <T> writeTransaction(block: suspend () -> T): T = database.withTransaction(block)
+
+    /**
+     * Runs [block] as one transaction unless one of [collectionHrefs] is an Android provider calendar.
+     * Provider calls must not run inside a transaction, so those paths wrap only their local writes.
+     */
+    private suspend fun <T> localWriteUnit(vararg collectionHrefs: String?, block: suspend () -> T): T =
+        if (collectionHrefs.any { it != null && isAndroidProviderCollectionHref(it) }) block() else writeTransaction(block)
 
     private suspend fun upsertLocalResource(
         collectionHref: String,
@@ -2330,19 +2442,21 @@ class CalendarRepository(
         baseEtag: String?,
     ) {
         if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
-        database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
-        database.pendingMutationDao().insert(
-            PendingMutationEntity(
-                accountId = database.collectionDao().get(collectionHref)?.accountId ?: AccountEntity.PRIMARY_ID,
-                collectionHref = collectionHref,
-                resourceHref = resourceHref,
-                componentType = componentType,
-                action = MutationAction.Put,
-                payloadIcs = rawIcs,
-                baseEtag = baseEtag,
-                createdAtMillis = System.currentTimeMillis(),
-            ),
-        )
+        writeTransaction {
+            database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
+            database.pendingMutationDao().insert(
+                PendingMutationEntity(
+                    accountId = database.collectionDao().get(collectionHref)?.accountId ?: AccountEntity.PRIMARY_ID,
+                    collectionHref = collectionHref,
+                    resourceHref = resourceHref,
+                    componentType = componentType,
+                    action = MutationAction.Put,
+                    payloadIcs = rawIcs,
+                    baseEtag = baseEtag,
+                    createdAtMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
     }
 
     private suspend fun enqueueDelete(
@@ -2352,20 +2466,22 @@ class CalendarRepository(
         baseEtag: String?,
     ) {
         if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
-        database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
-        database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Delete)
-        database.pendingMutationDao().insert(
-            PendingMutationEntity(
-                accountId = database.collectionDao().get(collectionHref)?.accountId ?: AccountEntity.PRIMARY_ID,
-                collectionHref = collectionHref,
-                resourceHref = resourceHref,
-                componentType = componentType,
-                action = MutationAction.Delete,
-                payloadIcs = null,
-                baseEtag = baseEtag,
-                createdAtMillis = System.currentTimeMillis(),
-            ),
-        )
+        writeTransaction {
+            database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
+            database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Delete)
+            database.pendingMutationDao().insert(
+                PendingMutationEntity(
+                    accountId = database.collectionDao().get(collectionHref)?.accountId ?: AccountEntity.PRIMARY_ID,
+                    collectionHref = collectionHref,
+                    resourceHref = resourceHref,
+                    componentType = componentType,
+                    action = MutationAction.Delete,
+                    payloadIcs = null,
+                    baseEtag = baseEtag,
+                    createdAtMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
     }
 
     private fun readOnlyAccountId(url: String): String =
@@ -2430,8 +2546,10 @@ class CalendarRepository(
             ?: error("Android event id is missing.")
         val sanitized = event.sanitizedFor(collection)
         androidCalendarProviderClient.updateEvent(eventId, collection.androidCalendarId(), sanitized)
-        upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
-        database.eventDao().upsert(sanitized)
+        writeTransaction {
+            upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
+            database.eventDao().upsert(sanitized)
+        }
         markRecentAndroidLocalWrite(sanitized.resourceHref)
     }
 
@@ -2450,33 +2568,11 @@ class CalendarRepository(
             allDay = eventWithExDate.allDay,
         )
         val sanitized = eventWithExDate.sanitizedFor(collection)
-        upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
-        database.eventDao().upsert(sanitized)
+        writeTransaction {
+            upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
+            database.eventDao().upsert(sanitized)
+        }
         markRecentAndroidLocalWrite(sanitized.resourceHref)
-    }
-
-    private fun markRecentCalDavLocalWrite(resourceHref: String) {
-        recentCalDavLocalWrites[resourceHref] = System.currentTimeMillis()
-    }
-
-    private fun shouldKeepRecentCalDavLocalWrite(resourceHref: String, local: CalendarResourceEntity?, remoteRawIcs: String): Boolean {
-        val writtenAt = recentCalDavLocalWrites[resourceHref] ?: return false
-        if (System.currentTimeMillis() - writtenAt > RECENT_REMOTE_WRITE_SHIELD_MILLIS) {
-            recentCalDavLocalWrites.remove(resourceHref)
-            return false
-        }
-        if (local == null || local.rawIcs.normalizedIcsText() == remoteRawIcs.normalizedIcsText()) {
-            recentCalDavLocalWrites.remove(resourceHref)
-            return false
-        }
-        return true
-    }
-
-    private fun shouldKeepRecentCalDavMissingResource(resourceHref: String): Boolean {
-        val writtenAt = recentCalDavLocalWrites[resourceHref] ?: return false
-        if (System.currentTimeMillis() - writtenAt <= RECENT_REMOTE_WRITE_SHIELD_MILLIS) return true
-        recentCalDavLocalWrites.remove(resourceHref)
-        return false
     }
 
     private fun markRecentAndroidLocalWrite(resourceHref: String) {
@@ -2610,7 +2706,6 @@ class CalendarRepository(
         private const val ANDROID_SYNC_LOOKAHEAD_MILLIS = 730L * 24L * 60L * 60L * 1000L
         private const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L
         private const val RECENT_ANDROID_WRITE_SHIELD_MILLIS = 90L * 1000L
-        private const val RECENT_REMOTE_WRITE_SHIELD_MILLIS = 90L * 1000L
         private const val UNKNOWN_COMPONENT_TYPE = "UNKNOWN"
         private const val MAX_SYNC_ERROR_LENGTH = 500
         private const val HOUR_MILLIS = 60L * 60L * 1000L
@@ -2672,6 +2767,14 @@ private fun String.calendarObjectPathSegment(): String =
     URLEncoder.encode(trim(), StandardCharsets.UTF_8.name())
         .replace("+", "%20")
         .ifBlank { UUID.randomUUID().toString() }
+
+private class RemoteCalDavDownload(
+    val remote: RemoteResource,
+    val local: CalendarResourceEntity?,
+    val localHref: String,
+    val etag: String?,
+    val result: Result<Pair<String, ParsedCalendarComponent?>>,
+)
 
 internal fun resolveCalDavUploadBaseEtag(
     queuedBaseEtag: String?,

@@ -3,6 +3,7 @@ package com.kgs.calendar.data
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import org.junit.After
@@ -297,21 +298,128 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun remoteChangeRightAfterLocalUploadIsShieldedAndSkipped() = runTest {
+    fun remoteChangeRightAfterLocalUploadIsAppliedOnNextSync() = runTest {
         repository.updateEvent("remote-event", eventPayload("Local edit", day))
         repository.pushPendingChangesCreatedSince(0)
         val uploadedEtag = harness.resource(eventHref)!!.etag
         server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Other client edit", sequence = 5))
+        val remoteEtag = server.stored(eventHref)!!.etag
+        assertNotEquals(uploadedEtag, remoteEtag)
 
         repository.syncNow()
-        server.clearRequests()
+
+        assertEquals("Other client edit", harness.event(eventHref)!!.title)
+        assertEquals(remoteEtag, harness.resource(eventHref)!!.etag)
+        assertTrue(harness.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun ownUploadListedBySyncCollectionIsRecognisedByEtagAndNotRefetched() = runTest {
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        val payload = harness.pendingMutations().single().payloadIcs
+
         repository.syncNow()
 
-        // NOTE: current behaviour - within the 90 s write shield the remote edit is ignored while the
-        // sync token still advances past it, so later incremental syncs do not pick it up either.
-        assertTrue(server.requests("REPORT").none { "calendar-multiget" in it.body && eventHref in it.body })
+        // The sync-collection report lists our own PUT, but its ETag matches the one stored after the upload.
+        assertTrue(server.requests("REPORT").any { "sync-collection" in it.body && it.path == server.eventsHref })
+        assertTrue(server.requests("REPORT").none { "calendar-multiget" in it.body })
+        assertEquals(server.stored(eventHref)!!.etag, harness.resource(eventHref)!!.etag)
+        // The resource still holds the uploaded payload rather than the server's re-serialised copy.
+        assertEquals(payload, harness.resource(eventHref)!!.rawIcs)
         assertEquals("Local edit", harness.event(eventHref)!!.title)
-        assertEquals(uploadedEtag, harness.resource(eventHref)!!.etag)
-        assertNotEquals(uploadedEtag, server.stored(eventHref)!!.etag)
+    }
+
+    @Test
+    fun fetchedResourceWhoseEtagMatchesStoredEtagIsNotReapplied() = runTest {
+        val stored = harness.event(eventHref)!!
+        harness.database.eventDao().upsert(stored.copy(title = "Local state"))
+        val syncToken = harness.collection(server.eventsHref)!!.syncToken
+        server.respondNext("REPORT", server.eventsHref) {
+            MockResponse()
+                .setResponseCode(207)
+                .addHeader("Content-Type", "application/xml; charset=utf-8")
+                .setBody(CalDavXml.multistatus(CalDavXml.etag(eventHref, "\"listing-etag\""), syncToken = syncToken))
+        }
+
+        repository.syncNow()
+
+        assertTrue(server.requests("REPORT").any { "calendar-multiget" in it.body && eventHref in it.body })
+        assertEquals("Local state", harness.event(eventHref)!!.title)
+        assertEquals(server.stored(eventHref)!!.etag, harness.resource(eventHref)!!.etag)
+    }
+
+    @Test
+    fun localEditQueuedWhileRemoteChangeDownloadsKeepsLocalVersion() = runTest {
+        val originalEtag = harness.resource(eventHref)!!.etag
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Other client edit", sequence = 1))
+        server.beforeResponse = { request ->
+            if (request.method == "REPORT" && "calendar-multiget" in request.body && request.path == server.eventsHref) {
+                server.beforeResponse = null
+                runBlocking { repository.updateEvent("remote-event", eventPayload("Local edit", day)) }
+            }
+        }
+
+        repository.syncNow()
+
+        assertEquals("Local edit", harness.event(eventHref)!!.title)
+        assertEquals(originalEtag, harness.resource(eventHref)!!.etag)
+        val mutation = harness.pendingMutations().single()
+        assertEquals(eventHref, mutation.resourceHref)
+        assertEquals(originalEtag, mutation.baseEtag)
+    }
+
+    @Test
+    fun remoteDeletionWhileLocalEditIsQueuedKeepsLocalResource() = runTest {
+        server.beforeResponse = { request ->
+            if (request.method == "REPORT" && "sync-collection" in request.body && request.path == server.eventsHref) {
+                server.beforeResponse = null
+                server.deleteRemote(eventHref)
+                runBlocking { repository.updateEvent("remote-event", eventPayload("Local edit", day)) }
+            }
+        }
+
+        repository.syncNow()
+
+        assertNull(server.stored(eventHref))
+        assertEquals("Local edit", harness.event(eventHref)!!.title)
+        assertNotNull(harness.resource(eventHref))
+        assertEquals(MutationAction.Put, harness.pendingMutations().single().action)
+    }
+
+    @Test
+    fun remoteDeletionRightAfterLocalUploadRemovesLocalResource() = runTest {
+        repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
+        val event = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }
+        repository.pushPendingChangesCreatedSince(0)
+        server.deleteRemote(event.resourceHref)
+
+        repository.syncNow()
+
+        assertNull(harness.event(event.resourceHref))
+        assertNull(harness.resource(event.resourceHref))
+        assertTrue(harness.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun invalidTaskScheduleIsRepairedOnceAndQueuedForUpload() = runTest {
+        val task = harness.task(taskHref)!!
+        harness.database.taskDao().upsert(
+            task.copy(startAtMillis = task.dueAtMillis!! - 3_600_000, startHasTime = false, dueHasTime = true),
+        )
+
+        repository.repairInvalidTaskSchedules()
+
+        val repaired = harness.task(taskHref)!!
+        assertNull(repaired.startAtMillis)
+        assertEquals(task.dueAtMillis, repaired.dueAtMillis)
+        assertTrue(repaired.dueHasTime)
+        val mutation = harness.pendingMutations().single()
+        assertEquals(taskHref, mutation.resourceHref)
+        assertEquals(harness.resource(taskHref)!!.etag, mutation.baseEtag)
+        assertEquals(harness.resource(taskHref)!!.rawIcs, mutation.payloadIcs)
+
+        repository.repairInvalidTaskSchedules()
+
+        assertEquals(mutation, harness.pendingMutations().single())
     }
 }

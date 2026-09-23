@@ -367,6 +367,9 @@ class FakeCalDavServer(
     /** When false, collections stop advertising sync-collection so the client falls back to ctag. */
     @Volatile var supportsSyncCollection = true
 
+    /** Runs on the server thread before each request is answered, e.g. to interleave local edits with a sync. */
+    @Volatile var beforeResponse: ((CapturedRequest) -> Unit)? = null
+
     /** When true every `/dav` request answers 401, as after a revoked app password. */
     @Volatile var rejectCredentials = false
 
@@ -440,6 +443,7 @@ class FakeCalDavServer(
             body = request.body.readUtf8(),
         )
         requests += captured
+        beforeResponse?.invoke(captured)
         overrides.firstOrNull { it.remaining > 0 && it.method == method && captured.path.contains(it.pathContains) }?.let {
             it.remaining--
             return it.response()

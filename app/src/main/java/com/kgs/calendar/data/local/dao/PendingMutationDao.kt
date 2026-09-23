@@ -30,6 +30,9 @@ interface PendingMutationDao {
     @Query("SELECT * FROM pending_mutations WHERE accountId = :accountId ORDER BY createdAtMillis ASC, id ASC")
     suspend fun allForAccount(accountId: String): List<PendingMutationEntity>
 
+    @Query("SELECT * FROM pending_mutations WHERE resourceHref = :resourceHref ORDER BY createdAtMillis ASC, id ASC")
+    suspend fun forResource(resourceHref: String): List<PendingMutationEntity>
+
     @Query(
         """
         SELECT * FROM pending_mutations
