@@ -19,6 +19,7 @@ espresso = "3.7.0"
 androidxTest = "1.7.0"
 turbine = "1.2.1"
 json = "20240303"
+robolectric = "4.16.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
@@ -54,6 +55,7 @@ androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTes
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 json = { module = "org.json:json", version.ref = "json" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

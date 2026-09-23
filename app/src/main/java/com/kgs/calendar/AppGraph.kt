@@ -10,6 +10,7 @@ import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.secure.CredentialsStore
+import com.kgs.calendar.data.secure.EncryptedCredentialsStore
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.reminder.ReminderRegistry
 import com.kgs.calendar.reminder.ReminderScheduler
@@ -37,7 +38,7 @@ class AppGraph(context: Context) {
 
     val settingsStore = SettingsStore(appContext)
     internal val timelineViewportMemory = TimelineOrientationViewportMemory()
-    private val credentialsStore = CredentialsStore(appContext)
+    private val credentialsStore: CredentialsStore = EncryptedCredentialsStore(appContext)
     private val loginFlowClient = NextcloudLoginFlowClient(okHttpClient)
     private val calDavHttpClient = CalDavHttpClient(okHttpClient)
     private val androidCalendarProviderClient = AndroidCalendarProviderClient(appContext)
