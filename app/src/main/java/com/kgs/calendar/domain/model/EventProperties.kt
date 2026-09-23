@@ -22,7 +22,9 @@ sealed interface EventStatus {
     data class Other(override val value: String) : EventStatus
 
     companion object {
-        private val known = listOf(Confirmed, Tentative, Cancelled)
+        // A getter, not a stored list: referencing the objects from the interface's static initializer
+        // can capture null for an object whose own initialization triggered it.
+        private val known get() = listOf(Confirmed, Tentative, Cancelled)
 
         fun from(raw: String?): EventStatus? =
             raw?.let { value -> known.firstOrNull { it.value.equals(value, ignoreCase = true) } ?: Other(value) }
@@ -47,7 +49,7 @@ sealed interface EventClassification {
     data class Other(override val value: String) : EventClassification
 
     companion object {
-        private val known = listOf(Public, Private, Confidential)
+        private val known get() = listOf(Public, Private, Confidential)
 
         fun from(raw: String?): EventClassification? =
             raw?.let { value -> known.firstOrNull { it.value.equals(value, ignoreCase = true) } ?: Other(value) }
@@ -68,7 +70,7 @@ sealed interface EventTransparency {
     data class Other(override val value: String) : EventTransparency
 
     companion object {
-        private val known = listOf(Opaque, Transparent)
+        private val known get() = listOf(Opaque, Transparent)
 
         fun from(raw: String?): EventTransparency? =
             raw?.let { value -> known.firstOrNull { it.value.equals(value, ignoreCase = true) } ?: Other(value) }
