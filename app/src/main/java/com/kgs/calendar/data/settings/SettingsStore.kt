@@ -1,6 +1,7 @@
 package com.kgs.calendar.data.settings
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -23,13 +24,15 @@ import java.time.LocalDate
 
 private val Context.dataStore by preferencesDataStore(name = "kgs_settings")
 
-class SettingsStore(private val context: Context) {
-    val lastBackgroundedAtMillis: Flow<Long?> = context.dataStore.data.map { prefs ->
+class SettingsStore internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.dataStore)
+
+    val lastBackgroundedAtMillis: Flow<Long?> = dataStore.data.map { prefs ->
         prefs[KEY_LAST_BACKGROUNDED_AT_MILLIS]
     }
 
     suspend fun setLastBackgroundedAtMillis(value: Long?) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (value == null) {
                 prefs.remove(KEY_LAST_BACKGROUNDED_AT_MILLIS)
             } else {
@@ -41,18 +44,18 @@ class SettingsStore(private val context: Context) {
     private inline fun <reified T : Enum<T>> enumFlow(
         key: Preferences.Key<String>,
         default: T,
-    ): Flow<T> = context.dataStore.data.map { prefs ->
+    ): Flow<T> = dataStore.data.map { prefs ->
         runCatching { enumValueOf<T>(prefs[key] ?: default.name) }.getOrDefault(default)
     }
 
-    val selectedView: Flow<CalendarViewMode> = context.dataStore.data.map { prefs ->
+    val selectedView: Flow<CalendarViewMode> = dataStore.data.map { prefs ->
         if (prefs[KEY_VIEW] == "Week") return@map CalendarViewMode.ThreeDay
         runCatching {
             CalendarViewMode.valueOf(prefs[KEY_VIEW] ?: CalendarViewMode.ThreeDay.name)
         }.getOrDefault(CalendarViewMode.ThreeDay)
     }
 
-    val selectedDate: Flow<LocalDate> = context.dataStore.data.map { prefs ->
+    val selectedDate: Flow<LocalDate> = dataStore.data.map { prefs ->
         runCatching {
             LocalDate.parse(prefs[KEY_DATE] ?: LocalDate.now().toString())
         }.getOrDefault(LocalDate.now())
@@ -82,7 +85,7 @@ class SettingsStore(private val context: Context) {
 
     val multiWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MULTI_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
-    val multiWidgetMonthPercent: Flow<Int> = context.dataStore.data.map { prefs ->
+    val multiWidgetMonthPercent: Flow<Int> = dataStore.data.map { prefs ->
         normalizeMultiWidgetMonthPercent(
             prefs[KEY_MULTI_WIDGET_MONTH_PERCENT] ?: DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
         )
@@ -91,7 +94,7 @@ class SettingsStore(private val context: Context) {
     val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> =
         enumFlow(KEY_TASKS_WIDGET_DISPLAY_MODE, WidgetTaskDisplayMode.Planned)
 
-    val tasksWidgetIncludeOverdue: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val tasksWidgetIncludeOverdue: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] ?: true
     }
 
@@ -102,19 +105,19 @@ class SettingsStore(private val context: Context) {
     val tasksWidgetSubtaskDefaultMode: Flow<WidgetTaskSubtaskDefaultMode> =
         enumFlow(KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE, WidgetTaskSubtaskDefaultMode.FollowApp)
 
-    val dayWidgetScalePercent: Flow<Int> = context.dataStore.data.map { prefs ->
+    val dayWidgetScalePercent: Flow<Int> = dataStore.data.map { prefs ->
         normalizeDayWidgetScalePercent(
             prefs[KEY_DAY_WIDGET_SCALE_PERCENT] ?: DEFAULT_DAY_WIDGET_SCALE_PERCENT,
         )
     }
 
-    val dayWidgetStartHour: Flow<Int> = context.dataStore.data.map { prefs ->
+    val dayWidgetStartHour: Flow<Int> = dataStore.data.map { prefs ->
         normalizeDayWidgetStartHour(
             prefs[KEY_DAY_WIDGET_START_HOUR] ?: DEFAULT_DAY_WIDGET_START_HOUR,
         )
     }
 
-    val dayWidgetStartAtCurrentHour: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val dayWidgetStartAtCurrentHour: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] ?: DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR
     }
 
@@ -122,91 +125,91 @@ class SettingsStore(private val context: Context) {
 
     val taskColorMode: Flow<TaskColorMode> = enumFlow(KEY_TASK_COLOR_MODE, TaskColorMode.Collection)
 
-    val focusTitleOnCreate: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val focusTitleOnCreate: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_FOCUS_TITLE_ON_CREATE] ?: false
     }
 
-    val firstDayOfWeek: Flow<DayOfWeek> = context.dataStore.data.map { prefs ->
+    val firstDayOfWeek: Flow<DayOfWeek> = dataStore.data.map { prefs ->
         runCatching {
             DayOfWeek.of((prefs[KEY_FIRST_DAY_OF_WEEK] ?: DayOfWeek.MONDAY.value).coerceIn(1, 7))
         }.getOrDefault(DayOfWeek.MONDAY)
     }
 
-    val showCompletedTasksInCalendar: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val showCompletedTasksInCalendar: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_SHOW_COMPLETED_TASKS] ?: true
     }
 
-    val showCalendarWeeks: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val showCalendarWeeks: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_SHOW_CALENDAR_WEEKS] ?: DEFAULT_SHOW_CALENDAR_WEEKS
     }
 
-    val priorityAnimationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val priorityAnimationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_PRIORITY_ANIMATIONS_ENABLED] ?: true
     }
 
-    val overdueSummaryPriorityAnimationEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val overdueSummaryPriorityAnimationEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] ?: true
     }
 
-    val subtasksExpandedByDefault: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val subtasksExpandedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] ?: true
     }
 
-    val autoLoadMapPreviews: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val autoLoadMapPreviews: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_AUTO_LOAD_MAP_PREVIEWS] ?: false
     }
 
-    val maxVisibleAllDayItems: Flow<Int> = context.dataStore.data.map { prefs ->
+    val maxVisibleAllDayItems: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
     }
 
-    val portraitMultiDayCount: Flow<Int> = context.dataStore.data.map { prefs ->
+    val portraitMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_PORTRAIT_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
             .coerceMultiDayCount()
     }
 
-    val landscapeMultiDayCount: Flow<Int> = context.dataStore.data.map { prefs ->
+    val landscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_LANDSCAPE_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
             .coerceMultiDayCount()
     }
 
-    val portraitTimelineHourHeightDp: Flow<Float> = context.dataStore.data.map { prefs ->
+    val portraitTimelineHourHeightDp: Flow<Float> = dataStore.data.map { prefs ->
         normalizeTimelineHourHeightDp(
             prefs[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
         )
     }
 
-    val landscapeTimelineHourHeightDp: Flow<Float> = context.dataStore.data.map { prefs ->
+    val landscapeTimelineHourHeightDp: Flow<Float> = dataStore.data.map { prefs ->
         normalizeTimelineHourHeightDp(
             prefs[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
         )
     }
 
-    val weekViewEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val weekViewEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_WEEK_VIEW_ENABLED] ?: DEFAULT_WEEK_VIEW_ENABLED
     }
 
-    val fullWeekSwipeEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val fullWeekSwipeEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_FULL_WEEK_SWIPE_ENABLED] ?: DEFAULT_FULL_WEEK_SWIPE_ENABLED
     }
 
-    val multiDaySidebarControlsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val multiDaySidebarControlsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] ?: true
     }
 
-    val defaultEventDurationMinutes: Flow<Int> = context.dataStore.data.map { prefs ->
+    val defaultEventDurationMinutes: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_DEFAULT_EVENT_DURATION] ?: 60).coerceIn(15, 24 * 60)
     }
 
-    val defaultTaskHasDate: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val defaultTaskHasDate: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_TASK_HAS_DATE] ?: false
     }
 
-    val defaultTaskHasTime: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val defaultTaskHasTime: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_TASK_HAS_TIME] ?: false
     }
 
-    val defaultEventReminderMinutes: Flow<Set<Int>> = context.dataStore.data.map { prefs ->
+    val defaultEventReminderMinutes: Flow<Set<Int>> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_EVENT_REMINDERS]?.toReminderSet()
             ?: buildSet {
                 if (prefs[KEY_EVENT_START_NOTIFICATIONS] == true) add(REMINDER_AT_START)
@@ -214,7 +217,7 @@ class SettingsStore(private val context: Context) {
             }
     }
 
-    val defaultTaskReminderMinutes: Flow<Set<Int>> = context.dataStore.data.map { prefs ->
+    val defaultTaskReminderMinutes: Flow<Set<Int>> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_TASK_REMINDERS]?.toReminderSet()
             ?: buildSet {
                 if (prefs[KEY_TASK_START_NOTIFICATIONS] ?: true) add(REMINDER_AT_START)
@@ -222,283 +225,283 @@ class SettingsStore(private val context: Context) {
             }
     }
 
-    val taskStartNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val taskStartNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_TASK_START_NOTIFICATIONS] ?: true
     }
 
-    val taskEndNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val taskEndNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_TASK_END_NOTIFICATIONS] ?: false
     }
 
-    val eventStartNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val eventStartNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_EVENT_START_NOTIFICATIONS] ?: false
     }
 
-    val eventEndNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val eventEndNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_EVENT_END_NOTIFICATIONS] ?: false
     }
 
-    val eventFieldOrder: Flow<List<String>> = context.dataStore.data.map { prefs ->
+    val eventFieldOrder: Flow<List<String>> = dataStore.data.map { prefs ->
         prefs[KEY_EVENT_FIELD_ORDER].toFieldOrder(DEFAULT_EVENT_FIELD_ORDER)
     }
 
-    val taskFieldOrder: Flow<List<String>> = context.dataStore.data.map { prefs ->
+    val taskFieldOrder: Flow<List<String>> = dataStore.data.map { prefs ->
         prefs[KEY_TASK_FIELD_ORDER].toFieldOrder(DEFAULT_TASK_FIELD_ORDER)
     }
 
-    val welcomeCompleted: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val welcomeCompleted: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_WELCOME_COMPLETED] ?: false
     }
 
-    val showDisabledAndroidProviderCalendars: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val showDisabledAndroidProviderCalendars: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS] ?: false
     }
 
-    val hiddenCollectionHrefs: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+    val hiddenCollectionHrefs: Flow<Set<String>> = dataStore.data.map { prefs ->
         prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
             .toSet()
     }
 
     suspend fun setSelectedView(viewMode: CalendarViewMode) {
-        context.dataStore.edit { it[KEY_VIEW] = viewMode.name }
+        dataStore.edit { it[KEY_VIEW] = viewMode.name }
     }
 
     suspend fun setSelectedDate(date: LocalDate) {
-        context.dataStore.edit { it[KEY_DATE] = date.toString() }
+        dataStore.edit { it[KEY_DATE] = date.toString() }
     }
 
     suspend fun setThemeMode(mode: AppThemeMode) {
-        context.dataStore.edit { it[KEY_THEME] = mode.name }
+        dataStore.edit { it[KEY_THEME] = mode.name }
     }
 
     suspend fun setColorMode(mode: AppColorMode) {
-        context.dataStore.edit { it[KEY_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_COLOR_MODE] = mode.name }
     }
 
     suspend fun setMonthWidgetThemeMode(mode: WidgetThemeMode) {
-        context.dataStore.edit { it[KEY_MONTH_WIDGET_THEME] = mode.name }
+        dataStore.edit { it[KEY_MONTH_WIDGET_THEME] = mode.name }
     }
 
     suspend fun setMonthWidgetColorMode(mode: WidgetColorMode) {
-        context.dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
     }
 
     suspend fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
-        context.dataStore.edit { it[KEY_AGENDA_WIDGET_THEME] = mode.name }
+        dataStore.edit { it[KEY_AGENDA_WIDGET_THEME] = mode.name }
     }
 
     suspend fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
-        context.dataStore.edit { it[KEY_AGENDA_WIDGET_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_AGENDA_WIDGET_COLOR_MODE] = mode.name }
     }
 
     suspend fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_THEME] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_THEME] = mode.name }
     }
 
     suspend fun setTasksWidgetColorMode(mode: WidgetColorMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_COLOR_MODE] = mode.name }
     }
 
     suspend fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
-        context.dataStore.edit { it[KEY_DAY_WIDGET_THEME] = mode.name }
+        dataStore.edit { it[KEY_DAY_WIDGET_THEME] = mode.name }
     }
 
     suspend fun setDayWidgetColorMode(mode: WidgetColorMode) {
-        context.dataStore.edit { it[KEY_DAY_WIDGET_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_DAY_WIDGET_COLOR_MODE] = mode.name }
     }
 
     suspend fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
-        context.dataStore.edit { it[KEY_MULTI_WIDGET_THEME] = mode.name }
+        dataStore.edit { it[KEY_MULTI_WIDGET_THEME] = mode.name }
     }
 
     suspend fun setMultiWidgetColorMode(mode: WidgetColorMode) {
-        context.dataStore.edit { it[KEY_MULTI_WIDGET_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_MULTI_WIDGET_COLOR_MODE] = mode.name }
     }
 
     suspend fun setMultiWidgetMonthPercent(monthPercent: Int) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[KEY_MULTI_WIDGET_MONTH_PERCENT] = normalizeMultiWidgetMonthPercent(monthPercent)
         }
     }
 
     suspend fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_DISPLAY_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_DISPLAY_MODE] = mode.name }
     }
 
     suspend fun setTasksWidgetIncludeOverdue(include: Boolean) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] = include }
+        dataStore.edit { it[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] = include }
     }
 
     suspend fun setTasksWidgetSortMode(mode: WidgetTaskSortMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_SORT_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_SORT_MODE] = mode.name }
     }
 
     suspend fun setTasksWidgetCreateMode(mode: WidgetTaskCreateMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_CREATE_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_CREATE_MODE] = mode.name }
     }
 
     suspend fun setTasksWidgetSubtaskDefaultMode(mode: WidgetTaskSubtaskDefaultMode) {
-        context.dataStore.edit { it[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] = mode.name }
     }
 
     suspend fun setDayWidgetScalePercent(scalePercent: Int) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[KEY_DAY_WIDGET_SCALE_PERCENT] = normalizeDayWidgetScalePercent(scalePercent)
         }
     }
 
     suspend fun setDayWidgetStartHour(startHour: Int) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[KEY_DAY_WIDGET_START_HOUR] = normalizeDayWidgetStartHour(startHour)
         }
     }
 
     suspend fun setDayWidgetStartAtCurrentHour(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] = enabled }
+        dataStore.edit { it[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] = enabled }
     }
 
     suspend fun setLanguageMode(mode: AppLanguageMode) {
-        context.dataStore.edit { it[KEY_LANGUAGE_MODE] = mode.name }
+        dataStore.edit { it[KEY_LANGUAGE_MODE] = mode.name }
     }
 
     suspend fun setTaskColorMode(mode: TaskColorMode) {
-        context.dataStore.edit { it[KEY_TASK_COLOR_MODE] = mode.name }
+        dataStore.edit { it[KEY_TASK_COLOR_MODE] = mode.name }
     }
 
     suspend fun setFocusTitleOnCreate(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_FOCUS_TITLE_ON_CREATE] = enabled }
+        dataStore.edit { it[KEY_FOCUS_TITLE_ON_CREATE] = enabled }
     }
 
     suspend fun setFirstDayOfWeek(dayOfWeek: DayOfWeek) {
-        context.dataStore.edit { it[KEY_FIRST_DAY_OF_WEEK] = dayOfWeek.value }
+        dataStore.edit { it[KEY_FIRST_DAY_OF_WEEK] = dayOfWeek.value }
     }
 
     suspend fun setShowCompletedTasksInCalendar(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_COMPLETED_TASKS] = show }
+        dataStore.edit { it[KEY_SHOW_COMPLETED_TASKS] = show }
     }
 
     suspend fun setShowCalendarWeeks(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_CALENDAR_WEEKS] = show }
+        dataStore.edit { it[KEY_SHOW_CALENDAR_WEEKS] = show }
     }
 
     suspend fun setPriorityAnimationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_PRIORITY_ANIMATIONS_ENABLED] = enabled }
+        dataStore.edit { it[KEY_PRIORITY_ANIMATIONS_ENABLED] = enabled }
     }
 
     suspend fun setOverdueSummaryPriorityAnimationEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] = enabled }
+        dataStore.edit { it[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] = enabled }
     }
 
     suspend fun setSubtasksExpandedByDefault(expanded: Boolean) {
-        context.dataStore.edit { it[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] = expanded }
+        dataStore.edit { it[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] = expanded }
     }
 
     suspend fun setAutoLoadMapPreviews(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_AUTO_LOAD_MAP_PREVIEWS] = enabled }
+        dataStore.edit { it[KEY_AUTO_LOAD_MAP_PREVIEWS] = enabled }
     }
 
     suspend fun setMaxVisibleAllDayItems(maxItems: Int) {
-        context.dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
+        dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
     }
 
     suspend fun setPortraitMultiDayCount(count: Int) {
-        context.dataStore.edit { it[KEY_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+        dataStore.edit { it[KEY_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
     }
 
     suspend fun setLandscapeMultiDayCount(count: Int) {
-        context.dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+        dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
     }
 
     suspend fun setPortraitTimelineHourHeightDp(hourHeightDp: Float) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
         }
     }
 
     suspend fun setLandscapeTimelineHourHeightDp(hourHeightDp: Float) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
         }
     }
 
     suspend fun setWeekViewEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_WEEK_VIEW_ENABLED] = enabled }
+        dataStore.edit { it[KEY_WEEK_VIEW_ENABLED] = enabled }
     }
 
     suspend fun setFullWeekSwipeEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_FULL_WEEK_SWIPE_ENABLED] = enabled }
+        dataStore.edit { it[KEY_FULL_WEEK_SWIPE_ENABLED] = enabled }
     }
 
     suspend fun setMultiDaySidebarControlsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] = enabled }
+        dataStore.edit { it[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] = enabled }
     }
 
     suspend fun setDefaultEventDurationMinutes(minutes: Int) {
-        context.dataStore.edit { it[KEY_DEFAULT_EVENT_DURATION] = minutes.coerceIn(15, 24 * 60) }
+        dataStore.edit { it[KEY_DEFAULT_EVENT_DURATION] = minutes.coerceIn(15, 24 * 60) }
     }
 
     suspend fun setDefaultTaskHasDate(hasDate: Boolean) {
-        context.dataStore.edit { it[KEY_DEFAULT_TASK_HAS_DATE] = hasDate }
+        dataStore.edit { it[KEY_DEFAULT_TASK_HAS_DATE] = hasDate }
     }
 
     suspend fun setDefaultTaskHasTime(hasTime: Boolean) {
-        context.dataStore.edit { it[KEY_DEFAULT_TASK_HAS_TIME] = hasTime }
+        dataStore.edit { it[KEY_DEFAULT_TASK_HAS_TIME] = hasTime }
     }
 
     suspend fun setDefaultEventReminderMinutes(reminders: Set<Int>) {
-        context.dataStore.edit { it[KEY_DEFAULT_EVENT_REMINDERS] = reminders.toReminderCsv() }
+        dataStore.edit { it[KEY_DEFAULT_EVENT_REMINDERS] = reminders.toReminderCsv() }
     }
 
     suspend fun setDefaultTaskReminderMinutes(reminders: Set<Int>) {
-        context.dataStore.edit { it[KEY_DEFAULT_TASK_REMINDERS] = reminders.toReminderCsv() }
+        dataStore.edit { it[KEY_DEFAULT_TASK_REMINDERS] = reminders.toReminderCsv() }
     }
 
     suspend fun setTaskStartNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_TASK_START_NOTIFICATIONS] = enabled }
+        dataStore.edit { it[KEY_TASK_START_NOTIFICATIONS] = enabled }
     }
 
     suspend fun setTaskEndNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_TASK_END_NOTIFICATIONS] = enabled }
+        dataStore.edit { it[KEY_TASK_END_NOTIFICATIONS] = enabled }
     }
 
     suspend fun setEventStartNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_EVENT_START_NOTIFICATIONS] = enabled }
+        dataStore.edit { it[KEY_EVENT_START_NOTIFICATIONS] = enabled }
     }
 
     suspend fun setEventEndNotificationsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_EVENT_END_NOTIFICATIONS] = enabled }
+        dataStore.edit { it[KEY_EVENT_END_NOTIFICATIONS] = enabled }
     }
 
     suspend fun setEventFieldOrder(order: List<String>) {
-        context.dataStore.edit { it[KEY_EVENT_FIELD_ORDER] = order.joinToString(",") }
+        dataStore.edit { it[KEY_EVENT_FIELD_ORDER] = order.joinToString(",") }
     }
 
     suspend fun setTaskFieldOrder(order: List<String>) {
-        context.dataStore.edit { it[KEY_TASK_FIELD_ORDER] = order.joinToString(",") }
+        dataStore.edit { it[KEY_TASK_FIELD_ORDER] = order.joinToString(",") }
     }
 
     suspend fun setWelcomeCompleted(completed: Boolean) {
-        context.dataStore.edit { it[KEY_WELCOME_COMPLETED] = completed }
+        dataStore.edit { it[KEY_WELCOME_COMPLETED] = completed }
     }
 
     suspend fun setShowDisabledAndroidProviderCalendars(show: Boolean) {
-        context.dataStore.edit { it[KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS] = show }
+        dataStore.edit { it[KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS] = show }
     }
 
     suspend fun setCollectionHiddenInViews(href: String, hidden: Boolean) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             val current = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
             val next = if (hidden) current + href else current - href
             if (next.isEmpty()) prefs.remove(KEY_HIDDEN_COLLECTION_HREFS) else prefs[KEY_HIDDEN_COLLECTION_HREFS] = next
         }
     }
 
-    val parserReparseVersion: Flow<Int> = context.dataStore.data.map { prefs ->
+    val parserReparseVersion: Flow<Int> = dataStore.data.map { prefs ->
         prefs[KEY_PARSER_REPARSE_VERSION] ?: 0
     }
 
     suspend fun setParserReparseVersion(version: Int) {
-        context.dataStore.edit { it[KEY_PARSER_REPARSE_VERSION] = version }
+        dataStore.edit { it[KEY_PARSER_REPARSE_VERSION] = version }
     }
 
     /**
@@ -507,29 +510,29 @@ class SettingsStore(private val context: Context) {
      */
     suspend fun markExactAlarmPromptShown(): Boolean {
         var firstPrompt = false
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             firstPrompt = prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] != true
             prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] = true
         }
         return firstPrompt
     }
 
-    val defaultEventCollectionHref: Flow<String?> = context.dataStore.data.map { prefs ->
+    val defaultEventCollectionHref: Flow<String?> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_EVENT_COLLECTION]?.takeIf { it.isNotBlank() }
     }
 
     suspend fun setDefaultEventCollectionHref(href: String?) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (href.isNullOrBlank()) prefs.remove(KEY_DEFAULT_EVENT_COLLECTION) else prefs[KEY_DEFAULT_EVENT_COLLECTION] = href
         }
     }
 
-    val defaultTaskCollectionHref: Flow<String?> = context.dataStore.data.map { prefs ->
+    val defaultTaskCollectionHref: Flow<String?> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_TASK_COLLECTION]?.takeIf { it.isNotBlank() }
     }
 
     suspend fun setDefaultTaskCollectionHref(href: String?) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             if (href.isNullOrBlank()) prefs.remove(KEY_DEFAULT_TASK_COLLECTION) else prefs[KEY_DEFAULT_TASK_COLLECTION] = href
         }
     }
