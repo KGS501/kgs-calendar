@@ -1,9 +1,21 @@
 package com.kgs.calendar.data
 
+import android.graphics.Color
+import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.data.local.entity.EventEntity
 import org.json.JSONArray
 import java.io.IOException
+import java.net.URI
+import java.net.URLEncoder
+import java.net.UnknownHostException
 import java.nio.charset.StandardCharsets
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 internal fun normalizeServer(serverUrl: String): String {
@@ -78,3 +90,70 @@ internal inline fun <reified T : Throwable> Throwable.findCause(): T? {
     }
     return null
 }
+
+internal const val READ_ONLY_USERNAME = "Read-only URL"
+internal const val READ_ONLY_PREFIX = "readonly-"
+internal const val LOCAL_ACCOUNT_ID = "local"
+internal const val LOCAL_COLLECTION_PREFIX = "local://"
+
+internal val DEFAULT_COLORS = listOf(
+    Color.rgb(23, 107, 93),
+    Color.rgb(26, 115, 232),
+    Color.rgb(185, 81, 64),
+    Color.rgb(120, 85, 190),
+    Color.rgb(238, 147, 45),
+)
+
+internal fun String.isLocalCollectionHref(): Boolean =
+    startsWith(LOCAL_COLLECTION_PREFIX)
+
+internal fun String.normalizedIcsText(): String =
+    replace("\r\n", "\n").replace('\r', '\n').trim()
+
+/** Returns this RRULE with COUNT/UNTIL removed and a new UNTIL set just before [cutMillis]. */
+internal fun String.withRecurrenceUntilBefore(cutMillis: Long, allDay: Boolean, zoneId: ZoneId): String {
+    val kept = split(';')
+        .filter { it.isNotBlank() }
+        .filterNot {
+            val key = it.substringBefore('=').trim().uppercase(Locale.US)
+            key == "UNTIL" || key == "COUNT"
+        }
+    val untilValue = if (allDay) {
+        Instant.ofEpochMilli(cutMillis).atZone(zoneId).toLocalDate().minusDays(1)
+            .format(DateTimeFormatter.BASIC_ISO_DATE)
+    } else {
+        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.ofEpochMilli(cutMillis - 1000L))
+    }
+    return (kept + "UNTIL=$untilValue").joinToString(";")
+}
+
+internal fun AccountEntity.describeSyncError(error: Throwable): String {
+    val source = displayName?.takeIf { it.isNotBlank() } ?: username
+    error.message?.takeIf { it.startsWith("Source \"$source\":") }?.let { return it }
+    val unknownHost = error.findCause<UnknownHostException>()
+    if (unknownHost != null) {
+        val host = runCatching { URI(serverUrl).host }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: unknownHost.message
+            ?: serverUrl
+        return "Source \"$source\": DNS lookup for \"$host\" failed. Check the internet connection, Private DNS/VPN, and server address."
+    }
+    return "Source \"$source\": ${error.message ?: "Sync failed."}"
+}
+
+internal fun Long.toDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+
+internal fun EventEntity.endDateInclusive(): LocalDate =
+    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(ZoneId.systemDefault()).toLocalDate()
+
+internal fun CollectionEntity.newResourceHref(uid: String): String =
+    href.trimEnd('/') + "/" + uid.calendarObjectPathSegment() + ".ics"
+
+private fun String.calendarObjectPathSegment(): String =
+    URLEncoder.encode(trim(), StandardCharsets.UTF_8.name())
+        .replace("+", "%20")
+        .ifBlank { UUID.randomUUID().toString() }
