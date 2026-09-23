@@ -504,11 +504,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         var completedTasksOpen by remember { mutableStateOf(false) }
         var settingsOpen by remember { mutableStateOf(false) }
         var settingsStartDestination by remember { mutableStateOf(SettingsDestination.Main) }
-        var handledWidgetCreateEventSerial by rememberSaveable { mutableStateOf(0) }
-        var handledWidgetCreateTaskSerial by rememberSaveable { mutableStateOf(0) }
-        var handledWidgetOpenEventSerial by rememberSaveable { mutableStateOf(0) }
-        var handledWidgetOpenTaskSerial by rememberSaveable { mutableStateOf(0) }
-        var handledCalendarLaunchSerial by rememberSaveable { mutableStateOf(0) }
+        var foregroundRecenterRequest by rememberSaveable { mutableStateOf(0) }
         var problemsOpen by remember { mutableStateOf(false) }
         var editingCollection by remember { mutableStateOf<CollectionEntity?>(null) }
         var editorSchedule by remember {
@@ -637,7 +633,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
             searchOpen = false
             searchScope.launch {
                 delay(MotionMedium.toLong())
-                if (!searchOpen) viewModel.setSearchQuery("")
+                if (!searchOpen) viewModel.search.setSearchQuery("")
             }
         }
         val anyOverlayOpen = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
@@ -672,7 +668,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LaunchedEffect(state.externalLoginUrl) {
             val url = state.externalLoginUrl ?: return@LaunchedEffect
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            viewModel.externalLoginUrlConsumed()
+            viewModel.sources.externalLoginUrlConsumed()
         }
         LaunchedEffect(creationSheet) {
             if (creationSheet == null) {
@@ -827,91 +823,32 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         }
 
         LaunchedEffect(settingsOpen) {
-            if (settingsOpen) viewModel.refreshAndroidProviderDiagnostics()
+            if (settingsOpen) viewModel.sources.refreshAndroidProviderDiagnostics()
         }
-        LaunchedEffect(state.widgetCreateEventSerial) {
-            if (state.widgetCreateEventSerial > handledWidgetCreateEventSerial) {
-                handledWidgetCreateEventSerial = state.widgetCreateEventSerial
-                openEventCreation(state.widgetCreateEventDate ?: state.selectedDate)
-            }
+        fun openLaunchedDetail(detail: DetailSheet) {
+            createMenuOpen = false
+            searchOpen = false
+            drawerOpen = false
+            taskDrawerOpen = false
+            settingsOpen = false
+            problemsOpen = false
+            editingCollection = null
+            creationSheet = null
+            detailTaskBackStack.clear()
+            detailTaskMorphGeneration = 0
+            detailTaskMorphSourceHref = null
+            detailSheet = detail
         }
-        LaunchedEffect(state.widgetCreateTaskSerial) {
-            if (state.widgetCreateTaskSerial > handledWidgetCreateTaskSerial) {
-                handledWidgetCreateTaskSerial = state.widgetCreateTaskSerial
-                openTaskCreation(
-                    date = state.widgetCreateTaskDate ?: state.selectedDate,
-                    scheduledForDay = state.widgetCreateTaskScheduled,
+        CollectCalendarUiEvents(viewModel.uiEvents) { event ->
+            when (event) {
+                is CalendarUiEvent.CreateEvent -> openEventCreation(event.date)
+                is CalendarUiEvent.CreateTask -> openTaskCreation(
+                    date = event.date,
+                    scheduledForDay = event.scheduledForDay,
                 )
-            }
-        }
-        LaunchedEffect(state.widgetOpenEventSerial, state.events) {
-            if (state.widgetOpenEventSerial > handledWidgetOpenEventSerial) {
-                val event = state.widgetOpenEventUid?.let { uid ->
-                    state.events.firstOrNull { it.resourceHref == uid || it.uid == uid }
-                }
-                if (event != null) {
-                    handledWidgetOpenEventSerial = state.widgetOpenEventSerial
-                    createMenuOpen = false
-                    searchOpen = false
-                    drawerOpen = false
-                    taskDrawerOpen = false
-                    settingsOpen = false
-                    problemsOpen = false
-                    editingCollection = null
-                    creationSheet = null
-                    detailTaskBackStack.clear()
-                    detailTaskMorphGeneration = 0
-                    detailTaskMorphSourceHref = null
-                    detailSheet = DetailSheet.Event(event)
-                }
-            }
-        }
-        LaunchedEffect(state.widgetOpenTaskSerial, state.allTasks) {
-            if (state.widgetOpenTaskSerial > handledWidgetOpenTaskSerial) {
-                val task = state.widgetOpenTaskUid?.let { uid ->
-                    state.allTasks.firstOrNull { it.resourceHref == uid || it.uid == uid }
-                }
-                if (task != null) {
-                    handledWidgetOpenTaskSerial = state.widgetOpenTaskSerial
-                    createMenuOpen = false
-                    searchOpen = false
-                    drawerOpen = false
-                    taskDrawerOpen = false
-                    settingsOpen = false
-                    problemsOpen = false
-                    editingCollection = null
-                    creationSheet = null
-                    detailTaskBackStack.clear()
-                    detailTaskMorphGeneration = 0
-                    detailTaskMorphSourceHref = null
-                    detailSheet = DetailSheet.Task(task)
-                }
-            }
-        }
-        LaunchedEffect(state.calendarLaunchSerial) {
-            if (state.calendarLaunchSerial > handledCalendarLaunchSerial) {
-                val launchedEvent = state.calendarLaunchEvent
-                val launchedTask = state.calendarLaunchTask
-                val detail = when {
-                    launchedEvent != null -> DetailSheet.Event(launchedEvent)
-                    launchedTask != null -> DetailSheet.Task(launchedTask)
-                    else -> null
-                }
-                if (detail != null) {
-                    handledCalendarLaunchSerial = state.calendarLaunchSerial
-                    createMenuOpen = false
-                    searchOpen = false
-                    drawerOpen = false
-                    taskDrawerOpen = false
-                    settingsOpen = false
-                    problemsOpen = false
-                    editingCollection = null
-                    creationSheet = null
-                    detailTaskBackStack.clear()
-                    detailTaskMorphGeneration = 0
-                    detailTaskMorphSourceHref = null
-                    detailSheet = detail
-                }
+                is CalendarUiEvent.OpenEvent -> openLaunchedDetail(DetailSheet.Event(event.event))
+                is CalendarUiEvent.OpenTask -> openLaunchedDetail(DetailSheet.Task(event.task))
+                CalendarUiEvent.ForegroundRecentered -> foregroundRecenterRequest += 1
             }
         }
 
@@ -948,8 +885,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         },
                         onDateSelected = viewModel::selectDate,
                         onViewSelected = ::selectCalendarView,
-                        onMultiDayCountChanged = viewModel::setMultiDayCount,
-                        onTimelineHourHeightChanged = viewModel::setTimelineHourHeight,
+                        onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
+                        onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
                         onToday = viewModel::today,
                         onSearch = {
                             drawerOpen = false
@@ -963,11 +900,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                             createMenuOpen = false
                             taskDrawerOpen = true
                         },
-                        onTaskStatusChanged = viewModel::setTaskStatus,
-                        onEventMoved = viewModel::moveTimedEvent,
-                        onTaskMoved = viewModel::moveTimedTask,
-                        onEventMovedAllDay = viewModel::moveAllDayEvent,
-                        onTaskMovedAllDay = viewModel::moveAllDayTask,
+                        onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                        onEventMoved = viewModel.edits::moveTimedEvent,
+                        onTaskMoved = viewModel.edits::moveTimedTask,
+                        onEventMovedAllDay = viewModel.edits::moveAllDayEvent,
+                        onTaskMovedAllDay = viewModel.edits::moveAllDayTask,
                         onSlotSelected = { date, start ->
                             editorWireframeMode = true
                             if (creationSheet != null) creationCollapseRequest++
@@ -1048,6 +985,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
                         onLoadLaterAgenda = viewModel::loadLaterAgenda,
                         timelineViewportMemory = viewModel.timelineViewportMemory,
+                        foregroundRecenterRequest = foregroundRecenterRequest,
                     )
                 }
                 AnimatedVisibility(
@@ -1087,10 +1025,10 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         drawerOpen = false
                     },
                     onSync = {
-                        viewModel.syncNow()
+                        viewModel.sources.syncNow()
                         drawerOpen = false
                     },
-                    onCollectionVisibleInViews = viewModel::setCollectionVisibleInViews,
+                    onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
                     onCollectionSettings = { editingCollection = it },
                     onAppSettings = {
                         drawerOpen = false
@@ -1107,7 +1045,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     visible = taskDrawerOpen,
                     state = renderState,
                     onDismiss = { taskDrawerOpen = false },
-                    onTaskStatusChanged = viewModel::setTaskStatus,
+                    onTaskStatusChanged = viewModel.edits::setTaskStatus,
                     onTaskClick = {
                         detailTaskMorphGeneration = 0
                         detailTaskMorphSourceHref = null
@@ -1127,11 +1065,11 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     allTasksForHierarchy = renderState.allTasks,
                     taskColorMode = renderState.taskColorMode,
                     subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
-                    onQueryChange = viewModel::setSearchQuery,
-                    onSearchModeChange = viewModel::setSearchMode,
-                    onLoadEarlierOccurrences = viewModel::loadEarlierSearchOccurrences,
-                    onLoadLaterOccurrences = viewModel::loadLaterSearchOccurrences,
-                    onTaskStatusChanged = viewModel::setTaskStatus,
+                    onQueryChange = viewModel.search::setSearchQuery,
+                    onSearchModeChange = viewModel.search::setSearchMode,
+                    onLoadEarlierOccurrences = viewModel.search::loadEarlierSearchOccurrences,
+                    onLoadLaterOccurrences = viewModel.search::loadLaterSearchOccurrences,
+                    onTaskStatusChanged = viewModel.edits::setTaskStatus,
                     onEventClick = {
                         detailSheet = DetailSheet.Event(it)
                     },
@@ -1192,7 +1130,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
                         requestTitleFocus = state.focusTitleOnCreate,
                         onSave = { payload ->
-                            viewModel.createEvent(payload)
+                            viewModel.edits.createEvent(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
                             creationSheet = null
@@ -1216,7 +1154,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         transferDraft = editorTransferDraft,
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
                         onSave = { payload ->
-                            viewModel.createTask(payload)
+                            viewModel.edits.createTask(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
                             creationSheet = null
@@ -1273,8 +1211,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         requestTitleFocus = state.focusTitleOnCreate,
                         onSave = { payload ->
                             when (val source = conversionSource) {
-                                is ConversionSource.Task -> viewModel.convertTaskToEvent(source.task.resourceHref, payload)
-                                else -> viewModel.createEvent(payload)
+                                is ConversionSource.Task -> viewModel.edits.convertTaskToEvent(source.task.resourceHref, payload)
+                                else -> viewModel.edits.createEvent(payload)
                             }
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
@@ -1301,13 +1239,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         requestTitleFocus = false,
                         onSave = { payload ->
                             if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true) {
-                                viewModel.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
+                                viewModel.edits.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
                                 showHiddenSaveNotice(sheet.event.collectionHref, HiddenSaveKind.Event)
                                 creationSheet = null
                             } else if (!sheet.event.recurrenceRule.isNullOrBlank() || sheet.event.isRecurring) {
                                 recurringSaveRequest = RecurringSaveRequest.Event(sheet.event, payload)
                             } else {
-                                viewModel.updateEvent(sheet.event.resourceHref, payload)
+                                viewModel.edits.updateEvent(sheet.event.resourceHref, payload)
                                 showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                                 creationSheet = null
                             }
@@ -1332,7 +1270,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         requestTitleFocus = state.focusTitleOnCreate,
                         headerTitle = stringResource(R.string.duplicate_event),
                         onSave = { payload ->
-                            viewModel.createEvent(payload)
+                            viewModel.edits.createEvent(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
                             conversionSource = null
                             creationSheet = null
@@ -1357,8 +1295,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         onDraftCollectionColorChanged = { draftWireframeColor = it },
                         onSave = { payload ->
                             when (val source = conversionSource) {
-                                is ConversionSource.Event -> viewModel.convertEventToTask(source.event.resourceHref, payload)
-                                else -> viewModel.createTask(payload)
+                                is ConversionSource.Event -> viewModel.edits.convertEventToTask(source.event.resourceHref, payload)
+                                else -> viewModel.edits.createTask(payload)
                             }
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
@@ -1383,7 +1321,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         forcedParentTask = sheet.parent,
                         headerTitle = stringResource(R.string.add_subtask),
                         onSave = { payload ->
-                            viewModel.createTask(payload)
+                            viewModel.edits.createTask(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             creationSheet = null
                         },
@@ -1401,13 +1339,13 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         transferDraft = null,
                         onSave = { payload ->
                             if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true) {
-                                viewModel.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
+                                viewModel.edits.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
                                 showHiddenSaveNotice(sheet.task.collectionHref, HiddenSaveKind.Task)
                                 creationSheet = null
                             } else if (!sheet.task.recurrenceRule.isNullOrBlank()) {
                                 recurringSaveRequest = RecurringSaveRequest.Task(sheet.task, payload)
                             } else {
-                                viewModel.updateTask(sheet.task.resourceHref, payload)
+                                viewModel.edits.updateTask(sheet.task.resourceHref, payload)
                                 showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                                 creationSheet = null
                             }
@@ -1431,7 +1369,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         transferDraft = null,
                         headerTitle = stringResource(R.string.duplicate_task),
                         onSave = { payload ->
-                            viewModel.createTask(payload)
+                            viewModel.edits.createTask(payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
                             conversionSource = null
                             creationSheet = null
@@ -1470,7 +1408,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 ),
                 onDismiss = { hiddenSaveNotice = null },
                 onUnhide = {
-                    viewModel.setCollectionVisibleInViews(currentHiddenSaveCollection.href, true)
+                    viewModel.settings.setCollectionVisibleInViews(currentHiddenSaveCollection.href, true)
                     hiddenSaveNotice = null
                 },
             )
@@ -1485,7 +1423,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 },
                 taskColorMode = renderState.taskColorMode,
                 subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
-                onTaskStatusChanged = viewModel::setTaskStatus,
+                onTaskStatusChanged = viewModel.edits::setTaskStatus,
                 onTaskClick = {
                     detailTaskMorphGeneration = 0
                     detailTaskMorphSourceHref = null
@@ -1573,10 +1511,10 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         allTasks = renderState.allTasks,
                         taskMorphGeneration = detailTaskMorphGeneration,
                         taskMorphSourceHref = detailTaskMorphSourceHref,
-                        onTaskStatusChanged = viewModel::setTaskStatus,
-                        onTaskPriorityChanged = viewModel::setTaskPriority,
-                        onTaskProgressChanged = viewModel::setTaskProgress,
-                        onEventParticipationChanged = viewModel::setEventParticipation,
+                        onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                        onTaskPriorityChanged = viewModel.edits::setTaskPriority,
+                        onTaskProgressChanged = viewModel.edits::setTaskProgress,
+                        onEventParticipationChanged = viewModel.edits::setEventParticipation,
                     onEditEvent = {
                         editorSchedule = scheduleForEvent(it)
                         creationSheet = CreationSheet.EditEvent(it)
@@ -1588,14 +1526,14 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailSheet = null
                     },
                     onCopyEventTo = { event, collectionHref ->
-                        viewModel.copyEventTo(event.resourceHref, collectionHref)
+                        viewModel.edits.copyEventTo(event.resourceHref, collectionHref)
                         detailSheet = null
                     },
                     onDeleteEvent = { uid, scope, occurrenceStartMillis ->
                         when (scope) {
-                            EventDeleteScope.This -> viewModel.deleteEventOccurrence(uid, occurrenceStartMillis)
-                            EventDeleteScope.ThisAndFollowing -> viewModel.deleteEventFollowing(uid, occurrenceStartMillis)
-                            EventDeleteScope.All -> viewModel.deleteEvent(uid)
+                            EventDeleteScope.This -> viewModel.edits.deleteEventOccurrence(uid, occurrenceStartMillis)
+                            EventDeleteScope.ThisAndFollowing -> viewModel.edits.deleteEventFollowing(uid, occurrenceStartMillis)
+                            EventDeleteScope.All -> viewModel.edits.deleteEvent(uid)
                         }
                         detailSheet = null
                     },
@@ -1612,12 +1550,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                         detailTaskBackStack.clear()
                     },
                     onCopyTaskTo = { task, collectionHref ->
-                        viewModel.copyTaskTo(task.resourceHref, collectionHref)
+                        viewModel.edits.copyTaskTo(task.resourceHref, collectionHref)
                         detailSheet = null
                         detailTaskBackStack.clear()
                     },
                     onDeleteTask = {
-                        viewModel.deleteTask(it)
+                        viewModel.edits.deleteTask(it)
                         detailSheet = null
                         detailTaskBackStack.clear()
                     },
@@ -1673,71 +1611,71 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 state = state,
                 initialDestination = settingsStartDestination,
                 onViewSelected = viewModel::selectView,
-                onThemeSelected = viewModel::setThemeMode,
-                onColorModeSelected = viewModel::setColorMode,
-                onMonthWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Month, it) },
-                onMonthWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Month, it) },
-                onAgendaWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Agenda, it) },
-                onAgendaWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Agenda, it) },
-                onTasksWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Tasks, it) },
-                onTasksWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Tasks, it) },
-                onDayWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Day, it) },
-                onDayWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Day, it) },
-                onMultiWidgetThemeSelected = { viewModel.setWidgetThemeMode(KgsWidgetKind.Multi, it) },
-                onMultiWidgetColorModeSelected = { viewModel.setWidgetColorMode(KgsWidgetKind.Multi, it) },
-                onMultiWidgetMonthPercentChanged = viewModel::setMultiWidgetMonthPercent,
-                onTasksWidgetDisplayModeSelected = viewModel::setTasksWidgetDisplayMode,
-                onTasksWidgetIncludeOverdueChanged = viewModel::setTasksWidgetIncludeOverdue,
-                onTasksWidgetCreateModeSelected = viewModel::setTasksWidgetCreateMode,
-                onTasksWidgetSubtaskDefaultModeSelected = viewModel::setTasksWidgetSubtaskDefaultMode,
-                onDayWidgetScaleChanged = viewModel::setDayWidgetScalePercent,
-                onDayWidgetStartHourChanged = viewModel::setDayWidgetStartHour,
-                onDayWidgetStartAtCurrentHourChanged = viewModel::setDayWidgetStartAtCurrentHour,
-                onLanguageSelected = viewModel::setLanguageMode,
-                onTaskColorModeSelected = viewModel::setTaskColorMode,
-                onPriorityAnimationsChanged = viewModel::setPriorityAnimationsEnabled,
-                onOverdueSummaryPriorityAnimationChanged = viewModel::setOverdueSummaryPriorityAnimationEnabled,
-                onSubtasksExpandedByDefaultChanged = viewModel::setSubtasksExpandedByDefault,
-                onAutoLoadMapPreviewsChanged = viewModel::setAutoLoadMapPreviews,
-                onMaxVisibleAllDayItemsChanged = viewModel::setMaxVisibleAllDayItems,
-                onMultiDaySidebarControlsChanged = viewModel::setMultiDaySidebarControlsEnabled,
-                onPortraitMultiDayCountChanged = viewModel::setPortraitMultiDayCount,
-                onLandscapeMultiDayCountChanged = viewModel::setLandscapeMultiDayCount,
-                onWeekViewEnabledChanged = viewModel::setWeekViewEnabled,
-                onFullWeekSwipeEnabledChanged = viewModel::setFullWeekSwipeEnabled,
-                onFocusTitleOnCreateChanged = viewModel::setFocusTitleOnCreate,
-                onFirstDayOfWeekSelected = viewModel::setFirstDayOfWeek,
-                onShowCompletedTasksChanged = viewModel::setShowCompletedTasksInCalendar,
-                onShowCalendarWeeksChanged = viewModel::setShowCalendarWeeks,
-                onDefaultEventDurationChanged = viewModel::setDefaultEventDurationMinutes,
-                onDefaultTaskHasDateChanged = viewModel::setDefaultTaskHasDate,
-                onDefaultTaskHasTimeChanged = viewModel::setDefaultTaskHasTime,
-                onDefaultEventRemindersChanged = viewModel::setDefaultEventReminderMinutes,
-                onDefaultTaskRemindersChanged = viewModel::setDefaultTaskReminderMinutes,
-                onTaskStartNotificationsChanged = viewModel::setTaskStartNotificationsEnabled,
-                onTaskEndNotificationsChanged = viewModel::setTaskEndNotificationsEnabled,
-                onEventStartNotificationsChanged = viewModel::setEventStartNotificationsEnabled,
-                onEventEndNotificationsChanged = viewModel::setEventEndNotificationsEnabled,
-                onDefaultEventCollectionSelected = viewModel::setDefaultEventCollectionHref,
-                onDefaultTaskCollectionSelected = viewModel::setDefaultTaskCollectionHref,
-                onEventFieldOrderChanged = viewModel::setEventFieldOrder,
-                onTaskFieldOrderChanged = viewModel::setTaskFieldOrder,
-                onCollectionsReordered = viewModel::applyCollectionOrder,
+                onThemeSelected = viewModel.settings::setThemeMode,
+                onColorModeSelected = viewModel.settings::setColorMode,
+                onMonthWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Month, it) },
+                onMonthWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Month, it) },
+                onAgendaWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Agenda, it) },
+                onAgendaWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Agenda, it) },
+                onTasksWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Tasks, it) },
+                onTasksWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Tasks, it) },
+                onDayWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Day, it) },
+                onDayWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Day, it) },
+                onMultiWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Multi, it) },
+                onMultiWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Multi, it) },
+                onMultiWidgetMonthPercentChanged = viewModel.settings::setMultiWidgetMonthPercent,
+                onTasksWidgetDisplayModeSelected = viewModel.settings::setTasksWidgetDisplayMode,
+                onTasksWidgetIncludeOverdueChanged = viewModel.settings::setTasksWidgetIncludeOverdue,
+                onTasksWidgetCreateModeSelected = viewModel.settings::setTasksWidgetCreateMode,
+                onTasksWidgetSubtaskDefaultModeSelected = viewModel.settings::setTasksWidgetSubtaskDefaultMode,
+                onDayWidgetScaleChanged = viewModel.settings::setDayWidgetScalePercent,
+                onDayWidgetStartHourChanged = viewModel.settings::setDayWidgetStartHour,
+                onDayWidgetStartAtCurrentHourChanged = viewModel.settings::setDayWidgetStartAtCurrentHour,
+                onLanguageSelected = viewModel.settings::setLanguageMode,
+                onTaskColorModeSelected = viewModel.settings::setTaskColorMode,
+                onPriorityAnimationsChanged = viewModel.settings::setPriorityAnimationsEnabled,
+                onOverdueSummaryPriorityAnimationChanged = viewModel.settings::setOverdueSummaryPriorityAnimationEnabled,
+                onSubtasksExpandedByDefaultChanged = viewModel.settings::setSubtasksExpandedByDefault,
+                onAutoLoadMapPreviewsChanged = viewModel.settings::setAutoLoadMapPreviews,
+                onMaxVisibleAllDayItemsChanged = viewModel.settings::setMaxVisibleAllDayItems,
+                onMultiDaySidebarControlsChanged = viewModel.settings::setMultiDaySidebarControlsEnabled,
+                onPortraitMultiDayCountChanged = viewModel.settings::setPortraitMultiDayCount,
+                onLandscapeMultiDayCountChanged = viewModel.settings::setLandscapeMultiDayCount,
+                onWeekViewEnabledChanged = viewModel.settings::setWeekViewEnabled,
+                onFullWeekSwipeEnabledChanged = viewModel.settings::setFullWeekSwipeEnabled,
+                onFocusTitleOnCreateChanged = viewModel.settings::setFocusTitleOnCreate,
+                onFirstDayOfWeekSelected = viewModel.settings::setFirstDayOfWeek,
+                onShowCompletedTasksChanged = viewModel.settings::setShowCompletedTasksInCalendar,
+                onShowCalendarWeeksChanged = viewModel.settings::setShowCalendarWeeks,
+                onDefaultEventDurationChanged = viewModel.settings::setDefaultEventDurationMinutes,
+                onDefaultTaskHasDateChanged = viewModel.settings::setDefaultTaskHasDate,
+                onDefaultTaskHasTimeChanged = viewModel.settings::setDefaultTaskHasTime,
+                onDefaultEventRemindersChanged = viewModel.settings::setDefaultEventReminderMinutes,
+                onDefaultTaskRemindersChanged = viewModel.settings::setDefaultTaskReminderMinutes,
+                onTaskStartNotificationsChanged = viewModel.settings::setTaskStartNotificationsEnabled,
+                onTaskEndNotificationsChanged = viewModel.settings::setTaskEndNotificationsEnabled,
+                onEventStartNotificationsChanged = viewModel.settings::setEventStartNotificationsEnabled,
+                onEventEndNotificationsChanged = viewModel.settings::setEventEndNotificationsEnabled,
+                onDefaultEventCollectionSelected = viewModel.settings::setDefaultEventCollectionHref,
+                onDefaultTaskCollectionSelected = viewModel.settings::setDefaultTaskCollectionHref,
+                onEventFieldOrderChanged = viewModel.settings::setEventFieldOrder,
+                onTaskFieldOrderChanged = viewModel.settings::setTaskFieldOrder,
+                onCollectionsReordered = viewModel.sources::applyCollectionOrder,
                 onManualLogin = { serverUrl, username, password, onResult ->
-                    viewModel.manualLogin(serverUrl, username, password, onResult)
+                    viewModel.sources.manualLogin(serverUrl, username, password, onResult)
                 },
-                onBrowserLogin = viewModel::startBrowserLogin,
-                onAddReadOnlyCalendar = viewModel::addReadOnlyCalendar,
-                onAddAndroidCalendars = viewModel::addAndroidDeviceCalendars,
-                onDisabledAndroidProviderCalendarsVisibleChanged = viewModel::setDisabledAndroidProviderCalendarsVisible,
-                onUpdateAccount = viewModel::updateAccount,
-                onDeleteAccount = viewModel::deleteAccount,
-                onCreateCalDavCalendar = viewModel::createCalDavCalendar,
-                onSync = viewModel::syncNow,
+                onBrowserLogin = viewModel.sources::startBrowserLogin,
+                onAddReadOnlyCalendar = viewModel.sources::addReadOnlyCalendar,
+                onAddAndroidCalendars = viewModel.sources::addAndroidDeviceCalendars,
+                onDisabledAndroidProviderCalendarsVisibleChanged = viewModel.sources::setDisabledAndroidProviderCalendarsVisible,
+                onUpdateAccount = viewModel.sources::updateAccount,
+                onDeleteAccount = viewModel.sources::deleteAccount,
+                onCreateCalDavCalendar = viewModel.sources::createCalDavCalendar,
+                onSync = viewModel.sources::syncNow,
                 onCollectionSettings = { editingCollection = it },
                 onLocalCalendarEnabledChanged = { enabled ->
                     state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->
-                        viewModel.setCollectionEnabled(local.href, enabled)
+                        viewModel.sources.setCollectionEnabled(local.href, enabled)
                     }
                 },
                 onClose = { settingsOpen = false },
@@ -1746,9 +1684,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
 
         if (!state.welcomeCompleted) {
             WelcomeScreen(
-                onStartFresh = viewModel::completeWelcome,
+                onStartFresh = viewModel.settings::completeWelcome,
                 onConnectCalendars = {
-                    viewModel.completeWelcome()
+                    viewModel.settings.completeWelcome()
                     openAddCalendarSources()
                 },
             )
@@ -1765,19 +1703,19 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                     collection = collection,
                     visibleInViews = collection.href !in state.hiddenCollectionHrefs,
                     onSave = { name, color ->
-                        viewModel.updateCollectionAppearance(collection.href, name, color)
+                        viewModel.sources.updateCollectionAppearance(collection.href, name, color)
                         editingCollection = null
                     },
                     onEnabledChanged = { enabled ->
-                        viewModel.setCollectionEnabled(collection.href, enabled)
+                        viewModel.sources.setCollectionEnabled(collection.href, enabled)
                         editingCollection = editingCollection?.copy(isEnabled = enabled)
                     },
                     onVisibleInViewsChanged = { visible ->
-                        viewModel.setCollectionVisibleInViews(collection.href, visible)
+                        viewModel.settings.setCollectionVisibleInViews(collection.href, visible)
                     },
                     onDelete = if (collection.canDeleteFromServerForUi()) {
                         {
-                            viewModel.deleteCalDavCalendar(collection.href)
+                            viewModel.sources.deleteCalDavCalendar(collection.href)
                             editingCollection = null
                         }
                     } else {
@@ -1797,12 +1735,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 onDismiss = { recurringSaveRequest = null },
                 onSaveThis = {
                     when (request) {
-                        is RecurringSaveRequest.Event -> viewModel.updateEventOccurrence(
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEventOccurrence(
                             request.event.resourceHref,
                             request.event.occurrenceStartForEdit(),
                             request.payload,
                         )
-                        is RecurringSaveRequest.Task -> viewModel.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
                     }
                     when (request) {
                         is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
@@ -1813,12 +1751,12 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 },
                 onSaveFollowing = {
                     when (request) {
-                        is RecurringSaveRequest.Event -> viewModel.updateEventFollowing(
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEventFollowing(
                             request.event.resourceHref,
                             request.event.occurrenceStartForEdit(),
                             request.payload,
                         )
-                        is RecurringSaveRequest.Task -> viewModel.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
                     }
                     when (request) {
                         is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
@@ -1829,8 +1767,8 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
                 },
                 onSaveAll = {
                     when (request) {
-                        is RecurringSaveRequest.Event -> viewModel.updateEvent(request.event.resourceHref, request.payload)
-                        is RecurringSaveRequest.Task -> viewModel.updateTask(request.task.resourceHref, request.payload)
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEvent(request.event.resourceHref, request.payload)
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTask(request.task.resourceHref, request.payload)
                     }
                     when (request) {
                         is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)

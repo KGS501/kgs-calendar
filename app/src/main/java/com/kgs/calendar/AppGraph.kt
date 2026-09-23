@@ -24,8 +24,15 @@ import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.ui.AppLifecycleSignals
+import com.kgs.calendar.ui.ReminderRescheduler
+import com.kgs.calendar.ui.UiStrings
+import com.kgs.calendar.ui.WidgetRefresher
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
+import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -113,4 +120,26 @@ class AppGraph(context: Context) {
         updateWidgets = { KgsWidgetUpdateScheduler.updateAll(appContext) },
     )
 
+    val widgetRefresher: WidgetRefresher = object : WidgetRefresher {
+        override fun updateAll() {
+            KgsWidgetUpdateScheduler.updateAll(appContext)
+        }
+
+        override fun update(kind: KgsWidgetKind, forceFullDayUpdate: Boolean) {
+            KgsWidgetUpdateScheduler.update(appContext, kind, forceFullDayUpdate = forceFullDayUpdate)
+        }
+    }
+
+    val reminderRescheduler = ReminderRescheduler { ReminderScheduler.reschedule(appContext) }
+
+    val appLifecycleSignals: AppLifecycleSignals = object : AppLifecycleSignals {
+        override val processForegroundedAt: Flow<Long>
+            get() = (appContext as? KgsCalendarApplication)?.processForegroundedAt ?: emptyFlow()
+
+        override fun registerAndroidCalendarObserverIfPermitted() {
+            (appContext as? KgsCalendarApplication)?.registerAndroidCalendarObserverIfPermitted()
+        }
+    }
+
+    val uiStrings = UiStrings { id -> appContext.getString(id) }
 }

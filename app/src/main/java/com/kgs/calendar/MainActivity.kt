@@ -35,11 +35,13 @@ class MainActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
     private var initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null
     private var initialCalendarLaunchTarget: CalendarLaunchTarget? = null
+    private var restoredFromSavedState = false
     private val calendarViewModel: CalendarViewModel by viewModels {
         CalendarViewModelFactory(
             graph,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+            deliverInitialLaunchEvents = !restoredFromSavedState,
         )
     }
     private val notificationPermissionLauncher =
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        restoredFromSavedState = savedInstanceState != null
         initialCalendarLaunchTarget = CalendarLaunchTarget.readFrom(intent)
         initialWidgetLaunchTarget = if (initialCalendarLaunchTarget == null) {
             intent.toExternalCalendarLaunchTarget() ?: intent.toWidgetLaunchTarget()
