@@ -1,4 +1,4 @@
-package com.kgs.calendar.data
+package com.kgs.calendar.data.sync
 
 import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.PutResult
