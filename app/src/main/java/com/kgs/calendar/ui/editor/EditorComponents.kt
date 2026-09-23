@@ -214,6 +214,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -795,3 +796,9 @@ internal fun PickerOutlinedField(
         )
     }
 }
+
+/** Keeps a reminder offset set in saved state as a plain list, in its order. */
+internal val ReminderMinutesSaver: Saver<Set<Int>, Any> = Saver(
+    save = { ArrayList(it) },
+    restore = { saved -> (saved as? List<*>).orEmpty().mapNotNull { (it as? Number)?.toInt() }.toSet() },
+)

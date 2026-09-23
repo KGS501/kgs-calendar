@@ -450,8 +450,8 @@ internal fun EventEditorSheet(
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
         }
     }
-    var title by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.title ?: transferDraft?.title.orEmpty()) }
-    var selectedCollectionHref by remember(initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
+    var title by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.title ?: transferDraft?.title.orEmpty()) }
+    var selectedCollectionHref by rememberSaveable(initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
         val preferred = state.defaultEventCollectionHref
             ?.takeIf { href -> eventCollections.any { it.href == href } }
         mutableStateOf(
@@ -468,19 +468,19 @@ internal fun EventEditorSheet(
     val startText = schedule.startTimeText
     val endText = schedule.endTimeText
     val allDay = schedule.allDay
-    var location by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.manualColor ?: transferDraft?.manualColor) }
-    var description by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.description ?: transferDraft?.notes.orEmpty()) }
-    var recurrenceRule by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var eventStatus by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.status ?: EventStatusOption.Confirmed.value) }
-    var eventClassification by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.classification ?: EventClassOption.Public.value) }
-    var eventTransparency by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.transparency ?: EventTransparencyOption.Busy.value) }
-    var categories by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.categories ?: transferDraft?.categories.orEmpty()) }
+    var location by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.location ?: transferDraft?.location.orEmpty()) }
+    var locationMapVerified by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified) }
+    var manualColor by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.manualColor ?: transferDraft?.manualColor) }
+    var description by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.description ?: transferDraft?.notes.orEmpty()) }
+    var recurrenceRule by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
+    var eventStatus by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.status ?: EventStatusOption.Confirmed.value) }
+    var eventClassification by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.classification ?: EventClassOption.Public.value) }
+    var eventTransparency by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.transparency ?: EventTransparencyOption.Busy.value) }
+    var categories by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.categories ?: transferDraft?.categories.orEmpty()) }
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
         state.allKnownCategoryTags()
     }
-    var reminderMinutes by remember(initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
+    var reminderMinutes by rememberSaveable(initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes, stateSaver = ReminderMinutesSaver) {
         mutableStateOf(
             when {
                 initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
@@ -502,7 +502,7 @@ internal fun EventEditorSheet(
             )
         }
     }
-    var attendeesJson by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
+    var attendeesJson by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
     var locationPickerOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     var invalidRangeDialogOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     val invalidTimeRange = eventDateTimeRangeInvalid(

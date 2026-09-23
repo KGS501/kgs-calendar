@@ -457,21 +457,21 @@ internal fun TaskEditorSheet(
                 .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
         }
     }
-    var title by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.title ?: transferDraft?.title.orEmpty()) }
-    var notes by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.notes ?: transferDraft?.notes.orEmpty()) }
-    var location by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.manualColor ?: transferDraft?.manualColor) }
-    var url by remember(initialTask?.uid) { mutableStateOf(initialTask?.url.orEmpty()) }
-    var categories by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.categories ?: transferDraft?.categories.orEmpty()) }
+    var title by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.title ?: transferDraft?.title.orEmpty()) }
+    var notes by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.notes ?: transferDraft?.notes.orEmpty()) }
+    var location by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.location ?: transferDraft?.location.orEmpty()) }
+    var locationMapVerified by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.locationMapVerified ?: transferDraft?.locationMapVerified) }
+    var manualColor by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.manualColor ?: transferDraft?.manualColor) }
+    var url by rememberSaveable(initialTask?.uid) { mutableStateOf(initialTask?.url.orEmpty()) }
+    var categories by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.categories ?: transferDraft?.categories.orEmpty()) }
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
         state.allKnownCategoryTags()
     }
-    var percentComplete by remember(initialTask?.uid) { mutableStateOf(initialTask?.percentComplete ?: 0) }
-    var parentUid by remember(initialTask?.resourceHref, forcedParentTask?.resourceHref) {
+    var percentComplete by rememberSaveable(initialTask?.uid) { mutableStateOf(initialTask?.percentComplete ?: 0) }
+    var parentUid by rememberSaveable(initialTask?.resourceHref, forcedParentTask?.resourceHref) {
         mutableStateOf(forcedParentTask?.uid ?: initialTask?.parentUid)
     }
-    var selectedCollectionHref by remember(initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
+    var selectedCollectionHref by rememberSaveable(initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
         val preferred = state.defaultTaskCollectionHref
             ?.takeIf { href -> taskCollections.any { it.href == href } }
         mutableStateOf(
@@ -491,8 +491,8 @@ internal fun TaskEditorSheet(
             .distinctBy { it.uid }
             .sortedBy { it.title.lowercase(Locale.ROOT) }
     }
-    var isCompleted by remember(initialTask?.uid) { mutableStateOf(initialTask?.isCompleted ?: false) }
-    var statusValue by remember(initialTask?.uid) {
+    var isCompleted by rememberSaveable(initialTask?.uid) { mutableStateOf(initialTask?.isCompleted ?: false) }
+    var statusValue by rememberSaveable(initialTask?.uid) {
         mutableStateOf(
             initialTask?.status?.uppercase()
                 ?: if (initialTask?.isCompleted == true) "COMPLETED" else "NEEDS-ACTION",
@@ -507,9 +507,9 @@ internal fun TaskEditorSheet(
     val hasEndTime = schedule.hasEndTime
     val dueTimeText = schedule.endTimeText
     val allDay = schedule.allDay
-    var priority by remember(initialTask?.uid) { mutableStateOf(initialTask?.priority ?: 9) }
-    var recurrenceRule by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var reminderMinutes by remember(initialTask?.uid, transferDraft, state.defaultTaskReminderMinutes) {
+    var priority by rememberSaveable(initialTask?.uid) { mutableStateOf(initialTask?.priority ?: 9) }
+    var recurrenceRule by rememberSaveable(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
+    var reminderMinutes by rememberSaveable(initialTask?.uid, transferDraft, state.defaultTaskReminderMinutes, stateSaver = ReminderMinutesSaver) {
         mutableStateOf(
             when {
                 initialTask != null -> initialTask.remindersCsv.parseReminderMinutes()

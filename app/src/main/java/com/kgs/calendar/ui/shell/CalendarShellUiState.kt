@@ -1,11 +1,15 @@
 package com.kgs.calendar.ui.shell
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -25,6 +29,8 @@ import com.kgs.calendar.ui.SheetSnap
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import java.time.LocalDate
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Navigation state of the app shell: which sheet, drawer, overlay or dialog is open, the task
@@ -81,6 +87,11 @@ internal class CalendarShellUiState(
     var hiddenSaveNotice by mutableStateOf<HiddenSaveNotice?>(null)
         private set
     private val viewHistory = mutableStateListOf<CalendarViewMode>()
+
+    /** Restored state that waits until the calendar data its sheets refer to has loaded. */
+    private var pendingRestore by mutableStateOf<SavedShellState?>(null)
+
+    val hasPendingRestore: Boolean get() = pendingRestore != null
 
     val anyOverlayOpen: Boolean
         get() = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
@@ -458,13 +469,123 @@ internal class CalendarShellUiState(
         closeDetail()
         creationSheet = CreationSheet.TaskForParent(parent)
     }
+
+    fun snapshot(): SavedShellState = pendingRestore ?: SavedShellState(
+        createMenuOpen = createMenuOpen,
+        overdueTasksExpanded = overdueTasksExpanded,
+        searchOpen = searchOpen,
+        drawerOpen = drawerOpen,
+        taskDrawerOpen = taskDrawerOpen,
+        completedTasksOpen = completedTasksOpen,
+        settingsOpen = settingsOpen,
+        settingsStartDestination = settingsStartDestination,
+        problemsOpen = problemsOpen,
+        editingCollectionHref = editingCollection?.href,
+        creationSheet = creationSheet?.toSaved(),
+        detailSheet = detailSheet?.savedRef(),
+        detailTaskBackStack = detailTaskStack.map { it.savedRef() },
+        editorSchedule = editorSchedule,
+        draftWireframeColor = draftWireframeColor,
+        editorWireframeMode = editorWireframeMode,
+        editorTransferDraft = editorTransferDraft,
+        conversionSource = conversionSource?.savedRef(),
+        hiddenSaveNotice = hiddenSaveNotice,
+        viewHistory = viewHistory.toList(),
+    )
+
+    /**
+     * Reopens what [saved] had open, looking its items up in [state]. Before the first data load
+     * this waits in [hasPendingRestore] for [applyPendingRestore]. A sheet whose item is gone stays
+     * closed; an editor that converted an item that is gone stays closed as well.
+     */
+    fun restore(saved: SavedShellState, state: CalendarUiState) {
+        if (!state.initialDataLoaded) {
+            pendingRestore = saved
+            return
+        }
+        pendingRestore = null
+        createMenuOpen = saved.createMenuOpen
+        overdueTasksExpanded = saved.overdueTasksExpanded
+        searchOpen = saved.searchOpen
+        drawerOpen = saved.drawerOpen
+        taskDrawerOpen = saved.taskDrawerOpen
+        completedTasksOpen = saved.completedTasksOpen
+        settingsOpen = saved.settingsOpen
+        settingsStartDestination = saved.settingsStartDestination
+        problemsOpen = saved.problemsOpen
+        editingCollection = saved.editingCollectionHref?.let { href ->
+            state.collections.firstOrNull { it.href == href }
+        }
+        val conversion = saved.conversionSource?.resolveConversion(state)
+        creationSheet = saved.creationSheet?.resolve(state)
+            ?.takeIf { saved.conversionSource == null || conversion != null }
+        conversionSource = conversion
+        editorSchedule = saved.editorSchedule
+        draftWireframeColor = saved.draftWireframeColor
+        editorWireframeMode = saved.editorWireframeMode
+        editorTransferDraft = saved.editorTransferDraft
+        detailSheet = saved.detailSheet?.resolveDetail(state)
+        detailTaskStack.clear()
+        if (detailSheet != null) {
+            detailTaskStack.addAll(saved.detailTaskBackStack.mapNotNull(state::findTask))
+        }
+        hiddenSaveNotice = saved.hiddenSaveNotice
+        viewHistory.clear()
+        viewHistory.addAll(saved.viewHistory)
+    }
+
+    /** Whether a pending restore would find every item it refers to in [state]. */
+    fun canResolvePendingRestore(state: CalendarUiState): Boolean =
+        state.initialDataLoaded && pendingRestore?.canResolveAll(state) != false
+
+    fun applyPendingRestore(state: CalendarUiState) {
+        pendingRestore?.let { restore(it, state) }
+    }
+
+    companion object {
+        /** Saves by value; on restore, [currentState] resolves the items the sheets refer to. */
+        fun saver(
+            today: LocalDate,
+            defaultWireframeColor: Int,
+            currentState: () -> CalendarUiState,
+        ): Saver<CalendarShellUiState, Any> = Saver(
+            save = { it.snapshot().toSaveable() },
+            restore = { value ->
+                CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor).apply {
+                    SavedShellState.fromSaveable(value)?.let { restore(it, currentState()) }
+                }
+            },
+        )
+    }
 }
 
+/**
+ * The shell state, kept across activity recreation. After a rotation the ViewModel still holds
+ * the calendar data, so the open sheets come back in the first frame; after process death they
+ * come back once the data they refer to has loaded (or [PendingRestoreTimeoutMillis] later).
+ */
 @Composable
 internal fun rememberCalendarShellUiState(
     state: CalendarUiState,
     today: LocalDate,
     defaultWireframeColor: Int,
-): CalendarShellUiState = remember {
-    CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor)
+): CalendarShellUiState {
+    val currentState by rememberUpdatedState(state)
+    val shell = rememberSaveable(
+        saver = CalendarShellUiState.saver(today, defaultWireframeColor) { currentState },
+    ) {
+        CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor)
+    }
+    if (shell.hasPendingRestore) {
+        LaunchedEffect(shell) {
+            withTimeoutOrNull(PendingRestoreTimeoutMillis) {
+                snapshotFlow { currentState }.first(shell::canResolvePendingRestore)
+            }
+            snapshotFlow { currentState }.first { it.initialDataLoaded }
+            shell.applyPendingRestore(currentState)
+        }
+    }
+    return shell
 }
+
+private const val PendingRestoreTimeoutMillis = 5_000L
