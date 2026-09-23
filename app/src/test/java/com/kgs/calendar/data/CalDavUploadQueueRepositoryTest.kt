@@ -43,6 +43,19 @@ class CalDavUploadQueueRepositoryTest {
 
     private fun puts() = server.requests("PUT")
 
+    /** Creates an event whose upload the server stored, but without the client learning its ETag. */
+    private suspend fun createEventUploadedWithoutEtag(): String {
+        repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
+        val href = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }.resourceHref
+        server.answerNextPutWithoutEtag(href)
+        server.respondNext("PROPFIND", href) { MockResponse().setResponseCode(500) }
+        repository.pushPendingChangesCreatedSince(0)
+        assertNotNull(server.stored(href))
+        assertNull(harness.resource(href)!!.etag)
+        assertTrue(harness.pendingMutations().isEmpty())
+        return href
+    }
+
     @Test
     fun createEventInCalDavCollectionEnqueuesCreatePut() = runTest {
         repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
@@ -310,6 +323,50 @@ class CalDavUploadQueueRepositoryTest {
 
         assertEquals("Other client edit", harness.event(eventHref)!!.title)
         assertEquals(remoteEtag, harness.resource(eventHref)!!.etag)
+        assertTrue(harness.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun uploadWithoutEtagGetsServerEtagOnNextSyncAndKeepsOwnContent() = runTest {
+        val href = createEventUploadedWithoutEtag()
+        val payload = harness.resource(href)!!.rawIcs
+
+        repository.syncNow()
+
+        assertEquals(server.stored(href)!!.etag, harness.resource(href)!!.etag)
+        assertEquals(payload, harness.resource(href)!!.rawIcs)
+        assertEquals("Planning", harness.event(href)!!.title)
+        assertTrue(harness.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun remoteChangeAfterUploadWithoutEtagIsDownloadedOnNextSync() = runTest {
+        val href = createEventUploadedWithoutEtag()
+        val uid = harness.event(href)!!.uid
+        server.putRemote(server.eventsHref, href.removePrefix(server.eventsHref), SampleIcs.event(uid, "Other client edit", sequence = 5))
+        val remoteEtag = server.stored(href)!!.etag
+
+        repository.syncNow()
+
+        assertEquals("Other client edit", harness.event(href)!!.title)
+        assertEquals(remoteEtag, harness.resource(href)!!.etag)
+        assertTrue(harness.resource(href)!!.rawIcs.unfoldedIcs().contains("SUMMARY:Other client edit"))
+        assertTrue(server.stored(href)!!.ics.unfoldedIcs().contains("SUMMARY:Other client edit"))
+        assertTrue(harness.pendingMutations().isEmpty())
+    }
+
+    @Test
+    fun localEditQueuedAfterUploadWithoutEtagWinsOverRemoteChange() = runTest {
+        val href = createEventUploadedWithoutEtag()
+        val uid = harness.event(href)!!.uid
+        server.putRemote(server.eventsHref, href.removePrefix(server.eventsHref), SampleIcs.event(uid, "Other client edit", sequence = 5))
+        repository.updateEvent(uid, eventPayload("Local edit", day))
+
+        repository.syncNow()
+
+        assertEquals("Local edit", harness.event(href)!!.title)
+        assertTrue(server.stored(href)!!.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
+        assertEquals(server.stored(href)!!.etag, harness.resource(href)!!.etag)
         assertTrue(harness.pendingMutations().isEmpty())
     }
 

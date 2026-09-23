@@ -13,6 +13,7 @@ import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
+import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
@@ -289,23 +290,48 @@ class CalDavSyncEngine internal constructor(
         }
     }
 
+    /**
+     * Fills in the ETag of resources whose upload returned none. The body is fetched with it: when it
+     * no longer matches our local copy, another client changed the resource after our upload, so it is
+     * applied like any other remote change instead of being marked as already held.
+     */
     private suspend fun repairMissingCalDavEtags(credentials: StoredCredentials, accountId: String) {
         database.collectionDao().forAccount(accountId)
             .filter { it.sourceType == SourceType.CalDav && it.isEnabled }
             .forEach { collection ->
                 database.resourceDao().missingEtagForCollection(collection.href)
                     .forEach { resource ->
-                        val etag = runCatching {
+                        val fetched = runCatching {
+                            calDavClient.getResourceWithEtag(
+                                serverUrl = credentials.serverUrl,
+                                href = resource.href,
+                                username = credentials.username,
+                                appPassword = credentials.appPassword,
+                            )
+                        }.getOrNull() ?: return@forEach
+                        val etag = fetched.etag ?: runCatching {
                             calDavClient.getResourceEtag(
                                 serverUrl = credentials.serverUrl,
                                 href = resource.href,
                                 username = credentials.username,
                                 appPassword = credentials.appPassword,
                             )
-                        }.getOrNull()
-                        if (etag != null) {
+                        }.getOrNull() ?: return@forEach
+                        val holdsFetchedContent = fetched.calendarData.normalizedIcsText() == resource.rawIcs.normalizedIcsText()
+                        if (holdsFetchedContent || database.pendingMutationDao().forResource(resource.href).isNotEmpty()) {
                             database.resourceDao().markSynced(resource.href, etag)
+                            return@forEach
                         }
+                        val download = RemoteCalDavDownload(
+                            remote = RemoteResource(resource.href, etag),
+                            local = resource,
+                            localHref = resource.href,
+                            etag = etag,
+                            result = runCatching {
+                                fetched.calendarData to icalCodec.parse(fetched.calendarData, collection.href, resource.href, collection.color)
+                            },
+                        )
+                        localWrites.writeTransaction { applyRemoteCalDavDownload(collection, download) }
                     }
             }
     }

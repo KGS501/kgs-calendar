@@ -216,13 +216,17 @@ class CalDavHttpClient(
     }
 
     suspend fun getResource(serverUrl: String, href: String, username: String, appPassword: String): String =
+        getResourceWithEtag(serverUrl, href, username, appPassword).calendarData
+
+    /** GETs [href]; the ETag comes from the same response, so it always belongs to the returned body. */
+    suspend fun getResourceWithEtag(serverUrl: String, href: String, username: String, appPassword: String): RemoteResourceData =
         withContext(Dispatchers.IO) {
             val request = authenticatedRequest(absoluteUrl(serverUrl, href), username, appPassword)
                 .header("Accept", "text/calendar")
                 .build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw HttpStatusException(response.code, "GET $href failed: HTTP ${response.code}")
-                response.body?.string().orEmpty()
+                RemoteResourceData(href, response.header("ETag"), response.body?.string().orEmpty())
             }
         }
 
