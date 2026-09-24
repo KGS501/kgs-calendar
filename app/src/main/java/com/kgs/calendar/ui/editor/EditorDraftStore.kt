@@ -38,8 +38,9 @@ internal data class SavedDraft(val revision: Long, val values: Map<String, Any?>
  * - Large drafts keep only their ID and revision in the Bundle and rely on their file. With
  *   [files], every change is written on IO shortly afterwards (at most once per
  *   [writeDelayMillis]), and [flush] on `ON_STOP` schedules that write at once. They survive
- *   process death unless the process is killed before that write completes, a window of
- *   milliseconds.
+ *   process death only on a best-effort basis: if the process is killed before that write has
+ *   succeeded, the newest changes are lost. The window is usually milliseconds, but IO
+ *   contention or a failing disk can make it longer.
  *
  * On restore the live draft wins, else whichever of the Bundle's and the file's values has the
  * higher revision, else none, so that the editor falls back to the stored item's values.
