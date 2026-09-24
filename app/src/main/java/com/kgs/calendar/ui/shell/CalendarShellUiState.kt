@@ -115,6 +115,9 @@ internal class CalendarShellUiState(
 
     val hasPendingRestore: Boolean get() = pendingRestore != null
 
+    /** The editor drafts this state refers to, including one of a restore that still waits. */
+    val referencedDraftIds: Set<String> get() = setOfNotNull(pendingRestore?.editorDraftId, editorDraftId)
+
     val anyOverlayOpen: Boolean
         get() = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
             completedTasksOpen || settingsOpen || problemsOpen || editingCollection != null ||
@@ -611,6 +614,9 @@ internal fun rememberCalendarShellUiState(
         saver = CalendarShellUiState.saver(today, defaultWireframeColor, editorDrafts) { currentState },
     ) {
         CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor, editorDrafts)
+    }
+    LaunchedEffect(shell) {
+        editorDrafts.onShellRestored(shell.referencedDraftIds)
     }
     if (shell.hasPendingRestore) {
         LaunchedEffect(shell) {

@@ -306,17 +306,78 @@ class EditorDraftStoreTest {
     }
 
     @Test
-    fun staleDraftFilesAreDeleted() = runTest {
+    fun unreferencedStaleDraftFilesAreDeletedOnceTheShellRestored() = runTest {
         val files = EditorDraftFiles(directory)
         files.write("old", mapOf("title" to "Old"))
         files.write("recent", mapOf("title" to "Recent"))
+        File(directory, "leftover.json.tmp").writeText("{")
         val now = System.currentTimeMillis()
-        File(directory, "old.json").setLastModified(now - EditorDraftStore.STALE_DRAFT_MAX_AGE_MILLIS - 60_000)
+        File(directory, "old.json").setLastModified(now - TEN_DAYS_MILLIS)
+        File(directory, "leftover.json.tmp").setLastModified(now - TEN_DAYS_MILLIS)
+        val store = fileStore()
+        advanceUntilIdle()
+        assertEquals(listOf("leftover.json.tmp", "old.json", "recent.json"), draftFiles())
 
-        fileStore().deleteStaleDrafts(nowMillis = now)
+        store.onShellRestored(referencedDraftIds = emptySet(), nowMillis = now)
         advanceUntilIdle()
 
         assertEquals(listOf("recent.json"), draftFiles())
+    }
+
+    @Test
+    fun aTenDayOldDraftReferencedByTheRestoredStateSurvivesCleanUpAndRestores() = runTest {
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        val meeting = event("meeting")
+        shell.editEvent(meeting, meeting.editorSchedule())
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Typed ten days ago")
+        store.flush()
+        val saved = with(CalendarShellUiState.saver(today, DefaultColor, store) { loadedState }) {
+            SaverScope { true }.save(shell)
+        }!!
+        val now = System.currentTimeMillis()
+        File(directory, "$draftId.json").setLastModified(now - TEN_DAYS_MILLIS)
+
+        // Process death: the data has not loaded yet when the shell comes back.
+        val newStore = fileStore()
+        val restored = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
+        assertTrue(restored.hasPendingRestore)
+        newStore.onShellRestored(restored.referencedDraftIds, nowMillis = now)
+        advanceUntilIdle()
+        restored.applyPendingRestore(loadedState)
+
+        assertEquals(listOf("$draftId.json"), draftFiles())
+        assertEquals(draftId, restored.editorDraftId)
+        assertEquals("Typed ten days ago", newStore.values(draftId)["title"])
+    }
+
+    @Test
+    fun cleanUpRacingAWriteCannotDeleteTheFreshRevision() = runBlocking {
+        EditorDraftFiles(directory).write("reopened", mapOf("title" to "Old"))
+        val now = System.currentTimeMillis()
+        File(directory, "reopened.json").setLastModified(now - TEN_DAYS_MILLIS)
+        val blocked = BlockingFirstWrite()
+        val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = EditorDraftStore(blocked.files, ioScope, writeDelayMillis = 0)
+        try {
+            // Another draft's write is running, so the clean-up has to wait for it.
+            val other = store.newDraft()
+            store.put(other, "title", "Other")
+            assertTrue(blocked.started.await(5, TimeUnit.SECONDS))
+            store.onShellRestored(referencedDraftIds = emptySet(), nowMillis = now)
+            // The old file gets a fresh revision while the clean-up waits.
+            store.put("reopened", "title", "Fresh")
+
+            blocked.release.countDown()
+            withTimeout(5_000) { ioScope.coroutineContext.job.children.forEach { it.join() } }
+
+            assertEquals(listOf("$other.json", "reopened.json"), draftFiles().sorted())
+            assertEquals("Fresh", EditorDraftFiles(directory).read("reopened")!!["title"])
+        } finally {
+            blocked.release.countDown()
+            ioScope.cancel()
+        }
     }
 
     @Test
@@ -386,6 +447,10 @@ class EditorDraftStoreTest {
 
         assertFalse(File(folder.root, "escape.json").exists())
         assertNull(files.read("../escape"))
+    }
+
+    private companion object {
+        const val TEN_DAYS_MILLIS = 10L * 24 * 60 * 60 * 1000
     }
 
     /** Draft files whose first write blocks until [release]. */

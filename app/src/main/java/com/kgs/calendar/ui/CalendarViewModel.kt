@@ -666,7 +666,7 @@ class CalendarViewModelFactory(
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
             editorDrafts = EditorDraftStore(
                 EditorDraftFiles(File(graph.appContext.noBackupFilesDir, EDITOR_DRAFT_DIRECTORY)),
-            ).apply { deleteStaleDrafts() },
+            ),
         ) as T
     }
 }

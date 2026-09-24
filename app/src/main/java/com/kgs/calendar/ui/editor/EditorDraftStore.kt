@@ -36,7 +36,10 @@ class EditorDraftStore(
     private val drafts = HashMap<String, HashMap<String, Any?>>()
     private val discarded = HashSet<String>()
     private val lock = Any()
-    private val writeLock = ReentrantLock()
+
+    /** Serializes every file operation: writes, deletes and the stale draft clean-up. */
+    private val fileLock = ReentrantLock()
+    private var staleDraftsChecked = false
 
     /** Draft contents to write, by draft ID; null deletes the file. Guarded by [lock]. */
     private val pendingWrites = LinkedHashMap<String, Map<String, Any?>?>()
@@ -73,21 +76,34 @@ class EditorDraftStore(
      */
     fun flush() {
         if (files == null) return
-        if (writeLock.tryLock(FLUSH_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+        if (fileLock.tryLock(FLUSH_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
                 writePendingLocked()
             } finally {
-                writeLock.unlock()
+                fileLock.unlock()
             }
         } else {
             ioScope.launch { writePending() }
         }
     }
 
-    /** Deletes the files of drafts that were never saved or discarded, e.g. after a crash. */
-    fun deleteStaleDrafts(maxAgeMillis: Long = STALE_DRAFT_MAX_AGE_MILLIS, nowMillis: Long = System.currentTimeMillis()) {
+    /**
+     * Called once the shell has restored its saved state, or found none, with the draft IDs that
+     * state refers to. Only then, and once per store, the files of drafts that were never saved or
+     * discarded (e.g. after a crash) are deleted when their last write is older than
+     * [STALE_DRAFT_MAX_AGE_MILLIS]. Live, referenced and pending drafts are kept.
+     */
+    fun onShellRestored(referencedDraftIds: Set<String>, nowMillis: Long = System.currentTimeMillis()) {
         val files = files ?: return
-        ioScope.launch { files.deleteOlderThan(nowMillis - maxAgeMillis) }
+        if (staleDraftsChecked) return
+        staleDraftsChecked = true
+        val keep = drafts.keys + referencedDraftIds
+        ioScope.launch {
+            fileLock.withLock {
+                val pending = synchronized(lock) { pendingWrites.keys.toSet() }
+                files.deleteOlderThan(nowMillis - STALE_DRAFT_MAX_AGE_MILLIS, keep = keep + pending)
+            }
+        }
     }
 
     private fun liveDraft(draftId: String): HashMap<String, Any?>? {
@@ -109,7 +125,7 @@ class EditorDraftStore(
     }
 
     private fun writePending() {
-        writeLock.withLock { writePendingLocked() }
+        fileLock.withLock { writePendingLocked() }
     }
 
     private fun writePendingLocked() {
@@ -179,9 +195,10 @@ class EditorDraftFiles(
         return false
     }
 
-    fun deleteOlderThan(cutoffMillis: Long) {
+    /** Deletes the files, including leftover temporary ones, of drafts not in [keep] last written before [cutoffMillis]. */
+    fun deleteOlderThan(cutoffMillis: Long, keep: Set<String>) {
         directory.listFiles()
-            ?.filter { it.isFile && it.lastModified() < cutoffMillis }
+            ?.filter { it.isFile && it.name.substringBefore('.') !in keep && it.lastModified() < cutoffMillis }
             ?.forEach { it.delete() }
     }
 
