@@ -32,7 +32,7 @@ jobs:
       # Release signing is optional: without keystore.properties or KGS_RELEASE_* variables the
       # build configures normally and only the debug variant is built here.
       - name: Build debug APK and run unit tests
-        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest --console=plain
+        run: ./gradlew :app:assembleDebug testDebugUnitTest --console=plain
 
       - name: Upload unit test reports
         if: failure()
@@ -42,4 +42,6 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/test-results/
+            core/data/build/reports/tests/
+            core/data/build/test-results/
           if-no-files-found: ignore

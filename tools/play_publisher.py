@@ -297,7 +297,7 @@ def build_bundle(config: dict[str, str], skip_tests: bool) -> Path:
     gradle = _gradle_command()
     if not skip_tests:
         print("Running debug unit tests...", flush=True)
-        subprocess.run(gradle + [":app:testDebugUnitTest"], cwd=REPO_ROOT, check=True)
+        subprocess.run(gradle + ["testDebugUnitTest"], cwd=REPO_ROOT, check=True)
     print("Building signed release app bundle...", flush=True)
     subprocess.run(
         gradle + [":app:bundleRelease", "--no-configuration-cache", "--no-daemon"],
