@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.shell
 
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
@@ -13,6 +14,7 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.model.occurrenceIdOrNull
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -26,15 +28,15 @@ internal sealed interface SavedItemRef {
 
     data class Event(override val resourceHref: String, val occurrenceStart: Long) : SavedItemRef
 
-    /** [occurrenceStart] is only kept for recurring tasks; an undated task has no stable start. */
-    data class Task(override val resourceHref: String, val occurrenceStart: Long?) : SavedItemRef
+    /** [occurrence] is only kept for recurring (RRULE or RDATE) tasks; see [occurrenceIdOrNull]. */
+    data class Task(override val resourceHref: String, val occurrence: CalendarOccurrenceId.Task?) : SavedItemRef
 }
 
 internal fun EventEntity.savedRef(): SavedItemRef.Event =
     SavedItemRef.Event(resourceHref, occurrenceStartForEdit())
 
 internal fun TaskEntity.savedRef(): SavedItemRef.Task =
-    SavedItemRef.Task(resourceHref, occurrenceStartForEdit().takeUnless { recurrenceRule.isNullOrBlank() })
+    SavedItemRef.Task(resourceHref, occurrenceIdOrNull())
 
 internal fun CalendarUiState.findEvent(ref: SavedItemRef.Event): EventEntity? =
     (events.asSequence() + searchResults.asSequence() + problemEvents.asSequence())
@@ -42,8 +44,7 @@ internal fun CalendarUiState.findEvent(ref: SavedItemRef.Event): EventEntity? =
 
 internal fun CalendarUiState.findTask(ref: SavedItemRef.Task): TaskEntity? =
     (datedTasks.asSequence() + allTasks.asSequence()).firstOrNull {
-        it.resourceHref == ref.resourceHref &&
-            (ref.occurrenceStart == null || it.occurrenceStartForEdit() == ref.occurrenceStart)
+        it.resourceHref == ref.resourceHref && (ref.occurrence == null || it.occurrenceIdOrNull() == ref.occurrence)
     }
 
 internal fun CalendarUiState.canFind(ref: SavedItemRef): Boolean = when (ref) {
@@ -218,7 +219,7 @@ internal data class SavedShellState(
 
 private fun SavedItemRef.toSaveable(): ArrayList<Any?> = when (this) {
     is SavedItemRef.Event -> arrayListOf("event", resourceHref, occurrenceStart)
-    is SavedItemRef.Task -> arrayListOf("task", resourceHref, occurrenceStart)
+    is SavedItemRef.Task -> arrayListOf("task", resourceHref, occurrence?.recurrenceIdMillis)
 }
 
 private fun itemRefFromSaveable(value: Any?): SavedItemRef? {
@@ -227,7 +228,7 @@ private fun itemRefFromSaveable(value: Any?): SavedItemRef? {
     val occurrenceStart = (saved.getOrNull(2) as? Number)?.toLong()
     return when (saved.getOrNull(0)) {
         "event" -> occurrenceStart?.let { SavedItemRef.Event(href, it) }
-        "task" -> SavedItemRef.Task(href, occurrenceStart)
+        "task" -> SavedItemRef.Task(href, occurrenceStart?.let { CalendarOccurrenceId.Task(href, it) })
         else -> null
     }
 }

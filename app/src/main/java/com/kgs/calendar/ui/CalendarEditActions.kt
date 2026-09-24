@@ -6,6 +6,7 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.ui.model.occurrenceIdOrNull
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -146,12 +147,7 @@ class CalendarEditActions internal constructor(
 
     fun setTaskStatus(task: TaskEntity, status: String) {
         runTaskStatusMutation {
-            val occurrenceId = if (task.recurrenceRule.isNullOrBlank() && task.rDatesCsv.isNullOrBlank()) {
-                null
-            } else {
-                CalendarOccurrenceId.Task(task.resourceHref, task.occurrenceStartForEdit())
-            }
-            taskMutationCoordinator.setStatus(task.resourceHref, status, occurrenceId)
+            taskMutationCoordinator.setStatus(task.resourceHref, status, task.occurrenceIdOrNull())
         }
     }
 

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import com.kgs.calendar.domain.task.isRecurring
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.model.taskDate
 import com.kgs.calendar.ui.shell.CalendarShellUiState
@@ -49,7 +50,7 @@ internal fun DetailSheetHost(
                     it.resourceHref == detail.task.resourceHref && it.occurrenceStartForEdit() == occurrenceStart
                 } ?: renderState.allTasks.firstOrNull {
                     it.resourceHref == detail.task.resourceHref &&
-                        (detail.task.recurrenceRule.isNullOrBlank() || it.occurrenceStartForEdit() == occurrenceStart)
+                        (!detail.task.isRecurring || it.occurrenceStartForEdit() == occurrenceStart)
                 }
                 refreshed?.let { DetailSheet.Task(it) } ?: detail
             }

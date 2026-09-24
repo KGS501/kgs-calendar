@@ -19,6 +19,14 @@ class TaskRulesTest {
     }
 
     @Test
+    fun rruleOrRdatesMakeATaskRecurring() {
+        assertFalse(task().isRecurring)
+        assertFalse(task().copy(recurrenceRule = " ", rDatesCsv = "").isRecurring)
+        assertTrue(task().copy(recurrenceRule = "FREQ=WEEKLY").isRecurring)
+        assertTrue(task().copy(rDatesCsv = "1790000000000,1790172800000").isRecurring)
+    }
+
+    @Test
     fun inactiveAndOpenDisagreeOnlyForACompletedStatusWithoutTheFlag() {
         val statusOnlyCompleted = task(status = "COMPLETED", isCompleted = false)
 

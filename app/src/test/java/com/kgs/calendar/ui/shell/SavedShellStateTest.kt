@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.shell
 
 import android.os.Parcel
 import androidx.compose.runtime.saveable.SaverScope
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
@@ -55,9 +56,9 @@ class SavedShellStateTest {
             settingsStartDestination = SettingsDestination.AddSource,
             problemsOpen = true,
             editingCollectionHref = "work",
-            creationSheet = SavedCreationSheet(SavedCreationSheet.Kind.EditTask, SavedItemRef.Task("daily.ics", occurrenceStart)),
+            creationSheet = SavedCreationSheet(SavedCreationSheet.Kind.EditTask, taskRef("daily.ics", occurrenceStart)),
             detailSheet = SavedItemRef.Event("meeting.ics", occurrenceStart),
-            detailTaskBackStack = listOf(SavedItemRef.Task("inbox.ics", null), SavedItemRef.Task("daily.ics", occurrenceStart)),
+            detailTaskBackStack = listOf(SavedItemRef.Task("inbox.ics", null), taskRef("daily.ics", occurrenceStart)),
             editorSchedule = newTaskSchedule(today, LocalTime.of(9, 10), false, true, true, true, 30),
             draftWireframeColor = DefaultColor,
             editorWireframeMode = true,
@@ -176,11 +177,31 @@ class SavedShellStateTest {
 
     @Test
     fun taskRefsOnlyPinTheOccurrenceOfRecurringTasks() {
-        assertNull(task("inbox").savedRef().occurrenceStart)
-        assertEquals(occurrenceStart, recurringOccurrence.savedRef().occurrenceStart)
+        assertNull(task("inbox").savedRef().occurrence)
+        assertEquals(occurrenceStart, recurringOccurrence.savedRef().occurrence?.recurrenceIdMillis)
         assertEquals(laterOccurrence, loadedState.findTask(laterOccurrence.savedRef()))
         assertEquals(event("lunch"), loadedState.findEvent(event("lunch").savedRef()))
         assertNull(loadedState.findEvent(SavedItemRef.Event("lunch.ics", 0L)))
+    }
+
+    @Test
+    fun rdateOnlyTaskRefsKeepTheirOccurrenceAcrossASaveAndRestore() {
+        val day = 86_400_000L
+        val first = task("dates", startAt = occurrenceStart).copy(
+            rDatesCsv = listOf(occurrenceStart + 2 * day, occurrenceStart + 5 * day).joinToString(","),
+        )
+        val occurrences = listOf(first, first.copy(startAtMillis = occurrenceStart + 2 * day), first.copy(startAtMillis = occurrenceStart + 5 * day))
+        val state = loadedState.copy(datedTasks = occurrences)
+        val third = occurrences[2]
+
+        val ref = third.savedRef()
+        assertEquals(taskRef("dates.ics", occurrenceStart + 5 * day), ref)
+        val restored = SavedShellState.fromSaveable(
+            parcelRoundTrip(SavedShellState(editorSchedule = allDayScheduleFor(today), draftWireframeColor = DefaultColor, detailSheet = ref).toSaveable()),
+        )!!
+
+        assertEquals(DetailSheet.Task(third), restored.detailSheet!!.resolveDetail(state))
+        assertEquals(occurrences[1], state.findTask(occurrences[1].savedRef()))
     }
 
     @Test
@@ -220,4 +241,7 @@ class SavedShellStateTest {
             else -> throw AssertionError("${value::class} is not a plain saved-state value")
         }
     }
+
+    private fun taskRef(href: String, occurrenceStart: Long) =
+        SavedItemRef.Task(href, CalendarOccurrenceId.Task(href, occurrenceStart))
 }

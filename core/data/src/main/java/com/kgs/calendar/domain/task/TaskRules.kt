@@ -7,6 +7,10 @@ import com.kgs.calendar.domain.model.TaskStatus
 val TaskEntity.taskStatus: TaskStatus?
     get() = TaskStatus.from(status)
 
+/** Recurs through an RRULE, explicit RDATEs or both. */
+val TaskEntity.isRecurring: Boolean
+    get() = !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()
+
 /** Normalised effective status, falling back to the legacy isCompleted boolean. */
 fun TaskEntity.effectiveStatus(): String = status?.uppercase()
     ?: if (isCompleted) TaskStatus.Completed.value else TaskStatus.NeedsAction.value
