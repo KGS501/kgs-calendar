@@ -26,6 +26,7 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.RecurringSaveRequest
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.SheetSnap
+import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import java.time.LocalDate
@@ -40,11 +41,25 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal class CalendarShellUiState(
     initialEditorSchedule: EditorScheduleState,
     initialWireframeColor: Int,
+    private val editorDrafts: EditorDraftStore = EditorDraftStore(),
 ) {
     var createMenuOpen by mutableStateOf(false)
         private set
     var overdueTasksExpanded by mutableStateOf(false)
-    var creationSheet by mutableStateOf<CreationSheet?>(null)
+    private var creationSheetState by mutableStateOf<CreationSheet?>(null)
+
+    /** Every editor that opens starts a new draft in [editorDrafts]; closing one ends its draft. */
+    var creationSheet: CreationSheet?
+        get() = creationSheetState
+        private set(value) {
+            if (value == creationSheetState) return
+            editorDraftId?.let(editorDrafts::discard)
+            editorDraftId = value?.let { editorDrafts.newDraft() }
+            creationSheetState = value
+        }
+
+    /** Identifies the open editor's draft; only this ID is kept in the saved-state Bundle. */
+    var editorDraftId by mutableStateOf<String?>(null)
         private set
     var detailSheet by mutableStateOf<DetailSheet?>(null)
         private set
@@ -74,8 +89,15 @@ internal class CalendarShellUiState(
     var draftWireframeColor by mutableStateOf(initialWireframeColor)
     var editorWireframeMode by mutableStateOf(false)
         private set
-    var editorTransferDraft by mutableStateOf<EditorTransferDraft?>(null)
-        private set
+    private var transferDraftState by mutableStateOf<EditorTransferDraft?>(null)
+
+    /** The draft carried over from the other editor type, stored with the open editor's draft. */
+    var editorTransferDraft: EditorTransferDraft?
+        get() = transferDraftState
+        private set(value) {
+            transferDraftState = value
+            editorDraftId?.let { editorDrafts.put(it, TransferDraftKey, value?.toSaveable()) }
+        }
     var creationCollapseRequest by mutableStateOf(0)
         private set
     var creationExpandRequest by mutableStateOf(0)
@@ -303,10 +325,10 @@ internal class CalendarShellUiState(
         conversion: ConversionSource?,
         today: LocalDate,
     ) {
+        creationSheet = target
         editorTransferDraft = transfer
         editorSchedule = transfer.transferredSchedule(editorSchedule, today)
         conversionSource = conversion
-        creationSheet = target
     }
 
     fun closeCreationSheet() {
@@ -487,7 +509,7 @@ internal class CalendarShellUiState(
         editorSchedule = editorSchedule,
         draftWireframeColor = draftWireframeColor,
         editorWireframeMode = editorWireframeMode,
-        editorTransferDraft = editorTransferDraft,
+        editorDraftId = editorDraftId,
         conversionSource = conversionSource?.savedRef(),
         hiddenSaveNotice = hiddenSaveNotice,
         viewHistory = viewHistory.toList(),
@@ -517,13 +539,25 @@ internal class CalendarShellUiState(
             state.collections.firstOrNull { it.href == href }
         }
         val conversion = saved.conversionSource?.resolveConversion(state)
-        creationSheet = saved.creationSheet?.resolve(state)
+        val restoredSheet = saved.creationSheet?.resolve(state)
             ?.takeIf { saved.conversionSource == null || conversion != null }
+        // The editor continues its saved draft; a draft whose editor cannot come back is dropped.
+        val previousDraftId = editorDraftId
+        creationSheetState = restoredSheet
+        editorDraftId = if (restoredSheet != null) {
+            saved.editorDraftId ?: editorDrafts.newDraft()
+        } else {
+            saved.editorDraftId?.let(editorDrafts::discard)
+            null
+        }
+        if (previousDraftId != null && previousDraftId != editorDraftId) editorDrafts.discard(previousDraftId)
         conversionSource = conversion
         editorSchedule = saved.editorSchedule
         draftWireframeColor = saved.draftWireframeColor
         editorWireframeMode = saved.editorWireframeMode
-        editorTransferDraft = saved.editorTransferDraft
+        transferDraftState = editorDraftId
+            ?.let { editorDrafts.values(it)[TransferDraftKey] }
+            ?.let(::transferDraftFromSaveable)
         detailSheet = saved.detailSheet?.resolveDetail(state)
         detailTaskStack.clear()
         if (detailSheet != null) {
@@ -547,11 +581,12 @@ internal class CalendarShellUiState(
         fun saver(
             today: LocalDate,
             defaultWireframeColor: Int,
+            editorDrafts: EditorDraftStore,
             currentState: () -> CalendarUiState,
         ): Saver<CalendarShellUiState, Any> = Saver(
             save = { it.snapshot().toSaveable() },
             restore = { value ->
-                CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor).apply {
+                CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor, editorDrafts).apply {
                     SavedShellState.fromSaveable(value)?.let { restore(it, currentState()) }
                 }
             },
@@ -569,12 +604,13 @@ internal fun rememberCalendarShellUiState(
     state: CalendarUiState,
     today: LocalDate,
     defaultWireframeColor: Int,
+    editorDrafts: EditorDraftStore,
 ): CalendarShellUiState {
     val currentState by rememberUpdatedState(state)
     val shell = rememberSaveable(
-        saver = CalendarShellUiState.saver(today, defaultWireframeColor) { currentState },
+        saver = CalendarShellUiState.saver(today, defaultWireframeColor, editorDrafts) { currentState },
     ) {
-        CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor)
+        CalendarShellUiState(initialEditorSchedule(today), defaultWireframeColor, editorDrafts)
     }
     if (shell.hasPendingRestore) {
         LaunchedEffect(shell) {
@@ -589,3 +625,5 @@ internal fun rememberCalendarShellUiState(
 }
 
 private const val PendingRestoreTimeoutMillis = 5_000L
+
+private const val TransferDraftKey = "transferDraft"

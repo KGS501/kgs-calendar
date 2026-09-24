@@ -25,6 +25,8 @@ import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.ui.editor.EditorDraftFiles
+import com.kgs.calendar.ui.editor.EditorDraftStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -93,6 +96,8 @@ class CalendarViewModel(
     // False when the activity is restored from saved state: the launch was already handled then,
     // so only its date/view selection is reapplied.
     deliverInitialLaunchEvents: Boolean = true,
+    /** The open editor's draft; kept here so that it survives rotation without the saved-state Bundle. */
+    val editorDrafts: EditorDraftStore = EditorDraftStore(),
 ) : ViewModel() {
     private val initialSelectedDate = initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date ?: LocalDate.now()
     private val initialSelectedView = initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
@@ -659,6 +664,11 @@ class CalendarViewModelFactory(
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
+            editorDrafts = EditorDraftStore(
+                EditorDraftFiles(File(graph.appContext.noBackupFilesDir, EDITOR_DRAFT_DIRECTORY)),
+            ).apply { deleteStaleDrafts() },
         ) as T
     }
 }
+
+private const val EDITOR_DRAFT_DIRECTORY = "editor-drafts"

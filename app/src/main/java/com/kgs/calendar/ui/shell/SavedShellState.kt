@@ -140,7 +140,7 @@ internal data class SavedShellState(
     val editorSchedule: EditorScheduleState,
     val draftWireframeColor: Int,
     val editorWireframeMode: Boolean = false,
-    val editorTransferDraft: EditorTransferDraft? = null,
+    val editorDraftId: String? = null,
     val conversionSource: SavedItemRef? = null,
     val hiddenSaveNotice: HiddenSaveNotice? = null,
     val viewHistory: List<CalendarViewMode> = emptyList(),
@@ -151,7 +151,10 @@ internal data class SavedShellState(
             .plus(detailTaskBackStack)
             .all(state::canFind)
 
-    /** Plain lists, maps, strings and numbers only, so that it fits into a saved-state Bundle. */
+    /**
+     * Plain lists, maps, strings and numbers only, so that it fits into a saved-state Bundle. The
+     * editor draft itself, which can hold long texts, is only referred to by [editorDraftId].
+     */
     fun toSaveable(): Map<String, Any?> = hashMapOf(
         "createMenuOpen" to createMenuOpen,
         "overdueTasksExpanded" to overdueTasksExpanded,
@@ -169,7 +172,7 @@ internal data class SavedShellState(
         "editorSchedule" to editorSchedule.toSaveable(),
         "draftWireframeColor" to draftWireframeColor,
         "editorWireframeMode" to editorWireframeMode,
-        "editorTransferDraft" to editorTransferDraft?.toSaveable(),
+        "editorDraftId" to editorDraftId,
         "conversionSource" to conversionSource?.toSaveable(),
         "hiddenSaveNotice" to hiddenSaveNotice?.let { arrayListOf(it.collectionHref, it.kind.name) },
         "viewHistory" to ArrayList(viewHistory.map { it.name }),
@@ -203,7 +206,7 @@ internal data class SavedShellState(
                 editorSchedule = editorSchedule,
                 draftWireframeColor = draftWireframeColor,
                 editorWireframeMode = map["editorWireframeMode"] == true,
-                editorTransferDraft = map["editorTransferDraft"]?.let(::transferDraftFromSaveable),
+                editorDraftId = map["editorDraftId"] as? String,
                 conversionSource = itemRefFromSaveable(map["conversionSource"]),
                 hiddenSaveNotice = (map["hiddenSaveNotice"] as? List<*>)?.let { saved ->
                     val href = saved.getOrNull(0) as? String

@@ -214,7 +214,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -302,6 +301,9 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
+import com.kgs.calendar.ui.editor.DraftCodec
+import com.kgs.calendar.ui.editor.EditorDraftStore
+import com.kgs.calendar.ui.editor.rememberEditorDraftFields
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -431,6 +433,8 @@ internal fun EventEditorSheet(
     onScheduleChange: (EditorScheduleState) -> Unit,
     expanded: Boolean,
     initialEvent: EventEntity?,
+    draftStore: EditorDraftStore,
+    draftId: String?,
     transferDraft: EditorTransferDraft? = null,
     headerTitle: String? = null,
     requestTitleFocus: Boolean = false,
@@ -450,15 +454,14 @@ internal fun EventEditorSheet(
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
         }
     }
-    var title by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.title ?: transferDraft?.title.orEmpty()) }
-    var selectedCollectionHref by rememberSaveable(initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
+    val draft = rememberEditorDraftFields(draftStore, draftId)
+    var title by draft.field("title", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.title ?: transferDraft?.title.orEmpty() }
+    var selectedCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
         val preferred = state.defaultEventCollectionHref
             ?.takeIf { href -> eventCollections.any { it.href == href } }
-        mutableStateOf(
-            initialEvent?.collectionHref
-                ?: preferred
-                ?: eventCollections.firstOrNull()?.href,
-        )
+        initialEvent?.collectionHref
+            ?: preferred
+            ?: eventCollections.firstOrNull()?.href
     }
     val selectedCollectionIndex = remember(eventCollections, selectedCollectionHref) {
         eventCollections.indexOfFirst { it.href == selectedCollectionHref }
@@ -468,26 +471,24 @@ internal fun EventEditorSheet(
     val startText = schedule.startTimeText
     val endText = schedule.endTimeText
     val allDay = schedule.allDay
-    var location by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.manualColor ?: transferDraft?.manualColor) }
-    var description by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.description ?: transferDraft?.notes.orEmpty()) }
-    var recurrenceRule by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var eventStatus by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.status ?: EventStatusOption.Confirmed.value) }
-    var eventClassification by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.classification ?: EventClassOption.Public.value) }
-    var eventTransparency by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.transparency ?: EventTransparencyOption.Busy.value) }
-    var categories by rememberSaveable(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.categories ?: transferDraft?.categories.orEmpty()) }
+    var location by draft.field("location", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.location ?: transferDraft?.location.orEmpty() }
+    var locationMapVerified by draft.field("locationMapVerified", DraftCodec.OptionalFlag, initialEvent?.uid, transferDraft) { initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified }
+    var manualColor by draft.field("manualColor", DraftCodec.OptionalNumber, initialEvent?.uid, transferDraft) { initialEvent?.manualColor ?: transferDraft?.manualColor }
+    var description by draft.field("description", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.description ?: transferDraft?.notes.orEmpty() }
+    var recurrenceRule by draft.field("recurrenceRule", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty() }
+    var eventStatus by draft.field("status", DraftCodec.Text, initialEvent?.uid) { initialEvent?.status ?: EventStatusOption.Confirmed.value }
+    var eventClassification by draft.field("classification", DraftCodec.Text, initialEvent?.uid) { initialEvent?.classification ?: EventClassOption.Public.value }
+    var eventTransparency by draft.field("transparency", DraftCodec.Text, initialEvent?.uid) { initialEvent?.transparency ?: EventTransparencyOption.Busy.value }
+    var categories by draft.field("categories", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.categories ?: transferDraft?.categories.orEmpty() }
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
         state.allKnownCategoryTags()
     }
-    var reminderMinutes by rememberSaveable(initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes, stateSaver = ReminderMinutesSaver) {
-        mutableStateOf(
-            when {
-                initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
-                transferDraft != null -> transferDraft.reminderMinutes
-                else -> state.defaultEventReminderMinutes
-            },
-        )
+    var reminderMinutes by draft.field("reminderMinutes", DraftCodec.MinuteSet, initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
+        when {
+            initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
+            transferDraft != null -> transferDraft.reminderMinutes
+            else -> state.defaultEventReminderMinutes
+        }
     }
     val organizerJson = initialEvent?.organizerJson ?: remember(selectedCollectionHref, state.accounts, eventCollections) {
         val accountId = eventCollections.firstOrNull { it.href == selectedCollectionHref }?.accountId
@@ -502,7 +503,7 @@ internal fun EventEditorSheet(
             )
         }
     }
-    var attendeesJson by rememberSaveable(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
+    var attendeesJson by draft.field("attendeesJson", DraftCodec.OptionalText, initialEvent?.uid) { initialEvent?.attendeesJson }
     var locationPickerOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     var invalidRangeDialogOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     val invalidTimeRange = eventDateTimeRangeInvalid(

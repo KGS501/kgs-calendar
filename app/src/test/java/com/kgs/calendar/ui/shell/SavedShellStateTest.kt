@@ -11,8 +11,8 @@ import com.kgs.calendar.ui.DetailSheet
 import com.kgs.calendar.ui.EditorTransferDraft
 import com.kgs.calendar.ui.HiddenSaveKind
 import com.kgs.calendar.ui.HiddenSaveNotice
-import com.kgs.calendar.ui.ReminderMinutesSaver
 import com.kgs.calendar.ui.SettingsDestination
+import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.DefaultColor
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.collection
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
@@ -31,6 +31,7 @@ import java.time.LocalTime
 class SavedShellStateTest {
     private val today = LocalDate.of(2026, 9, 23)
     private val saverScope = SaverScope { true }
+    private val drafts = EditorDraftStore()
 
     private val occurrenceStart = 1_790_000_000_000L
     private val recurringOccurrence = task("daily", startAt = occurrenceStart, recurrenceRule = "FREQ=DAILY")
@@ -62,23 +63,7 @@ class SavedShellStateTest {
             editorSchedule = newTaskSchedule(today, LocalTime.of(9, 10), false, true, true, true, 30),
             draftWireframeColor = DefaultColor,
             editorWireframeMode = true,
-            editorTransferDraft = EditorTransferDraft(
-                title = "Typed title",
-                notes = "Notes",
-                location = "Somewhere",
-                locationMapVerified = true,
-                manualColor = 0x112233,
-                categories = "a,b",
-                recurrenceRule = "FREQ=WEEKLY",
-                reminderMinutes = linkedSetOf(15, 0, 60),
-                sourceDefaultReminderMinutes = setOf(10),
-                date = today,
-                endDate = today.plusDays(1),
-                startTime = LocalTime.of(8, 30),
-                endTime = null,
-                allDay = false,
-                schedule = allDayScheduleFor(today),
-            ),
+            editorDraftId = "0f8fad5b-d9cb-469f-a165-70867728950e",
             conversionSource = SavedItemRef.Event("lunch.ics", occurrenceStart),
             hiddenSaveNotice = HiddenSaveNotice("work", HiddenSaveKind.Task),
             viewHistory = listOf(CalendarViewMode.Month, CalendarViewMode.Day),
@@ -92,7 +77,7 @@ class SavedShellStateTest {
 
     @Test
     fun rotationReopensTheEditorWithItsDraft() {
-        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor)
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         original.editTask(recurringOccurrence, recurringOccurrence.editorSchedule(today))
         original.editorSchedule = original.editorSchedule.copy(startTimeText = "07:4").recalculatePreview()
         original.draftWireframeColor = 42
@@ -109,7 +94,7 @@ class SavedShellStateTest {
 
     @Test
     fun detailSheetAndTaskBackStackResolveAgainstTheLoadedData() {
-        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor)
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         val parent = task("parent")
         original.openTaskDetail(parent)
         original.openSubtask(parent, recurringOccurrence)
@@ -128,7 +113,7 @@ class SavedShellStateTest {
 
     @Test
     fun anEditorWhoseItemIsGoneStaysClosed() {
-        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor)
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         original.editEvent(event("deleted"), event("deleted").editorSchedule())
         original.openSearch()
 
@@ -140,14 +125,15 @@ class SavedShellStateTest {
 
     @Test
     fun aConversionWhoseSourceIsGoneDropsTheEditor() {
-        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor)
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         val gone = event("gone")
         original.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.Task, ConversionSource.Event(gone), today)
 
         assertNull(saveAndRestore(original, loadedState).creationSheet)
 
-        original.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.Task, ConversionSource.Event(event("meeting")), today)
-        val restored = saveAndRestore(original, loadedState)
+        val another = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
+        another.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.Task, ConversionSource.Event(event("meeting")), today)
+        val restored = saveAndRestore(another, loadedState)
         assertEquals(CreationSheet.Task, restored.creationSheet)
         assertEquals(ConversionSource.Event(event("meeting")), restored.conversionSource)
         assertEquals(EditorTransferDraft(title = "x"), restored.editorTransferDraft)
@@ -155,7 +141,7 @@ class SavedShellStateTest {
 
     @Test
     fun beforeTheFirstDataLoadTheRestoreWaits() {
-        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor)
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         original.openTaskDetail(task("inbox"))
         original.openTaskDrawer()
         val notLoaded = CalendarUiState()
@@ -204,14 +190,8 @@ class SavedShellStateTest {
         assertEquals(occurrences[1], state.findTask(occurrences[1].savedRef()))
     }
 
-    @Test
-    fun reminderMinutesKeepTheirOrder() {
-        val saved = with(ReminderMinutesSaver) { saverScope.save(linkedSetOf(30, 0, 5)) }!!
-        assertEquals(listOf(30, 0, 5), ReminderMinutesSaver.restore(parcelRoundTrip(saved))!!.toList())
-    }
-
     private fun saveAndRestore(shell: CalendarShellUiState, state: CalendarUiState): CalendarShellUiState {
-        val saver = CalendarShellUiState.saver(today, DefaultColor) { state }
+        val saver = CalendarShellUiState.saver(today, DefaultColor, drafts) { state }
         val saved = with(saver) { saverScope.save(shell) }!!
         return saver.restore(parcelRoundTrip(saved))!!
     }

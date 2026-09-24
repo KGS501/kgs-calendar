@@ -13,6 +13,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import android.content.Intent
 import android.net.Uri
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -46,7 +48,11 @@ internal fun CalendarAppContent(
         state = state,
         today = today,
         defaultWireframeColor = defaultWireframeColor,
+        editorDrafts = viewModel.editorDrafts,
     )
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        viewModel.editorDrafts.flush()
+    }
     val searchScope = rememberCoroutineScope()
     var foregroundRecenterRequest by rememberSaveable { mutableStateOf(0) }
     val deleteFadeResourceHrefs = remember { mutableStateMapOf<String, Unit>() }
