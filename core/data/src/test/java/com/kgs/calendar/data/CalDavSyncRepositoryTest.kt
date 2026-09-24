@@ -282,6 +282,30 @@ class CalDavSyncRepositoryTest {
     }
 
     @Test
+    fun requestTimeoutOnTheFallbackGetHoldsSyncMarkers() = runTest {
+        val (eventHref, _) = seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        // OkHttp repeats a request answered with 408 once on its own.
+        server.respondNext("GET", eventHref, times = 2) { MockResponse().setResponseCode(408) }
+
+        repository.syncNow()
+
+        val held = harness.collection(server.eventsHref)!!
+        assertEquals(before.syncToken, held.syncToken)
+        assertEquals(before.ctag, held.ctag)
+        assertEquals("Kickoff", harness.event(eventHref)!!.title)
+        assertNotNull(harness.resource(eventHref)!!.syncError)
+
+        repository.syncNow()
+
+        assertEquals("Kickoff v2", harness.event(eventHref)!!.title)
+        assertNotEquals(before.syncToken, harness.collection(server.eventsHref)!!.syncToken)
+    }
+
+    @Test
     fun unparseableResourceStillAdvancesSyncMarkers() = runTest {
         seedRemote()
         harness.addSyncedCalDavAccount()

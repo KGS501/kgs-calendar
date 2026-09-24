@@ -15,15 +15,14 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.data.remote.CalDavHttpClient
-import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
 import com.kgs.calendar.data.remote.RemoteResourceData
+import com.kgs.calendar.data.remote.isTransientFailure
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
-import java.io.IOException
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 import java.time.Instant
@@ -501,12 +500,13 @@ private sealed interface DownloadOutcome {
     class Failed(val error: Throwable, val retryable: Boolean) : DownloadOutcome
 }
 
-/** Network trouble, server errors, rate limits and missing access can all clear up without the resource changing. */
-internal fun Throwable.isRetryableFetchFailure(): Boolean = when (this) {
-    is IOException -> true
-    is HttpStatusException -> statusCode >= 500 || statusCode in setOf(401, 403, 429)
-    else -> false
-}
+/**
+ * Network trouble, timeouts, server errors, rate limits and missing access can all clear up without
+ * the resource changing. Unlike a whole account sync, a single resource denied with 401/403 is retried.
+ */
+internal fun Throwable.isRetryableFetchFailure(): Boolean = isTransientFailure(alsoTransientStatuses = FETCH_ACCESS_STATUSES)
+
+private val FETCH_ACCESS_STATUSES = setOf(401, 403)
 
 /** Rejected queued uploads of an account, reported only after its pull has run. */
 internal class PendingUploadException(cause: Throwable) :

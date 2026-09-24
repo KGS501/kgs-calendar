@@ -28,6 +28,7 @@ class SyncFailurePolicyTest {
         assertEquals(SyncFailureOutcome.Retry, classify(wrapped(http(503))))
         assertEquals(SyncFailureOutcome.Retry, classify(wrapped(http(429))))
         assertEquals(SyncFailureOutcome.Retry, classify(wrapped(http(408))))
+        assertEquals(SyncFailureOutcome.Retry, classify(wrapped(http(425))))
     }
 
     @Test
