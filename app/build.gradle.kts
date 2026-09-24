@@ -81,6 +81,13 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric widget rendering tests resolve app strings and layouts.
+            isIncludeAndroidResources = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
