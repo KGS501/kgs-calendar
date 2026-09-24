@@ -362,7 +362,13 @@ class FakeCalDavServer(
         var version = 1
     }
 
-    private class Override(val method: String, val pathContains: String, val response: () -> MockResponse, var remaining: Int)
+    private class Override(
+        val method: String,
+        val pathContains: String,
+        val bodyContains: String?,
+        val response: () -> MockResponse,
+        var remaining: Int,
+    )
 
     private val server = MockWebServer()
     private val collections = LinkedHashMap<String, Collection>()
@@ -430,9 +436,18 @@ class FakeCalDavServer(
         feeds[path] = { MockResponse().setResponseCode(200).addHeader("Content-Type", contentType).setBody(body) }
     }
 
-    /** The next [times] requests whose method matches and whose path contains [pathContains] get [response]. */
-    fun respondNext(method: String, pathContains: String, times: Int = 1, response: () -> MockResponse) {
-        overrides += Override(method, pathContains, response, times)
+    /**
+     * The next [times] requests whose method matches, whose path contains [pathContains] and (if given)
+     * whose body contains [bodyContains] get [response].
+     */
+    fun respondNext(
+        method: String,
+        pathContains: String,
+        times: Int = 1,
+        bodyContains: String? = null,
+        response: () -> MockResponse,
+    ) {
+        overrides += Override(method, pathContains, bodyContains, response, times)
     }
 
     /** The next PUT to [href] is stored as usual but answered without an ETag header. */
@@ -459,7 +474,10 @@ class FakeCalDavServer(
         )
         requests += captured
         beforeResponse?.invoke(captured)
-        overrides.firstOrNull { it.remaining > 0 && it.method == method && captured.path.contains(it.pathContains) }?.let {
+        overrides.firstOrNull {
+            it.remaining > 0 && it.method == method && captured.path.contains(it.pathContains) &&
+                (it.bodyContains == null || captured.body.contains(it.bodyContains))
+        }?.let {
             it.remaining--
             return it.response()
         }

@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.sync
 
+import android.database.SQLException
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.hasTimedIcalProperty
@@ -14,12 +15,15 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
+import com.kgs.calendar.data.remote.RemoteResourceData
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import java.io.IOException
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 import java.time.Instant
@@ -182,7 +186,7 @@ class CalDavSyncEngine internal constructor(
             (collection.supportsTasks || collection.isCalDavScheduleInbox()) &&
             collection.sourceType == SourceType.CalDav
         ) {
-            runCatching {
+            try {
                 calDavClient.queryResources(
                     serverUrl = credentials.serverUrl,
                     collectionHref = collection.href,
@@ -190,7 +194,11 @@ class CalDavSyncEngine internal constructor(
                     username = credentials.username,
                     appPassword = credentials.appPassword,
                 )
-            }.getOrElse { emptyList() }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                emptyList()
+            }
         } else {
             emptyList()
         }
@@ -215,7 +223,8 @@ class CalDavSyncEngine internal constructor(
             .filterNot { it.href.davHrefKey() in queriedByHref }
             .chunked(RESOURCE_MULTIGET_BATCH_SIZE)
             .flatMap { batch ->
-                runCatching {
+                // Resources missing from a failed batch are fetched one by one below.
+                try {
                     calDavClient.multigetResources(
                         serverUrl = credentials.serverUrl,
                         collectionHref = collection.href,
@@ -223,7 +232,11 @@ class CalDavSyncEngine internal constructor(
                         username = credentials.username,
                         appPassword = credentials.appPassword,
                     )
-                }.getOrElse { emptyList() }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    emptyList()
+                }
             }
             .associateBy { it.href.davHrefKey() }
         val fetchedByHref = multigetByHref + queriedByHref
@@ -233,12 +246,8 @@ class CalDavSyncEngine internal constructor(
             val fetched = fetchedByHref[remote.href.davHrefKey()]
             if (local != null && local.syncError == null && fetched?.etag != null && fetched.etag == local.etag) return@mapNotNull null
             val localHref = local?.href ?: remote.href
-            val download = runCatching {
-                val raw = fetched?.calendarData
-                    ?: calDavClient.getResource(credentials.serverUrl, remote.href, credentials.username, credentials.appPassword)
-                raw to icalCodec.parse(raw, collection.href, localHref, collection.color)
-            }
-            RemoteCalDavDownload(remote, local, localHref, fetched?.etag ?: remote.etag, download)
+            val outcome = downloadOutcome(credentials, collection, remote.href, localHref, fetched)
+            RemoteCalDavDownload(remote, local, localHref, fetched?.etag ?: remote.etag, outcome)
         }
         val deletedKeys = incremental?.deletedHrefs
             ?.map { it.davHrefKey() }
@@ -256,13 +265,43 @@ class CalDavSyncEngine internal constructor(
                 database.taskDao().deleteByResource(deletedHref)
                 database.resourceDao().delete(deletedHref)
             }
-            database.collectionDao().updateSyncMarkers(
-                href = collection.href,
-                syncToken = incremental?.syncToken ?: discovered?.syncToken,
-                ctag = discovered?.ctag,
-            )
+            // A resource that could not be downloaded for now is only listed again while the old markers stand.
+            if (downloads.none { (it.outcome as? DownloadOutcome.Failed)?.retryable == true }) {
+                database.collectionDao().updateSyncMarkers(
+                    href = collection.href,
+                    syncToken = incremental?.syncToken ?: discovered?.syncToken,
+                    ctag = discovered?.ctag,
+                )
+            }
         }
     }
+
+    /** Falls back to a plain GET for resources the batch requests did not return. */
+    private suspend fun downloadOutcome(
+        credentials: StoredCredentials,
+        collection: CollectionEntity,
+        remoteHref: String,
+        localHref: String,
+        fetched: RemoteResourceData?,
+    ): DownloadOutcome {
+        val raw = fetched?.calendarData ?: try {
+            calDavClient.getResource(credentials.serverUrl, remoteHref, credentials.username, credentials.appPassword)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            return DownloadOutcome.Failed(error, retryable = error.isRetryableFetchFailure())
+        }
+        return parsedDownload(raw, collection, localHref)
+    }
+
+    private fun parsedDownload(raw: String, collection: CollectionEntity, localHref: String): DownloadOutcome =
+        try {
+            DownloadOutcome.Parsed(raw, icalCodec.parse(raw, collection.href, localHref, collection.color))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            DownloadOutcome.Failed(error, retryable = false)
+        }
 
     private suspend fun applyRemoteCalDavDownload(collection: CollectionEntity, download: RemoteCalDavDownload) {
         val local = download.local
@@ -270,7 +309,10 @@ class CalDavSyncEngine internal constructor(
         // A local edit queued while this batch was downloading wins; the push path reconciles it with the server.
         if (database.pendingMutationDao().forResource(localHref).isNotEmpty()) return
         try {
-            val (raw, parsed) = download.result.getOrThrow()
+            val (raw, parsed) = when (val outcome = download.outcome) {
+                is DownloadOutcome.Parsed -> outcome.raw to outcome.parsed
+                is DownloadOutcome.Failed -> throw outcome.error
+            }
             val effectiveEtag = download.etag
             if (parsed == null) {
                 upsertFailedResource(
@@ -298,6 +340,11 @@ class CalDavSyncEngine internal constructor(
                 database.taskDao().upsert(mergedTask)
                 database.eventDao().deleteByResource(localHref)
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: SQLException) {
+            // A failed write must abort the whole batch instead of committing it as an import error.
+            throw error
         } catch (error: Throwable) {
             upsertFailedResource(
                 collectionHref = collection.href,
@@ -347,9 +394,7 @@ class CalDavSyncEngine internal constructor(
                             local = resource,
                             localHref = resource.href,
                             etag = etag,
-                            result = runCatching {
-                                fetched.calendarData to icalCodec.parse(fetched.calendarData, collection.href, resource.href, collection.color)
-                            },
+                            outcome = parsedDownload(fetched.calendarData, collection, resource.href),
                         )
                         localWrites.writeTransaction { applyRemoteCalDavDownload(collection, download) }
                     }
@@ -445,8 +490,23 @@ private class RemoteCalDavDownload(
     val local: CalendarResourceEntity?,
     val localHref: String,
     val etag: String?,
-    val result: Result<Pair<String, ParsedCalendarComponent?>>,
+    val outcome: DownloadOutcome,
 )
+
+/** The final result of downloading and parsing one resource. */
+private sealed interface DownloadOutcome {
+    class Parsed(val raw: String, val parsed: ParsedCalendarComponent?) : DownloadOutcome
+
+    /** [retryable] failures may succeed unchanged later; the others (bad data, gone) will not. */
+    class Failed(val error: Throwable, val retryable: Boolean) : DownloadOutcome
+}
+
+/** Network trouble, server errors, rate limits and missing access can all clear up without the resource changing. */
+internal fun Throwable.isRetryableFetchFailure(): Boolean = when (this) {
+    is IOException -> true
+    is HttpStatusException -> statusCode >= 500 || statusCode in setOf(401, 403, 429)
+    else -> false
+}
 
 /** Rejected queued uploads of an account, reported only after its pull has run. */
 internal class PendingUploadException(cause: Throwable) :

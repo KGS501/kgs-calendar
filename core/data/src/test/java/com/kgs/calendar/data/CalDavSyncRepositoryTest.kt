@@ -4,10 +4,17 @@ import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import okhttp3.mockwebserver.MockResponse
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -216,5 +223,133 @@ class CalDavSyncRepositoryTest {
         val query = server.requests("REPORT").single { "calendar-query" in it.body }
         assertEquals(server.tasksHref, query.path)
         assertEquals("Kickoff", harness.event(eventHref)!!.title)
+    }
+
+    @Test
+    fun transientDownloadFailureHoldsSyncMarkersUntilTheResourceIsFetched() = runTest {
+        val (eventHref, _) = seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        server.putRemote(
+            server.eventsHref,
+            "kickoff.ics",
+            SampleIcs.event("remote-event", "Kickoff (moved)", start = "20261005T120000Z", end = "20261005T130000Z", sequence = 1),
+        )
+        val reviewHref = server.putRemote(server.eventsHref, "review.ics", SampleIcs.event("remote-review", "Review"))
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("GET", eventHref) { MockResponse().setResponseCode(503) }
+
+        repository.syncNow()
+
+        val held = harness.collection(server.eventsHref)!!
+        assertEquals(before.syncToken, held.syncToken)
+        assertEquals(before.ctag, held.ctag)
+        assertEquals("Kickoff", harness.event(eventHref)!!.title)
+        assertNotNull(harness.resource(eventHref)!!.syncError)
+        assertEquals("Review", harness.event(reviewHref)!!.title)
+        assertEquals(SyncState.Idle, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+        server.clearRequests()
+
+        repository.syncNow()
+
+        val incremental = server.requests("REPORT").single { "sync-collection" in it.body && it.path == server.eventsHref }
+        assertTrue(incremental.body.contains("<d:sync-token>${before.syncToken}</d:sync-token>"))
+        assertEquals("Kickoff (moved)", harness.event(eventHref)!!.title)
+        assertNull(harness.resource(eventHref)!!.syncError)
+        val advanced = harness.collection(server.eventsHref)!!
+        assertNotEquals(before.syncToken, advanced.syncToken)
+        assertNotEquals(before.ctag, advanced.ctag)
+    }
+
+    @Test
+    fun transientDownloadFailureKeepsNullMarkersOfAFirstSync() = runTest {
+        val (eventHref, _) = seedRemote()
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("GET", eventHref) { MockResponse().setResponseCode(429) }
+
+        harness.addSyncedCalDavAccount()
+
+        val events = harness.collection(server.eventsHref)!!
+        assertNull(events.syncToken)
+        assertNull(events.ctag)
+        assertNull(harness.event(eventHref))
+        assertNotNull(harness.collection(server.tasksHref)!!.syncToken)
+
+        repository.syncNow()
+
+        assertEquals("Kickoff", harness.event(eventHref)!!.title)
+        assertNotNull(harness.collection(server.eventsHref)!!.syncToken)
+    }
+
+    @Test
+    fun unparseableResourceStillAdvancesSyncMarkers() = runTest {
+        seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        val brokenHref = server.putRemote(server.eventsHref, "broken.ics", SampleIcs.calendar("X-NOTHING:here"))
+
+        repository.syncNow()
+
+        assertTrue(harness.resource(brokenHref)!!.syncError!!.startsWith("Import failed"))
+        val after = harness.collection(server.eventsHref)!!
+        assertNotEquals(before.syncToken, after.syncToken)
+        assertNotEquals(before.ctag, after.ctag)
+    }
+
+    @Test
+    fun goneResourceStillAdvancesSyncMarkers() = runTest {
+        seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        val goneHref = server.putRemote(server.eventsHref, "gone.ics", SampleIcs.event("gone", "Gone"))
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("GET", goneHref) { MockResponse().setResponseCode(404) }
+
+        repository.syncNow()
+
+        assertNotNull(harness.resource(goneHref)!!.syncError)
+        assertNotEquals(before.syncToken, harness.collection(server.eventsHref)!!.syncToken)
+    }
+
+    @Test
+    fun failedMultigetFollowedByASuccessfulGetAdvancesSyncMarkers() = runTest {
+        val (eventHref, _) = seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.clearRequests()
+
+        repository.syncNow()
+
+        assertEquals(listOf(eventHref), server.requests("GET").map { it.path }.filter { it.startsWith(server.eventsHref) })
+        assertEquals("Kickoff v2", harness.event(eventHref)!!.title)
+        assertNull(harness.resource(eventHref)!!.syncError)
+        val after = harness.collection(server.eventsHref)!!
+        assertNotEquals(before.syncToken, after.syncToken)
+        assertNotEquals(before.ctag, after.ctag)
+    }
+
+    @Test
+    fun cancellationDuringADownloadPropagatesWithoutRecordingAnImportError() = runTest {
+        val (eventHref, _) = seedRemote()
+        harness.addSyncedCalDavAccount()
+        val before = harness.collection(server.eventsHref)!!
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        val sync = CompletableDeferred<Job>()
+        server.beforeResponse = { request ->
+            if (request.method == "GET" && request.path == eventHref) runBlocking { sync.await().cancel() }
+        }
+
+        val job = launch(Dispatchers.IO) { repository.syncNow() }
+        sync.complete(job)
+        job.join()
+
+        assertTrue(job.isCancelled)
+        assertNull(harness.resource(eventHref)!!.syncError)
+        assertEquals("Kickoff", harness.event(eventHref)!!.title)
+        assertEquals(before.syncToken, harness.collection(server.eventsHref)!!.syncToken)
+        assertNull(harness.account(AccountEntity.PRIMARY_ID)!!.syncError)
     }
 }

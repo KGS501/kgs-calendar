@@ -3,6 +3,7 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.kgs.calendar.domain.model.SyncState
@@ -38,6 +39,8 @@ class SyncOrchestrator(
                 if (account.id == LOCAL_ACCOUNT_ID) return@forEach
                 val engine = engines.firstOrNull { it.handles(account) } ?: return@forEach
                 if (engine.sync(account, options)) successfulAccounts++
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 val syncError = account.describeSyncError(error)
                 database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
