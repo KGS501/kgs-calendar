@@ -4,7 +4,8 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.widget.data.forEachUncachedWidgetMonth
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
-import com.kgs.calendar.widget.state.KgsWidgetMonthPageCache
+import com.kgs.calendar.widget.state.WidgetDataGeneration
+import com.kgs.calendar.widget.state.WidgetMonthPageCache
 import com.kgs.calendar.widget.state.WidgetMonthPageFreshness
 import com.kgs.calendar.widget.state.widgetMonthPageModelNamespace
 import java.time.DayOfWeek
@@ -15,6 +16,8 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class WidgetMonthCacheTest {
+    private val monthPages = WidgetMonthPageCache(WidgetDataGeneration())
+
     @Test
     fun pageModelNamespaceIgnoresPresentationOnlySettings() {
         val settings = WidgetRenderSettings()
@@ -42,15 +45,15 @@ class WidgetMonthCacheTest {
         val month = YearMonth.of(2027, 2)
         val settings = WidgetRenderSettings(firstDayOfWeek = DayOfWeek.MONDAY)
         val page = WidgetMonthPage(month, 5, emptyList())
-        KgsWidgetMonthPageCache.put(month, settings, "cache-test-a", page, generation = 7)
+        monthPages.put(month, settings, "cache-test-a", page, generation = 7)
 
-        val current = KgsWidgetMonthPageCache.getForNavigation(
+        val current = monthPages.getForNavigation(
             month,
             settings,
             "cache-test-a",
             generation = 7,
         )
-        val latest = KgsWidgetMonthPageCache.getForNavigation(
+        val latest = monthPages.getForNavigation(
             month,
             settings,
             "cache-test-a",
@@ -68,7 +71,7 @@ class WidgetMonthCacheTest {
         val month = YearMonth.of(2027, 3)
         val monday = WidgetRenderSettings(firstDayOfWeek = DayOfWeek.MONDAY)
         val sunday = monday.copy(firstDayOfWeek = DayOfWeek.SUNDAY)
-        KgsWidgetMonthPageCache.put(
+        monthPages.put(
             month,
             monday,
             "cache-test-b",
@@ -78,11 +81,11 @@ class WidgetMonthCacheTest {
 
         assertEquals(
             null,
-            KgsWidgetMonthPageCache.getForNavigation(month, sunday, "cache-test-b", generation = 5),
+            monthPages.getForNavigation(month, sunday, "cache-test-b", generation = 5),
         )
         assertEquals(
             null,
-            KgsWidgetMonthPageCache.getForNavigation(month, monday, "cache-test-c", generation = 5),
+            monthPages.getForNavigation(month, monday, "cache-test-c", generation = 5),
         )
     }
 

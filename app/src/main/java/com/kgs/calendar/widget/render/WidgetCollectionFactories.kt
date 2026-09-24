@@ -1,7 +1,6 @@
 package com.kgs.calendar.widget.render
 
 import android.appwidget.AppWidgetManager
-import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import android.widget.RemoteViews
@@ -12,24 +11,24 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.TAG
 import com.kgs.calendar.widget.WIDGET_COLLECTION_VIEW_TYPE_COUNT
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WidgetLog
-import com.kgs.calendar.widget.data.KgsWidgetDataSource
 import com.kgs.calendar.widget.model.WidgetCollectionRenderOptions
 import com.kgs.calendar.widget.model.WidgetDayGridRow
 import com.kgs.calendar.widget.model.WidgetListRow
 import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.WidgetSize
 import com.kgs.calendar.widget.model.collectionArtWidthDp
-import com.kgs.calendar.widget.state.KgsWidgetCollectionRowsCache
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.withWidgetLocale
 import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 
 internal class KgsWidgetDayCollectionFactory(
-    private val context: Context,
+    private val widgets: WidgetDependencies,
     private val appWidgetId: Int,
 ) : RemoteViewsService.RemoteViewsFactory {
+    private val context = widgets.appContext
     private val packageName = context.packageName
     private var rows: List<WidgetDayGridRow> = emptyList()
     private var rowViews: List<RemoteViews> = emptyList()
@@ -40,13 +39,14 @@ internal class KgsWidgetDayCollectionFactory(
         val startedAt = SystemClock.elapsedRealtime()
         runCatching {
             val snapshot = runBlocking {
-                KgsWidgetRenderer(context).dayGridCollectionSnapshot(appWidgetId)
+                widgets.renderer().dayGridCollectionSnapshot(appWidgetId)
             }
             val textContext = context.withWidgetLocale(snapshot.settings.locale)
             rows = snapshot.rows
             rowViews = rows.map { row ->
                 row.toRemoteViews(
                     context = textContext,
+                    images = widgets.state.bitmapUris,
                     packageName = packageName,
                     palette = snapshot.palette,
                     widthDp = snapshot.widthDp,
@@ -83,11 +83,12 @@ internal class KgsWidgetDayCollectionFactory(
 }
 
 internal class KgsWidgetCollectionFactory(
-    private val context: Context,
+    private val widgets: WidgetDependencies,
     private val kind: KgsWidgetKind,
     private val appWidgetId: Int,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) : RemoteViewsService.RemoteViewsFactory {
+    private val context = widgets.appContext
     private val packageName = context.packageName
     private var rows: List<WidgetListRow> = emptyList()
     private var rowViews: List<RemoteViews> = emptyList()
@@ -106,7 +107,7 @@ internal class KgsWidgetCollectionFactory(
     override fun onDataSetChanged() {
         val startedAt = SystemClock.elapsedRealtime()
         runCatching {
-            val cached = KgsWidgetCollectionRowsCache.get(kind, appWidgetId)
+            val cached = widgets.state.collectionRows.get(kind, appWidgetId)
             if (cached != null) {
                 settings = cached.settings
                 palette = cached.palette
@@ -114,7 +115,7 @@ internal class KgsWidgetCollectionFactory(
                 renderOptions = renderOptions.withTaskArtWidth(cached.taskArtWidthDp)
             } else {
                 runBlocking {
-                    val dataSource = KgsWidgetDataSource(context, zoneId)
+                    val dataSource = widgets.dataSource(zoneId)
                     settings = dataSource.loadSettings(kind)
                     palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
                     rows = dataSource.listRows(kind, settings, appWidgetId)
@@ -129,7 +130,7 @@ internal class KgsWidgetCollectionFactory(
             }
             val textContext = context.withWidgetLocale(settings.locale)
             rowViews = rows.map { row ->
-                row.toRemoteViews(textContext, packageName, palette, kind, appWidgetId, renderOptions)
+                row.toRemoteViews(textContext, widgets.state.bitmapUris, packageName, palette, kind, appWidgetId, renderOptions)
             }
         }.onFailure { error ->
             Log.e(TAG, "Failed to load ${kind.name} widget rows", error)

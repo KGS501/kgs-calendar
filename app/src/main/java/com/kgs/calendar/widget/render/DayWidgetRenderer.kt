@@ -12,6 +12,7 @@ import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WIDGET_DAY_LIST_SIDE_BLEED_DP
 import com.kgs.calendar.widget.WIDGET_DAY_ROOT_PADDING_DP
 import com.kgs.calendar.widget.WidgetLog
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import com.kgs.calendar.widget.bitmap.dayTimelineBitmap
 import com.kgs.calendar.widget.bitmap.widgetTodayDateIconBitmap
 import com.kgs.calendar.widget.dpToPx
@@ -28,6 +29,7 @@ import java.time.format.DateTimeFormatter
 internal class DayWidgetRenderer(
     private val context: Context,
     private val zoneId: ZoneId,
+    private val images: WidgetBitmapUriStore,
 ) {
     private val packageName = context.packageName
     private val intents = WidgetPendingIntents(context)
@@ -53,6 +55,7 @@ internal class DayWidgetRenderer(
             ).bindInto(
                 target = views,
                 context = textContext,
+                images = images,
                 packageName = packageName,
                 palette = frameData.palette,
                 widthDp = frameData.contentWidthDp,
@@ -155,6 +158,7 @@ internal class DayWidgetRenderer(
                 ).bindInto(
                     target = views,
                     context = textContext,
+                    images = images,
                     packageName = packageName,
                     palette = palette,
                     widthDp = contentWidthDp,
@@ -172,6 +176,7 @@ internal class DayWidgetRenderer(
                 views.setPendingIntentTemplate(R.id.widget_list, intents.collectionClickPendingIntent(KgsWidgetKind.Day, appWidgetId))
                 views.bindDirectDayGridItems(
                     context = textContext,
+                    images = images,
                     packageName = packageName,
                     palette = palette,
                     rows = gridRows,

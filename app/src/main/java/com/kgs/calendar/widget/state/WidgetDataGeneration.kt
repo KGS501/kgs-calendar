@@ -2,7 +2,7 @@ package com.kgs.calendar.widget.state
 
 import java.util.concurrent.atomic.AtomicLong
 
-internal object WidgetDataGeneration {
+internal class WidgetDataGeneration {
     private val generation = AtomicLong()
 
     fun current(): Long = generation.get()

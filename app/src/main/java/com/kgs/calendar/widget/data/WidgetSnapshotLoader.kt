@@ -1,11 +1,11 @@
 package com.kgs.calendar.widget.data
 
 import android.appwidget.AppWidgetManager
-import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WIDGET_DAY_LIST_SIDE_BLEED_DP
 import com.kgs.calendar.widget.WIDGET_MULTI_CONTENT_PADDING_DP
 import com.kgs.calendar.widget.WidgetLog
@@ -29,10 +29,6 @@ import com.kgs.calendar.widget.model.preparedWidgetValue
 import com.kgs.calendar.widget.model.priorityMotionFrameCount
 import com.kgs.calendar.widget.model.usesCollectionList
 import com.kgs.calendar.widget.model.widgetDayGridRows
-import com.kgs.calendar.widget.state.KgsWidgetDayState
-import com.kgs.calendar.widget.state.KgsWidgetMonthPageCache
-import com.kgs.calendar.widget.state.KgsWidgetMonthState
-import com.kgs.calendar.widget.state.WidgetDataGeneration
 import com.kgs.calendar.widget.theme.WidgetPalette
 import java.time.LocalDate
 import java.time.YearMonth
@@ -42,17 +38,19 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
 internal class WidgetSnapshotLoader(
-    private val context: Context,
+    private val widgets: WidgetDependencies,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
-    val dataSource = KgsWidgetDataSource(context, zoneId)
-    private val monthPageSource = WidgetMonthPageSource(context, zoneId)
+    private val context = widgets.appContext
+    private val state = widgets.state
+    val dataSource = widgets.dataSource(zoneId)
+    private val monthPageSource = widgets.monthPageSource(zoneId)
 
     suspend fun prepareDayWidget(appWidgetId: Int, options: Bundle): PreparedDayWidgetRender {
         val settings = dataSource.loadSettings(KgsWidgetKind.Day)
         val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
         val today = LocalDate.now(zoneId)
-        val day = KgsWidgetDayState.day(context, appWidgetId, today)
+        val day = state.day.day(appWidgetId, today)
         val size = WidgetSize.from(context, options, KgsWidgetKind.Day)
         val timeline = dataSource.dayTimeline(day, settings)
         val useCurrentHourStart = settings.dayWidgetStartAtCurrentHour && day == today
@@ -70,7 +68,7 @@ internal class WidgetSnapshotLoader(
             size = size,
             timeline = timeline,
             gridRows = widgetDayGridRows(timeline, settings, nextTimeline, zoneId),
-            allDayExpanded = KgsWidgetDayState.isAllDayExpanded(context, appWidgetId),
+            allDayExpanded = state.day.isAllDayExpanded(appWidgetId),
         )
     }
 
@@ -82,7 +80,7 @@ internal class WidgetSnapshotLoader(
         val settings = dataSource.loadSettings(KgsWidgetKind.Day)
         val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
         val today = LocalDate.now(zoneId)
-        val day = KgsWidgetDayState.day(context, appWidgetId, today)
+        val day = state.day.day(appWidgetId, today)
         val size = WidgetSize.from(context, options, KgsWidgetKind.Day)
         val timeline = dataSource.dayTimeline(day, settings)
         return WidgetDayAllDaySectionFrameData(
@@ -91,14 +89,14 @@ internal class WidgetSnapshotLoader(
             palette = palette,
             timeline = timeline,
             contentWidthDp = size.dayGridContentWidthDp(),
-            allDayExpanded = KgsWidgetDayState.isAllDayExpanded(context, appWidgetId),
+            allDayExpanded = state.day.isAllDayExpanded(appWidgetId),
         )
     }
 
     suspend fun dayGridCollectionSnapshot(appWidgetId: Int): WidgetDayGridCollectionSnapshot {
         val settings = dataSource.loadSettings(KgsWidgetKind.Day)
         val palette = WidgetPalette.from(context, settings.themeMode, settings.colorMode)
-        val day = KgsWidgetDayState.day(context, appWidgetId, LocalDate.now(zoneId))
+        val day = state.day.day(appWidgetId, LocalDate.now(zoneId))
         val options = AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
         val size = WidgetSize.from(context, options, KgsWidgetKind.Day)
         val timeline = dataSource.dayTimeline(day, settings)
@@ -152,9 +150,9 @@ internal class WidgetSnapshotLoader(
         val settingsStarted = SystemClock.elapsedRealtime()
         val settings = dataSource.loadSettings(KgsWidgetKind.Month)
         val settingsMillis = SystemClock.elapsedRealtime() - settingsStarted
-        val month = KgsWidgetMonthState.month(context, appWidgetId, YearMonth.now(zoneId))
-        val generation = WidgetDataGeneration.current()
-        val cachedPage = KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation)
+        val month = state.month.month(appWidgetId, YearMonth.now(zoneId))
+        val generation = state.dataGeneration.current()
+        val cachedPage = state.monthPages.get(month, settings, zoneId.id, generation)
         val pageStarted = SystemClock.elapsedRealtime()
         val page = preparedWidgetValue(cachedPage) {
             monthPageSource.load(month, settings)
@@ -162,11 +160,11 @@ internal class WidgetSnapshotLoader(
         WidgetLog.d(
             context,
             "MonthPrepare widget=$appWidgetId settingsMs=$settingsMillis pageMs=${SystemClock.elapsedRealtime() - pageStarted} " +
-                "pageCacheHit=${cachedPage != null} generation=$generation currentGeneration=${WidgetDataGeneration.current()}",
+                "pageCacheHit=${cachedPage != null} generation=$generation currentGeneration=${state.dataGeneration.current()}",
         )
-        if (WidgetDataGeneration.current() == generation) {
-            KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
-            warmWidgetMonthPageCache(context, zoneId, month, settings)
+        if (state.dataGeneration.current() == generation) {
+            state.monthPages.put(month, settings, zoneId.id, page, generation)
+            warmWidgetMonthPageCache(widgets, zoneId, month, settings)
         }
         return prepareMonthPage(appWidgetId, options, settings, page, hasCompleteData = true)
     }
@@ -185,9 +183,9 @@ internal class WidgetSnapshotLoader(
             .roundToInt()
             .coerceIn(1, contentHeightDp - 1)
         val agendaPanelHeightDp = (contentHeightDp - monthPanelHeightDp).coerceAtLeast(1)
-        val month = KgsWidgetMonthState.month(context, appWidgetId, YearMonth.from(today))
-        val generation = WidgetDataGeneration.current()
-        val cachedPage = KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation)
+        val month = state.month.month(appWidgetId, YearMonth.from(today))
+        val generation = state.dataGeneration.current()
+        val cachedPage = state.monthPages.get(month, settings, zoneId.id, generation)
         val page = coroutineScope {
             val pageDeferred = async {
                 preparedWidgetValue(cachedPage) { monthPageSource.load(month, settings) }
@@ -199,9 +197,9 @@ internal class WidgetSnapshotLoader(
         }
         val monthPage = page.first
         val rows = page.second
-        if (WidgetDataGeneration.current() == generation) {
-            KgsWidgetMonthPageCache.put(month, settings, zoneId.id, monthPage, generation)
-            warmWidgetMonthPageCache(context, zoneId, month, settings)
+        if (state.dataGeneration.current() == generation) {
+            state.monthPages.put(month, settings, zoneId.id, monthPage, generation)
+            warmWidgetMonthPageCache(widgets, zoneId, month, settings)
         }
         val monthSpec = WidgetMonthRenderSpec.from(
             WidgetSize(widthDp = size.widthDp, heightDp = monthPanelHeightDp),

@@ -11,6 +11,7 @@ import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import com.kgs.calendar.widget.bitmap.widgetSortIconBitmap
 import com.kgs.calendar.widget.data.KgsWidgetDataSource
 import com.kgs.calendar.widget.dpToPx
@@ -36,6 +37,7 @@ internal class CollectionWidgetRenderer(
     private val context: Context,
     private val zoneId: ZoneId,
     private val dataSource: KgsWidgetDataSource,
+    private val images: WidgetBitmapUriStore,
 ) {
     private val packageName = context.packageName
     private val intents = WidgetPendingIntents(context)
@@ -69,6 +71,7 @@ internal class CollectionWidgetRenderer(
             }
             views.bindDirectCollectionItems(
                 context = textContext,
+                images = images,
                 packageName = packageName,
                 palette = palette,
                 rows = rows,

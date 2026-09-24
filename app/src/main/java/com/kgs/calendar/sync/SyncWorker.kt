@@ -11,7 +11,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import com.kgs.calendar.KgsCalendarApplication
-import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
@@ -27,7 +26,7 @@ class SyncWorker(
             runCatching {
                 com.kgs.calendar.reminder.ReminderScheduler.reschedule(applicationContext)
             }
-            KgsWidgetUpdateScheduler.updateAllAndAwait(applicationContext)
+            graph.widgets.scheduler.updateAllAndAwait()
             markRecentSyncActivity(applicationContext)
         }.fold(
             onSuccess = { Result.success() },

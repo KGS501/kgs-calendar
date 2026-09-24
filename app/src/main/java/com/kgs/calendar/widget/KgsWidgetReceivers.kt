@@ -12,10 +12,6 @@ import com.kgs.calendar.MainActivity
 import com.kgs.calendar.widget.model.loadSubtaskTransitionSnapshots
 import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
-import com.kgs.calendar.widget.render.KgsWidgetRenderer
-import com.kgs.calendar.widget.state.KgsWidgetCollectionRowsCache
-import com.kgs.calendar.widget.state.KgsWidgetTaskExpansionState
-import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import com.kgs.calendar.widget.update.animateTasksSubtaskToggle
 import com.kgs.calendar.widget.update.refreshTasksWidgetRows
 import kotlinx.coroutines.flow.first
@@ -40,9 +36,9 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
             COLLECTION_ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getStringExtra(KgsWidgetProvider.EXTRA_TASK_RESOURCE_HREF) ?: return
                 val pending = goAsync()
-                KgsWidgetUpdateScheduler.launch {
+                val graph = KgsCalendarApplication.graph(context.applicationContext)
+                graph.widgets.scheduler.launch {
                     try {
-                        val graph = KgsCalendarApplication.graph(context.applicationContext)
                         val task = graph.repository.allTasksSnapshot()
                             .firstOrNull { it.resourceHref == taskId }
                         if (task != null) {
@@ -64,19 +60,19 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return
                 val pending = goAsync()
-                KgsWidgetUpdateScheduler.launch {
+                val widgets = KgsCalendarApplication.graph(context.applicationContext).widgets
+                widgets.scheduler.launch {
                     try {
-                        val graph = KgsCalendarApplication.graph(context.applicationContext)
-                        val defaultExpanded = graph.settingsStore.tasksWidgetSubtaskDefaultMode.first()
-                            .resolveSubtasksExpandedByDefault(graph.settingsStore.subtasksExpandedByDefault.first())
-                        val renderer = KgsWidgetRenderer(context.applicationContext)
+                        val defaultExpanded = widgets.settingsStore.tasksWidgetSubtaskDefaultMode.first()
+                            .resolveSubtasksExpandedByDefault(widgets.settingsStore.subtasksExpandedByDefault.first())
+                        val renderer = widgets.renderer()
                         val before = if (KgsWidgetKind.Tasks.usesDirectCollectionItems()) {
-                            KgsWidgetCollectionRowsCache.get(KgsWidgetKind.Tasks, appWidgetId)
+                            widgets.state.collectionRows.get(KgsWidgetKind.Tasks, appWidgetId)
                         } else {
                             null
                         }
-                        val wasExpanded = KgsWidgetTaskExpansionState.isExpanded(context.applicationContext, appWidgetId, taskId, defaultExpanded)
-                        KgsWidgetTaskExpansionState.setExpanded(context.applicationContext, appWidgetId, taskId, !wasExpanded)
+                        val wasExpanded = widgets.state.taskExpansion.isExpanded(appWidgetId, taskId, defaultExpanded)
+                        widgets.state.taskExpansion.setExpanded(appWidgetId, taskId, !wasExpanded)
                         val animated = if (
                             before != null &&
                             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -88,13 +84,13 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                                 }.getOrNull()
                             }
                             snapshots.target?.let { target ->
-                                animateTasksSubtaskToggle(context.applicationContext, before, target, taskId)
+                                animateTasksSubtaskToggle(widgets, before, target, taskId)
                             } == true
                         } else {
                             false
                         }
                         if (!animated) {
-                            refreshTasksWidgetRows(context.applicationContext, intArrayOf(appWidgetId))
+                            refreshTasksWidgetRows(widgets, intArrayOf(appWidgetId))
                         }
                     } finally {
                         pending.finish()
@@ -108,7 +104,7 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
 class KgsWidgetRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_USER_PRESENT) {
-            KgsWidgetUpdateScheduler.updateAll(context.applicationContext)
+            KgsCalendarApplication.graph(context.applicationContext).widgets.scheduler.updateAll()
         }
     }
 }

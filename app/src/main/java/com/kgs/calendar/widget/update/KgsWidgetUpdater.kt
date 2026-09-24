@@ -1,7 +1,6 @@
 package com.kgs.calendar.widget.update
 
 import android.appwidget.AppWidgetManager
-import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.kgs.calendar.R
@@ -9,9 +8,8 @@ import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.TAG
 import com.kgs.calendar.widget.WIDGET_DAY_ALL_DAY_EXPANSION_FRAME_DELAY_MS
 import com.kgs.calendar.widget.WIDGET_DAY_ALL_DAY_EXPANSION_STEPS
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WidgetLog
-import com.kgs.calendar.widget.data.KgsWidgetDataSource
-import com.kgs.calendar.widget.data.WidgetMonthPageSource
 import com.kgs.calendar.widget.data.warmWidgetMonthPageCache
 import com.kgs.calendar.widget.model.MonthNavSnapshot
 import com.kgs.calendar.widget.model.MonthWidgetRenderResult
@@ -23,24 +21,17 @@ import com.kgs.calendar.widget.model.shouldBuildMonthRemoteViews
 import com.kgs.calendar.widget.model.usesCollectionList
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
 import com.kgs.calendar.widget.model.usesDirectDayGridItems
-import com.kgs.calendar.widget.render.KgsWidgetRenderer
-import com.kgs.calendar.widget.state.KgsWidgetCollectionRowsCache
-import com.kgs.calendar.widget.state.KgsWidgetCollectionUpdateSignatures
-import com.kgs.calendar.widget.state.KgsWidgetDayState
-import com.kgs.calendar.widget.state.KgsWidgetInteractionTokens
-import com.kgs.calendar.widget.state.KgsWidgetMonthPageCache
-import com.kgs.calendar.widget.state.KgsWidgetMonthState
-import com.kgs.calendar.widget.state.KgsWidgetMonthUpdateSignatures
-import com.kgs.calendar.widget.state.WidgetDataGeneration
 import com.kgs.calendar.widget.state.WidgetMonthPageFreshness
 import com.kgs.calendar.widget.state.dayAllDayTokenKey
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-object KgsWidgetUpdater {
+internal class KgsWidgetUpdater(private val widgets: WidgetDependencies) {
+    private val context = widgets.appContext
+    private val state = widgets.state
+
     suspend fun update(
-        context: Context,
         kind: KgsWidgetKind,
         appWidgetIds: IntArray,
         forceFullDayUpdate: Boolean = false,
@@ -48,19 +39,19 @@ object KgsWidgetUpdater {
     ) {
         if (appWidgetIds.isEmpty()) return
         val manager = AppWidgetManager.getInstance(context)
-        val renderer = KgsWidgetRenderer(context)
+        val renderer = widgets.renderer()
         appWidgetIds.forEach { appWidgetId ->
-            WidgetPerformanceMonitor.trace(context, kind, appWidgetId, cause) { metrics ->
+            WidgetPerformanceMonitor.trace(context, state.bitmapUris, kind, appWidgetId, cause) { metrics ->
             val options = manager.getAppWidgetOptions(appWidgetId)
             val targetMonthRevision = if (kind == KgsWidgetKind.Month || kind == KgsWidgetKind.Multi) {
-                KgsWidgetMonthState.revision(context, appWidgetId)
+                state.month.revision(appWidgetId)
             } else {
                 null
             }
             val incrementalDayUpdate =
                 kind == KgsWidgetKind.Day &&
                     !forceFullDayUpdate &&
-                    KgsWidgetDayState.isInitialized(context, appWidgetId)
+                    state.day.isInitialized(appWidgetId)
             var monthResult: MonthWidgetRenderResult? = null
             val preparedMulti = if (kind == KgsWidgetKind.Multi) {
                 val dataLoadStarted = SystemClock.elapsedRealtime()
@@ -104,14 +95,14 @@ object KgsWidgetUpdater {
                 null
             }
             val collectionSignature = preparedMulti?.signature ?: collectionSnapshot?.signature
-            if (collectionSignature != null && KgsWidgetCollectionUpdateSignatures.matches(kind, appWidgetId, collectionSignature)) {
+            if (collectionSignature != null && state.collectionSignatures.matches(kind, appWidgetId, collectionSignature)) {
                 WidgetLog.d(context, "Skipped unchanged ${kind.name} widget $appWidgetId")
                 return@trace
             }
             if (
                 preparedMonth != null &&
                 !shouldBuildMonthRemoteViews(preparedMonth.signature) { signature ->
-                    KgsWidgetMonthUpdateSignatures.matches(appWidgetId, signature)
+                    state.monthSignatures.matches(appWidgetId, signature)
                 }
             ) {
                 WidgetLog.d(context, "Skipped unchanged Month widget $appWidgetId before RemoteViews build")
@@ -147,17 +138,17 @@ object KgsWidgetUpdater {
             val signature = monthResult?.signature
             if (
                 targetMonthRevision != null &&
-                KgsWidgetMonthState.revision(context, appWidgetId) != targetMonthRevision
+                state.month.revision(appWidgetId) != targetMonthRevision
             ) {
                 return@trace
             }
-            if (signature != null && KgsWidgetMonthUpdateSignatures.matches(appWidgetId, signature)) {
+            if (signature != null && state.monthSignatures.matches(appWidgetId, signature)) {
                 WidgetLog.d(context, "Skipped unchanged Month widget $appWidgetId")
                 return@trace
             }
             runCatching {
                 if (collectionSnapshot != null) {
-                    KgsWidgetCollectionRowsCache.put(collectionSnapshot)
+                    state.collectionRows.put(collectionSnapshot)
                 }
 
                 val applyUpdate = {
@@ -175,18 +166,17 @@ object KgsWidgetUpdater {
                         manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
                     }
                     if (kind == KgsWidgetKind.Day) {
-                        KgsWidgetDayState.markInitialized(context, appWidgetId)
+                        state.day.markInitialized(appWidgetId)
                     }
                     if (signature != null) {
-                        KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
+                        state.monthSignatures.markApplied(appWidgetId, signature)
                     }
                     if (collectionSignature != null) {
-                        KgsWidgetCollectionUpdateSignatures.markApplied(kind, appWidgetId, collectionSignature)
+                        state.collectionSignatures.markApplied(kind, appWidgetId, collectionSignature)
                     }
                 }
                 if (targetMonthRevision != null) {
-                    KgsWidgetMonthState.applyIfRevisionCurrent(
-                        context = context,
+                    state.month.applyIfRevisionCurrent(
                         appWidgetId = appWidgetId,
                         revision = targetMonthRevision,
                         block = applyUpdate,
@@ -214,8 +204,7 @@ object KgsWidgetUpdater {
                             manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
                         }
                         if (targetMonthRevision != null) {
-                            KgsWidgetMonthState.applyIfRevisionCurrent(
-                                context = context,
+                            state.month.applyIfRevisionCurrent(
                                 appWidgetId = appWidgetId,
                                 revision = targetMonthRevision,
                                 block = applyFallback,
@@ -232,8 +221,7 @@ object KgsWidgetUpdater {
         }
     }
 
-    internal suspend fun navigateMonth(
-        context: Context,
+    suspend fun navigateMonth(
         kind: KgsWidgetKind,
         appWidgetId: Int,
         snapshot: MonthNavSnapshot,
@@ -242,30 +230,30 @@ object KgsWidgetUpdater {
         require(snapshot.widgetId == appWidgetId)
         val manager = AppWidgetManager.getInstance(context)
         val zoneId = ZoneId.systemDefault()
-        val dataSource = KgsWidgetDataSource(context, zoneId)
-        val pageSource = WidgetMonthPageSource(context, zoneId)
-        val renderer = KgsWidgetRenderer(context, zoneId)
+        val dataSource = widgets.dataSource(zoneId)
+        val pageSource = widgets.monthPageSource(zoneId)
+        val renderer = widgets.renderer(zoneId)
         val options = manager.getAppWidgetOptions(appWidgetId)
         val settings = dataSource.loadSettings(kind)
 
         fun applyIfCurrent(result: MonthWidgetRenderResult): Boolean =
             runCatching {
-                KgsWidgetMonthState.applyIfCurrent(context, snapshot) {
+                state.month.applyIfCurrent(snapshot) {
                     if (kind == KgsWidgetKind.Multi) {
                         manager.partiallyUpdateAppWidget(appWidgetId, result.views)
                     } else {
                         manager.updateAppWidget(appWidgetId, result.views)
                     }
                     result.signature?.let { signature ->
-                        KgsWidgetMonthUpdateSignatures.markApplied(appWidgetId, signature)
+                        state.monthSignatures.markApplied(appWidgetId, signature)
                     }
                 }
             }.onFailure { error ->
                 Log.e(TAG, "Failed to apply ${kind.name} month page $appWidgetId", error)
             }.getOrDefault(false)
 
-        var generation = WidgetDataGeneration.current()
-        val cachedLookup = KgsWidgetMonthPageCache.getForNavigation(
+        var generation = state.dataGeneration.current()
+        val cachedLookup = state.monthPages.getForNavigation(
             snapshot.month,
             settings,
             zoneId.id,
@@ -288,12 +276,12 @@ object KgsWidgetUpdater {
                 return
             }
         }
-        if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
+        if (!state.month.isCurrent(snapshot)) return
         if (
             cachedLookup?.freshness == WidgetMonthPageFreshness.CurrentGeneration &&
-            WidgetDataGeneration.current() == generation
+            state.dataGeneration.current() == generation
         ) {
-            warmWidgetMonthPageCache(context, zoneId, snapshot.month, settings)
+            warmWidgetMonthPageCache(widgets, zoneId, snapshot.month, settings)
             return
         }
         var authoritativePage = try {
@@ -304,9 +292,9 @@ object KgsWidgetUpdater {
             Log.e(TAG, "Failed to load ${kind.name} month page $appWidgetId", error)
             return
         }
-        if (WidgetDataGeneration.current() != generation) {
-            generation = WidgetDataGeneration.current()
-            if (!KgsWidgetMonthState.isCurrent(context, snapshot)) return
+        if (state.dataGeneration.current() != generation) {
+            generation = state.dataGeneration.current()
+            if (!state.month.isCurrent(snapshot)) return
             authoritativePage = try {
                 pageSource.load(snapshot.month, settings)
             } catch (error: CancellationException) {
@@ -317,20 +305,20 @@ object KgsWidgetUpdater {
             }
         }
         val authoritativeDecision = authoritativeMonthPageDecision(
-            navigationCurrent = KgsWidgetMonthState.isCurrent(context, snapshot),
+            navigationCurrent = state.month.isCurrent(snapshot),
             loadedGeneration = generation,
-            currentGeneration = WidgetDataGeneration.current(),
+            currentGeneration = state.dataGeneration.current(),
         )
         if (!authoritativeDecision.apply) return
         if (authoritativeDecision.cache) {
-            KgsWidgetMonthPageCache.put(
+            state.monthPages.put(
                 month = snapshot.month,
                 settings = settings,
                 zoneId = zoneId.id,
                 page = authoritativePage,
                 generation = generation,
             )
-            warmWidgetMonthPageCache(context, zoneId, snapshot.month, settings)
+            warmWidgetMonthPageCache(widgets, zoneId, snapshot.month, settings)
         }
         if (cachedLookup?.page != authoritativePage) {
             applyIfCurrent(
@@ -346,9 +334,9 @@ object KgsWidgetUpdater {
         }
     }
 
-    suspend fun navigateDay(context: Context, appWidgetId: Int) {
+    suspend fun navigateDay(appWidgetId: Int) {
         val manager = AppWidgetManager.getInstance(context)
-        val renderer = KgsWidgetRenderer(context)
+        val renderer = widgets.renderer()
         val options = manager.getAppWidgetOptions(appWidgetId)
         val views = try {
             renderer.renderDayNavigationUpdate(
@@ -375,30 +363,30 @@ object KgsWidgetUpdater {
         }
     }
 
-    suspend fun toggleDayAllDay(context: Context, appWidgetId: Int) {
+    suspend fun toggleDayAllDay(appWidgetId: Int) {
         if (!usesDirectDayGridItems()) {
-            val nextExpanded = !KgsWidgetDayState.isAllDayExpanded(context, appWidgetId)
-            KgsWidgetDayState.setAllDayExpanded(context, appWidgetId, nextExpanded)
-            update(context, KgsWidgetKind.Day, intArrayOf(appWidgetId))
+            val nextExpanded = !state.day.isAllDayExpanded(appWidgetId)
+            state.day.setAllDayExpanded(appWidgetId, nextExpanded)
+            update(KgsWidgetKind.Day, intArrayOf(appWidgetId))
             return
         }
         val manager = AppWidgetManager.getInstance(context)
-        val renderer = KgsWidgetRenderer(context)
+        val renderer = widgets.renderer()
         val options = manager.getAppWidgetOptions(appWidgetId)
-        val targetExpanded = !KgsWidgetDayState.isAllDayExpanded(context, appWidgetId)
-        KgsWidgetDayState.setAllDayExpanded(context, appWidgetId, targetExpanded)
-        val token = KgsWidgetInteractionTokens.next(dayAllDayTokenKey(appWidgetId))
+        val targetExpanded = !state.day.isAllDayExpanded(appWidgetId)
+        state.day.setAllDayExpanded(appWidgetId, targetExpanded)
+        val token = state.interactionTokens.next(dayAllDayTokenKey(appWidgetId))
         val frameData = try {
             renderer.dayAllDaySectionFrameData(appWidgetId, options)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             Log.e(TAG, "Failed to prepare Day widget all-day expansion $appWidgetId", error)
-            update(context, KgsWidgetKind.Day, intArrayOf(appWidgetId))
+            update(KgsWidgetKind.Day, intArrayOf(appWidgetId))
             return
         }
         for (step in 0..WIDGET_DAY_ALL_DAY_EXPANSION_STEPS) {
-            if (!KgsWidgetInteractionTokens.isCurrent(dayAllDayTokenKey(appWidgetId), token)) return
+            if (!state.interactionTokens.isCurrent(dayAllDayTokenKey(appWidgetId), token)) return
             val rawProgress = step.toFloat() / WIDGET_DAY_ALL_DAY_EXPANSION_STEPS.toFloat()
             val eased = motionStandardEasing(rawProgress)
             val progress = if (targetExpanded) eased else 1f - eased
@@ -411,14 +399,14 @@ object KgsWidgetUpdater {
                 throw error
             } catch (error: Throwable) {
                 Log.e(TAG, "Failed to render Day widget all-day expansion frame $appWidgetId", error)
-                update(context, KgsWidgetKind.Day, intArrayOf(appWidgetId))
+                update(KgsWidgetKind.Day, intArrayOf(appWidgetId))
                 return
             }
             runCatching {
                 manager.partiallyUpdateAppWidget(appWidgetId, views)
             }.onFailure { error ->
                 Log.e(TAG, "Failed to update Day widget all-day expansion frame $appWidgetId", error)
-                update(context, KgsWidgetKind.Day, intArrayOf(appWidgetId))
+                update(KgsWidgetKind.Day, intArrayOf(appWidgetId))
                 return
             }
             if (step < WIDGET_DAY_ALL_DAY_EXPANSION_STEPS) {

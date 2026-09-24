@@ -30,7 +30,7 @@ import com.kgs.calendar.ui.UiStrings
 import com.kgs.calendar.ui.WidgetRefresher
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
-import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.WidgetDependencies
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -74,6 +74,8 @@ class AppGraph(context: Context) {
     val syncOrchestrator: SyncOrchestrator = calendarData.syncOrchestrator
     val syncRepairs: SyncRepairs = calendarData.repairs
 
+    internal val widgets = WidgetDependencies(appContext, settingsStore, calendarQueries)
+
     val repository = CalendarRepository(
         queries = calendarQueries,
         eventMutations = eventMutations,
@@ -93,7 +95,7 @@ class AppGraph(context: Context) {
         },
         reconcileLocalState = {
             ReminderScheduler.reschedule(appContext)
-            KgsWidgetUpdateScheduler.updateAll(appContext)
+            widgets.scheduler.updateAll()
         },
     )
 
@@ -117,16 +119,16 @@ class AppGraph(context: Context) {
         pushPendingChanges = repository::pushPendingChangesCreatedSince,
         notificationReconciler = reminderRegistry,
         rescheduleReminders = { ReminderScheduler.reschedule(appContext) },
-        updateWidgets = { KgsWidgetUpdateScheduler.updateAll(appContext) },
+        updateWidgets = { widgets.scheduler.updateAll() },
     )
 
     val widgetRefresher: WidgetRefresher = object : WidgetRefresher {
         override fun updateAll() {
-            KgsWidgetUpdateScheduler.updateAll(appContext)
+            widgets.scheduler.updateAll()
         }
 
         override fun update(kind: KgsWidgetKind, forceFullDayUpdate: Boolean) {
-            KgsWidgetUpdateScheduler.update(appContext, kind, forceFullDayUpdate = forceFullDayUpdate)
+            widgets.scheduler.update(kind, forceFullDayUpdate = forceFullDayUpdate)
         }
     }
 

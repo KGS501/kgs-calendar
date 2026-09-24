@@ -5,7 +5,7 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WidgetLog
-import com.kgs.calendar.widget.bitmap.KgsWidgetBitmapUriStore
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -167,6 +167,7 @@ internal object WidgetPerformanceMonitor {
 
     suspend fun <T> trace(
         context: Context,
+        images: WidgetBitmapUriStore,
         kind: KgsWidgetKind,
         appWidgetId: Int,
         cause: WidgetUpdateCause,
@@ -178,7 +179,7 @@ internal object WidgetPerformanceMonitor {
                 block(metrics)
             }
         } finally {
-            KgsWidgetBitmapUriStore.endUpdate(context, appWidgetId)
+            images.endUpdate(appWidgetId)
             finish(context, metrics)
         }
     }

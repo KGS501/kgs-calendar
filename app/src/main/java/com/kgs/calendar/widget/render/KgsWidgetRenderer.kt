@@ -1,10 +1,10 @@
 package com.kgs.calendar.widget.render
 
-import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
 import android.widget.RemoteViews
 import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WidgetLog
 import com.kgs.calendar.widget.data.WidgetSnapshotLoader
 import com.kgs.calendar.widget.model.MonthNavSnapshot
@@ -22,15 +22,16 @@ import com.kgs.calendar.widget.theme.WidgetPalette
 import java.time.ZoneId
 
 internal class KgsWidgetRenderer(
-    private val context: Context,
+    widgets: WidgetDependencies,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
-    private val snapshots = WidgetSnapshotLoader(context, zoneId)
+    private val context = widgets.appContext
+    private val snapshots = WidgetSnapshotLoader(widgets, zoneId)
     private val monthPages = WidgetMonthPageBinder(context, zoneId)
-    private val dayRenderer = DayWidgetRenderer(context, zoneId)
+    private val dayRenderer = DayWidgetRenderer(context, zoneId, widgets.state.bitmapUris)
     private val monthRenderer = MonthWidgetRenderer(context, monthPages)
-    private val multiRenderer = MultiWidgetRenderer(context, zoneId, monthPages)
-    private val collectionRenderer = CollectionWidgetRenderer(context, zoneId, snapshots.dataSource)
+    private val multiRenderer = MultiWidgetRenderer(context, zoneId, monthPages, widgets.state.bitmapUris)
+    private val collectionRenderer = CollectionWidgetRenderer(context, zoneId, snapshots.dataSource, widgets.state.bitmapUris)
 
     suspend fun render(
         kind: KgsWidgetKind,

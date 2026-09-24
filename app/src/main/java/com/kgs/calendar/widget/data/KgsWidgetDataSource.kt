@@ -2,12 +2,13 @@ package com.kgs.calendar.widget.data
 
 import android.content.Context
 import android.content.res.Configuration
-import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppThemeMode
+import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
@@ -37,7 +38,7 @@ import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.emptyText
 import com.kgs.calendar.widget.model.layoutWidgetDayTimedItems
 import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
-import com.kgs.calendar.widget.state.KgsWidgetTaskExpansionState
+import com.kgs.calendar.widget.state.WidgetTaskExpansionState
 import com.kgs.calendar.widget.toLocale
 import com.kgs.calendar.widget.withWidgetLocale
 import java.time.Instant
@@ -52,6 +53,9 @@ import kotlinx.coroutines.flow.first
 
 internal class KgsWidgetDataSource(
     private val context: Context,
+    private val settingsStore: SettingsStore,
+    private val queries: CalendarQueries,
+    private val taskExpansion: WidgetTaskExpansionState,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
     private fun textContext(settings: WidgetRenderSettings): Context =
@@ -61,44 +65,43 @@ internal class KgsWidgetDataSource(
         context.withWidgetLocale(locale)
 
     suspend fun loadSettings(kind: KgsWidgetKind): WidgetRenderSettings = coroutineScope {
-        val graph = KgsCalendarApplication.graph(context)
-        val appThemeMode = async { graph.settingsStore.themeMode.first() }
-        val appColorMode = async { graph.settingsStore.colorMode.first() }
+        val appThemeMode = async { settingsStore.themeMode.first() }
+        val appColorMode = async { settingsStore.colorMode.first() }
         val widgetThemeMode = async {
             when (kind) {
-                KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetThemeMode.first()
-                KgsWidgetKind.Month -> graph.settingsStore.monthWidgetThemeMode.first()
-                KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetThemeMode.first()
-                KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetThemeMode.first()
-                KgsWidgetKind.Day -> graph.settingsStore.dayWidgetThemeMode.first()
+                KgsWidgetKind.Agenda -> settingsStore.agendaWidgetThemeMode.first()
+                KgsWidgetKind.Month -> settingsStore.monthWidgetThemeMode.first()
+                KgsWidgetKind.Tasks -> settingsStore.tasksWidgetThemeMode.first()
+                KgsWidgetKind.Multi -> settingsStore.multiWidgetThemeMode.first()
+                KgsWidgetKind.Day -> settingsStore.dayWidgetThemeMode.first()
             }
         }
         val widgetColorMode = async {
             when (kind) {
-                KgsWidgetKind.Agenda -> graph.settingsStore.agendaWidgetColorMode.first()
-                KgsWidgetKind.Month -> graph.settingsStore.monthWidgetColorMode.first()
-                KgsWidgetKind.Tasks -> graph.settingsStore.tasksWidgetColorMode.first()
-                KgsWidgetKind.Multi -> graph.settingsStore.multiWidgetColorMode.first()
-                KgsWidgetKind.Day -> graph.settingsStore.dayWidgetColorMode.first()
+                KgsWidgetKind.Agenda -> settingsStore.agendaWidgetColorMode.first()
+                KgsWidgetKind.Month -> settingsStore.monthWidgetColorMode.first()
+                KgsWidgetKind.Tasks -> settingsStore.tasksWidgetColorMode.first()
+                KgsWidgetKind.Multi -> settingsStore.multiWidgetColorMode.first()
+                KgsWidgetKind.Day -> settingsStore.dayWidgetColorMode.first()
             }
         }
-        val languageMode = async { graph.settingsStore.languageMode.first() }
-        val firstDayOfWeek = async { graph.settingsStore.firstDayOfWeek.first() }
-        val hiddenCollectionHrefs = async { graph.settingsStore.hiddenCollectionHrefs.first() }
-        val showCompletedTasks = async { graph.settingsStore.showCompletedTasksInCalendar.first() }
-        val taskColorMode = async { graph.settingsStore.taskColorMode.first() }
-        val priorityAnimationsEnabled = async { graph.settingsStore.priorityAnimationsEnabled.first() }
-        val subtasksExpandedByDefault = async { graph.settingsStore.subtasksExpandedByDefault.first() }
-        val tasksWidgetDisplayMode = async { graph.settingsStore.tasksWidgetDisplayMode.first() }
-        val tasksWidgetIncludeOverdue = async { graph.settingsStore.tasksWidgetIncludeOverdue.first() }
-        val tasksWidgetSortMode = async { graph.settingsStore.tasksWidgetSortMode.first() }
-        val tasksWidgetCreateMode = async { graph.settingsStore.tasksWidgetCreateMode.first() }
-        val tasksWidgetSubtaskDefaultMode = async { graph.settingsStore.tasksWidgetSubtaskDefaultMode.first() }
-        val maxVisibleAllDayItems = async { graph.settingsStore.maxVisibleAllDayItems.first() }
-        val dayWidgetScalePercent = async { graph.settingsStore.dayWidgetScalePercent.first() }
-        val dayWidgetStartHour = async { graph.settingsStore.dayWidgetStartHour.first() }
-        val dayWidgetStartAtCurrentHour = async { graph.settingsStore.dayWidgetStartAtCurrentHour.first() }
-        val multiWidgetMonthPercent = async { graph.settingsStore.multiWidgetMonthPercent.first() }
+        val languageMode = async { settingsStore.languageMode.first() }
+        val firstDayOfWeek = async { settingsStore.firstDayOfWeek.first() }
+        val hiddenCollectionHrefs = async { settingsStore.hiddenCollectionHrefs.first() }
+        val showCompletedTasks = async { settingsStore.showCompletedTasksInCalendar.first() }
+        val taskColorMode = async { settingsStore.taskColorMode.first() }
+        val priorityAnimationsEnabled = async { settingsStore.priorityAnimationsEnabled.first() }
+        val subtasksExpandedByDefault = async { settingsStore.subtasksExpandedByDefault.first() }
+        val tasksWidgetDisplayMode = async { settingsStore.tasksWidgetDisplayMode.first() }
+        val tasksWidgetIncludeOverdue = async { settingsStore.tasksWidgetIncludeOverdue.first() }
+        val tasksWidgetSortMode = async { settingsStore.tasksWidgetSortMode.first() }
+        val tasksWidgetCreateMode = async { settingsStore.tasksWidgetCreateMode.first() }
+        val tasksWidgetSubtaskDefaultMode = async { settingsStore.tasksWidgetSubtaskDefaultMode.first() }
+        val maxVisibleAllDayItems = async { settingsStore.maxVisibleAllDayItems.first() }
+        val dayWidgetScalePercent = async { settingsStore.dayWidgetScalePercent.first() }
+        val dayWidgetStartHour = async { settingsStore.dayWidgetStartHour.first() }
+        val dayWidgetStartAtCurrentHour = async { settingsStore.dayWidgetStartAtCurrentHour.first() }
+        val multiWidgetMonthPercent = async { settingsStore.multiWidgetMonthPercent.first() }
         val systemNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         WidgetRenderSettings(
             locale = languageMode.await().toLocale(context),
@@ -125,14 +128,13 @@ internal class KgsWidgetDataSource(
     }
 
     suspend fun dayTimeline(day: LocalDate, settings: WidgetRenderSettings): WidgetDayTimeline {
-        val graph = KgsCalendarApplication.graph(context)
         val labels = textContext(settings)
         val start = day.atStartOfDay(zoneId).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val events = graph.repository.eventsSnapshot(start, end)
+        val events = queries.eventsSnapshot(start, end)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filterNot { it.isCancelled() }
-        val tasks = graph.repository.datedTasksSnapshot(start, end)
+        val tasks = queries.datedTasksSnapshot(start, end)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
@@ -315,14 +317,13 @@ internal class KgsWidgetDataSource(
         settings: WidgetRenderSettings,
         launchKind: KgsWidgetKind,
     ): List<WidgetListRow> {
-        val graph = KgsCalendarApplication.graph(context)
         val labels = textContext(settings)
         val startDate = Instant.ofEpochMilli(startMillis).atZone(zoneId).toLocalDate()
         val endDateExclusive = Instant.ofEpochMilli(endMillis).atZone(zoneId).toLocalDate()
-        val eventSnapshot = graph.repository.eventsSnapshot(startMillis, endMillis)
+        val eventSnapshot = queries.eventsSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filterNot { it.isCancelled() }
-        val taskSnapshot = graph.repository.datedTasksSnapshot(startMillis, endMillis)
+        val taskSnapshot = queries.datedTasksSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
@@ -365,9 +366,8 @@ internal class KgsWidgetDataSource(
         }
 
     private suspend fun loadTaskItems(settings: WidgetRenderSettings, appWidgetId: Int): List<WidgetListRow> {
-        val graph = KgsCalendarApplication.graph(context)
         val today = LocalDate.now(zoneId)
-        val allTasks = graph.repository.allTasksSnapshot()
+        val allTasks = queries.allTasksSnapshot()
             .distinctBy { it.resourceHref }
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
         val activeTasks = allTasks.filter { it.isOpen() }
@@ -437,8 +437,7 @@ internal class KgsWidgetDataSource(
                 if (!emitted.add(task.resourceHref)) return
                 val children = childrenByParent[task.resourceHref].orEmpty()
                 val boundedDepth = depth.coerceAtMost(WIDGET_TASK_MAX_DEPTH)
-                val expanded = KgsWidgetTaskExpansionState.isExpanded(
-                    context = context,
+                val expanded = taskExpansion.isExpanded(
                     appWidgetId = appWidgetId,
                     taskResourceHref = task.resourceHref,
                     defaultExpanded = defaultExpanded,

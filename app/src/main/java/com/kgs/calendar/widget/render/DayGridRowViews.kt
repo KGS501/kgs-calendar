@@ -36,7 +36,7 @@ import com.kgs.calendar.widget.WIDGET_DAY_GRID_GAP_DP
 import com.kgs.calendar.widget.WIDGET_DAY_PRIORITY_OVERDRAW_DP
 import com.kgs.calendar.widget.WIDGET_DAY_TIME_COLUMN_WIDTH_DP
 import com.kgs.calendar.widget.WIDGET_TASK_MIN_CARD_WIDTH_DP
-import com.kgs.calendar.widget.bitmap.KgsWidgetBitmapUriStore
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import com.kgs.calendar.widget.bitmap.dayGridRowBitmap
 import com.kgs.calendar.widget.bitmap.dayNowLineOverlayBitmap
 import com.kgs.calendar.widget.bitmap.dayPriorityMotionBitmap
@@ -51,6 +51,7 @@ import java.time.LocalDate
 
 internal fun WidgetDayGridRow.toRemoteViews(
     context: Context,
+    images: WidgetBitmapUriStore,
     packageName: String,
     palette: WidgetPalette,
     widthDp: Float,
@@ -60,6 +61,7 @@ internal fun WidgetDayGridRow.toRemoteViews(
     bindInto(
         target = views,
         context = context,
+        images = images,
         packageName = packageName,
         palette = palette,
         widthDp = widthDp,
@@ -78,6 +80,7 @@ internal fun WidgetDayGridRow.toRemoteViews(
 internal fun WidgetDayGridRow.bindInto(
     target: RemoteViews,
     context: Context,
+    images: WidgetBitmapUriStore,
     packageName: String,
     palette: WidgetPalette,
     widthDp: Float,
@@ -97,6 +100,7 @@ internal fun WidgetDayGridRow.bindInto(
     }
     target.setDayGridImage(
         context = context,
+        images = images,
         appWidgetId = appWidgetId,
         viewId = artId,
         cacheKey = imageCacheKey(palette, widthDp, "art"),
@@ -112,6 +116,7 @@ internal fun WidgetDayGridRow.bindInto(
     bindPriorityMotion(
         target = target,
         context = context,
+        images = images,
         palette = palette,
         widthDp = widthDp,
         motionId = motionId,
@@ -121,6 +126,7 @@ internal fun WidgetDayGridRow.bindInto(
     bindNowLineOverlay(
         target = target,
         context = context,
+        images = images,
         palette = palette,
         widthDp = widthDp,
         nowOverlayId = nowOverlayId,
@@ -142,6 +148,7 @@ internal fun WidgetDayGridRow.bindInto(
 private fun WidgetDayGridRow.bindPriorityMotion(
     target: RemoteViews,
     context: Context,
+    images: WidgetBitmapUriStore,
     palette: WidgetPalette,
     widthDp: Float,
     motionId: Int,
@@ -166,6 +173,7 @@ private fun WidgetDayGridRow.bindPriorityMotion(
     frameIds.forEachIndexed { frame, viewId ->
         target.setDayGridImage(
             context = context,
+            images = images,
             appWidgetId = appWidgetId,
             viewId = viewId,
             cacheKey = imageCacheKey(palette, widthDp, "priority-$frame-$frameIntervalMillis"),
@@ -200,6 +208,7 @@ private fun WidgetDayGridRow.bindPriorityMotion(
 private fun WidgetDayGridRow.bindNowLineOverlay(
     target: RemoteViews,
     context: Context,
+    images: WidgetBitmapUriStore,
     palette: WidgetPalette,
     widthDp: Float,
     nowOverlayId: Int?,
@@ -213,6 +222,7 @@ private fun WidgetDayGridRow.bindNowLineOverlay(
     }
     target.setDayGridImage(
         context = context,
+        images = images,
         appWidgetId = appWidgetId,
         viewId = nowOverlayId,
         cacheKey = imageCacheKey(palette, widthDp, "now-line-$nowMinute"),
@@ -229,6 +239,7 @@ private fun WidgetDayGridRow.bindNowLineOverlay(
 
 private fun RemoteViews.setDayGridImage(
     context: Context,
+    images: WidgetBitmapUriStore,
     appWidgetId: Int,
     viewId: Int,
     cacheKey: String,
@@ -242,7 +253,7 @@ private fun RemoteViews.setDayGridImage(
         return
     }
     val cachedUri = runCatching {
-        KgsWidgetBitmapUriStore.getIfPresent(context, appWidgetId, cacheKey)
+        images.getIfPresent(appWidgetId, cacheKey)
     }.onFailure { error ->
         Log.w(TAG, "Failed to read cached Day widget image", error)
     }.getOrNull()
@@ -253,7 +264,7 @@ private fun RemoteViews.setDayGridImage(
     val bitmap = bitmapProvider()
     WidgetPerformanceMonitor.current()?.recordBitmapRendered()
     val uri = runCatching {
-        KgsWidgetBitmapUriStore.put(context, appWidgetId, cacheKey, bitmap)
+        images.put(appWidgetId, cacheKey, bitmap)
     }.onFailure { error ->
         Log.w(TAG, "Failed to cache Day widget image; falling back to an inline bitmap", error)
     }.getOrNull()

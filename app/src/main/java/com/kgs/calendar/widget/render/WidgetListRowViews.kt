@@ -35,7 +35,7 @@ import com.kgs.calendar.widget.WIDGET_TASK_PRIORITY_BITMAP_SCALE
 import com.kgs.calendar.widget.WIDGET_TASK_PRIORITY_OVERDRAW_DP
 import com.kgs.calendar.widget.WIDGET_TASK_ROW_HEIGHT_DP
 import com.kgs.calendar.widget.WIDGET_TASK_TRANSITION_MIN_ROW_HEIGHT_DP
-import com.kgs.calendar.widget.bitmap.KgsWidgetBitmapUriStore
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import com.kgs.calendar.widget.bitmap.agendaEventCardBitmap
 import com.kgs.calendar.widget.bitmap.taskPriorityMotionBitmap
 import com.kgs.calendar.widget.bitmap.taskRowBackgroundBitmap
@@ -61,6 +61,7 @@ import kotlin.math.roundToInt
 
 internal fun WidgetListRow.toRemoteViews(
     context: Context,
+    images: WidgetBitmapUriStore,
     packageName: String,
     palette: WidgetPalette,
     sourceKind: KgsWidgetKind,
@@ -93,7 +94,7 @@ internal fun WidgetListRow.toRemoteViews(
     }
     if (type == WidgetListRowType.Item) {
         if (sourceKind.usesAgendaCollectionStyle()) {
-            return toAgendaEventRemoteViews(context, packageName, palette, appWidgetId, renderOptions)
+            return toAgendaEventRemoteViews(context, images, packageName, palette, appWidgetId, renderOptions)
         }
         val views = RemoteViews(packageName, R.layout.widget_list_item)
         views.setInt(R.id.widget_item_root, "setBackgroundResource", palette.itemBackgroundRes)
@@ -158,6 +159,7 @@ internal fun WidgetListRow.toRemoteViews(
         priorityFrameIds.forEachIndexed { frame, viewId ->
             views.setWidgetRowImage(
                 context = context,
+                images = images,
                 appWidgetId = appWidgetId,
                 viewId = viewId,
                 cacheKey = taskPriorityMotionCacheKey(
@@ -251,6 +253,7 @@ internal fun WidgetListRow.toRemoteViews(
 
 private fun RemoteViews.setWidgetRowImage(
     context: Context,
+    images: WidgetBitmapUriStore,
     appWidgetId: Int,
     viewId: Int,
     cacheKey: String,
@@ -263,7 +266,7 @@ private fun RemoteViews.setWidgetRowImage(
         return
     }
     val cachedUri = runCatching {
-        KgsWidgetBitmapUriStore.getIfPresent(context, appWidgetId, cacheKey)
+        images.getIfPresent(appWidgetId, cacheKey)
     }.onFailure { error ->
         Log.w(TAG, "Failed to read cached widget row image", error)
     }.getOrNull()
@@ -274,7 +277,7 @@ private fun RemoteViews.setWidgetRowImage(
     val bitmap = bitmapProvider()
     WidgetPerformanceMonitor.current()?.recordBitmapRendered()
     val uri = runCatching {
-        KgsWidgetBitmapUriStore.put(context, appWidgetId, cacheKey, bitmap)
+        images.put(appWidgetId, cacheKey, bitmap)
     }.onFailure { error ->
         Log.w(TAG, "Failed to cache widget row image; falling back to an inline bitmap", error)
     }.getOrNull()
@@ -302,6 +305,7 @@ private fun WidgetListRow.taskPriorityMotionCacheKey(
 
 private fun WidgetListRow.toAgendaEventRemoteViews(
     context: Context,
+    images: WidgetBitmapUriStore,
     packageName: String,
     palette: WidgetPalette,
     appWidgetId: Int,
@@ -329,6 +333,7 @@ private fun WidgetListRow.toAgendaEventRemoteViews(
     val cardWidthDp = renderOptions.taskArtWidthDp
     views.setWidgetRowImage(
         context = context,
+        images = images,
         appWidgetId = appWidgetId,
         viewId = R.id.widget_agenda_event_art,
         cacheKey = agendaEventCardCacheKey(

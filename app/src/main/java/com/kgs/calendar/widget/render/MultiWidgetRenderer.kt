@@ -11,6 +11,7 @@ import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WIDGET_MULTI_CONTENT_PADDING_DP
+import com.kgs.calendar.widget.bitmap.WidgetBitmapUriStore
 import com.kgs.calendar.widget.bitmap.widgetTodayDateIconBitmap
 import com.kgs.calendar.widget.dpToPx
 import com.kgs.calendar.widget.model.PreparedMultiWidgetRender
@@ -33,6 +34,7 @@ internal class MultiWidgetRenderer(
     private val context: Context,
     private val zoneId: ZoneId,
     private val monthPages: WidgetMonthPageBinder,
+    private val images: WidgetBitmapUriStore,
 ) {
     private val packageName = context.packageName
     private val intents = WidgetPendingIntents(context)
@@ -215,6 +217,7 @@ internal class MultiWidgetRenderer(
         if (KgsWidgetKind.Multi.usesDirectCollectionItems() && !forceServiceCollection) {
             views.bindDirectCollectionItems(
                 context = textContext,
+                images = images,
                 packageName = packageName,
                 palette = palette,
                 rows = renderData.collectionSnapshot.rows,

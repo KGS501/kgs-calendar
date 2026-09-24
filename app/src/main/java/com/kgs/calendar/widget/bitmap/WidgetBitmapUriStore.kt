@@ -10,11 +10,7 @@ import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-internal object KgsWidgetBitmapUriStore {
-    private const val CACHE_DIRECTORY = "widget_images"
-    private const val MAX_FILES_PER_WIDGET = 2_048
-    private const val MAX_BYTES_PER_WIDGET = 128L * 1024L * 1024L
-
+internal class WidgetBitmapUriStore(private val context: Context) {
     private data class UpdateGeneration(
         var active: Boolean = false,
         var initialized: Boolean = false,
@@ -26,12 +22,11 @@ internal object KgsWidgetBitmapUriStore {
     private val generations = ConcurrentHashMap<Int, UpdateGeneration>()
 
     fun getIfPresent(
-        context: Context,
         appWidgetId: Int,
         cacheKey: String,
     ): Uri? = synchronized(widgetLock(appWidgetId)) {
-        val directory = widgetDirectory(context, appWidgetId)
-        val target = targetFile(context, directory, cacheKey)
+        val directory = widgetDirectory(appWidgetId)
+        val target = targetFile(directory, cacheKey)
         val generation = activeGeneration(appWidgetId, directory)
         if (!target.isFile) {
             WidgetPerformanceMonitor.current()?.recordCacheMiss()
@@ -39,17 +34,16 @@ internal object KgsWidgetBitmapUriStore {
         }
         generation.currentNames += target.name
         WidgetPerformanceMonitor.current()?.recordCacheHit()
-        imageUri(context, directory, target)
+        imageUri(directory, target)
     }
 
     fun put(
-        context: Context,
         appWidgetId: Int,
         cacheKey: String,
         bitmap: Bitmap,
     ): Uri = synchronized(widgetLock(appWidgetId)) {
-        val directory = widgetDirectory(context, appWidgetId)
-        val target = targetFile(context, directory, cacheKey)
+        val directory = widgetDirectory(appWidgetId)
+        val target = targetFile(directory, cacheKey)
         val generation = activeGeneration(appWidgetId, directory)
         if (!target.exists()) {
             val temporary = File.createTempFile("${target.name}.", ".tmp", directory)
@@ -70,14 +64,14 @@ internal object KgsWidgetBitmapUriStore {
             WidgetPerformanceMonitor.current()?.recordFileWrite()
         }
         generation.currentNames += target.name
-        imageUri(context, directory, target)
+        imageUri(directory, target)
     }
 
-    fun endUpdate(context: Context, appWidgetId: Int) {
+    fun endUpdate(appWidgetId: Int) {
         synchronized(widgetLock(appWidgetId)) {
             val generation = generations[appWidgetId] ?: return
             if (!generation.active) return
-            val directory = widgetDirectory(context, appWidgetId)
+            val directory = widgetDirectory(appWidgetId)
             val protectedNames = generation.previousNames + generation.currentNames
             val imageFiles = directory.listFiles { file -> file.isFile && file.extension == "png" }
                 .orEmpty()
@@ -122,7 +116,7 @@ internal object KgsWidgetBitmapUriStore {
         return generation
     }
 
-    private fun widgetDirectory(context: Context, appWidgetId: Int): File =
+    private fun widgetDirectory(appWidgetId: Int): File =
         File(
             context.filesDir,
             "$CACHE_DIRECTORY/day_${appWidgetId.coerceAtLeast(0)}",
@@ -132,10 +126,10 @@ internal object KgsWidgetBitmapUriStore {
             }
         }
 
-    private fun targetFile(context: Context, directory: File, cacheKey: String): File =
-        File(directory, "${saltedCacheKey(context, cacheKey).sha256Hex()}.png")
+    private fun targetFile(directory: File, cacheKey: String): File =
+        File(directory, "${saltedCacheKey(cacheKey).sha256Hex()}.png")
 
-    private fun imageUri(context: Context, directory: File, target: File): Uri =
+    private fun imageUri(directory: File, target: File): Uri =
         Uri.Builder()
             .scheme("content")
             .authority("${context.packageName}.widget.images")
@@ -146,12 +140,18 @@ internal object KgsWidgetBitmapUriStore {
     private fun widgetLock(appWidgetId: Int): Any =
         widgetLocks.computeIfAbsent(appWidgetId.coerceAtLeast(0)) { Any() }
 
-    private fun saltedCacheKey(context: Context, cacheKey: String): String {
+    private fun saltedCacheKey(cacheKey: String): String {
         val preferences = context.getSharedPreferences("kgs_widget_image_cache", Context.MODE_PRIVATE)
         val salt = preferences.getString("salt", null) ?: UUID.randomUUID().toString().also {
             preferences.edit().putString("salt", it).apply()
         }
         return "$salt|$cacheKey"
+    }
+
+    private companion object {
+        const val CACHE_DIRECTORY = "widget_images"
+        const val MAX_FILES_PER_WIDGET = 2_048
+        const val MAX_BYTES_PER_WIDGET = 128L * 1024L * 1024L
     }
 }
 

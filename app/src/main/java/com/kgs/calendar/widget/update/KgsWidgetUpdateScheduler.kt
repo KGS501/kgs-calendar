@@ -2,8 +2,8 @@ package com.kgs.calendar.widget.update
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
-import android.content.Context
 import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.model.next
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -75,7 +75,7 @@ private data class DebouncedWidgetWork(
     val completion: OnceCompletion,
 )
 
-internal object KgsWidgetUpdateScheduler {
+internal class KgsWidgetUpdateScheduler(private val widgets: WidgetDependencies) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pendingResizeJobs = mutableMapOf<String, DebouncedWidgetWork>()
     private val latestJobs = mutableMapOf<String, Job>()
@@ -91,7 +91,6 @@ internal object KgsWidgetUpdateScheduler {
     }
 
     fun update(
-        context: Context,
         kind: KgsWidgetKind,
         appWidgetIds: IntArray? = null,
         debounceMillis: Long = 0L,
@@ -99,7 +98,6 @@ internal object KgsWidgetUpdateScheduler {
         cause: WidgetUpdateCause = WidgetUpdateCause.Unknown,
         onCompletion: () -> Unit = {},
     ) {
-        val appContext = context.applicationContext
         if (debounceMillis > 0L) {
             val debounceKey = "${kind.name}:${appWidgetIds?.sorted()?.joinToString(",") ?: "all"}"
             val completion = OnceCompletion(onCompletion)
@@ -112,7 +110,6 @@ internal object KgsWidgetUpdateScheduler {
                     try {
                         delay(debounceMillis)
                         enqueueUpdates(
-                            context = appContext,
                             kind = kind,
                             appWidgetIds = appWidgetIds,
                             forceFullDayUpdate = forceFullDayUpdate,
@@ -132,7 +129,6 @@ internal object KgsWidgetUpdateScheduler {
             return
         }
         enqueueUpdates(
-            context = appContext,
             kind = kind,
             appWidgetIds = appWidgetIds,
             forceFullDayUpdate = forceFullDayUpdate,
@@ -141,29 +137,26 @@ internal object KgsWidgetUpdateScheduler {
         )
     }
 
-    fun updateAll(context: Context, cause: WidgetUpdateCause = WidgetUpdateCause.DataChange) {
+    fun updateAll(cause: WidgetUpdateCause = WidgetUpdateCause.DataChange) {
         KgsWidgetKind.entries.forEach { kind ->
-            update(context.applicationContext, kind, cause = cause)
+            update(kind, cause = cause)
         }
     }
 
     suspend fun updateAllAndAwait(
-        context: Context,
         cause: WidgetUpdateCause = WidgetUpdateCause.DataChange,
     ) {
-        val appContext = context.applicationContext
         val kinds = KgsWidgetKind.entries.iterator()
         awaitScheduledCompletions(KgsWidgetKind.entries.size) { completion ->
-            update(appContext, kinds.next(), cause = cause, onCompletion = completion)
+            update(kinds.next(), cause = cause, onCompletion = completion)
         }
     }
 
-    internal fun launch(block: suspend () -> Unit) {
+    fun launch(block: suspend () -> Unit) {
         scope.launch { block() }
     }
 
-    internal fun launchWidgetLatest(
-        context: Context,
+    fun launchWidgetLatest(
         kind: KgsWidgetKind,
         appWidgetId: Int,
         cause: WidgetUpdateCause,
@@ -176,7 +169,8 @@ internal object KgsWidgetUpdateScheduler {
             ScheduledWidgetWork(
                 run = {
                     WidgetPerformanceMonitor.trace(
-                        context = context.applicationContext,
+                        context = widgets.appContext,
+                        images = widgets.state.bitmapUris,
                         kind = kind,
                         appWidgetId = appWidgetId,
                         cause = cause,
@@ -189,7 +183,7 @@ internal object KgsWidgetUpdateScheduler {
         )
     }
 
-    internal fun launchLatest(
+    fun launchLatest(
         key: String,
         onCompletion: () -> Unit = {},
         block: suspend () -> Unit,
@@ -210,15 +204,14 @@ internal object KgsWidgetUpdateScheduler {
     }
 
     private fun enqueueUpdates(
-        context: Context,
         kind: KgsWidgetKind,
         appWidgetIds: IntArray?,
         forceFullDayUpdate: Boolean,
         cause: WidgetUpdateCause,
         onCompletion: () -> Unit,
     ) {
-        val ids = appWidgetIds ?: AppWidgetManager.getInstance(context)
-            .getAppWidgetIds(ComponentName(context, kind.providerClass))
+        val ids = appWidgetIds ?: AppWidgetManager.getInstance(widgets.appContext)
+            .getAppWidgetIds(ComponentName(widgets.appContext, kind.providerClass))
         if (ids.isEmpty()) {
             onCompletion()
             return
@@ -230,8 +223,7 @@ internal object KgsWidgetUpdateScheduler {
                 key,
                 ScheduledWidgetWork(
                     run = {
-                        KgsWidgetUpdater.update(
-                            context = context,
+                        widgets.updater.update(
                             kind = kind,
                             appWidgetIds = intArrayOf(appWidgetId),
                             forceFullDayUpdate = forceFullDayUpdate,

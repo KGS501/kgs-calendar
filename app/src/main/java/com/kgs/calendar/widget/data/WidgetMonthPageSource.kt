@@ -1,8 +1,8 @@
 package com.kgs.calendar.widget.data
 
 import android.content.Context
-import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
+import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.domain.event.displayColor
 import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.event.isCancelled
@@ -10,6 +10,7 @@ import com.kgs.calendar.domain.event.monthOccurrenceKey
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WidgetLog
 import com.kgs.calendar.widget.model.WidgetMonthCandidate
 import com.kgs.calendar.widget.model.WidgetMonthLayout
@@ -17,10 +18,7 @@ import com.kgs.calendar.widget.model.WidgetMonthModel
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.monthCacheWindow
-import com.kgs.calendar.widget.state.KgsWidgetMonthPageCache
-import com.kgs.calendar.widget.state.WidgetDataGeneration
 import com.kgs.calendar.widget.state.widgetMonthPageModelNamespace
-import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import com.kgs.calendar.widget.withWidgetLocale
 import java.time.LocalDate
 import java.time.YearMonth
@@ -29,6 +27,7 @@ import kotlinx.coroutines.CancellationException
 
 internal class WidgetMonthPageSource(
     private val context: Context,
+    private val queries: CalendarQueries,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
     suspend fun load(month: YearMonth, settings: WidgetRenderSettings): WidgetMonthPage {
@@ -53,10 +52,9 @@ internal class WidgetMonthPageSource(
     ): WidgetMonthLayout {
         val startMillis = start.atStartOfDay(zoneId).toInstant().toEpochMilli()
         val endMillis = endExclusive.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val graph = KgsCalendarApplication.graph(context)
         val labels = context.withWidgetLocale(settings.locale)
         val candidates = mutableListOf<WidgetMonthCandidate>()
-        graph.repository.eventsSnapshot(startMillis, endMillis)
+        queries.eventsSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filterNot { it.isCancelled() }
             .forEach { event ->
@@ -73,7 +71,7 @@ internal class WidgetMonthPageSource(
                     completed = false,
                 )
             }
-        graph.repository.datedTasksSnapshot(startMillis, endMillis)
+        queries.datedTasksSnapshot(startMillis, endMillis)
             .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
             .filter { task -> isMonthSurfaceTaskVisible(task.isCompleted, task.status) }
             .forEach { task ->
@@ -101,28 +99,30 @@ internal class WidgetMonthPageSource(
 }
 
 internal fun warmWidgetMonthPageCache(
-    context: Context,
+    widgets: WidgetDependencies,
     zoneId: ZoneId,
     centerMonth: YearMonth,
     settings: WidgetRenderSettings,
 ) {
-    val generation = WidgetDataGeneration.current()
+    val dataGeneration = widgets.state.dataGeneration
+    val monthPages = widgets.state.monthPages
+    val generation = dataGeneration.current()
     val months = monthCacheWindow(centerMonth)
-    if (months.all { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) != null }) return
-    val appContext = context.applicationContext
-    KgsWidgetUpdateScheduler.launchLatest(
+    if (months.all { month -> monthPages.get(month, settings, zoneId.id, generation) != null }) return
+    val appContext = widgets.appContext
+    widgets.scheduler.launchLatest(
         key = "month-cache:${widgetMonthPageModelNamespace(settings, zoneId.id)}",
     ) {
-        val source = WidgetMonthPageSource(appContext, zoneId)
+        val source = widgets.monthPageSource(zoneId)
         forEachUncachedWidgetMonth(
             months = months,
-            isCached = { month -> KgsWidgetMonthPageCache.get(month, settings, zoneId.id, generation) != null },
-            shouldContinue = { WidgetDataGeneration.current() == generation },
+            isCached = { month -> monthPages.get(month, settings, zoneId.id, generation) != null },
+            shouldContinue = { dataGeneration.current() == generation },
         ) { month ->
             try {
                 val page = source.load(month, settings)
-                if (WidgetDataGeneration.current() != generation) return@forEachUncachedWidgetMonth
-                KgsWidgetMonthPageCache.put(month, settings, zoneId.id, page, generation)
+                if (dataGeneration.current() != generation) return@forEachUncachedWidgetMonth
+                monthPages.put(month, settings, zoneId.id, page, generation)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {

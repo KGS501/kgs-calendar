@@ -16,6 +16,7 @@ import com.kgs.calendar.widget.WIDGET_TASK_EXPANSION_STEPS
 import com.kgs.calendar.widget.WIDGET_TASK_SORT_LABEL_TRANSITION_MS
 import com.kgs.calendar.widget.WIDGET_TASK_SORT_MORPH_FRAME_DELAY_MS
 import com.kgs.calendar.widget.WIDGET_TASK_SORT_MORPH_STEPS
+import com.kgs.calendar.widget.WidgetDependencies
 import com.kgs.calendar.widget.WidgetLog
 import com.kgs.calendar.widget.model.WidgetCollectionRenderOptions
 import com.kgs.calendar.widget.model.WidgetCollectionSnapshot
@@ -25,32 +26,29 @@ import com.kgs.calendar.widget.model.lerpFloat
 import com.kgs.calendar.widget.model.motionStandardEasing
 import com.kgs.calendar.widget.model.next
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
-import com.kgs.calendar.widget.render.KgsWidgetRenderer
 import com.kgs.calendar.widget.render.WidgetPendingIntents
 import com.kgs.calendar.widget.render.bindCollectionBottomFade
 import com.kgs.calendar.widget.render.bindDirectCollectionItems
 import com.kgs.calendar.widget.render.bindTasksSortButtonState
 import com.kgs.calendar.widget.render.bindTasksSortButtonWidth
 import com.kgs.calendar.widget.render.widgetButtonWidthDp
-import com.kgs.calendar.widget.state.KgsWidgetCollectionRowsCache
-import com.kgs.calendar.widget.state.KgsWidgetCollectionUpdateSignatures
-import com.kgs.calendar.widget.state.KgsWidgetInteractionTokens
 import com.kgs.calendar.widget.state.tasksListTokenKey
 import com.kgs.calendar.widget.state.tasksSortButtonTokenKey
 import com.kgs.calendar.widget.withWidgetLocale
 import kotlinx.coroutines.delay
 
 internal suspend fun refreshTasksWidgetRows(
-    context: Context,
+    widgets: WidgetDependencies,
     appWidgetIds: IntArray,
     displayedSortMode: WidgetTaskSortMode? = null,
     createMode: WidgetTaskCreateMode? = null,
     shouldApply: ((Int) -> Boolean)? = null,
 ) {
     if (appWidgetIds.isEmpty()) return
-    val appContext = context.applicationContext
+    val appContext = widgets.appContext
+    val state = widgets.state
     val manager = AppWidgetManager.getInstance(appContext)
-    val renderer = KgsWidgetRenderer(appContext)
+    val renderer = widgets.renderer()
     val changedSnapshots = mutableListOf<WidgetCollectionSnapshot>()
     for (appWidgetId in appWidgetIds) {
         val snapshot = runCatching {
@@ -58,7 +56,7 @@ internal suspend fun refreshTasksWidgetRows(
         }.onFailure { error ->
             Log.w(TAG, "Failed to calculate Tasks widget $appWidgetId list snapshot", error)
         }.getOrNull()
-        if (snapshot != null && KgsWidgetCollectionUpdateSignatures.matches(KgsWidgetKind.Tasks, appWidgetId, snapshot.signature)) {
+        if (snapshot != null && state.collectionSignatures.matches(KgsWidgetKind.Tasks, appWidgetId, snapshot.signature)) {
             WidgetLog.d(appContext, "Skipped unchanged Tasks widget $appWidgetId list refresh")
         } else if (snapshot != null) {
             changedSnapshots += snapshot
@@ -82,6 +80,7 @@ internal suspend fun refreshTasksWidgetRows(
             }
             views.bindDirectCollectionItems(
                 context = textContext,
+                images = state.bitmapUris,
                 packageName = appContext.packageName,
                 palette = snapshot.palette,
                 rows = snapshot.rows,
@@ -92,7 +91,7 @@ internal suspend fun refreshTasksWidgetRows(
             views.setPendingIntentTemplate(R.id.widget_list, WidgetPendingIntents(appContext).collectionClickPendingIntent(KgsWidgetKind.Tasks, snapshot.appWidgetId))
             runCatching {
                 manager.partiallyUpdateAppWidget(snapshot.appWidgetId, views)
-                KgsWidgetCollectionUpdateSignatures.markApplied(KgsWidgetKind.Tasks, snapshot.appWidgetId, snapshot.signature)
+                state.collectionSignatures.markApplied(KgsWidgetKind.Tasks, snapshot.appWidgetId, snapshot.signature)
             }.onFailure { error ->
                 Log.e(TAG, "Failed to directly refresh Tasks widget ${snapshot.appWidgetId}", error)
                 if (error.isRemoteViewsBitmapMemoryError()) {
@@ -110,7 +109,7 @@ internal suspend fun refreshTasksWidgetRows(
                     fallback.setRemoteAdapter(R.id.widget_list, WidgetPendingIntents(appContext).collectionAdapterIntent(KgsWidgetKind.Tasks, snapshot.appWidgetId))
                     fallback.setPendingIntentTemplate(R.id.widget_list, WidgetPendingIntents(appContext).collectionClickPendingIntent(KgsWidgetKind.Tasks, snapshot.appWidgetId))
                     manager.partiallyUpdateAppWidget(snapshot.appWidgetId, fallback)
-                    KgsWidgetCollectionRowsCache.put(snapshot)
+                    state.collectionRows.put(snapshot)
                     manager.notifyAppWidgetViewDataChanged(snapshot.appWidgetId, R.id.widget_list)
                 }
             }
@@ -124,15 +123,16 @@ internal suspend fun refreshTasksWidgetRows(
     }
     if (snapshotsToApply.isEmpty()) return
     snapshotsToApply.forEach { snapshot ->
-        KgsWidgetCollectionRowsCache.put(snapshot)
+        state.collectionRows.put(snapshot)
     }
     manager.notifyAppWidgetViewDataChanged(snapshotsToApply.map { it.appWidgetId }.toIntArray(), R.id.widget_list)
     snapshotsToApply.forEach { snapshot ->
-        KgsWidgetCollectionUpdateSignatures.markApplied(KgsWidgetKind.Tasks, snapshot.appWidgetId, snapshot.signature)
+        state.collectionSignatures.markApplied(KgsWidgetKind.Tasks, snapshot.appWidgetId, snapshot.signature)
     }
 }
 
 private fun applyTasksSortButtonFrame(
+    widgets: WidgetDependencies,
     context: Context,
     appWidgetIds: IntArray,
     mode: WidgetTaskSortMode,
@@ -145,7 +145,7 @@ private fun applyTasksSortButtonFrame(
     val manager = AppWidgetManager.getInstance(context)
     appWidgetIds.forEach { appWidgetId ->
         val token = tokens[appWidgetId] ?: return@forEach
-        if (!KgsWidgetInteractionTokens.isCurrent(tasksSortButtonTokenKey(appWidgetId), token)) return@forEach
+        if (!widgets.state.interactionTokens.isCurrent(tasksSortButtonTokenKey(appWidgetId), token)) return@forEach
         val views = RemoteViews(context.packageName, R.layout.widget_calendar_tasks)
         if (updateDisplayedChild) {
             views.bindTasksSortButtonState(context, appWidgetId, mode, widthDp, createMode)
@@ -157,6 +157,7 @@ private fun applyTasksSortButtonFrame(
 }
 
 internal suspend fun prepareTasksSortButtonForModeChange(
+    widgets: WidgetDependencies,
     context: Context,
     appWidgetIds: IntArray,
     fromMode: WidgetTaskSortMode,
@@ -167,13 +168,14 @@ internal suspend fun prepareTasksSortButtonForModeChange(
     val fromWidth = fromMode.widgetButtonWidthDp(context)
     val toWidth = toMode.widgetButtonWidthDp(context)
     if (toWidth <= fromWidth) {
-        applyTasksSortButtonFrame(context, appWidgetIds, toMode, fromWidth, createMode, tokens)
+        applyTasksSortButtonFrame(widgets, context, appWidgetIds, toMode, fromWidth, createMode, tokens)
         delay(WIDGET_TASK_SORT_LABEL_TRANSITION_MS)
         return
     }
     for (step in 0 until WIDGET_TASK_SORT_MORPH_STEPS) {
         val progress = motionStandardEasing(step.toFloat() / WIDGET_TASK_SORT_MORPH_STEPS.toFloat())
         applyTasksSortButtonFrame(
+            widgets = widgets,
             context = context,
             appWidgetIds = appWidgetIds,
             mode = fromMode,
@@ -184,11 +186,12 @@ internal suspend fun prepareTasksSortButtonForModeChange(
         )
         delay(WIDGET_TASK_SORT_MORPH_FRAME_DELAY_MS)
     }
-    applyTasksSortButtonFrame(context, appWidgetIds, toMode, toWidth, createMode, tokens)
+    applyTasksSortButtonFrame(widgets, context, appWidgetIds, toMode, toWidth, createMode, tokens)
     delay(WIDGET_TASK_SORT_LABEL_TRANSITION_MS)
 }
 
 internal suspend fun animateTasksSortButton(
+    widgets: WidgetDependencies,
     context: Context,
     appWidgetIds: IntArray,
     fromMode: WidgetTaskSortMode,
@@ -200,11 +203,11 @@ internal suspend fun animateTasksSortButton(
     val fromWidth = fromMode.widgetButtonWidthDp(context)
     val toWidth = toMode.widgetButtonWidthDp(context)
     if (toWidth >= fromWidth) return
-    applyTasksSortButtonFrame(context, appWidgetIds, toMode, fromWidth, createMode, tokens, updateDisplayedChild = true)
+    applyTasksSortButtonFrame(widgets, context, appWidgetIds, toMode, fromWidth, createMode, tokens, updateDisplayedChild = true)
     for (step in startStep..WIDGET_TASK_SORT_MORPH_STEPS) {
         val progress = motionStandardEasing(step.toFloat() / WIDGET_TASK_SORT_MORPH_STEPS.toFloat())
         val width = lerpFloat(fromWidth, toWidth, progress)
-        applyTasksSortButtonFrame(context, appWidgetIds, toMode, width, createMode, tokens, updateDisplayedChild = false)
+        applyTasksSortButtonFrame(widgets, context, appWidgetIds, toMode, width, createMode, tokens, updateDisplayedChild = false)
         if (step < WIDGET_TASK_SORT_MORPH_STEPS) {
             delay(WIDGET_TASK_SORT_MORPH_FRAME_DELAY_MS)
         }
@@ -213,18 +216,20 @@ internal suspend fun animateTasksSortButton(
 
 @RequiresApi(Build.VERSION_CODES.S)
 private fun applyTasksCollectionFrame(
-    context: Context,
+    widgets: WidgetDependencies,
     snapshot: WidgetCollectionSnapshot,
     rows: List<WidgetListRow>,
     renderOptions: WidgetCollectionRenderOptions,
     token: Long,
 ): Boolean {
-    if (!KgsWidgetInteractionTokens.isCurrent(tasksListTokenKey(snapshot.appWidgetId), token)) return false
+    if (!widgets.state.interactionTokens.isCurrent(tasksListTokenKey(snapshot.appWidgetId), token)) return false
+    val context = widgets.appContext
     val textContext = context.withWidgetLocale(snapshot.settings.locale)
     val views = RemoteViews(context.packageName, R.layout.widget_calendar_tasks)
     views.bindCollectionBottomFade(snapshot.palette, visible = true)
     views.bindDirectCollectionItems(
         context = textContext,
+        images = widgets.state.bitmapUris,
         packageName = context.packageName,
         palette = snapshot.palette,
         rows = rows,
@@ -242,13 +247,13 @@ private fun applyTasksCollectionFrame(
 
 @RequiresApi(Build.VERSION_CODES.S)
 internal suspend fun animateTasksSubtaskToggle(
-    context: Context,
+    widgets: WidgetDependencies,
     before: WidgetCollectionSnapshot,
     target: WidgetCollectionSnapshot,
     parentTaskResourceHref: String,
 ): Boolean {
     val appWidgetId = target.appWidgetId
-    val token = KgsWidgetInteractionTokens.next(tasksListTokenKey(appWidgetId))
+    val token = widgets.state.interactionTokens.next(tasksListTokenKey(appWidgetId))
     val beforeIds = before.rows.map { it.stableId }.toSet()
     val targetIds = target.rows.map { it.stableId }.toSet()
     val parentStableId = target.rows.firstOrNull { it.taskResourceHref == parentTaskResourceHref }?.stableId
@@ -258,7 +263,7 @@ internal suspend fun animateTasksSubtaskToggle(
     val changingRowIds = if (expanding) targetIds - beforeIds else beforeIds - targetIds
 
     if (changingRowIds.isEmpty() && parentStableId == null) {
-        return applyTasksCollectionFrame(context, target, target.rows, WidgetCollectionRenderOptions(), token)
+        return applyTasksCollectionFrame(widgets, target, target.rows, WidgetCollectionRenderOptions(), token)
     }
 
     for (step in 1 until WIDGET_TASK_EXPANSION_STEPS) {
@@ -285,12 +290,12 @@ internal suspend fun animateTasksSubtaskToggle(
             suppressPriorityMotion = true,
             lightweightTaskTransition = true,
         )
-        if (!applyTasksCollectionFrame(context, target, transitionRows, frameOptions, token)) return false
+        if (!applyTasksCollectionFrame(widgets, target, transitionRows, frameOptions, token)) return false
         delay(WIDGET_TASK_EXPANSION_FRAME_DELAY_MS)
     }
 
-    if (!applyTasksCollectionFrame(context, target, target.rows, WidgetCollectionRenderOptions(), token)) return false
-    KgsWidgetCollectionRowsCache.put(target)
-    KgsWidgetCollectionUpdateSignatures.markApplied(KgsWidgetKind.Tasks, appWidgetId, target.signature)
+    if (!applyTasksCollectionFrame(widgets, target, target.rows, WidgetCollectionRenderOptions(), token)) return false
+    widgets.state.collectionRows.put(target)
+    widgets.state.collectionSignatures.markApplied(KgsWidgetKind.Tasks, appWidgetId, target.signature)
     return true
 }
