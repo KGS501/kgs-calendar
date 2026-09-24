@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.editor
 
+import android.os.Parcel
 import androidx.compose.runtime.saveable.SaverScope
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
@@ -9,6 +10,7 @@ import com.kgs.calendar.ui.shell.CalendarShellUiState
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.DefaultColor
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.collection
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
+import com.kgs.calendar.ui.shell.SavedShellState
 import com.kgs.calendar.ui.shell.editorSchedule
 import com.kgs.calendar.ui.shell.initialEditorSchedule
 import com.kgs.calendar.ui.shell.newEventSchedule
@@ -20,6 +22,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -36,10 +39,10 @@ import java.io.File
 import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.concurrent.thread
 
 // Robolectric provides android.util.Log for the logged write failures.
 @RunWith(RobolectricTestRunner::class)
@@ -58,6 +61,15 @@ class EditorDraftStoreTest {
     private fun TestScope.fileStore() = EditorDraftStore(EditorDraftFiles(directory), ioScope = this)
 
     private fun draftFiles(): List<String> = directory.list().orEmpty().sorted()
+
+    private fun fileDraft(draftId: String): DraftRevision? = EditorDraftFiles(directory).read(draftId)
+
+    /** A store after process death that has read the files of [draftIds]. */
+    private fun TestScope.restoredStore(vararg draftIds: String): EditorDraftStore =
+        fileStore().also {
+            it.onShellRestored(draftIds.toSet())
+            advanceUntilIdle()
+        }
 
     @Test
     fun liveDraftKeepsItsValuesAndEndsWhenDiscarded() {
@@ -87,7 +99,7 @@ class EditorDraftStoreTest {
         store.put(draftId, "transferDraft", mapOf("title" to "x", "schedule" to mapOf("allDay" to false), "tags" to listOf("a")))
         advanceUntilIdle()
 
-        val restored = fileStore().values(draftId)
+        val restored = restoredStore(draftId).values(draftId)
 
         assertEquals(description, restored["description"])
         assertTrue(restored.containsKey("manualColor"))
@@ -99,20 +111,23 @@ class EditorDraftStoreTest {
     }
 
     @Test
-    fun writesAreBatchedAndFlushWritesAtOnce() = runTest {
+    fun writesAreBatchedAndFlushSchedulesTheWriteOfTheLatestRevisionAtOnce() = runTest {
         val store = fileStore()
         val draftId = store.newDraft()
         "Typing".forEachIndexed { index, _ -> store.put(draftId, "title", "Typing".take(index + 1)) }
-        assertTrue(draftFiles().isEmpty())
 
         store.flush()
+        // flush() only schedules the write; nothing touches the file before the IO dispatcher runs.
+        assertTrue(draftFiles().isEmpty())
+        runCurrent()
 
         assertEquals(listOf("$draftId.json"), draftFiles())
-        assertEquals("Typing", fileStore().values(draftId)["title"])
+        assertEquals("Typing", fileDraft(draftId)!!.values["title"])
+        assertEquals(6L, fileDraft(draftId)!!.revision)
     }
 
     @Test
-    fun flushWaitsForAWriteInFlightAndReturnsOnlyOnceTheLatestRevisionIsWritten() {
+    fun flushNeverWritesOnTheCallingThreadNorWaitsForAWriteInFlight() = runBlocking {
         val blocked = BlockingFirstWrite()
         val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val store = EditorDraftStore(blocked.files, ioScope, writeDelayMillis = 0)
@@ -122,14 +137,16 @@ class EditorDraftStoreTest {
             assertTrue(blocked.started.await(5, TimeUnit.SECONDS))
             store.put(draftId, "title", "Newer")
 
-            val flushing = thread { store.flush() }
-            flushing.join(300)
-            assertTrue("flush returned while a write was still running", flushing.isAlive)
+            // The write in flight holds the file lock for up to five seconds; flush() still returns at once.
+            val flushStarted = System.nanoTime()
+            store.flush()
+            assertTrue(System.nanoTime() - flushStarted < TimeUnit.SECONDS.toNanos(1))
             blocked.release.countDown()
-            flushing.join(5_000)
+            withTimeout(5_000) { ioScope.coroutineContext.job.children.forEach { it.join() } }
 
-            assertFalse(flushing.isAlive)
-            assertEquals("Newer", EditorDraftFiles(directory).read(draftId)!!["title"])
+            assertEquals("Newer", fileDraft(draftId)!!.values["title"])
+            assertTrue(blocked.writeThreads.isNotEmpty())
+            assertFalse(Thread.currentThread() in blocked.writeThreads)
         } finally {
             blocked.release.countDown()
             ioScope.cancel()
@@ -150,7 +167,7 @@ class EditorDraftStoreTest {
             blocked.release.countDown()
             withTimeout(5_000) { ioScope.coroutineContext.job.children.forEach { it.join() } }
 
-            assertEquals("Newer", EditorDraftFiles(directory).read(draftId)!!["title"])
+            assertEquals("Newer", fileDraft(draftId)!!.values["title"])
         } finally {
             blocked.release.countDown()
             ioScope.cancel()
@@ -166,8 +183,8 @@ class EditorDraftStoreTest {
         store.put(draftId, "title", "Live")
 
         assertEquals("Live", store.values(draftId)["title"])
-        assertEquals("Written", fileStore().values(draftId)["title"])
-        assertTrue(fileStore().values("unknown-draft").isEmpty())
+        assertEquals("Written", restoredStore(draftId).values(draftId)["title"])
+        assertTrue(restoredStore("unknown-draft").values("unknown-draft").isEmpty())
     }
 
     @Test
@@ -216,6 +233,8 @@ class EditorDraftStoreTest {
         val newStore = fileStore()
         val restored = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
         assertNull(restored.creationSheet)
+        newStore.onShellRestored(restored.referencedDraftIds)
+        advanceUntilIdle()
         restored.applyPendingRestore(loadedState)
 
         assertEquals(CreationSheet.EditEvent(meeting), restored.creationSheet)
@@ -223,6 +242,111 @@ class EditorDraftStoreTest {
         val fields = EditorDraftFields(newStore, draftId)
         assertEquals("Typed draft", fields.newState("title", DraftCodec.Text) { meeting.title }.value)
         assertEquals("From the item", fields.newState("location", DraftCodec.Text) { "From the item" }.value)
+    }
+
+    @Test
+    fun aSmallDraftRoundTripsThroughTheBundleAloneWithoutAFile() = runTest {
+        // Without files, e.g. when the process died before any write completed.
+        val store = EditorDraftStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        val meeting = event("meeting")
+        shell.editEvent(meeting, meeting.editorSchedule())
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Typed draft")
+        store.put(draftId, "manualColor", null)
+        store.put(draftId, "reminderMinutes", DraftCodec.MinuteSet.save(linkedSetOf(30, 0)))
+
+        val saved = parcelRoundTrip(saveShell(shell, store))
+        val newStore = fileStore()
+        val restored = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
+        newStore.onShellRestored(restored.referencedDraftIds)
+        advanceUntilIdle()
+        restored.applyPendingRestore(loadedState)
+
+        assertTrue(draftFiles().isEmpty())
+        assertEquals(draftId, restored.editorDraftId)
+        val values = newStore.values(draftId)
+        assertEquals("Typed draft", values["title"])
+        assertTrue(values.containsKey("manualColor"))
+        assertEquals(listOf(30, 0), DraftCodec.MinuteSet.restore(values["reminderMinutes"]).toList())
+        // Later changes are numbered above the restored revision.
+        newStore.put(draftId, "title", "Edited")
+        advanceUntilIdle()
+        assertEquals(4L, fileDraft(draftId)!!.revision)
+    }
+
+    @Test
+    fun aLargeDraftKeepsOnlyItsIdAndRevisionInTheBundleAndRestoresFromTheFile() = runTest {
+        val description = "d".repeat(EditorDraftStore.BUNDLE_DRAFT_MAX_CHARS)
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        val meeting = event("meeting")
+        shell.editEvent(meeting, meeting.editorSchedule())
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Typed draft")
+        store.put(draftId, "description", description)
+        advanceUntilIdle()
+
+        val saved = parcelRoundTrip(saveShell(shell, store))
+        assertFalse(saved.toString().contains(description))
+        assertEquals(SavedDraft(2, null), SavedShellState.fromSaveable(saved)!!.editorDraft)
+        val restored = restoreAfterProcessDeath(saved)
+
+        assertEquals(draftId, restored.shell.editorDraftId)
+        assertEquals("Typed draft", restored.store.values(draftId)["title"])
+        assertEquals(description, restored.store.values(draftId)["description"])
+    }
+
+    @Test
+    fun aNewerBundleWinsOverAnOlderFile() = runTest {
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        shell.openEventCreation(newEventSchedule(today, LocalTime.NOON, 60), DefaultColor)
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Written")
+        advanceUntilIdle()
+        // The process dies before this revision reaches the file.
+        store.put(draftId, "title", "Only in the Bundle")
+        val saved = parcelRoundTrip(saveShell(shell, store))
+        assertEquals(1L, fileDraft(draftId)!!.revision)
+
+        val restored = restoreAfterProcessDeath(saved)
+
+        assertEquals("Only in the Bundle", restored.store.values(draftId)["title"])
+    }
+
+    @Test
+    fun aNewerFileWinsOverAnOlderBundle() = runTest {
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        shell.openEventCreation(newEventSchedule(today, LocalTime.NOON, 60), DefaultColor)
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "In the Bundle")
+        val saved = parcelRoundTrip(saveShell(shell, store))
+        // The user keeps typing after the state was saved, e.g. in multi-window mode.
+        store.put(draftId, "title", "Written later")
+        advanceUntilIdle()
+        assertEquals(2L, fileDraft(draftId)!!.revision)
+
+        val restored = restoreAfterProcessDeath(saved)
+
+        assertEquals("Written later", restored.store.values(draftId)["title"])
+    }
+
+    @Test
+    fun aDraftFileWithoutRevisionIsReadAsRevisionZero() = runTest {
+        directory.mkdirs()
+        File(directory, "legacy.json").writeText("""{"values":{"title":"Legacy","manualColor":null}}""")
+
+        val draft = fileDraft("legacy")!!
+        assertEquals(0L, draft.revision)
+        assertEquals(mapOf("title" to "Legacy", "manualColor" to null), draft.values)
+
+        val store = restoredStore("legacy")
+        assertEquals("Legacy", store.values("legacy")["title"])
+        store.put("legacy", "title", "Edited")
+        advanceUntilIdle()
+        assertEquals(1L, fileDraft("legacy")!!.revision)
     }
 
     @Test
@@ -274,7 +398,7 @@ class EditorDraftStoreTest {
         assertTrue(store.values(eventDraftId).isEmpty())
         assertEquals(listOf("$taskDraftId.json"), draftFiles())
 
-        // Process death: a new store reads the file; the Bundle only holds the draft ID.
+        // Process death: a new store reads the file; the Bundle only holds the draft ID and revision.
         val saved = with(CalendarShellUiState.saver(today, DefaultColor, store) { loadedState }) {
             SaverScope { true }.save(shell)
         }!!
@@ -282,6 +406,8 @@ class EditorDraftStoreTest {
         val newStore = fileStore()
         val notLoaded = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
         assertTrue(notLoaded.hasPendingRestore)
+        newStore.onShellRestored(notLoaded.referencedDraftIds)
+        advanceUntilIdle()
         notLoaded.applyPendingRestore(loadedState)
 
         assertEquals(CreationSheet.Task, notLoaded.creationSheet)
@@ -308,8 +434,8 @@ class EditorDraftStoreTest {
     @Test
     fun unreferencedStaleDraftFilesAreDeletedOnceTheShellRestored() = runTest {
         val files = EditorDraftFiles(directory)
-        files.write("old", mapOf("title" to "Old"))
-        files.write("recent", mapOf("title" to "Recent"))
+        files.write("old", DraftRevision(1, mapOf("title" to "Old")))
+        files.write("recent", DraftRevision(1, mapOf("title" to "Recent")))
         File(directory, "leftover.json.tmp").writeText("{")
         val now = System.currentTimeMillis()
         File(directory, "old.json").setLastModified(now - TEN_DAYS_MILLIS)
@@ -333,6 +459,7 @@ class EditorDraftStoreTest {
         val draftId = shell.editorDraftId!!
         store.put(draftId, "title", "Typed ten days ago")
         store.flush()
+        runCurrent()
         val saved = with(CalendarShellUiState.saver(today, DefaultColor, store) { loadedState }) {
             SaverScope { true }.save(shell)
         }!!
@@ -354,7 +481,7 @@ class EditorDraftStoreTest {
 
     @Test
     fun referencedDraftsAreReadOnIoBeforeTheRestoredEditorAsksForThem() = runTest {
-        EditorDraftFiles(directory).write("restored", mapOf("title" to "From the file"))
+        EditorDraftFiles(directory).write("restored", DraftRevision(1, mapOf("title" to "From the file")))
         val store = fileStore()
 
         store.onShellRestored(referencedDraftIds = setOf("restored"))
@@ -366,7 +493,7 @@ class EditorDraftStoreTest {
 
     @Test
     fun cleanUpRacingAWriteCannotDeleteTheFreshRevision() = runBlocking {
-        EditorDraftFiles(directory).write("reopened", mapOf("title" to "Old"))
+        EditorDraftFiles(directory).write("reopened", DraftRevision(1, mapOf("title" to "Old")))
         val now = System.currentTimeMillis()
         File(directory, "reopened.json").setLastModified(now - TEN_DAYS_MILLIS)
         val blocked = BlockingFirstWrite()
@@ -385,7 +512,7 @@ class EditorDraftStoreTest {
             withTimeout(5_000) { ioScope.coroutineContext.job.children.forEach { it.join() } }
 
             assertEquals(listOf("$other.json", "reopened.json"), draftFiles().sorted())
-            assertEquals("Fresh", EditorDraftFiles(directory).read("reopened")!!["title"])
+            assertEquals("Fresh", fileDraft("reopened")!!.values["title"])
         } finally {
             blocked.release.countDown()
             ioScope.cancel()
@@ -410,7 +537,7 @@ class EditorDraftStoreTest {
         advanceUntilIdle()
 
         assertEquals(listOf("$draftId.json"), draftFiles())
-        assertEquals("Typed", fileStore().values(draftId)["title"])
+        assertEquals("Typed", fileDraft(draftId)!!.values["title"])
     }
 
     @Test
@@ -434,7 +561,8 @@ class EditorDraftStoreTest {
         store.flush()
         advanceUntilIdle()
 
-        assertEquals("Newer", fileStore().values(draftId)["title"])
+        assertEquals("Newer", fileDraft(draftId)!!.values["title"])
+        assertEquals(2L, fileDraft(draftId)!!.revision)
     }
 
     @Test
@@ -443,19 +571,20 @@ class EditorDraftStoreTest {
         val files = EditorDraftFiles(directory, replaceFile = { source, target ->
             if (failRename || !source.renameTo(target)) throw IOException("rename failed")
         })
-        assertTrue(files.write("draft", mapOf("title" to "Old")))
+        assertTrue(files.write("draft", DraftRevision(1, mapOf("title" to "Old"))))
 
         failRename = true
-        assertFalse(files.write("draft", mapOf("title" to "New")))
+        assertFalse(files.write("draft", DraftRevision(2, mapOf("title" to "New"))))
 
-        assertEquals(mapOf("title" to "Old"), files.read("draft"))
+        assertEquals(mapOf("title" to "Old"), files.read("draft")!!.values)
+        assertEquals(1L, files.read("draft")!!.revision)
         assertEquals(listOf("draft.json"), draftFiles())
     }
 
     @Test
     fun draftIdsCannotEscapeTheDraftDirectory() {
         val files = EditorDraftFiles(directory)
-        files.write("../escape", mapOf("title" to "x"))
+        files.write("../escape", DraftRevision(1, mapOf("title" to "x")))
 
         assertFalse(File(folder.root, "escape.json").exists())
         assertNull(files.read("../escape"))
@@ -465,18 +594,47 @@ class EditorDraftStoreTest {
         const val TEN_DAYS_MILLIS = 10L * 24 * 60 * 60 * 1000
     }
 
-    /** Draft files whose first write blocks until [release]. */
+    /** Draft files whose first write blocks until [release]; they record the threads that wrote. */
     private inner class BlockingFirstWrite {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
+        val writeThreads: MutableSet<Thread> = Collections.synchronizedSet(HashSet())
         private val first = AtomicBoolean(true)
         val files = EditorDraftFiles(directory, writeFile = { file, text ->
+            writeThreads += Thread.currentThread()
             if (first.getAndSet(false)) {
                 started.countDown()
                 release.await(5, TimeUnit.SECONDS)
             }
             file.writeText(text)
         })
+    }
+
+    private class Restored(val shell: CalendarShellUiState, val store: EditorDraftStore)
+
+    private fun saveShell(shell: CalendarShellUiState, store: EditorDraftStore): Any =
+        with(CalendarShellUiState.saver(today, DefaultColor, store) { loadedState }) { SaverScope { true }.save(shell) }!!
+
+    /** Restores [saved] into a new store the way the app does after process death. */
+    private fun TestScope.restoreAfterProcessDeath(saved: Any): Restored {
+        val store = fileStore()
+        val shell = CalendarShellUiState.saver(today, DefaultColor, store) { CalendarUiState() }.restore(saved)!!
+        assertTrue(shell.hasPendingRestore)
+        store.onShellRestored(shell.referencedDraftIds)
+        advanceUntilIdle()
+        shell.applyPendingRestore(loadedState)
+        return Restored(shell, store)
+    }
+
+    private fun parcelRoundTrip(value: Any): Any {
+        val parcel = Parcel.obtain()
+        try {
+            parcel.writeValue(value)
+            parcel.setDataPosition(0)
+            return parcel.readValue(javaClass.classLoader)!!
+        } finally {
+            parcel.recycle()
+        }
     }
 
     private fun saveAndRestore(shell: CalendarShellUiState, store: EditorDraftStore): CalendarShellUiState {

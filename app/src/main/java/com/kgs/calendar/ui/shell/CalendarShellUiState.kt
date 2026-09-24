@@ -58,7 +58,7 @@ internal class CalendarShellUiState(
             creationSheetState = value
         }
 
-    /** Identifies the open editor's draft; only this ID is kept in the saved-state Bundle. */
+    /** Identifies the open editor's draft; the saved-state Bundle keeps its values only while they are small. */
     var editorDraftId by mutableStateOf<String?>(null)
         private set
     var detailSheet by mutableStateOf<DetailSheet?>(null)
@@ -513,6 +513,7 @@ internal class CalendarShellUiState(
         draftWireframeColor = draftWireframeColor,
         editorWireframeMode = editorWireframeMode,
         editorDraftId = editorDraftId,
+        editorDraft = editorDraftId?.let(editorDrafts::saved),
         conversionSource = conversionSource?.savedRef(),
         hiddenSaveNotice = hiddenSaveNotice,
         viewHistory = viewHistory.toList(),
@@ -548,7 +549,9 @@ internal class CalendarShellUiState(
         val previousDraftId = editorDraftId
         creationSheetState = restoredSheet
         editorDraftId = if (restoredSheet != null) {
-            saved.editorDraftId ?: editorDrafts.newDraft()
+            saved.editorDraftId
+                ?.also { draftId -> saved.editorDraft?.let { editorDrafts.restore(draftId, it) } }
+                ?: editorDrafts.newDraft()
         } else {
             saved.editorDraftId?.let(editorDrafts::discard)
             null
@@ -600,7 +603,8 @@ internal class CalendarShellUiState(
 /**
  * The shell state, kept across activity recreation. After a rotation the ViewModel still holds
  * the calendar data, so the open sheets come back in the first frame; after process death they
- * come back once the data they refer to has loaded (or [PendingRestoreTimeoutMillis] later).
+ * come back once the data they refer to has loaded (or [PendingRestoreTimeoutMillis] later) and
+ * the file of the editor draft has been read.
  */
 @Composable
 internal fun rememberCalendarShellUiState(
@@ -624,6 +628,7 @@ internal fun rememberCalendarShellUiState(
                 snapshotFlow { currentState }.first(shell::canResolvePendingRestore)
             }
             snapshotFlow { currentState }.first { it.initialDataLoaded }
+            editorDrafts.awaitRestoredDrafts()
             shell.applyPendingRestore(currentState)
         }
     }

@@ -13,6 +13,7 @@ import com.kgs.calendar.ui.HiddenSaveKind
 import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorDraftStore
+import com.kgs.calendar.ui.editor.SavedDraft
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.DefaultColor
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.collection
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
@@ -64,6 +65,15 @@ class SavedShellStateTest {
             draftWireframeColor = DefaultColor,
             editorWireframeMode = true,
             editorDraftId = "0f8fad5b-d9cb-469f-a165-70867728950e",
+            editorDraft = SavedDraft(
+                revision = 7,
+                values = mapOf(
+                    "title" to "Typed",
+                    "manualColor" to null,
+                    "reminderMinutes" to listOf(30, 0),
+                    "transferDraft" to mapOf("title" to "x", "schedule" to mapOf("allDay" to false)),
+                ),
+            ),
             conversionSource = SavedItemRef.Event("lunch.ics", occurrenceStart),
             hiddenSaveNotice = HiddenSaveNotice("work", HiddenSaveKind.Task),
             viewHistory = listOf(CalendarViewMode.Month, CalendarViewMode.Day),

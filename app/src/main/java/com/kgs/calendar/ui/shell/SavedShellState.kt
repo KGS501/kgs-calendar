@@ -14,6 +14,7 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.editor.SavedDraft
 import com.kgs.calendar.ui.model.occurrenceIdOrNull
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
@@ -141,6 +142,7 @@ internal data class SavedShellState(
     val draftWireframeColor: Int,
     val editorWireframeMode: Boolean = false,
     val editorDraftId: String? = null,
+    val editorDraft: SavedDraft? = null,
     val conversionSource: SavedItemRef? = null,
     val hiddenSaveNotice: HiddenSaveNotice? = null,
     val viewHistory: List<CalendarViewMode> = emptyList(),
@@ -153,7 +155,7 @@ internal data class SavedShellState(
 
     /**
      * Plain lists, maps, strings and numbers only, so that it fits into a saved-state Bundle. The
-     * editor draft itself, which can hold long texts, is only referred to by [editorDraftId].
+     * editor draft, which can hold long texts, only brings its values along while they are small.
      */
     fun toSaveable(): Map<String, Any?> = hashMapOf(
         "createMenuOpen" to createMenuOpen,
@@ -173,6 +175,7 @@ internal data class SavedShellState(
         "draftWireframeColor" to draftWireframeColor,
         "editorWireframeMode" to editorWireframeMode,
         "editorDraftId" to editorDraftId,
+        "editorDraft" to editorDraft?.let { arrayListOf(it.revision, it.values?.let(::HashMap)) },
         "conversionSource" to conversionSource?.toSaveable(),
         "hiddenSaveNotice" to hiddenSaveNotice?.let { arrayListOf(it.collectionHref, it.kind.name) },
         "viewHistory" to ArrayList(viewHistory.map { it.name }),
@@ -207,6 +210,7 @@ internal data class SavedShellState(
                 draftWireframeColor = draftWireframeColor,
                 editorWireframeMode = map["editorWireframeMode"] == true,
                 editorDraftId = map["editorDraftId"] as? String,
+                editorDraft = savedDraftFromSaveable(map["editorDraft"]),
                 conversionSource = itemRefFromSaveable(map["conversionSource"]),
                 hiddenSaveNotice = (map["hiddenSaveNotice"] as? List<*>)?.let { saved ->
                     val href = saved.getOrNull(0) as? String
@@ -218,6 +222,15 @@ internal data class SavedShellState(
             )
         }
     }
+}
+
+private fun savedDraftFromSaveable(value: Any?): SavedDraft? {
+    val saved = value as? List<*> ?: return null
+    val revision = (saved.getOrNull(0) as? Number)?.toLong() ?: return null
+    val values = (saved.getOrNull(1) as? Map<*, *>)?.entries
+        ?.mapNotNull { (key, item) -> (key as? String)?.let { it to item } }
+        ?.toMap()
+    return SavedDraft(revision, values)
 }
 
 private fun SavedItemRef.toSaveable(): ArrayList<Any?> = when (this) {
