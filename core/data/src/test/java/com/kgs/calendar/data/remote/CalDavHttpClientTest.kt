@@ -2,8 +2,10 @@ package com.kgs.calendar.data.remote
 
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,14 +31,7 @@ class CalDavHttpClientTest {
 
     @Test
     fun discoversPrincipalHomeSchedulingAndCollectionCapabilities() = runTest {
-        server.enqueue(xmlResponse(discoveryResponse("/principals/users/alice/")))
-        server.enqueue(xmlResponse(principalResponse("/calendars/alice/")))
-        server.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .addHeader("DAV", "1, 3, calendar-access, calendar-schedule"),
-        )
-        server.enqueue(xmlResponse(collectionResponse()))
+        serveDiscovery(collectionResponse())
 
         val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
         val collections = client.discoverCollections(discovery, "alice", "secret")
@@ -116,14 +111,7 @@ class CalDavHttpClientTest {
 
     @Test
     fun discoversScheduleInboxAsReadOnlyTaskCollection() = runTest {
-        server.enqueue(xmlResponse(discoveryResponse("/principals/users/alice/")))
-        server.enqueue(xmlResponse(principalResponse("/calendars/alice/")))
-        server.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .addHeader("DAV", "1, 3, calendar-access, calendar-schedule"),
-        )
-        server.enqueue(xmlResponse(scheduleInboxCollectionResponse()))
+        serveDiscovery(scheduleInboxCollectionResponse())
 
         val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
         val collections = client.discoverCollections(discovery, "alice", "secret")
@@ -177,6 +165,25 @@ class CalDavHttpClientTest {
         val body = request.body.readUtf8()
         assertTrue(body.contains("calendar-query"))
         assertTrue(body.contains("""<cal:comp-filter name="VTODO" />"""))
+    }
+
+    /**
+     * Answers discovery by method and path rather than queue order, so a transient connection
+     * retry under load can't shift every later response.
+     */
+    private fun serveDiscovery(collections: String) {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.method == "OPTIONS" -> MockResponse()
+                    .setResponseCode(200)
+                    .addHeader("DAV", "1, 3, calendar-access, calendar-schedule")
+                request.method != "PROPFIND" -> MockResponse().setResponseCode(405)
+                request.path == "/" -> xmlResponse(discoveryResponse("/principals/users/alice/"))
+                request.path == "/principals/users/alice/" -> xmlResponse(principalResponse("/calendars/alice/"))
+                request.path == "/calendars/alice/" -> xmlResponse(collections)
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
     }
 
     private fun xmlResponse(body: String) = MockResponse()

@@ -176,8 +176,8 @@ class CalendarViewModelTest {
             assertEquals(event.resourceHref, (opened as CalendarUiEvent.OpenEvent).event.resourceHref)
             expectNoEvents()
         }
-        val state = viewModel.awaitState { it.selectedDate == day }
-        assertEquals(CalendarViewMode.Day, state.selectedView)
+        // The view reaches uiState one emission after the date, so wait for both.
+        viewModel.awaitState { it.selectedDate == day && it.selectedView == CalendarViewMode.Day }
     }
 
     @Test
@@ -202,6 +202,8 @@ class CalendarViewModelTest {
         val date = LocalDate.of(2026, 7, 15)
 
         viewModel.selectView(CalendarViewMode.Day)
+        // selectDate anchors the date to the current view, so let the view settle first.
+        viewModel.awaitState { it.selectedView == CalendarViewMode.Day }
         viewModel.selectDate(date)
         // Range and view are separate inputs, so wait for the state in which both have settled.
         val dayRange = CalendarRange(LocalDate.of(2026, 6, 14), LocalDate.of(2026, 8, 15))
