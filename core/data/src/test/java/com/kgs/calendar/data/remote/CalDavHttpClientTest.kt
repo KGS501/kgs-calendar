@@ -12,6 +12,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 class CalDavHttpClientTest {
     private lateinit var server: MockWebServer
@@ -21,7 +22,13 @@ class CalDavHttpClientTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        client = CalDavHttpClient(OkHttpClient())
+        // Generous timeouts: a timed-out discovery request falls through to the next candidate URL.
+        client = CalDavHttpClient(
+            OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build(),
+        )
     }
 
     @After

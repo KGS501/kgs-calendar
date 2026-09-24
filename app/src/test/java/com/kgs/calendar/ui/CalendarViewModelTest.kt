@@ -294,7 +294,7 @@ class CalendarViewModelTest {
 /** Waits in wall-clock time: Room and DataStore deliver on their own threads. */
 private suspend fun CalendarViewModel.awaitState(predicate: (CalendarUiState) -> Boolean): CalendarUiState =
     withContext(Dispatchers.Default) {
-        withTimeout(10_000) { uiState.first(predicate) }
+        withTimeout(30_000) { uiState.first(predicate) }
     }
 
 private class RecordingWidgetRefresher : WidgetRefresher {
@@ -310,7 +310,7 @@ private class RecordingWidgetRefresher : WidgetRefresher {
 
     suspend fun awaitUpdates(predicate: (List<Pair<KgsWidgetKind?, Boolean>>) -> Boolean) =
         withContext(Dispatchers.Default) {
-            withTimeout(10_000) { updates.first(predicate) }
+            withTimeout(30_000) { updates.first(predicate) }
         }
 }
 

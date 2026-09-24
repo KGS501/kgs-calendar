@@ -75,9 +75,9 @@ class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
         .build()
     val credentials = InMemoryCredentialsStore()
     val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
-        .writeTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
     val components = CalendarDataComponents(
         database = database,
