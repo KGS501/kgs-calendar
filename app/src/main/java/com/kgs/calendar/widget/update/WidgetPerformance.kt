@@ -1,7 +1,11 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.update
 
 import android.content.Context
+import android.content.res.Configuration
 import android.os.SystemClock
+import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WidgetLog
+import com.kgs.calendar.widget.bitmap.KgsWidgetBitmapUriStore
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong

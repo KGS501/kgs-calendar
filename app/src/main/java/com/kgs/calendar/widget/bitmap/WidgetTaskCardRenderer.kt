@@ -1,5 +1,6 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.bitmap
 
+import com.kgs.calendar.widget.KgsWidgetKind
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max

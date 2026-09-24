@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.bitmap.WidgetImageCacheEntry
+import com.kgs.calendar.widget.bitmap.cachedWidgetValue
+import com.kgs.calendar.widget.bitmap.selectWidgetImageCacheEvictions
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.model
 
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -6,6 +6,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 
 private const val WIDGET_MONTH_MAX_LANES = 10
 

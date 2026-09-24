@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.model
 
 import android.util.SizeF
 import com.kgs.calendar.R

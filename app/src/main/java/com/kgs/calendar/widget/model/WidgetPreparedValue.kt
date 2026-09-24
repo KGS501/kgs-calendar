@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.model
 
 internal suspend fun <T> preparedWidgetValue(
     prepared: T?,

@@ -1,13 +1,24 @@
 package com.kgs.calendar.widget
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import com.kgs.calendar.widget.model.WidgetMonthCandidate
+import com.kgs.calendar.widget.model.WidgetMonthCellContent
+import com.kgs.calendar.widget.model.WidgetMonthItem
+import com.kgs.calendar.widget.model.WidgetMonthLayout
+import com.kgs.calendar.widget.model.WidgetMonthModel
+import com.kgs.calendar.widget.model.WidgetMonthRenderSpec
+import com.kgs.calendar.widget.model.WidgetSize
+import com.kgs.calendar.widget.model.WidgetSizeBucket
+import com.kgs.calendar.widget.model.loadingSkeleton
+import com.kgs.calendar.widget.model.monthBottomFadeSegments
+import com.kgs.calendar.widget.model.monthWeekSegments
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class WidgetMonthModelTest {
     @Test

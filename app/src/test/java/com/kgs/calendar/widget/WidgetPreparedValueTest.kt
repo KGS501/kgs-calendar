@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.model.loadSubtaskTransitionSnapshots
+import com.kgs.calendar.widget.model.preparedWidgetValue
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test

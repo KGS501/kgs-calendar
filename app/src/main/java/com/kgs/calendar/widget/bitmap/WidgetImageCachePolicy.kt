@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.bitmap
 
 internal data class WidgetImageCacheEntry(
     val name: String,

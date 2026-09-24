@@ -14,8 +14,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
-import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
-import com.kgs.calendar.widget.WidgetDataGeneration
+import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.state.WidgetDataGeneration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

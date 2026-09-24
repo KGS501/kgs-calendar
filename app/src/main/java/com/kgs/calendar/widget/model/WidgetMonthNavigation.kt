@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.model
 
 import java.time.Clock
 import java.time.YearMonth

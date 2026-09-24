@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.update.WidgetPerformanceMetrics
+import com.kgs.calendar.widget.update.WidgetUpdateCause
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

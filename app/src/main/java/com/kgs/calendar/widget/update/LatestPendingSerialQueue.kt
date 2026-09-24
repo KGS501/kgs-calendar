@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.update
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart

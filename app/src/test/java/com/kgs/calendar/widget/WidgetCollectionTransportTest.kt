@@ -1,6 +1,7 @@
 package com.kgs.calendar.widget
 
 import android.os.Build
+import com.kgs.calendar.widget.model.usesDirectCollectionItemsAtSdk
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

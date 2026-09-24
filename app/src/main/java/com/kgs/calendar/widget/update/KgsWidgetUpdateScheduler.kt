@@ -1,10 +1,13 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.update
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.model.next
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,7 +15,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
 internal class OnceCompletion(private val onComplete: () -> Unit) {
     private val completed = AtomicBoolean(false)

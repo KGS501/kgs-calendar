@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.model.multiWidgetRenderSignature
+import com.kgs.calendar.widget.model.shouldBuildMonthRemoteViews
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

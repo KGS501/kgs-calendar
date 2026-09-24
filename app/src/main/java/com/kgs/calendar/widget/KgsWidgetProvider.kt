@@ -1,76 +1,37 @@
 package com.kgs.calendar.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.DashPathEffect
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.RectF
-import android.graphics.Shader
-import android.graphics.Typeface
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.StyleSpan
-import android.util.Log
-import android.util.TypedValue
-import android.view.Gravity
-import android.view.View
 import android.widget.RemoteViews
-import android.widget.RemoteViewsService
-import androidx.annotation.RequiresApi
 import com.kgs.calendar.KgsCalendarApplication
-import com.kgs.calendar.MainActivity
 import com.kgs.calendar.R
-import com.kgs.calendar.data.local.entity.EventEntity
-import com.kgs.calendar.data.local.entity.TaskEntity
-import com.kgs.calendar.data.settings.AppColorMode
-import com.kgs.calendar.data.settings.AppLanguageMode
-import com.kgs.calendar.data.settings.AppThemeMode
-import com.kgs.calendar.data.settings.SettingsStore
-import com.kgs.calendar.data.settings.TaskColorMode
-import com.kgs.calendar.data.settings.WidgetColorMode
-import com.kgs.calendar.data.settings.WidgetTaskCreateMode
-import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
-import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
-import com.kgs.calendar.data.settings.WidgetThemeMode
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import com.kgs.calendar.widget.model.MonthCommand
+import com.kgs.calendar.widget.model.MonthNavSnapshot
+import com.kgs.calendar.widget.model.next
+import com.kgs.calendar.widget.model.usesDirectCollectionItems
+import com.kgs.calendar.widget.render.WidgetPendingIntents
+import com.kgs.calendar.widget.render.bindTasksSortButtonState
+import com.kgs.calendar.widget.render.widgetButtonWidthDp
+import com.kgs.calendar.widget.state.KgsWidgetDayState
+import com.kgs.calendar.widget.state.KgsWidgetInteractionTokens
+import com.kgs.calendar.widget.state.KgsWidgetMonthState
+import com.kgs.calendar.widget.state.tasksListTokenKey
+import com.kgs.calendar.widget.state.tasksSortButtonTokenKey
+import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.update.KgsWidgetUpdater
+import com.kgs.calendar.widget.update.WidgetUpdateCause
+import com.kgs.calendar.widget.update.animateTasksSortButton
+import com.kgs.calendar.widget.update.prepareTasksSortButtonForModeChange
+import com.kgs.calendar.widget.update.refreshTasksWidgetRows
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.time.DayOfWeek
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.time.temporal.ChronoUnit
-import java.util.Locale
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.roundToInt
 
 class KgsAgendaWidgetProvider : KgsWidgetProvider(KgsWidgetKind.Agenda)
 
@@ -338,9 +299,9 @@ abstract class KgsWidgetProvider(
     private fun RemoteViews.bindTasksCollectionActions(context: Context, appWidgetId: Int) {
         setRemoteAdapter(
             R.id.widget_list,
-            tasksCollectionAdapterIntent(context, appWidgetId),
+            WidgetPendingIntents(context).collectionAdapterIntent(KgsWidgetKind.Tasks, appWidgetId),
         )
-        setPendingIntentTemplate(R.id.widget_list, tasksCollectionClickPendingIntent(context, appWidgetId))
+        setPendingIntentTemplate(R.id.widget_list, WidgetPendingIntents(context).collectionClickPendingIntent(KgsWidgetKind.Tasks, appWidgetId))
     }
 
     private fun navigateMonthAsync(

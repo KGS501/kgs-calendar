@@ -1,4 +1,4 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.data
 
 import android.content.Context
 import com.kgs.calendar.KgsCalendarApplication
@@ -10,19 +10,22 @@ import com.kgs.calendar.domain.event.monthOccurrenceKey
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.widget.WidgetLog
+import com.kgs.calendar.widget.model.WidgetMonthCandidate
+import com.kgs.calendar.widget.model.WidgetMonthLayout
+import com.kgs.calendar.widget.model.WidgetMonthModel
+import com.kgs.calendar.widget.model.WidgetMonthPage
+import com.kgs.calendar.widget.model.WidgetRenderSettings
+import com.kgs.calendar.widget.model.monthCacheWindow
+import com.kgs.calendar.widget.state.KgsWidgetMonthPageCache
+import com.kgs.calendar.widget.state.WidgetDataGeneration
+import com.kgs.calendar.widget.state.widgetMonthPageModelNamespace
+import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.withWidgetLocale
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
-
-internal object WidgetDataGeneration {
-    private val generation = AtomicLong()
-
-    fun current(): Long = generation.get()
-
-    fun increment(): Long = generation.incrementAndGet()
-}
 
 internal class WidgetMonthPageSource(
     private val context: Context,

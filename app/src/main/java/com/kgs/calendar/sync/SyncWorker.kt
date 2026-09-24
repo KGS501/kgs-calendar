@@ -11,7 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import com.kgs.calendar.KgsCalendarApplication
-import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 

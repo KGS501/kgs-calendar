@@ -1,8 +1,19 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.state
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
+import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WIDGET_MONTH_RENDER_SIGNATURE_VERSION
+import com.kgs.calendar.widget.model.MonthCommand
+import com.kgs.calendar.widget.model.MonthNavSnapshot
+import com.kgs.calendar.widget.model.MonthNavStorage
+import com.kgs.calendar.widget.model.MonthNavSynchronizationDomain
+import com.kgs.calendar.widget.model.WidgetCollectionSnapshot
+import com.kgs.calendar.widget.model.WidgetMonthNavigation
+import com.kgs.calendar.widget.model.WidgetMonthPage
+import com.kgs.calendar.widget.model.WidgetRenderSettings
+import com.kgs.calendar.widget.model.next
 import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
@@ -378,33 +389,6 @@ internal object KgsWidgetCollectionUpdateSignatures {
     private fun key(kind: KgsWidgetKind, appWidgetId: Int): String =
         "${kind.name}:$appWidgetId"
 }
-
-internal data class WidgetCollectionSnapshot(
-    val kind: KgsWidgetKind,
-    val appWidgetId: Int,
-    val settings: WidgetRenderSettings,
-    val palette: WidgetPalette,
-    val renderSize: WidgetSize,
-    val taskArtWidthDp: Float,
-    val rows: List<WidgetListRow>,
-    val signature: String,
-    val createdAtMillis: Long = SystemClock.elapsedRealtime(),
-)
-
-internal data class WidgetCollectionRenderOptions(
-    val taskRows: Map<Long, WidgetTaskRowRenderOptions> = emptyMap(),
-    val suppressPriorityMotion: Boolean = false,
-    val lightweightTaskTransition: Boolean = false,
-    val taskArtWidthDp: Float = WIDGET_TASK_ART_WIDTH_DP.toFloat(),
-) {
-    fun withTaskArtWidth(widthDp: Float): WidgetCollectionRenderOptions =
-        copy(taskArtWidthDp = widthDp.coerceAtLeast(1f))
-}
-
-internal data class WidgetTaskRowRenderOptions(
-    val rowProgress: Float = 1f,
-    val subtaskExpansionProgress: Float? = null,
-)
 
 internal object KgsWidgetCollectionRowsCache {
     private const val MAX_AGE_MS = 30 * 60 * 1_000L

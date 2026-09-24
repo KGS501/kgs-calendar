@@ -30,7 +30,7 @@ import com.kgs.calendar.ui.UiStrings
 import com.kgs.calendar.ui.WidgetRefresher
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
-import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
+import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first

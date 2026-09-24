@@ -1,36 +1,14 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.model
 
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
-import com.kgs.calendar.R
-
-enum class KgsWidgetKind {
-    Agenda,
-    Month,
-    Tasks,
-    Multi,
-    Day;
-
-    val providerClass: Class<out AppWidgetProvider>
-        get() = when (this) {
-            Agenda -> KgsAgendaWidgetProvider::class.java
-            Month -> KgsMonthWidgetProvider::class.java
-            Tasks -> KgsTasksWidgetProvider::class.java
-            Multi -> KgsMultiWidgetProvider::class.java
-            Day -> KgsDayWidgetProvider::class.java
-        }
-
-    fun title(context: Context): String = when (this) {
-        Agenda -> context.getString(R.string.agenda)
-        Month -> context.getString(R.string.month)
-        Tasks -> context.getString(R.string.tasks)
-        Multi -> context.getString(R.string.widget_multi_title)
-        Day -> context.getString(R.string.day)
-    }
-}
+import com.kgs.calendar.widget.KgsWidgetKind
+import com.kgs.calendar.widget.WIDGET_AGENDA_COLUMN_GAP_DP
+import com.kgs.calendar.widget.WIDGET_AGENDA_DATE_COLUMN_WIDTH_DP
+import com.kgs.calendar.widget.WIDGET_TASK_CARD_SIDE_INSET_DP
+import com.kgs.calendar.widget.WIDGET_TASK_MIN_CARD_WIDTH_DP
 
 internal data class WidgetSize(
     val widthDp: Int,
@@ -66,4 +44,33 @@ internal data class WidgetSize(
             )
         }
     }
+}
+
+internal fun WidgetSize.collectionArtWidthDp(kind: KgsWidgetKind): Float =
+    when (kind) {
+        KgsWidgetKind.Agenda,
+        KgsWidgetKind.Multi,
+        KgsWidgetKind.Day -> (
+            widthDp -
+                WIDGET_TASK_CARD_SIDE_INSET_DP * 2 -
+                WIDGET_AGENDA_DATE_COLUMN_WIDTH_DP -
+                WIDGET_AGENDA_COLUMN_GAP_DP
+            ).toFloat().coerceAtLeast(WIDGET_TASK_MIN_CARD_WIDTH_DP)
+        else -> widthDp.toFloat().coerceAtLeast(1f)
+    }
+
+internal fun WidgetSize.dayGridContentWidthDp(): Float =
+    widthDp.toFloat().coerceAtLeast(120f)
+
+internal fun shouldHideWidgetTitle(
+    widthDp: Number,
+    title: String,
+    reservedDp: Float,
+    textSp: Float,
+): Boolean {
+    val available = (widthDp.toFloat() - reservedDp).coerceAtLeast(0f)
+    if (available < 28f) return true
+    val estimatedTitleWidth = title.length * textSp * 0.54f
+    if (estimatedTitleWidth <= 0f) return false
+    return available / estimatedTitleWidth < 0.38f
 }

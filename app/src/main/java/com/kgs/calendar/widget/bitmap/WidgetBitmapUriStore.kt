@@ -1,8 +1,9 @@
-package com.kgs.calendar.widget
+package com.kgs.calendar.widget.bitmap
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import com.kgs.calendar.widget.update.WidgetPerformanceMonitor
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
