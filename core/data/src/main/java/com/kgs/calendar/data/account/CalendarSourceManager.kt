@@ -25,6 +25,8 @@ import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.source.isAndroidProviderAccount
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Calendar sources and their collections: login flow, CalDAV/read-only/Android/local accounts,
@@ -60,8 +62,15 @@ class CalendarSourceManager internal constructor(
             lastSyncAtMillis = null,
             sourceType = SourceType.ReadOnlyUrl,
         )
+        val isNewAccount = database.accountDao().get(account.id) == null
         database.accountDao().upsert(account)
-        readOnlyUrlSyncEngine.sync(account)
+        try {
+            readOnlyUrlSyncEngine.sync(account)
+        } catch (error: Throwable) {
+            // A URL that never loaded must not stay behind as an empty source; its collection and items cascade.
+            if (isNewAccount) withContext(NonCancellable) { deleteAccount(account.id) }
+            throw error
+        }
         return account
     }
 

@@ -909,7 +909,7 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
         }
     }.distinctBy { it.id }
 
-private fun String.isProblemMessage(): Boolean {
+internal fun String.isProblemMessage(): Boolean {
     val lower = lowercase(Locale.ROOT)
     return listOf("error", "failed", "fehl", "konnte", "unable", "sync", "warn").any { it in lower }
 }

@@ -100,7 +100,13 @@ class CalendarSourceActions internal constructor(
     }
 
     fun addReadOnlyCalendar(url: String) {
-        runStructuralMutation(CalendarStructuralMutation.AddSource, "Read-only calendar added.", showManualSync = true) {
+        runStructuralMutation(
+            CalendarStructuralMutation.AddSource,
+            "Read-only calendar added.",
+            showManualSync = true,
+            // A failed subscription leaves no source behind, so this notice is the only place the error shows up.
+            failureMessage = { "Adding the read-only calendar failed. ${it.message ?: it::class.java.simpleName}" },
+        ) {
             repository.addReadOnlyCalendar(url)
         }
     }
@@ -213,6 +219,7 @@ class CalendarSourceActions internal constructor(
         kind: CalendarStructuralMutation,
         successMessage: String? = null,
         showManualSync: Boolean = false,
+        failureMessage: (Throwable) -> String = { it.message ?: "Could not update calendar settings." },
         mutation: suspend () -> Unit,
     ) {
         scope.launch {
@@ -224,7 +231,7 @@ class CalendarSourceActions internal constructor(
                 refreshAndroidProviderDiagnosticsInternal()
                 message.value = structuralMutationMessage(result, successMessage)
             }.onFailure {
-                message.value = it.message ?: "Could not update calendar settings."
+                message.value = failureMessage(it)
             }
             if (showManualSync) manualSyncing.value = false
             busy.value = false
