@@ -5,8 +5,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-internal fun Long.toDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
+fun Long.toDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
     Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()
 
-internal fun Long.toTimeText(zoneId: ZoneId = ZoneId.systemDefault()): String =
+fun Long.toTimeText(zoneId: ZoneId = ZoneId.systemDefault()): String =
     Instant.ofEpochMilli(this).atZone(zoneId).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))

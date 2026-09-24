@@ -1,4 +1,7 @@
 [versions]
+compileSdk = "36"
+minSdk = "26"
+jvmTarget = "17"
 agp = "9.2.0"
 kotlin = "2.3.0"
 ksp = "2.3.8"
@@ -61,6 +64,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }

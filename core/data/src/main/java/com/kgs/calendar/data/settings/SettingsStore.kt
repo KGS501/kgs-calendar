@@ -24,7 +24,7 @@ import java.time.LocalDate
 
 private val Context.dataStore by preferencesDataStore(name = "kgs_settings")
 
-class SettingsStore internal constructor(private val dataStore: DataStore<Preferences>) {
+class SettingsStore(private val dataStore: DataStore<Preferences>) {
     constructor(context: Context) : this(context.dataStore)
 
     val lastBackgroundedAtMillis: Flow<Long?> = dataStore.data.map { prefs ->

@@ -16,5 +16,5 @@ internal fun normalizeReadOnlyCalendarUrl(value: String): String {
     return parsed.toString()
 }
 
-internal fun isSupportedReadOnlyCalendarUrl(value: String): Boolean =
+fun isSupportedReadOnlyCalendarUrl(value: String): Boolean =
     runCatching { normalizeReadOnlyCalendarUrl(value) }.isSuccess

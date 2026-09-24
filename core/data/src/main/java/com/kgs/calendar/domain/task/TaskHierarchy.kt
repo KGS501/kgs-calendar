@@ -6,7 +6,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
  * Resolves RELATED-TO parents within [tasks]: a parent in the same collection wins, otherwise a
  * task whose UID is unique across [tasks].
  */
-internal class TaskParentLookup(tasks: List<TaskEntity>) {
+class TaskParentLookup(tasks: List<TaskEntity>) {
     private val byCollectionUid = tasks.associateBy { it.collectionHref to it.uid }
     private val globallyUniqueByUid = tasks.groupBy { it.uid }
         .filterValues { it.size == 1 }
@@ -38,7 +38,7 @@ internal class TaskParentLookup(tasks: List<TaskEntity>) {
  * on itself get no parent, so a cycle is shown as separate roots instead of disappearing.
  * [this] must already be distinct by [identity].
  */
-internal fun <K> List<TaskEntity>.treeParents(identity: (TaskEntity) -> K): Map<K, TaskEntity?> {
+fun <K> List<TaskEntity>.treeParents(identity: (TaskEntity) -> K): Map<K, TaskEntity?> {
     val lookup = TaskParentLookup(this)
     return associate { task ->
         var parent = lookup.parentOf(task)

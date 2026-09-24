@@ -4,7 +4,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.kgs.calendar.domain.model.SourceType
 
-internal object KgsDatabaseMigrations {
+object KgsDatabaseMigrations {
     val ALL: Array<Migration> get() = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,

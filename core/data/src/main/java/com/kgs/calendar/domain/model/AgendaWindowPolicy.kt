@@ -3,7 +3,7 @@ package com.kgs.calendar.domain.model
 import java.time.LocalDate
 
 /** Bounded Agenda data windows that can grow without rebuilding a fifteen-year query. */
-internal object AgendaWindowPolicy {
+object AgendaWindowPolicy {
     private const val MonthsBeforeAnchor = 12L
     private const val MonthsAfterAnchor = 24L
     private const val ExtensionMonths = 12L
@@ -28,5 +28,5 @@ internal object AgendaWindowPolicy {
     )
 }
 
-internal fun CalendarRange.contains(date: LocalDate): Boolean =
+fun CalendarRange.contains(date: LocalDate): Boolean =
     !date.isBefore(startDate) && date.isBefore(endExclusiveDate)

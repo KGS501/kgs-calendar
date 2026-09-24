@@ -735,8 +735,7 @@ internal fun Context.openMapLocation(location: String) {
 internal fun TaskEntity.displayProgress(): Int =
     when {
         isCompleted -> 100
-        percentComplete != null -> percentComplete.coerceIn(0, 100)
-        else -> 0
+        else -> percentComplete?.coerceIn(0, 100) ?: 0
     }
 
 internal fun TaskEntity.cardTextDecoration(): TextDecoration? =
