@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -35,6 +36,9 @@ class EditorDraftStore(
 ) {
     private val drafts = HashMap<String, HashMap<String, Any?>>()
     private val discarded = HashSet<String>()
+
+    /** Drafts read from their files on IO before the restored editor asks for them. */
+    private val preloaded = ConcurrentHashMap<String, Map<String, Any?>>()
     private val lock = Any()
 
     /** Serializes every file operation: writes, deletes and the stale draft clean-up. */
@@ -64,6 +68,7 @@ class EditorDraftStore(
     /** Ends [draftId] after its editor was saved or closed, in memory and on disk. */
     fun discard(draftId: String) {
         drafts.remove(draftId)
+        preloaded.remove(draftId)
         discarded += draftId
         enqueueWrite(draftId, null)
     }
@@ -91,14 +96,17 @@ class EditorDraftStore(
      * Called once the shell has restored its saved state, or found none, with the draft IDs that
      * state refers to. Only then, and once per store, the files of drafts that were never saved or
      * discarded (e.g. after a crash) are deleted when their last write is older than
-     * [STALE_DRAFT_MAX_AGE_MILLIS]. Live, referenced and pending drafts are kept.
+     * [STALE_DRAFT_MAX_AGE_MILLIS]. Live, referenced and pending drafts are kept. The referenced
+     * drafts are read first, so that the editor restored after process death finds them in memory.
      */
     fun onShellRestored(referencedDraftIds: Set<String>, nowMillis: Long = System.currentTimeMillis()) {
         val files = files ?: return
         if (staleDraftsChecked) return
         staleDraftsChecked = true
         val keep = drafts.keys + referencedDraftIds
+        val toRead = referencedDraftIds.filter { it !in drafts && it !in discarded }
         ioScope.launch {
+            toRead.forEach { draftId -> files.read(draftId)?.let { preloaded[draftId] = it } }
             fileLock.withLock {
                 val pending = synchronized(lock) { pendingWrites.keys.toSet() }
                 files.deleteOlderThan(nowMillis - STALE_DRAFT_MAX_AGE_MILLIS, keep = keep + pending)
@@ -108,7 +116,7 @@ class EditorDraftStore(
 
     private fun liveDraft(draftId: String): HashMap<String, Any?>? {
         if (draftId in discarded) return null
-        return drafts.getOrPut(draftId) { HashMap(files?.read(draftId).orEmpty()) }
+        return drafts.getOrPut(draftId) { HashMap(preloaded.remove(draftId) ?: files?.read(draftId).orEmpty()) }
     }
 
     private fun enqueueWrite(draftId: String, values: Map<String, Any?>?) {

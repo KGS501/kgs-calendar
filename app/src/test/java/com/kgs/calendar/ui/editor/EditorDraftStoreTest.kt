@@ -353,6 +353,18 @@ class EditorDraftStoreTest {
     }
 
     @Test
+    fun referencedDraftsAreReadOnIoBeforeTheRestoredEditorAsksForThem() = runTest {
+        EditorDraftFiles(directory).write("restored", mapOf("title" to "From the file"))
+        val store = fileStore()
+
+        store.onShellRestored(referencedDraftIds = setOf("restored"))
+        advanceUntilIdle()
+        File(directory, "restored.json").delete()
+
+        assertEquals("From the file", store.values("restored")["title"])
+    }
+
+    @Test
     fun cleanUpRacingAWriteCannotDeleteTheFreshRevision() = runBlocking {
         EditorDraftFiles(directory).write("reopened", mapOf("title" to "Old"))
         val now = System.currentTimeMillis()
