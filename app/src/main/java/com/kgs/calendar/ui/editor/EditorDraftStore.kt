@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.editor
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -8,6 +9,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.util.UUID
 
 /**
@@ -97,7 +100,11 @@ class EditorDraftStore(
                 LinkedHashMap(pendingWrites).also { pendingWrites.clear() }
             }
             batch.forEach { (draftId, values) ->
-                if (values == null) files.delete(draftId) else files.write(draftId, values)
+                val persisted = if (values == null) files.delete(draftId) else files.write(draftId, values)
+                // A failed revision stays pending for the next write or flush unless a newer one replaced it.
+                if (!persisted) {
+                    synchronized(lock) { if (!pendingWrites.containsKey(draftId)) pendingWrites[draftId] = values }
+                }
             }
         }
     }
@@ -111,9 +118,14 @@ class EditorDraftStore(
 /**
  * One small JSON file per editor draft in a private [directory]. Values are strings, numbers,
  * booleans, null, lists and string-keyed maps of those; a stored null stays distinct from a
- * missing value.
+ * missing value. A file is replaced by writing a temporary file and renaming it over the old one,
+ * so a failed write leaves the previous revision intact.
  */
-class EditorDraftFiles(private val directory: File) {
+class EditorDraftFiles(
+    private val directory: File,
+    private val writeFile: (File, String) -> Unit = ::writeSynced,
+    private val replaceFile: (source: File, target: File) -> Unit = ::replaceAtomically,
+) {
     fun read(draftId: String): Map<String, Any?>? {
         val file = fileFor(draftId) ?: return null
         if (!file.isFile) return null
@@ -123,21 +135,28 @@ class EditorDraftFiles(private val directory: File) {
         }.getOrNull()
     }
 
-    fun write(draftId: String, values: Map<String, Any?>) {
-        val file = fileFor(draftId) ?: return
-        runCatching {
+    /** Whether [values] are now the stored revision of [draftId]. */
+    fun write(draftId: String, values: Map<String, Any?>): Boolean {
+        val file = fileFor(draftId) ?: return false
+        val temporary = File(directory, "${file.name}$TEMPORARY_SUFFIX")
+        return try {
             directory.mkdirs()
-            val temporary = File(directory, "${file.name}.tmp")
-            temporary.writeText(JSONObject().put(VALUES, values.toJson()).toString())
-            if (!temporary.renameTo(file)) {
-                file.delete()
-                temporary.renameTo(file)
-            }
+            writeFile(temporary, JSONObject().put(VALUES, values.toJson()).toString())
+            replaceFile(temporary, file)
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to write editor draft $draftId", error)
+            temporary.delete()
+            false
         }
     }
 
-    fun delete(draftId: String) {
-        fileFor(draftId)?.delete()
+    /** Whether no file of [draftId] is left. */
+    fun delete(draftId: String): Boolean {
+        val file = fileFor(draftId) ?: return true
+        if (file.delete() || !file.exists()) return true
+        Log.w(TAG, "Failed to delete editor draft $draftId")
+        return false
     }
 
     fun deleteOlderThan(cutoffMillis: Long) {
@@ -152,7 +171,21 @@ class EditorDraftFiles(private val directory: File) {
 
     private companion object {
         const val VALUES = "values"
+        const val TEMPORARY_SUFFIX = ".tmp"
+        const val TAG = "KgsEditorDraft"
     }
+}
+
+private fun writeSynced(file: File, text: String) {
+    FileOutputStream(file).use { output ->
+        output.write(text.toByteArray())
+        output.fd.sync()
+    }
+}
+
+/** Replaces [target] in one step; on failure it keeps its previous contents. */
+private fun replaceAtomically(source: File, target: File) {
+    if (!source.renameTo(target)) throw IOException("Failed to rename ${source.name} to ${target.name}")
 }
 
 private fun Any?.toJson(): Any = when (this) {

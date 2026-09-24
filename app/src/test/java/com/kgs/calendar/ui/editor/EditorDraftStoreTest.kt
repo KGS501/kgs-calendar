@@ -23,10 +23,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.File
+import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalTime
 
+// Robolectric provides android.util.Log for the logged write failures.
+@RunWith(RobolectricTestRunner::class)
 class EditorDraftStoreTest {
     @get:Rule
     val folder = TemporaryFolder()
@@ -256,6 +261,66 @@ class EditorDraftStoreTest {
         advanceUntilIdle()
 
         assertEquals(listOf("recent.json"), draftFiles())
+    }
+
+    @Test
+    fun aFailedWriteStaysPendingAndALaterFlushWritesIt() = runTest {
+        var failWrites = true
+        val files = EditorDraftFiles(directory, writeFile = { file, text ->
+            if (failWrites) throw IOException("No space left on device")
+            file.writeText(text)
+        })
+        val store = EditorDraftStore(files, ioScope = this)
+        val draftId = store.newDraft()
+        store.put(draftId, "title", "Typed")
+        advanceUntilIdle()
+        assertTrue(draftFiles().isEmpty())
+
+        failWrites = false
+        store.flush()
+        advanceUntilIdle()
+
+        assertEquals(listOf("$draftId.json"), draftFiles())
+        assertEquals("Typed", fileStore().values(draftId)["title"])
+    }
+
+    @Test
+    fun aNewerRevisionQueuedDuringAFailedWriteIsNotReplacedByTheRetry() = runTest {
+        lateinit var store: EditorDraftStore
+        lateinit var draftId: String
+        var failWrites = true
+        val files = EditorDraftFiles(directory, writeFile = { file, text ->
+            if (failWrites) {
+                failWrites = false
+                store.put(draftId, "title", "Newer")
+                throw IOException("No space left on device")
+            }
+            file.writeText(text)
+        })
+        store = EditorDraftStore(files, ioScope = this)
+        draftId = store.newDraft()
+        store.put(draftId, "title", "Older")
+        advanceUntilIdle()
+
+        store.flush()
+        advanceUntilIdle()
+
+        assertEquals("Newer", fileStore().values(draftId)["title"])
+    }
+
+    @Test
+    fun aFailedRenameKeepsThePreviousFileIntact() {
+        var failRename = false
+        val files = EditorDraftFiles(directory, replaceFile = { source, target ->
+            if (failRename || !source.renameTo(target)) throw IOException("rename failed")
+        })
+        assertTrue(files.write("draft", mapOf("title" to "Old")))
+
+        failRename = true
+        assertFalse(files.write("draft", mapOf("title" to "New")))
+
+        assertEquals(mapOf("title" to "Old"), files.read("draft"))
+        assertEquals(listOf("draft.json"), draftFiles())
     }
 
     @Test
