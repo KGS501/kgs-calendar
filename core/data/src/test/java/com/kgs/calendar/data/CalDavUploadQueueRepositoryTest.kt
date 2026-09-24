@@ -1,6 +1,7 @@
 package com.kgs.calendar.data
 
 import com.kgs.calendar.data.local.entity.AccountEntity
+import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SyncState
@@ -270,7 +271,7 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun uploadFailureKeepsMutationMarksResourceAndFailsAccountSync() = runTest {
+    fun uploadFailureKeepsMutationMarksResourceAndFailsAccountSyncAfterPulling() = runTest {
         repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
         val event = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }
         server.respondNext("PUT", server.eventsHref, times = 5) { MockResponse().setResponseCode(500) }
@@ -278,17 +279,107 @@ class CalDavUploadQueueRepositoryTest {
 
         val error = expectFailure<IllegalStateException> { repository.syncNow() }
 
-        assertEquals("Source \"alice\": PUT ${event.resourceHref} failed: HTTP 500", error.message)
+        assertEquals("Source \"alice\": Upload failed: PUT ${event.resourceHref} failed: HTTP 500", error.message)
+        assertEquals(500, error.findCause<HttpStatusException>()!!.statusCode)
         val mutation = harness.pendingMutations().single()
         assertEquals(event.resourceHref, mutation.resourceHref)
         assertEquals("PUT ${event.resourceHref} failed: HTTP 500", harness.resource(event.resourceHref)!!.syncError)
         assertNull(harness.resource(event.resourceHref)!!.etag)
+        assertEquals("Planning", harness.event(event.resourceHref)!!.title)
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
         assertEquals(SyncState.Error, account.syncState)
-        assertEquals("Source \"alice\": PUT ${event.resourceHref} failed: HTTP 500", account.syncError)
+        assertEquals(error.message, account.syncError)
         assertEquals(lastSyncBefore, account.lastSyncAtMillis)
-        // NOTE: current behaviour - a failed upload aborts the account before remote changes are pulled.
-        assertTrue(server.requests("PROPFIND").none { it.path == server.homeHref })
+        assertTrue(server.requests("PROPFIND").any { it.path == server.homeHref })
+    }
+
+    @Test
+    fun rejectedUploadStillPullsOtherRemoteChanges() = runTest {
+        val originalEtag = harness.resource(eventHref)!!.etag
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        server.respondNext("PUT", eventHref, times = 5) { MockResponse().setResponseCode(403) }
+        val reviewHref = server.putRemote(server.eventsHref, "review.ics", SampleIcs.event("remote-review", "Review"))
+        server.putRemote(server.tasksHref, "todo.ics", SampleIcs.task("remote-task", "Write agenda v2"))
+
+        val error = expectFailure<IllegalStateException> { repository.syncNow() }
+
+        assertEquals("Source \"alice\": Upload failed: PUT $eventHref failed: HTTP 403", error.message)
+        assertEquals(403, error.findCause<HttpStatusException>()!!.statusCode)
+        assertEquals("Review", harness.event(reviewHref)!!.title)
+        assertEquals(server.stored(reviewHref)!!.etag, harness.resource(reviewHref)!!.etag)
+        assertEquals("Write agenda v2", harness.task(taskHref)!!.title)
+        assertEquals("Local edit", harness.event(eventHref)!!.title)
+        assertEquals(originalEtag, harness.resource(eventHref)!!.etag)
+        assertEquals("PUT $eventHref failed: HTTP 403", harness.resource(eventHref)!!.syncError)
+        val mutation = harness.pendingMutations().single()
+        assertEquals(eventHref, mutation.resourceHref)
+        assertEquals(MutationAction.Put, mutation.action)
+        val account = harness.account(AccountEntity.PRIMARY_ID)!!
+        assertEquals(SyncState.Error, account.syncState)
+        assertEquals(error.message, account.syncError)
+    }
+
+    @Test
+    fun rejectedUploadKeepsLocalVersionWhenSameResourceChangedRemotely() = runTest {
+        val originalEtag = harness.resource(eventHref)!!.etag
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        server.respondNext("PUT", eventHref, times = 5) { MockResponse().setResponseCode(403) }
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Other client edit", sequence = 5))
+
+        expectFailure<IllegalStateException> { repository.syncNow() }
+
+        assertTrue(server.requests("REPORT").any { "sync-collection" in it.body && it.path == server.eventsHref })
+        assertEquals("Local edit", harness.event(eventHref)!!.title)
+        assertTrue(harness.resource(eventHref)!!.rawIcs.unfoldedIcs().contains("SUMMARY:Local edit"))
+        assertEquals(originalEtag, harness.resource(eventHref)!!.etag)
+        assertEquals("PUT $eventHref failed: HTTP 403", harness.resource(eventHref)!!.syncError)
+        assertEquals(eventHref, harness.pendingMutations().single().resourceHref)
+        assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+    }
+
+    @Test
+    fun pullFailureAfterRejectedUploadIsReportedWithUploadFailureSuppressed() = runTest {
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        server.respondNext("PUT", eventHref, times = 5) { MockResponse().setResponseCode(403) }
+        server.respondNext("PROPFIND", server.homeHref, times = 5) { MockResponse().setResponseCode(500) }
+
+        val error = expectFailure<IllegalStateException> { repository.syncNow() }
+
+        val pullError = error.cause!!
+        assertEquals(500, (pullError as HttpStatusException).statusCode)
+        assertEquals(harness.account(AccountEntity.PRIMARY_ID)!!.syncError, error.message)
+        assertFalse(error.message!!.contains("Upload failed"))
+        val uploadError = pullError.suppressed.single()
+        assertEquals("Upload failed: PUT $eventHref failed: HTTP 403", uploadError.message)
+        assertEquals(403, (uploadError.cause as HttpStatusException).statusCode)
+        assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+        assertEquals("PUT $eventHref failed: HTTP 403", harness.resource(eventHref)!!.syncError)
+        assertEquals(eventHref, harness.pendingMutations().single().resourceHref)
+    }
+
+    @Test
+    fun rejectedUploadInOneAccountDoesNotFailSyncOrBlockOtherAccount() = runTest {
+        FakeCalDavServer(username = "bob", password = "hunter2").use { otherServer ->
+            otherServer.start()
+            val otherEventHref = otherServer.putRemote(otherServer.eventsHref, "standup.ics", SampleIcs.event("bob-event", "Standup"))
+            val other = repository.saveManualAccount(otherServer.serverUrl, otherServer.username, otherServer.password)
+            repository.syncNow()
+            assertEquals("Standup", harness.event(otherEventHref)!!.title)
+            repository.updateEvent("remote-event", eventPayload("Local edit", day))
+            server.respondNext("PUT", eventHref, times = 5) { MockResponse().setResponseCode(403) }
+            val reviewHref = server.putRemote(server.eventsHref, "review.ics", SampleIcs.event("remote-review", "Review"))
+            otherServer.putRemote(otherServer.eventsHref, "standup.ics", SampleIcs.event("bob-event", "Standup moved", sequence = 1))
+
+            repository.syncNow()
+
+            assertEquals("Review", harness.event(reviewHref)!!.title)
+            assertEquals("Local edit", harness.event(eventHref)!!.title)
+            assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+            assertEquals("Standup moved", harness.event(otherEventHref)!!.title)
+            val otherAccount = harness.account(other.id)!!
+            assertEquals(SyncState.Idle, otherAccount.syncState)
+            assertNull(otherAccount.syncError)
+        }
     }
 
     @Test

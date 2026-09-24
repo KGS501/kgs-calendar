@@ -126,7 +126,8 @@ class PendingMutationUploader internal constructor(
                 }
             } catch (error: Throwable) {
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")
-                if (firstFailure == null) firstFailure = error
+                val first = firstFailure
+                if (first == null) firstFailure = error else if (first !== error) first.addSuppressed(error)
             }
         }
         firstFailure?.let { throw it }

@@ -21,6 +21,7 @@ import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
 import java.net.URI
+import kotlin.coroutines.cancellation.CancellationException
 import java.time.Instant
 import java.time.ZoneId
 import com.kgs.calendar.domain.model.SourceType
@@ -43,7 +44,27 @@ class CalDavSyncEngine internal constructor(
         val credentials = credentialsStore.get(account.id) ?: return false
         database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         repairMissingCalDavEtags(credentials, account.id)
-        uploader.pushPending(credentials, account.id)
+        // A rejected upload stays queued and marked on its resource; it must not keep remote changes away.
+        val uploadFailure = try {
+            uploader.pushPending(credentials, account.id)
+            null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            PendingUploadException(error)
+        }
+        try {
+            pullAccount(account, credentials, options)
+        } catch (pullError: Throwable) {
+            uploadFailure?.let(pullError::addSuppressed)
+            throw pullError
+        }
+        uploadFailure?.let { throw it }
+        database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
+        return true
+    }
+
+    private suspend fun pullAccount(account: AccountEntity, credentials: StoredCredentials, options: SourceSyncOptions) {
         val discovery = calDavClient.discoverAccount(
             serverUrl = credentials.serverUrl,
             username = credentials.username,
@@ -105,8 +126,6 @@ class CalDavSyncEngine internal constructor(
                 val remote = remoteCollections.firstOrNull { it.href.davHrefKey() == collection.href.davHrefKey() }
                 syncCollection(credentials, collection, remote, forceFullRefresh = options.forceFullCalDavRefresh)
             }
-        database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
-        return true
     }
 
     private suspend fun syncCollection(
@@ -428,6 +447,10 @@ private class RemoteCalDavDownload(
     val etag: String?,
     val result: Result<Pair<String, ParsedCalendarComponent?>>,
 )
+
+/** Rejected queued uploads of an account, reported only after its pull has run. */
+internal class PendingUploadException(cause: Throwable) :
+    Exception("Upload failed: ${cause.message ?: cause::class.java.simpleName}", cause)
 
 internal fun shouldApplyRemoteCalDavState(
     resourceKey: String,
