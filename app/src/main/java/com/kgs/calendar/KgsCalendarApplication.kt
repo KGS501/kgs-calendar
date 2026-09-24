@@ -14,6 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
+import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,19 +77,12 @@ class KgsCalendarApplication : Application() {
         scope.launch {
             // After parser fixes for nested VALARM blocks, recurrence, attendee and category metadata shipped,
             // any rows synced under the previous version may have truncated/incorrect data.
-            // Re-parse the cached raw iCal once so existing events are corrected without
-            // forcing a full re-download.
-            val current = appGraph.settingsStore.parserReparseVersion.first()
-            if (current < PARSER_REPARSE_VERSION) {
-                runCatching {
-                    if (current >= FULL_REPARSE_VERSION) {
-                        appGraph.repository.reparseLocalTaskResources()
-                    } else {
-                        appGraph.repository.reparseLocalResources()
-                    }
-                }
-                appGraph.settingsStore.setParserReparseVersion(PARSER_REPARSE_VERSION)
-            }
+            reparseCachedIcalIfNeeded(
+                storedVersion = appGraph.settingsStore.parserReparseVersion.first(),
+                reparseTaskResources = appGraph.repository::reparseLocalTaskResources,
+                reparseAllResources = appGraph.repository::reparseLocalResources,
+                recordVersion = appGraph.settingsStore::setParserReparseVersion,
+            )
         }
     }
 
@@ -163,8 +157,6 @@ class KgsCalendarApplication : Application() {
     }
 
     companion object {
-        private const val FULL_REPARSE_VERSION = 5
-        private const val PARSER_REPARSE_VERSION = 6
         fun graph(context: Context): AppGraph =
             (context.applicationContext as KgsCalendarApplication).appGraph
     }

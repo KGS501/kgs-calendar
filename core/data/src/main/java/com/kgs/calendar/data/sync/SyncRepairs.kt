@@ -2,6 +2,7 @@ package com.kgs.calendar.data.sync
 
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.ical.IcalCodec
+import com.kgs.calendar.data.ical.ParsedCalendarComponent
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
@@ -29,18 +30,38 @@ class SyncRepairs internal constructor(
         reparseResources(database.resourceDao().forComponentType(ComponentType.Task))
     }
 
-    private suspend fun reparseResources(resources: List<CalendarResourceEntity>) {
-        resources.forEach { resource ->
-            val collection = database.collectionDao().get(resource.collectionHref) ?: return@forEach
-            val parsed = icalCodec.parse(resource.rawIcs, collection.href, resource.href, collection.color) ?: return@forEach
-            parsed.event?.let { freshEvent ->
-                val existing = database.eventDao().byResource(resource.href)
-                database.eventDao().upsert(freshEvent.copy(manualColor = existing?.manualColor))
-            }
-            parsed.task?.let { freshTask ->
-                val existing = database.taskDao().byResource(resource.href)
-                database.taskDao().upsert(freshTask.copy(manualColor = existing?.manualColor))
-            }
+    /**
+     * Parses outside the write transaction, then applies each result only if its resource is still
+     * the one that was parsed: a concurrent sync or local edit (queued as a pending mutation) wins.
+     * A payload the parser rejects is skipped, since reparsing it again would fail the same way.
+     */
+    internal suspend fun reparseResources(resources: List<CalendarResourceEntity>) {
+        val collectionsByHref = database.collectionDao().all().associateBy { it.href }
+        val reparsed = resources.mapNotNull { resource ->
+            val collection = collectionsByHref[resource.collectionHref] ?: return@mapNotNull null
+            val parsed = runCatching {
+                icalCodec.parse(resource.rawIcs, collection.href, resource.href, collection.color)
+            }.getOrNull() ?: return@mapNotNull null
+            resource to parsed
+        }
+        if (reparsed.isEmpty()) return
+        localWrites.writeTransaction {
+            reparsed.forEach { (snapshot, parsed) -> applyReparsed(snapshot, parsed) }
+        }
+    }
+
+    private suspend fun applyReparsed(snapshot: CalendarResourceEntity, parsed: ParsedCalendarComponent) {
+        val current = database.resourceDao().get(snapshot.href) ?: return
+        if (current.rawIcs != snapshot.rawIcs || current.collectionHref != snapshot.collectionHref) return
+        if (database.pendingMutationDao().forResource(current.href).isNotEmpty()) return
+        val collection = database.collectionDao().get(current.collectionHref) ?: return
+        parsed.event?.let { freshEvent ->
+            val existing = database.eventDao().byResource(current.href)
+            database.eventDao().upsert(freshEvent.copy(color = collection.color, manualColor = existing?.manualColor))
+        }
+        parsed.task?.let { freshTask ->
+            val existing = database.taskDao().byResource(current.href)
+            database.taskDao().upsert(freshTask.copy(color = collection.color, manualColor = existing?.manualColor))
         }
     }
 
