@@ -520,12 +520,13 @@ internal class CalendarShellUiState(
     )
 
     /**
-     * Reopens what [saved] had open, looking its items up in [state]. Before the first data load
-     * this waits in [hasPendingRestore] for [applyPendingRestore]. A sheet whose item is gone stays
-     * closed; an editor that converted an item that is gone stays closed as well.
+     * Reopens what [saved] had open, looking its items up in [state]. Before the first data load,
+     * or while the file of an editor draft that is not live is still being read, this waits in
+     * [hasPendingRestore] for [applyPendingRestore]. A sheet whose item is gone stays closed; an
+     * editor that converted an item that is gone stays closed as well.
      */
     fun restore(saved: SavedShellState, state: CalendarUiState) {
-        if (!state.initialDataLoaded) {
+        if (!state.initialDataLoaded || saved.editorDraftId?.let(editorDrafts::canRestore) == false) {
             pendingRestore = saved
             return
         }
@@ -602,9 +603,10 @@ internal class CalendarShellUiState(
 
 /**
  * The shell state, kept across activity recreation. After a rotation the ViewModel still holds
- * the calendar data, so the open sheets come back in the first frame; after process death they
- * come back once the data they refer to has loaded (or [PendingRestoreTimeoutMillis] later) and
- * the file of the editor draft has been read.
+ * the calendar data and the editor draft, so the open sheets come back in the first frame; after
+ * process death they come back once the data they refer to has loaded (or
+ * [PendingRestoreTimeoutMillis] later) and the file of the editor draft has been read, even when
+ * a rotation comes in between.
  */
 @Composable
 internal fun rememberCalendarShellUiState(

@@ -153,6 +153,13 @@ class EditorDraftStore(
         restoredDraftsRead.await()
     }
 
+    /**
+     * Whether [values] of [draftId] would find its restored values: the draft is live or ended, or
+     * the files of the restored drafts have been read. Until then an editor must not ask for it.
+     */
+    fun canRestore(draftId: String): Boolean =
+        draftId in drafts || draftId in discarded || restoredDraftsRead.isCompleted
+
     private fun liveDraft(draftId: String): Draft? {
         if (draftId in discarded) return null
         drafts[draftId]?.let { return it }

@@ -423,12 +423,95 @@ class EditorDraftStoreTest {
         advanceUntilIdle()
         assertEquals(1, draftFiles().size)
 
-        val restored = saveAndRestore(shell, fileStore())
+        val restored = restoreAfterProcessDeath(saveShell(shell, store)).shell
         advanceUntilIdle()
 
         assertNull(restored.creationSheet)
         assertNull(restored.editorDraftId)
         assertTrue(draftFiles().isEmpty())
+    }
+
+    @Test
+    fun aRotationWhileTheDraftFileIsReadWaitsForItEvenWhenTheDataHasLoaded() = runTest {
+        val description = "d".repeat(EditorDraftStore.BUNDLE_DRAFT_MAX_CHARS)
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        val meeting = event("meeting")
+        shell.editEvent(meeting, meeting.editorSchedule())
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Typed draft")
+        store.put(draftId, "description", description)
+        advanceUntilIdle()
+        val saved = parcelRoundTrip(saveShell(shell, store))
+
+        // Process death; the data loads and the user rotates while the draft file is still being read.
+        val newStore = fileStore()
+        val beforeRotation = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
+        newStore.onShellRestored(beforeRotation.referencedDraftIds)
+        val rotated = saveAndRestore(beforeRotation, newStore)
+
+        assertTrue(rotated.hasPendingRestore)
+        assertNull(rotated.creationSheet)
+        assertNull(rotated.editorDraftId)
+        assertFalse(newStore.canRestore(draftId))
+        // No live draft exists yet that could hide the file's values.
+        assertNull(newStore.saved(draftId).values)
+
+        advanceUntilIdle()
+        rotated.applyPendingRestore(loadedState)
+
+        assertEquals(CreationSheet.EditEvent(meeting), rotated.creationSheet)
+        assertEquals(draftId, rotated.editorDraftId)
+        val fields = EditorDraftFields(newStore, draftId)
+        assertEquals("Typed draft", fields.newState("title", DraftCodec.Text) { meeting.title }.value)
+        assertEquals(description, fields.newState("description", DraftCodec.Text) { "" }.value)
+        advanceUntilIdle()
+        assertEquals("Typed draft", fileDraft(draftId)!!.values["title"])
+        assertEquals(description, fileDraft(draftId)!!.values["description"])
+    }
+
+    @Test
+    fun aNewerFileWinsOverAnOlderBundleWhenTheRestoreComesBeforeTheFileIsRead() = runTest {
+        val store = fileStore()
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        shell.openEventCreation(newEventSchedule(today, LocalTime.NOON, 60), DefaultColor)
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "In the Bundle")
+        val saved = parcelRoundTrip(saveShell(shell, store))
+        store.put(draftId, "title", "Written later")
+        advanceUntilIdle()
+        assertEquals(2L, fileDraft(draftId)!!.revision)
+
+        val newStore = fileStore()
+        val beforeRotation = CalendarShellUiState.saver(today, DefaultColor, newStore) { CalendarUiState() }.restore(saved)!!
+        newStore.onShellRestored(beforeRotation.referencedDraftIds)
+        val restored = saveAndRestore(beforeRotation, newStore)
+        assertTrue(restored.hasPendingRestore)
+        assertNull(restored.editorDraftId)
+
+        advanceUntilIdle()
+        restored.applyPendingRestore(loadedState)
+
+        assertEquals(draftId, restored.editorDraftId)
+        assertEquals("Written later", newStore.values(draftId)["title"])
+    }
+
+    @Test
+    fun aLiveDraftRestoresAtOnceWhileTheDraftFilesAreStillRead() = runTest {
+        val store = fileStore()
+        store.onShellRestored(emptySet())
+        val shell = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, store)
+        val meeting = event("meeting")
+        shell.editEvent(meeting, meeting.editorSchedule())
+        val draftId = shell.editorDraftId!!
+        store.put(draftId, "title", "Typed draft")
+
+        val rotated = saveAndRestore(shell, store)
+
+        assertFalse(rotated.hasPendingRestore)
+        assertEquals(CreationSheet.EditEvent(meeting), rotated.creationSheet)
+        assertEquals(draftId, rotated.editorDraftId)
+        assertEquals("Typed draft", store.values(draftId)["title"])
     }
 
     @Test
