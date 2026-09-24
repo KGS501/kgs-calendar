@@ -12,9 +12,16 @@ import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
 import com.kgs.calendar.ui.shell.editorSchedule
 import com.kgs.calendar.ui.shell.initialEditorSchedule
 import com.kgs.calendar.ui.shell.newEventSchedule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -29,6 +36,10 @@ import java.io.File
 import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 // Robolectric provides android.util.Log for the logged write failures.
 @RunWith(RobolectricTestRunner::class)
@@ -95,10 +106,55 @@ class EditorDraftStoreTest {
         assertTrue(draftFiles().isEmpty())
 
         store.flush()
-        testScheduler.runCurrent()
 
         assertEquals(listOf("$draftId.json"), draftFiles())
         assertEquals("Typing", fileStore().values(draftId)["title"])
+    }
+
+    @Test
+    fun flushWaitsForAWriteInFlightAndReturnsOnlyOnceTheLatestRevisionIsWritten() {
+        val blocked = BlockingFirstWrite()
+        val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = EditorDraftStore(blocked.files, ioScope, writeDelayMillis = 0)
+        try {
+            val draftId = store.newDraft()
+            store.put(draftId, "title", "Older")
+            assertTrue(blocked.started.await(5, TimeUnit.SECONDS))
+            store.put(draftId, "title", "Newer")
+
+            val flushing = thread { store.flush() }
+            flushing.join(300)
+            assertTrue("flush returned while a write was still running", flushing.isAlive)
+            blocked.release.countDown()
+            flushing.join(5_000)
+
+            assertFalse(flushing.isAlive)
+            assertEquals("Newer", EditorDraftFiles(directory).read(draftId)!!["title"])
+        } finally {
+            blocked.release.countDown()
+            ioScope.cancel()
+        }
+    }
+
+    @Test
+    fun aRevisionQueuedDuringAWriteInFlightIsWrittenAfterIt() = runBlocking {
+        val blocked = BlockingFirstWrite()
+        val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = EditorDraftStore(blocked.files, ioScope, writeDelayMillis = 0)
+        try {
+            val draftId = store.newDraft()
+            store.put(draftId, "title", "Older")
+            assertTrue(blocked.started.await(5, TimeUnit.SECONDS))
+            store.put(draftId, "title", "Newer")
+
+            blocked.release.countDown()
+            withTimeout(5_000) { ioScope.coroutineContext.job.children.forEach { it.join() } }
+
+            assertEquals("Newer", EditorDraftFiles(directory).read(draftId)!!["title"])
+        } finally {
+            blocked.release.countDown()
+            ioScope.cancel()
+        }
     }
 
     @Test
@@ -330,6 +386,20 @@ class EditorDraftStoreTest {
 
         assertFalse(File(folder.root, "escape.json").exists())
         assertNull(files.read("../escape"))
+    }
+
+    /** Draft files whose first write blocks until [release]. */
+    private inner class BlockingFirstWrite {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        private val first = AtomicBoolean(true)
+        val files = EditorDraftFiles(directory, writeFile = { file, text ->
+            if (first.getAndSet(false)) {
+                started.countDown()
+                release.await(5, TimeUnit.SECONDS)
+            }
+            file.writeText(text)
+        })
     }
 
     private fun saveAndRestore(shell: CalendarShellUiState, store: EditorDraftStore): CalendarShellUiState {

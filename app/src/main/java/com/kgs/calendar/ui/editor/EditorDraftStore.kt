@@ -12,6 +12,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * The typed values of the open editor, keyed by a draft ID per editor session. Only that ID goes
@@ -19,10 +22,11 @@ import java.util.UUID
  *
  * The live draft survives activity recreation with the ViewModel that owns this store. With
  * [files], every change is also written to a private file shortly afterwards (on IO, at most once
- * per [writeDelayMillis]) so that the draft outlives process death. A draft ends when its editor
- * is saved or discarded, never when the composition goes away during a rotation.
+ * per [writeDelayMillis]) so that the draft outlives process death; [flush] writes at once. A
+ * draft ends when its editor is saved or discarded, never when the composition goes away during a
+ * rotation.
  *
- * All methods except the file writes run on the main thread.
+ * All methods run on the main thread; the debounced file writes run on IO.
  */
 class EditorDraftStore(
     private val files: EditorDraftFiles? = null,
@@ -32,7 +36,7 @@ class EditorDraftStore(
     private val drafts = HashMap<String, HashMap<String, Any?>>()
     private val discarded = HashSet<String>()
     private val lock = Any()
-    private val writeLock = Any()
+    private val writeLock = ReentrantLock()
 
     /** Draft contents to write, by draft ID; null deletes the file. Guarded by [lock]. */
     private val pendingWrites = LinkedHashMap<String, Map<String, Any?>?>()
@@ -61,10 +65,23 @@ class EditorDraftStore(
         enqueueWrite(draftId, null)
     }
 
-    /** Writes pending changes now, e.g. when the app goes to the background. */
+    /**
+     * Writes the latest revision of every draft before returning, e.g. when the app goes to the
+     * background and may be killed. Like `SharedPreferences` in `onStop`, this first waits for a
+     * write already running; draft files are small, but after [FLUSH_WAIT_MILLIS] the flush falls
+     * back to writing on IO instead of blocking longer.
+     */
     fun flush() {
         if (files == null) return
-        ioScope.launch { writePending() }
+        if (writeLock.tryLock(FLUSH_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+            try {
+                writePendingLocked()
+            } finally {
+                writeLock.unlock()
+            }
+        } else {
+            ioScope.launch { writePending() }
+        }
     }
 
     /** Deletes the files of drafts that were never saved or discarded, e.g. after a crash. */
@@ -92,25 +109,28 @@ class EditorDraftStore(
     }
 
     private fun writePending() {
+        writeLock.withLock { writePendingLocked() }
+    }
+
+    private fun writePendingLocked() {
         val files = files ?: return
-        synchronized(writeLock) {
-            val batch = synchronized(lock) {
-                // Changes made from here on need a new write.
-                writeScheduled = false
-                LinkedHashMap(pendingWrites).also { pendingWrites.clear() }
-            }
-            batch.forEach { (draftId, values) ->
-                val persisted = if (values == null) files.delete(draftId) else files.write(draftId, values)
-                // A failed revision stays pending for the next write or flush unless a newer one replaced it.
-                if (!persisted) {
-                    synchronized(lock) { if (!pendingWrites.containsKey(draftId)) pendingWrites[draftId] = values }
-                }
+        val batch = synchronized(lock) {
+            // Changes made from here on need a new write.
+            writeScheduled = false
+            LinkedHashMap(pendingWrites).also { pendingWrites.clear() }
+        }
+        batch.forEach { (draftId, values) ->
+            val persisted = if (values == null) files.delete(draftId) else files.write(draftId, values)
+            // A failed revision stays pending for the next write or flush unless a newer one replaced it.
+            if (!persisted) {
+                synchronized(lock) { if (!pendingWrites.containsKey(draftId)) pendingWrites[draftId] = values }
             }
         }
     }
 
     companion object {
         const val DRAFT_WRITE_DELAY_MILLIS = 400L
+        const val FLUSH_WAIT_MILLIS = 2_000L
         const val STALE_DRAFT_MAX_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 }
