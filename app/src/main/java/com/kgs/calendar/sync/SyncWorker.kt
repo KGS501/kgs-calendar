@@ -11,32 +11,33 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import com.kgs.calendar.KgsCalendarApplication
+import com.kgs.calendar.reminder.ReminderScheduler
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 class SyncWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        return runCatching {
-            val graph = KgsCalendarApplication.graph(applicationContext)
-            val includeDisabledProviderCalendars = graph.settingsStore.showDisabledAndroidProviderCalendars.first()
-            graph.repository.syncNow(includeDisabledProviderCalendars = includeDisabledProviderCalendars)
-            runCatching {
-                com.kgs.calendar.reminder.ReminderScheduler.reschedule(applicationContext)
-            }
-            graph.widgets.scheduler.updateAllAndAwait()
-            markRecentSyncActivity(applicationContext)
-        }.fold(
-            onSuccess = { Result.success() },
-            onFailure = { error ->
-                when (classifySyncFailure(error, runAttemptCount)) {
-                    SyncFailureOutcome.Retry -> Result.retry()
-                    SyncFailureOutcome.Fail -> Result.failure()
-                }
+        val syncError = syncThenReconcile(
+            sync = {
+                val graph = KgsCalendarApplication.graph(applicationContext)
+                val includeDisabledProviderCalendars = graph.settingsStore.showDisabledAndroidProviderCalendars.first()
+                graph.repository.syncNow(includeDisabledProviderCalendars = includeDisabledProviderCalendars)
             },
+            rescheduleReminders = { ReminderScheduler.reschedule(applicationContext) },
+            refreshWidgets = { KgsCalendarApplication.graph(applicationContext).widgets.scheduler.updateAllAndAwait() },
         )
+        if (syncError == null) {
+            markRecentSyncActivity(applicationContext)
+            return Result.success()
+        }
+        return when (classifySyncFailure(syncError, runAttemptCount)) {
+            SyncFailureOutcome.Retry -> Result.retry()
+            SyncFailureOutcome.Fail -> Result.failure()
+        }
     }
 
     companion object {
@@ -103,3 +104,30 @@ class SyncWorker(
         }
     }
 }
+
+/**
+ * Runs [sync], then reschedules reminders and refreshes widgets whatever its outcome: a sync that
+ * fails late (e.g. a rejected upload) may already have stored new events. The two follow-ups are
+ * independent, and neither can replace the sync error, which is returned (null on success).
+ * Cancellation is never swallowed.
+ */
+internal suspend fun syncThenReconcile(
+    sync: suspend () -> Unit,
+    rescheduleReminders: suspend () -> Unit,
+    refreshWidgets: suspend () -> Unit,
+): Throwable? {
+    val syncError = attempt(sync)
+    attempt(rescheduleReminders)
+    attempt(refreshWidgets)
+    return syncError
+}
+
+private suspend fun attempt(block: suspend () -> Unit): Throwable? =
+    try {
+        block()
+        null
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        error
+    }
