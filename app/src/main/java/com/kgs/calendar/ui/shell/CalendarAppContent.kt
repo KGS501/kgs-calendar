@@ -131,6 +131,9 @@ internal fun CalendarAppContent(
         smoothCompletedTasks.exitingResourceHrefs +
         smoothSearchTasks.exitingResourceHrefs
     val problemItems = state.problemItems()
+    // Hand the local functions that read `state` to children as lambdas, never as `::` references:
+    // a reference to a local function equals every earlier one, so Compose would keep the first
+    // instance and its state from the first composition.
     fun showHiddenSaveNotice(collectionHref: String?, kind: HiddenSaveKind) {
         shell.showHiddenSaveNotice(collectionHref, kind, state)
     }
@@ -194,7 +197,7 @@ internal fun CalendarAppContent(
     }
     CalendarLaunchEventsEffect(
         events = viewModel.uiEvents,
-        onCreateEvent = ::openEventCreation,
+        onCreateEvent = { openEventCreation(it) },
         onCreateTask = { date, scheduledForDay -> openTaskCreation(date, scheduledForDay) },
         onOpenDetail = shell::openLaunchedDetail,
         onForegroundRecentered = { foregroundRecenterRequest += 1 },
@@ -213,8 +216,8 @@ internal fun CalendarAppContent(
             today = today,
             defaultWireframeColor = defaultWireframeColor,
             foregroundRecenterRequest = foregroundRecenterRequest,
-            onViewSelected = ::selectCalendarView,
-            onCreateEvent = ::openEventCreation,
+            onViewSelected = { selectCalendarView(it) },
+            onCreateEvent = { openEventCreation(it) },
             onCreateTask = { date, useTaskDefaults ->
                 openTaskCreation(date, scheduledForDay = false, useTaskDefaults = useTaskDefaults)
             },
@@ -228,7 +231,7 @@ internal fun CalendarAppContent(
         state = state,
         shell = shell,
         today = today,
-        showHiddenSaveNotice = ::showHiddenSaveNotice,
+        showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
     )
     HiddenSaveNoticeDialog(viewModel = viewModel, state = state, shell = shell)
     CompletedTasksOverlay(viewModel = viewModel, renderState = renderState, shell = shell)
@@ -249,7 +252,7 @@ internal fun CalendarAppContent(
     RecurringSaveDialogHost(
         viewModel = viewModel,
         shell = shell,
-        showHiddenSaveNotice = ::showHiddenSaveNotice,
+        showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
     )
     StartupOverlay(visible = !state.initialDataLoaded)
 }
