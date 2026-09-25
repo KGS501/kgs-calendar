@@ -372,6 +372,7 @@ import com.kgs.calendar.ui.timeline.fallbackPagerSnapPageLimit
 import com.kgs.calendar.ui.timeline.FullWeekPagerFlingBehavior
 import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
 import com.kgs.calendar.ui.timeline.pagePosition
+import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
@@ -680,6 +681,7 @@ internal fun TimelineView(
     var handledWidgetDateNavigationSerial by remember { mutableStateOf(0) }
     val latestMorphContext by rememberUpdatedState(morphContext)
     val latestSelectedDate by rememberUpdatedState(state.selectedDate)
+    val latestSelectedPage by rememberUpdatedState(selectedPage)
 
     LaunchedEffect(selectedPage, fullWeekPagingEnabled, fullWeekGestureState) {
         if (fullWeekPagingEnabled) fullWeekGestureState.resetAnchor(selectedPage)
@@ -1009,10 +1011,15 @@ internal fun TimelineView(
                     if (page == target) programmaticTargetPage = null
                     return@collect
                 }
-                val date = page.toDayDate()
-                if (date != latestSelectedDate) {
-                    onDateSelected(date)
-                }
+                // The programmatic move above clears its target as soon as its animation returns,
+                // which can be before this collector sees the new settled page. Comparing with the
+                // current selection's anchor page keeps that late echo from selecting the week's
+                // first day instead of the chosen date.
+                timelineSettledPageSelection(
+                    settledPage = page,
+                    selectedAnchorPage = latestSelectedPage,
+                    selectedDate = latestSelectedDate,
+                )?.let(onDateSelected)
             }
     }
 
