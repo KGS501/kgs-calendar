@@ -25,7 +25,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
         TaskEntity::class,
         PendingMutationEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 @TypeConverters(KgsTypeConverters::class)

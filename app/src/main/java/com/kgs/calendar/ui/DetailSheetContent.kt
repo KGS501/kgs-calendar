@@ -792,7 +792,10 @@ internal fun DetailSheetContent(
         is DetailSheet.Event -> detail.event.resourceHref
         is DetailSheet.Task -> detail.task.resourceHref
     }
-    val pendingMutation = pendingMutationFor(detailResourceHref)
+    val pendingMutation = when (detail) {
+        is DetailSheet.Event -> pendingMutationFor(detail.event)
+        is DetailSheet.Task -> pendingMutationFor(detail.task)
+    }
     val problemResource = remember(detailResourceHref, problemResources) {
         problemResources.firstOrNull {
             it.href == detailResourceHref && !it.syncError.isNullOrBlank()

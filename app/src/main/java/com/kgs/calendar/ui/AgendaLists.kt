@@ -637,7 +637,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val eventTextStyle = tentativeReadableTextStyle(event.isTentative())
     val shape = RoundedCornerShape(12.dp)
-    val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(event)
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = visuals.background),
@@ -701,7 +701,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
                 maxVisible = 4,
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
@@ -1265,7 +1265,7 @@ internal fun TaskRow(
     )
     val baseContentColor = if (renderedCardColor.isDark()) Color.White else Color(0xFF1C1A18)
     val contentColor = baseContentColor.copy(alpha = taskAlpha)
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     val motionPadding = outerHorizontalPadding ?: if (prominent) 16.dp else 0.dp
     val verticalMotionPadding = outerVerticalPadding ?: if (prominent) 5.dp else 0.dp
     val hierarchyExitProgress = LocalTaskHierarchyExitProgress.current.coerceIn(0f, 1f)
@@ -1525,7 +1525,7 @@ internal fun TaskRow(
                     }
                 }
                 PendingMutationBadge(
-                    resourceHref = task.resourceHref,
+                    task = task,
                     modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
                 )
             }

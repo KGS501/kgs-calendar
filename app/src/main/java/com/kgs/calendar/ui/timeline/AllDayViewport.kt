@@ -1287,8 +1287,7 @@ private fun AllDayViewportChip(
     val color = eventVisuals?.background ?: Color(item.color)
     val textColor = eventVisuals?.contentColor ?: if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val eventTextStyle = tentativeReadableTextStyle(item.event?.isTentative() == true)
-    val resourceHref = item.event?.resourceHref ?: item.task?.resourceHref
-    val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = pendingDeleteAlpha(item.event, item.task)
     val density = LocalDensity.current
     val leadingRadius = 8.dp * allDayLeadingCornerRadiusFraction(leadingCornerProgress)
     val trailingRadius = 8.dp * allDayLeadingCornerRadiusFraction(trailingCornerProgress)
@@ -1510,8 +1509,8 @@ private fun AllDayViewportChip(
                 )
             }
         }
-        resourceHref?.takeIf { showPrimaryContent }?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        if (showPrimaryContent) {
+            PendingMutationBadge(item.event, item.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }
@@ -1601,7 +1600,7 @@ private fun AllDayArea(
                 continuesFromPrevious = singleTask?.isFullDayTaskOn(day.minusDays(1)) == true && day > visibleStartDate,
                 continuesToNext = singleTask?.isFullDayTaskOn(day.plusDays(1)) == true && day < visibleEndDate,
                 status = singleTask?.effectiveStatus(),
-                resourceHref = singleTask?.resourceHref,
+                task = singleTask,
                 onStatusChange = if (singleTask != null) {
                     { status -> onTaskStatusChanged(singleTask, status) }
                 } else {
@@ -1961,7 +1960,7 @@ private fun OverdueTaskChip(
     val displayLocation = remember(task.location, task.locationMapVerified) {
         task.location?.cardLocationText(task.locationMapVerified).orEmpty()
     }
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     val dragModifier = Modifier.pointerInput(task.resourceHref, sourceDate, startMinute, dragReporter) {
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
@@ -2059,7 +2058,7 @@ private fun OverdueTaskChip(
             )
         }
         PendingMutationBadge(
-            task.resourceHref,
+            task,
             Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
         )
     }
@@ -2088,7 +2087,7 @@ private fun AllDayChip(
         label = "allDayChipLeadingContinuationFade",
     )
     val eventTextStyle = tentativeReadableTextStyle(event?.isTentative() == true)
-    val pendingAlpha = event?.resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = event?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -2143,8 +2142,8 @@ private fun AllDayChip(
                 .padding(horizontal = 6.dp, vertical = 3.dp)
                 .wrapContentWidth(unbounded = true),
         )
-        event?.resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        event?.let {
+            PendingMutationBadge(it, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }
@@ -2158,7 +2157,7 @@ private fun AllDayTaskChip(
     continuesFromPrevious: Boolean,
     continuesToNext: Boolean,
     status: String?,
-    resourceHref: String?,
+    task: TaskEntity?,
     onStatusChange: ((String) -> Unit)?,
     onClick: () -> Unit,
     morphUid: String? = null,
@@ -2180,7 +2179,7 @@ private fun AllDayTaskChip(
         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
         label = "allDayTaskLeadingContinuationFade",
     )
-    val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = task?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -2253,8 +2252,8 @@ private fun AllDayTaskChip(
                 modifier = Modifier.wrapContentWidth(unbounded = true),
             )
         }
-        resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        task?.let {
+            PendingMutationBadge(it, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }

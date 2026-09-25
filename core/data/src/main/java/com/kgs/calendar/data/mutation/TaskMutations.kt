@@ -19,6 +19,7 @@ import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
 import java.time.Instant
 import java.time.LocalDate
@@ -172,7 +173,7 @@ class TaskMutations internal constructor(
             ).withValidIcalSchedule()
             val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
             localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-            localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+            localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
             database.taskDao().upsert(updatedMaster)
             createTask(payload.copy(recurrenceRule = null))
             return@writeTransaction
@@ -218,7 +219,7 @@ class TaskMutations internal constructor(
         ).withValidIcalSchedule()
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         database.taskDao().upsert(updatedMaster)
     }
 
@@ -256,7 +257,7 @@ class TaskMutations internal constructor(
         ).withValidIcalSchedule()
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.following(occurrenceStartMillis))
         database.taskDao().upsert(updatedMaster)
         createTask(payload)
     }
@@ -327,7 +328,7 @@ class TaskMutations internal constructor(
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
         database.taskDao().upsert(updatedMaster)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
     }
 
     suspend fun setTaskPriority(uid: String, priority: Int): Unit = localWrites.writeTransaction {

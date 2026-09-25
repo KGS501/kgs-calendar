@@ -24,6 +24,7 @@ object KgsDatabaseMigrations {
         MIGRATION_16_17,
         MIGRATION_17_18,
         MIGRATION_18_19,
+        MIGRATION_19_20,
     )
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -312,6 +313,13 @@ object KgsDatabaseMigrations {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE tasks ADD COLUMN parentUid TEXT DEFAULT NULL")
             db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_parentUid ON tasks(parentUid)")
+        }
+    }
+
+    private val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Queued changes from older versions keep a null scope, which marks the whole resource.
+            db.execSQL("ALTER TABLE pending_mutations ADD COLUMN occurrenceScope TEXT")
         }
     }
 

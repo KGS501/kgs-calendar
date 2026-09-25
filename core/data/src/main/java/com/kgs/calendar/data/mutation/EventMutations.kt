@@ -23,6 +23,7 @@ import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isAndroidProviderCollection
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
 import java.time.LocalDate
 import java.time.LocalTime
@@ -303,7 +304,7 @@ class EventMutations internal constructor(
         localWrites.writeTransaction {
             localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
             database.eventDao().upsert(updated)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         }
     }
 
@@ -501,7 +502,7 @@ class EventMutations internal constructor(
         }
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         database.eventDao().upsert(updated)
     }
 
@@ -549,7 +550,7 @@ class EventMutations internal constructor(
         }
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.following(occurrenceStartMillis))
         database.eventDao().upsert(updated)
     }
 

@@ -1604,7 +1604,7 @@ private fun SearchResultCard(
         )
         val eventTextStyle = tentativeReadableTextStyle(event.isTentative() && !isPast)
         val shape = RoundedCornerShape(13.dp)
-        val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+        val pendingAlpha = pendingDeleteAlpha(event)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -1653,7 +1653,7 @@ private fun SearchResultCard(
                 muted = isPast,
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }

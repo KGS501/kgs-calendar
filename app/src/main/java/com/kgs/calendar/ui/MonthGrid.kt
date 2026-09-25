@@ -685,7 +685,7 @@ private fun MonthDayCard(
                 add(
                     MonthPill(
                         uid = it.uid,
-                        resourceHref = it.resourceHref,
+                        event = it,
                         title = if (showTitle) it.title else "",
                         color = it.displayColor(),
                         completed = false,
@@ -702,7 +702,7 @@ private fun MonthDayCard(
                 add(
                     MonthPill(
                         uid = it.uid,
-                        resourceHref = it.resourceHref,
+                        task = it,
                         title = if (showTitle) it.title else "",
                         color = it.displayColor(taskColorMode),
                         completed = it.isCompleted,
@@ -735,7 +735,9 @@ private const val MonthVisiblePillLanes = 4
 private data class MonthRowPillCandidate(
     val id: String,
     val uid: String?,
-    val resourceHref: String?,
+    /** The occurrence this pill shows, for its pending-sync indicator. */
+    val event: EventEntity? = null,
+    val task: TaskEntity? = null,
     override val title: String,
     val color: Int,
     val completed: Boolean,
@@ -784,7 +786,7 @@ private fun buildMonthRowPillSegments(
                     MonthRowPillCandidate(
                         id = "event:${event.monthOccurrenceKey()}",
                         uid = event.uid,
-                        resourceHref = event.resourceHref,
+                        event = event,
                         title = event.title,
                         color = event.displayColor(),
                         completed = false,
@@ -806,7 +808,7 @@ private fun buildMonthRowPillSegments(
                     MonthRowPillCandidate(
                         id = "task:${task.resourceHref ?: task.uid}",
                         uid = task.uid,
-                        resourceHref = task.resourceHref,
+                        task = task,
                         title = task.title,
                         color = task.displayColor(taskColorMode),
                         completed = task.isCompleted,
@@ -1077,15 +1079,15 @@ private fun MonthRowPillChip(
             textDecoration = if (cancelled) TextDecoration.LineThrough else null,
             modifier = Modifier.padding(start = titleStartPadding, end = 4.dp, top = 1.dp, bottom = 0.dp),
         )
-        candidate.resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
-        }
+        PendingMutationBadge(candidate.event, candidate.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
     }
 }
 
 private data class MonthPill(
     val uid: String?,
-    val resourceHref: String?,
+    /** The occurrence this pill shows, for its pending-sync indicators. */
+    val event: EventEntity? = null,
+    val task: TaskEntity? = null,
     val title: String,
     val color: Int,
     val completed: Boolean,
@@ -1112,7 +1114,7 @@ private fun MonthPillChip(pill: MonthPill, morphEnabled: Boolean = false) {
         else -> Color(0xFF1C1A18)
     }
     val shape = continuationShape(pill.continuesFromPrevious, pill.continuesToNext)
-    val pendingAlpha = pill.resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = pendingDeleteAlpha(pill.event, pill.task)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1141,8 +1143,6 @@ private fun MonthPillChip(pill: MonthPill, morphEnabled: Boolean = false) {
             fontWeight = FontWeight.Medium,
             textDecoration = if (cancelled) TextDecoration.LineThrough else null,
         )
-        pill.resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
-        }
+        PendingMutationBadge(pill.event, pill.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
     }
 }

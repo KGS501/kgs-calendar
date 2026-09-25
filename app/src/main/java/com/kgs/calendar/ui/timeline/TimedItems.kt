@@ -692,7 +692,7 @@ private fun TimedEventBlock(
     }
     val background = visuals.background
     val textColor = visuals.contentColor
-    val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(event)
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     var dragX by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
     var dragY by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
@@ -994,7 +994,7 @@ private fun TimedEventBlock(
                     ),
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
@@ -1019,7 +1019,7 @@ private fun TimedTaskBlock(
 ) {
     val background = remember(color) { Color(color) }
     val textColor = remember(color) { if (background.isDark()) Color.White else Color(0xFF1C1A18) }
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     var lastCompleted by remember(task.resourceHref) { mutableStateOf(task.isCompleted) }
     var burstKey by remember(task.resourceHref) { mutableStateOf(0) }
     LaunchedEffect(task.isCompleted) {
@@ -1268,7 +1268,7 @@ private fun TimedTaskBlock(
                 }
             }
             PendingMutationBadge(
-                resourceHref = task.resourceHref,
+                task = task,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
