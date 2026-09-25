@@ -22,6 +22,7 @@ import com.kgs.calendar.domain.task.TaskParentLookup
 import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.task.effectiveStatus
 import com.kgs.calendar.domain.task.isOpen
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import com.kgs.calendar.domain.task.taskStatus
 import com.kgs.calendar.domain.task.treeParents
 import com.kgs.calendar.domain.time.toDate
@@ -173,6 +174,7 @@ internal class KgsWidgetDataSource(
                             taskResourceHref = task.resourceHref,
                             statusGlyph = task.widgetStatusGlyph(),
                             priority = task.priority,
+                            taskOccurrenceMillis = task.occurrenceIdOrNull()?.recurrenceIdMillis,
                         ),
                     )
                 }
@@ -207,6 +209,7 @@ internal class KgsWidgetDataSource(
                         taskResourceHref = task.resourceHref,
                         statusGlyph = task.widgetStatusGlyph(),
                         priority = task.priority,
+                        taskOccurrenceMillis = task.occurrenceIdOrNull()?.recurrenceIdMillis,
                     )
                     add(WidgetDayTimedItem(item, placement.first, placement.second))
                 }
@@ -367,7 +370,7 @@ internal class KgsWidgetDataSource(
 
     private suspend fun loadTaskItems(settings: WidgetRenderSettings, appWidgetId: Int): List<WidgetListRow> {
         val today = LocalDate.now(zoneId)
-        val allTasks = queries.allTasksSnapshot()
+        val allTasks = queries.taskListSnapshot(todayStartMillis())
             .distinctBy { it.resourceHref }
             .let(settings.collectionVisibility::visibleTasks)
         val activeTasks = allTasks.filter { it.isOpen() }
@@ -652,6 +655,7 @@ internal class KgsWidgetDataSource(
             launchKind = launchKind,
             stableKey = "task:$resourceHref",
             taskResourceHref = resourceHref,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
         )
     }
 
@@ -680,6 +684,7 @@ internal class KgsWidgetDataSource(
             priority = priority,
             priorityMotionEnabled = settings.priorityAnimationsEnabled,
             launchKind = KgsWidgetKind.Agenda,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
         )
     }
 
@@ -746,6 +751,7 @@ internal class KgsWidgetDataSource(
             subtasksExpanded = subtasksExpanded,
             priority = priority,
             priorityMotionEnabled = settings.priorityAnimationsEnabled,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
         )
     }
 

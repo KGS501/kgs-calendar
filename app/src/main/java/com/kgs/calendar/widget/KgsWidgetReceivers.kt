@@ -12,8 +12,11 @@ import com.kgs.calendar.MainActivity
 import com.kgs.calendar.widget.model.loadSubtaskTransitionSnapshots
 import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
+import com.kgs.calendar.widget.update.WidgetTaskToggle
 import com.kgs.calendar.widget.update.animateTasksSubtaskToggle
 import com.kgs.calendar.widget.update.refreshTasksWidgetRows
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -35,20 +38,23 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
 
             COLLECTION_ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getStringExtra(KgsWidgetProvider.EXTRA_TASK_RESOURCE_HREF) ?: return
+                val occurrenceMillis = if (intent.hasExtra(KgsWidgetProvider.EXTRA_TASK_OCCURRENCE_MILLIS)) {
+                    intent.getLongExtra(KgsWidgetProvider.EXTRA_TASK_OCCURRENCE_MILLIS, 0L)
+                } else {
+                    null
+                }
                 val pending = goAsync()
                 val graph = KgsCalendarApplication.graph(context.applicationContext)
                 graph.widgets.scheduler.launch {
                     try {
-                        val task = graph.repository.allTasksSnapshot()
-                            .firstOrNull { it.resourceHref == taskId }
-                        if (task != null) {
-                            val nextStatus = if (task.isCompleted || task.status.equals("COMPLETED", ignoreCase = true)) {
-                                "NEEDS-ACTION"
-                            } else {
-                                "COMPLETED"
-                            }
-                            graph.taskMutationCoordinator.setStatus(task.resourceHref, nextStatus)
-                        }
+                        WidgetTaskToggle(
+                            taskByResource = graph.repository::taskByResource,
+                            currentOccurrence = { master ->
+                                val todayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                graph.repository.currentOpenTaskOccurrence(master, todayStart)
+                            },
+                            coordinator = graph.taskMutationCoordinator,
+                        ).toggle(taskId, occurrenceMillis)
                     } finally {
                         pending.finish()
                     }

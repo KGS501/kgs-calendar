@@ -394,6 +394,7 @@ private fun WidgetDayItem.toggleFillInIntent(): Intent {
     val intent = Intent()
     intent.putExtra(EXTRA_COLLECTION_ACTION, COLLECTION_ACTION_TOGGLE_TASK)
     intent.putExtra(KgsWidgetProvider.EXTRA_TASK_RESOURCE_HREF, taskResourceHref)
+    taskOccurrenceMillis?.let { intent.putExtra(KgsWidgetProvider.EXTRA_TASK_OCCURRENCE_MILLIS, it) }
     intent.data = Uri.parse("kgs-calendar://widget-day-grid-toggle/$stableKey")
     return intent
 }

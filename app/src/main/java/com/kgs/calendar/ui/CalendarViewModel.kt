@@ -352,7 +352,12 @@ class CalendarViewModel(
     private val inboxTasks = combine(repository.observeInboxTasks(), collectionVisibility) { tasks, visibility ->
         visibility.visibleTasks(tasks)
     }
-    private val scheduledOpenTasks = combine(repository.observeScheduledOpenTasks(), collectionVisibility) { tasks, visibility ->
+    /** The local day task lists are relative to; recurring tasks appear as their occurrence due on or after it. */
+    private val currentDay = MutableStateFlow(LocalDate.now(zoneId))
+    private val scheduledOpenTasks = combine(
+        repository.observeScheduledOpenTasks(currentDay.map { it.atStartOfDay(zoneId).toInstant().toEpochMilli() }),
+        collectionVisibility,
+    ) { tasks, visibility ->
         visibility.visibleTasks(tasks)
     }
     private val completedTasks = combine(repository.observeCompletedTasks(), collectionVisibility) { tasks, visibility ->
@@ -587,6 +592,11 @@ class CalendarViewModel(
 
     private fun suppressAutomaticRecenterForExplicitLaunch() {
         explicitLaunchSuppressionUntilMillis = System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
+    }
+
+    /** Called when the local date changes while the app is open, so task lists move on to the new day. */
+    fun setCurrentDay(date: LocalDate) {
+        currentDay.value = date
     }
 
     fun setDeviceOrientation(landscape: Boolean) {

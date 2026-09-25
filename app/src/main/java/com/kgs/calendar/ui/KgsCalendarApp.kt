@@ -43,6 +43,9 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
     }
     val baseContext = LocalContext.current
     val configuration = LocalConfiguration.current
+    LaunchedEffect(calendarTime.today) {
+        viewModel.setCurrentDay(calendarTime.today)
+    }
     LaunchedEffect(configuration.orientation) {
         viewModel.setDeviceOrientation(
             configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,

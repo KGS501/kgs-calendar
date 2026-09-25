@@ -4,6 +4,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
 import com.kgs.calendar.ui.CreationSheet
@@ -15,7 +16,6 @@ import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.editor.SavedDraft
-import com.kgs.calendar.ui.model.occurrenceIdOrNull
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime

@@ -7,6 +7,8 @@ import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.recurrence.occurrenceAt
 import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
@@ -23,6 +25,7 @@ import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +47,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -295,6 +299,40 @@ class CalendarViewModelTest {
         awaitReminderReschedules { it > reschedulesBefore }
     }
 
+    @Test
+    fun completingARecurringTaskInTheTaskListCompletesOnlyTheListedOccurrence() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        val viewModel = viewModel()
+        val listed = viewModel.awaitState { state -> state.scheduledOpenTasks.any { it.title == "Water plants" } }
+            .scheduledOpenTasks.single { it.title == "Water plants" }
+        assertEquals(today, listed.dueDate())
+
+        viewModel.edits.setTaskStatus(listed, "COMPLETED")
+
+        val next = viewModel.awaitState { state ->
+            state.scheduledOpenTasks.singleOrNull { it.title == "Water plants" }?.dueDate() == today.plusDays(1)
+        }.scheduledOpenTasks.single { it.title == "Water plants" }
+        assertFalse(next.isCompleted)
+        val master = harness.repository.taskByResource(listed.resourceHref)!!
+        assertFalse(master.isCompleted)
+        assertTrue(master.occurrenceAt(listed.startAtMillis ?: listed.dueAtMillis!!).isCompleted)
+    }
+
+    @Test
+    fun taskListFollowsTheCurrentDay() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        val viewModel = viewModel()
+        viewModel.awaitState { state -> state.scheduledOpenTasks.singleOrNull()?.dueDate() == today }
+
+        viewModel.setCurrentDay(today.plusDays(1))
+
+        viewModel.awaitState { state -> state.scheduledOpenTasks.singleOrNull()?.dueDate() == today.plusDays(1) }
+    }
+
+    private fun TaskEntity.dueDate(): LocalDate = Instant.ofEpochMilli(dueAtMillis!!).atZone(TEST_ZONE).toLocalDate()
+
     private suspend fun awaitReminderReschedules(predicate: (Int) -> Boolean) =
         withContext(Dispatchers.Default) {
             withTimeout(30_000) { reminderReschedules.first(predicate) }
@@ -314,7 +352,13 @@ class CalendarViewModelTest {
                 reconcileLocalState = {},
             ),
             taskMutationCoordinator = TaskMutationCoordinator(
-                persistStatus = { resourceHref, status, _ -> repository.setTaskStatus(resourceHref, status) },
+                persistStatus = { resourceHref, status, occurrenceId ->
+                    if (occurrenceId == null) {
+                        repository.setTaskStatus(resourceHref, status)
+                    } else {
+                        repository.setTaskOccurrenceStatus(resourceHref, occurrenceId.recurrenceIdMillis, status)
+                    }
+                },
                 pushPendingChanges = repository::pushPendingChangesCreatedSince,
                 notificationReconciler = NoOpNotificationReconciler,
                 rescheduleReminders = {},

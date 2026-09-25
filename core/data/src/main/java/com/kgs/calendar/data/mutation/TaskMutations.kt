@@ -11,6 +11,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.newResourceHref
 import com.kgs.calendar.data.newUid
+import com.kgs.calendar.data.recurrence.occurrenceAt
 import com.kgs.calendar.data.toMinutesList
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.model.ComponentType
@@ -299,16 +300,8 @@ class TaskMutations internal constructor(
         }
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
 
-        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return@writeTransaction
-        val shift = occurrenceStartMillis - recurrenceAnchor
-        val generatedOccurrence = existing.copy(
-            startAtMillis = existing.startAtMillis?.plus(shift),
-            dueAtMillis = existing.dueAtMillis?.plus(shift),
-        )
-        val occurrence = RecurrenceOverrideCodec.decodeTasks(existing.recurrenceOverridesJson)
-            .firstOrNull { it.recurrenceIdMillis == occurrenceStartMillis }
-            ?.applyTo(generatedOccurrence)
-            ?: generatedOccurrence
+        if (existing.startAtMillis == null && existing.dueAtMillis == null) return@writeTransaction
+        val occurrence = existing.occurrenceAt(occurrenceStartMillis)
         val completed = status.equals("COMPLETED", ignoreCase = true)
         val updatedOccurrence = occurrence.copy(
             isCompleted = completed,
