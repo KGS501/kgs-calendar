@@ -323,6 +323,7 @@ import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.event.displayColor
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
@@ -699,7 +700,7 @@ private fun TaskDetailHeaderActions(
 internal fun DetailSheetContent(
     detail: DetailSheet,
     collections: List<CollectionEntity>,
-    hiddenCollectionHrefs: Set<String>,
+    collectionVisibility: CollectionVisibility,
     accounts: List<AccountEntity>,
     problemResources: List<CalendarResourceEntity>,
     taskColorMode: TaskColorMode,
@@ -836,7 +837,7 @@ internal fun DetailSheetContent(
                         }
                         DetailOverflowMenu(
                             copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
-                            hiddenCollectionHrefs = hiddenCollectionHrefs,
+                            hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
                             recurringScopes = recurring,
                             itemLabel = stringResource(R.string.event),
                             canDelete = !readOnlySource,
@@ -878,7 +879,7 @@ internal fun DetailSheetContent(
                             taskColorMode = taskColorMode,
                             hasSubtasks = descendantTasks.any { it.parentUid == detail.task.uid },
                             collections = collections,
-                            hiddenCollectionHrefs = hiddenCollectionHrefs,
+                            hiddenCollectionHrefs = collectionVisibility.hrefsHidingTasks,
                             readOnlySource = readOnlySource,
                             burstKey = burstKey,
                             onTaskStatusChanged = onTaskStatusChanged,

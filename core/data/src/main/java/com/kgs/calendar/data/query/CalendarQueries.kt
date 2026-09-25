@@ -11,6 +11,8 @@ import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import com.kgs.calendar.data.recurrence.TaskRecurrenceExpander
 import com.kgs.calendar.data.search.CalendarOccurrenceSearch
 import com.kgs.calendar.data.search.CalendarSearchMode
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
@@ -150,14 +152,37 @@ class CalendarQueries(
     fun observeProblemTasks(): Flow<List<TaskEntity>> = database.taskDao().observeProblemTasks()
 
     /**
-     * Returns all events and tasks (master rows) that carry at least one reminder, used
-     * by the reminder scheduler. Recurrence expansion for reminders is handled by the
-     * scheduler using the recurrence rule + expander.
+     * Returns all events and tasks (master rows) of active calendars that carry at least one
+     * reminder, used by the reminder scheduler. Items the [visibility] hides (whole calendars or
+     * only their events or tasks) are left out, so hidden items never notify. Recurrence
+     * expansion for reminders is handled by the scheduler using the recurrence rule + expander.
      */
-    suspend fun reminderCandidates(): Pair<List<EventEntity>, List<TaskEntity>> {
-        val events = database.eventDao().withReminders()
-        val tasks = database.taskDao().withReminders()
+    suspend fun reminderCandidates(
+        visibility: CollectionVisibility = CollectionVisibility(),
+    ): Pair<List<EventEntity>, List<TaskEntity>> {
+        val events = visibility.visibleEvents(database.eventDao().withReminders())
+        val tasks = visibility.visibleTasks(database.taskDao().withReminders())
         return events to tasks
+    }
+
+    /**
+     * Whether a reminder that is about to fire still belongs to a visible item of an active
+     * calendar. Guards against alarms planned before the calendar was hidden or deactivated.
+     * Items that can no longer be resolved are left to the caller's default.
+     */
+    suspend fun isReminderStillVisible(
+        occurrenceId: CalendarOccurrenceId,
+        visibility: CollectionVisibility,
+    ): Boolean? {
+        val collectionHref = when (occurrenceId) {
+            is CalendarOccurrenceId.Event -> database.eventDao().byResource(occurrenceId.resourceHref)?.collectionHref
+            is CalendarOccurrenceId.Task -> database.taskDao().byResource(occurrenceId.resourceHref)?.collectionHref
+        } ?: return null
+        if (database.collectionDao().get(collectionHref)?.isEnabled == false) return false
+        return when (occurrenceId) {
+            is CalendarOccurrenceId.Event -> visibility.showsEventsOf(collectionHref)
+            is CalendarOccurrenceId.Task -> visibility.showsTasksOf(collectionHref)
+        }
     }
 
     suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> {

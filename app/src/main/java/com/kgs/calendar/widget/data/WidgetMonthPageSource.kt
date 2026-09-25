@@ -55,7 +55,7 @@ internal class WidgetMonthPageSource(
         val labels = context.withWidgetLocale(settings.locale)
         val candidates = mutableListOf<WidgetMonthCandidate>()
         queries.eventsSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleEvents)
             .filterNot { it.isCancelled() }
             .forEach { event ->
                 val itemStart = event.startsAtMillis.toDate(zoneId)
@@ -72,7 +72,7 @@ internal class WidgetMonthPageSource(
                 )
             }
         queries.datedTasksSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
             .filter { task -> isMonthSurfaceTaskVisible(task.isCompleted, task.status) }
             .forEach { task ->
                 val itemStart = task.startAtMillis?.toDate(zoneId)

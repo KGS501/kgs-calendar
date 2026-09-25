@@ -5,6 +5,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.TaskEditPayload
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
 import com.kgs.calendar.ui.CreationSheet
@@ -185,12 +186,23 @@ class CalendarShellUiStateTest {
     fun hiddenSaveNoticeOnlyForHiddenCalendars() {
         val state = CalendarUiState(
             defaultTaskCollectionHref = "hidden",
-            hiddenCollectionHrefs = setOf("hidden"),
+            collectionVisibility = CollectionVisibility(hiddenCollectionHrefs = setOf("hidden")),
         )
         shell.showHiddenSaveNotice("visible", HiddenSaveKind.Event, state)
         assertNull(shell.hiddenSaveNotice)
         shell.showHiddenSaveNotice(null, HiddenSaveKind.Task, state)
         assertEquals(HiddenSaveNotice("hidden", HiddenSaveKind.Task), shell.hiddenSaveNotice)
+    }
+
+    @Test
+    fun hiddenSaveNoticeFollowsTheHiddenItemTypeOfACalendar() {
+        val state = CalendarUiState(
+            collectionVisibility = CollectionVisibility(tasksHiddenIn = setOf("shared")),
+        )
+        shell.showHiddenSaveNotice("shared", HiddenSaveKind.Event, state)
+        assertNull(shell.hiddenSaveNotice)
+        shell.showHiddenSaveNotice("shared", HiddenSaveKind.Task, state)
+        assertEquals(HiddenSaveNotice("shared", HiddenSaveKind.Task), shell.hiddenSaveNotice)
     }
 
     @Test

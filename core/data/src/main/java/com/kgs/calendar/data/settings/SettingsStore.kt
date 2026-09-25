@@ -2,6 +2,7 @@ package com.kgs.calendar.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -17,7 +18,9 @@ import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -262,6 +265,15 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             .toSet()
     }
 
+    /** Whole hidden calendars plus the calendars that hide only their events or only their tasks. */
+    val collectionVisibility: Flow<CollectionVisibility> = dataStore.data.map { prefs ->
+        CollectionVisibility(
+            hiddenCollectionHrefs = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            eventsHiddenIn = prefs[KEY_EVENTS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            tasksHiddenIn = prefs[KEY_TASKS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+        )
+    }.distinctUntilChanged()
+
     suspend fun setSelectedView(viewMode: CalendarViewMode) {
         dataStore.edit { it[KEY_VIEW] = viewMode.name }
     }
@@ -489,11 +501,47 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun setCollectionHiddenInViews(href: String, hidden: Boolean) {
+        setHrefInSet(KEY_HIDDEN_COLLECTION_HREFS, href, hidden)
+    }
+
+    /** Hides only the events of a calendar; its tasks stay visible unless hidden separately. */
+    suspend fun setCollectionEventsHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_EVENTS_HIDDEN_COLLECTION_HREFS, KEY_TASKS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /** Hides only the tasks of a calendar; its events stay visible unless hidden separately. */
+    suspend fun setCollectionTasksHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_TASKS_HIDDEN_COLLECTION_HREFS, KEY_EVENTS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /**
+     * Hiding the last visible item type hides the whole calendar instead, so the sidebar checkbox
+     * always tells whether anything of a calendar is shown.
+     */
+    private suspend fun setCollectionTypeHidden(
+        href: String,
+        hidden: Boolean,
+        typeKey: Preferences.Key<Set<String>>,
+        otherTypeKey: Preferences.Key<Set<String>>,
+    ) {
         dataStore.edit { prefs ->
-            val current = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
-            val next = if (hidden) current + href else current - href
-            if (next.isEmpty()) prefs.remove(KEY_HIDDEN_COLLECTION_HREFS) else prefs[KEY_HIDDEN_COLLECTION_HREFS] = next
+            if (hidden && href in prefs[otherTypeKey].orEmpty()) {
+                prefs.setHref(otherTypeKey, href, included = false)
+                prefs.setHref(KEY_HIDDEN_COLLECTION_HREFS, href, included = true)
+            } else {
+                prefs.setHref(typeKey, href, included = hidden)
+            }
         }
+    }
+
+    private suspend fun setHrefInSet(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        dataStore.edit { prefs -> prefs.setHref(key, href, included) }
+    }
+
+    private fun MutablePreferences.setHref(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        val current = this[key].orEmpty()
+        val next = if (included) current + href else current - href
+        if (next.isEmpty()) remove(key) else this[key] = next
     }
 
     val parserReparseVersion: Flow<Int> = dataStore.data.map { prefs ->
@@ -597,6 +645,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
         private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
         private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
+        private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
+        private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
         private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")
         private val KEY_EXACT_ALARM_PROMPT_SHOWN = booleanPreferencesKey("exact_alarm_prompt_shown")
         private val KEY_DEFAULT_EVENT_COLLECTION = stringPreferencesKey("default_event_collection_href")

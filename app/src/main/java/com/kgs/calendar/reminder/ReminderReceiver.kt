@@ -1,5 +1,6 @@
 package com.kgs.calendar.reminder
 
+import android.app.Notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -57,19 +58,35 @@ class ReminderReceiver : BroadcastReceiver() {
             )
         }
         val notification = notificationBuilder.build()
+        val appContext = context.applicationContext
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // The alarm may predate hiding or deactivating the item's calendar.
+                val occurrence = target.occurrence
+                val stillVisible = occurrence == null ||
+                    runCatching { ReminderScheduler.isStillVisible(appContext, occurrence) }.getOrDefault(true)
+                if (stillVisible) postNotification(appContext, target, notificationKey, notification)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
 
+    private suspend fun postNotification(
+        context: Context,
+        target: CalendarLaunchTarget,
+        notificationKey: ReminderNotificationKey,
+        notification: Notification,
+    ) {
         // POST_NOTIFICATIONS may be revoked; notify() is a no-op then rather than crashing.
         runCatching {
             if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                NotificationManagerCompat.from(context).notify(notificationTag, notificationId, notification)
-                val pendingResult = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    runCatching {
-                        KgsCalendarApplication.graph(context.applicationContext).reminderRegistry.recordNotification(
-                            ActiveReminderNotification(target.occurrence ?: return@runCatching, notificationKey),
-                        )
-                    }
-                    pendingResult.finish()
+                NotificationManagerCompat.from(context).notify(notificationKey.tag, notificationKey.id, notification)
+                runCatching {
+                    KgsCalendarApplication.graph(context).reminderRegistry.recordNotification(
+                        ActiveReminderNotification(target.occurrence ?: return@runCatching, notificationKey),
+                    )
                 }
             }
         }

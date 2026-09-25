@@ -90,7 +90,7 @@ internal fun DetailSheetHost(
                                 DetailSheetContent(
                                     detail = animatedDetail,
                                     collections = state.collections,
-                                    hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+                                    collectionVisibility = state.collectionVisibility,
                                     accounts = state.accounts,
                                     problemResources = state.problemResources,
                                     taskColorMode = state.taskColorMode,

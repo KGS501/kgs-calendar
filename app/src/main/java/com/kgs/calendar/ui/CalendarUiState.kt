@@ -20,6 +20,7 @@ import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.source.CollectionVisibility
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -116,9 +117,13 @@ data class CalendarUiState(
     val hiddenAndroidProviderCalendarNames: List<String> = emptyList(),
     val welcomeCompleted: Boolean = true,
     val showDisabledAndroidProviderCalendars: Boolean = false,
-    val hiddenCollectionHrefs: Set<String> = emptySet(),
+    val collectionVisibility: CollectionVisibility = CollectionVisibility(),
 ) {
     val hasAccount: Boolean = accounts.isNotEmpty() || account != null
+
+    /** Calendars hidden as a whole (the sidebar checkbox). */
+    val hiddenCollectionHrefs: Set<String>
+        get() = collectionVisibility.hiddenCollectionHrefs
     val taskHierarchyTasks: List<TaskEntity>
         get() = (inboxTasks + scheduledOpenTasks + completedTasks + datedTasks)
             .distinctBy { it.resourceHref }

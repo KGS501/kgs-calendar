@@ -87,7 +87,7 @@ internal class KgsWidgetDataSource(
         }
         val languageMode = async { settingsStore.languageMode.first() }
         val firstDayOfWeek = async { settingsStore.firstDayOfWeek.first() }
-        val hiddenCollectionHrefs = async { settingsStore.hiddenCollectionHrefs.first() }
+        val collectionVisibility = async { settingsStore.collectionVisibility.first() }
         val showCompletedTasks = async { settingsStore.showCompletedTasksInCalendar.first() }
         val taskColorMode = async { settingsStore.taskColorMode.first() }
         val priorityAnimationsEnabled = async { settingsStore.priorityAnimationsEnabled.first() }
@@ -106,7 +106,7 @@ internal class KgsWidgetDataSource(
         WidgetRenderSettings(
             locale = languageMode.await().toLocale(context),
             firstDayOfWeek = firstDayOfWeek.await(),
-            hiddenCollectionHrefs = hiddenCollectionHrefs.await(),
+            collectionVisibility = collectionVisibility.await(),
             showCompletedTasks = showCompletedTasks.await(),
             themeMode = widgetThemeMode.await().resolve(appThemeMode.await()),
             colorMode = widgetColorMode.await().resolve(appColorMode.await()),
@@ -132,10 +132,10 @@ internal class KgsWidgetDataSource(
         val start = day.atStartOfDay(zoneId).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
         val events = queries.eventsSnapshot(start, end)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleEvents)
             .filterNot { it.isCancelled() }
         val tasks = queries.datedTasksSnapshot(start, end)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val allDayItems = buildList {
@@ -221,7 +221,7 @@ internal class KgsWidgetDataSource(
                 append(WIDGET_DAY_RENDER_SIGNATURE_VERSION)
                 append('|').append(day.toEpochDay())
                 append('|').append(settings.locale.toLanguageTag())
-                append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+                append('|').append(settings.collectionVisibility.signature())
                 append('|').append(settings.showCompletedTasks)
                 append('|').append(settings.themeMode.name)
                 append('|').append(settings.colorMode.name)
@@ -271,7 +271,7 @@ internal class KgsWidgetDataSource(
             append(kind.name)
             append('|').append(LocalDate.now(zoneId).toEpochDay())
             append('|').append(settings.locale.toLanguageTag())
-            append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+            append('|').append(settings.collectionVisibility.signature())
             append('|').append(settings.showCompletedTasks)
             append('|').append(settings.themeMode.name)
             append('|').append(settings.colorMode.name)
@@ -321,10 +321,10 @@ internal class KgsWidgetDataSource(
         val startDate = Instant.ofEpochMilli(startMillis).atZone(zoneId).toLocalDate()
         val endDateExclusive = Instant.ofEpochMilli(endMillis).atZone(zoneId).toLocalDate()
         val eventSnapshot = queries.eventsSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleEvents)
             .filterNot { it.isCancelled() }
         val taskSnapshot = queries.datedTasksSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val events = if (launchKind == KgsWidgetKind.Agenda) {
@@ -369,7 +369,7 @@ internal class KgsWidgetDataSource(
         val today = LocalDate.now(zoneId)
         val allTasks = queries.allTasksSnapshot()
             .distinctBy { it.resourceHref }
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
         val activeTasks = allTasks.filter { it.isOpen() }
         val selectedTasks = when (settings.tasksWidgetDisplayMode) {
             WidgetTaskDisplayMode.Planned -> activeTasks.filter { it.widgetTaskDate(zoneId) != null }

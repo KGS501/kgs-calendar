@@ -71,7 +71,12 @@ internal fun HiddenSaveNoticeDialog(
             ),
             onDismiss = shell::dismissHiddenSaveNotice,
             onUnhide = {
-                viewModel.settings.setCollectionVisibleInViews(currentHiddenSaveCollection.href, true)
+                val href = currentHiddenSaveCollection.href
+                viewModel.settings.setCollectionVisibleInViews(href, true)
+                when (currentHiddenSaveNotice.kind) {
+                    HiddenSaveKind.Event -> viewModel.settings.setCollectionEventsVisible(href, true)
+                    HiddenSaveKind.Task -> viewModel.settings.setCollectionTasksVisible(href, true)
+                }
                 shell.dismissHiddenSaveNotice()
             },
         )
@@ -216,6 +221,8 @@ internal fun CollectionSettingsHost(
             CollectionSettingsSheet(
                 collection = collection,
                 visibleInViews = collection.href !in state.hiddenCollectionHrefs,
+                eventsVisible = collection.href !in state.collectionVisibility.eventsHiddenIn,
+                tasksVisible = collection.href !in state.collectionVisibility.tasksHiddenIn,
                 onSave = { name, color ->
                     viewModel.sources.updateCollectionAppearance(collection.href, name, color)
                     shell.closeCollectionEditor()
@@ -226,6 +233,12 @@ internal fun CollectionSettingsHost(
                 },
                 onVisibleInViewsChanged = { visible ->
                     viewModel.settings.setCollectionVisibleInViews(collection.href, visible)
+                },
+                onEventsVisibleChanged = { visible ->
+                    viewModel.settings.setCollectionEventsVisible(collection.href, visible)
+                },
+                onTasksVisibleChanged = { visible ->
+                    viewModel.settings.setCollectionTasksVisible(collection.href, visible)
                 },
                 onDelete = if (collection.canDeleteFromServerForUi()) {
                     {

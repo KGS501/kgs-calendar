@@ -371,7 +371,11 @@ internal class CalendarShellUiState(
             HiddenSaveKind.Event -> state.defaultEventCollectionHref
             HiddenSaveKind.Task -> state.defaultTaskCollectionHref
         }
-        if (resolvedHref != null && resolvedHref in state.hiddenCollectionHrefs) {
+        val visible = when (kind) {
+            HiddenSaveKind.Event -> state.collectionVisibility.showsEventsOf(resolvedHref)
+            HiddenSaveKind.Task -> state.collectionVisibility.showsTasksOf(resolvedHref)
+        }
+        if (resolvedHref != null && !visible) {
             hiddenSaveNotice = HiddenSaveNotice(resolvedHref, kind)
         }
     }

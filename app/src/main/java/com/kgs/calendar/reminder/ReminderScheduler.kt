@@ -11,7 +11,9 @@ import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -63,7 +65,8 @@ object ReminderScheduler {
         ensureChannel(context)
         val graph = KgsCalendarApplication.graph(context)
         val repository = graph.repository
-        val (events, tasks) = repository.reminderCandidates()
+        // Hidden calendars, and hidden events or tasks of a calendar, never notify.
+        val (events, tasks) = repository.reminderCandidates(graph.settingsStore.collectionVisibility.first())
         val now = System.currentTimeMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -116,6 +119,16 @@ object ReminderScheduler {
         activePlans.forEach { plan ->
             scheduleExactCompat(alarmManager, plan.triggerAtMillis, ReminderIntents.alarmPendingIntent(context, plan))
         }
+    }
+
+    /**
+     * Last check before a due alarm posts its notification: false when the item's calendar was
+     * hidden or deactivated after the alarm had been planned. Unresolvable items still notify.
+     */
+    suspend fun isStillVisible(context: Context, occurrenceId: CalendarOccurrenceId): Boolean {
+        val graph = KgsCalendarApplication.graph(context)
+        val visibility = graph.settingsStore.collectionVisibility.first()
+        return graph.repository.isReminderStillVisible(occurrenceId, visibility) ?: true
     }
 
     private fun String?.minutes(): List<Int> =

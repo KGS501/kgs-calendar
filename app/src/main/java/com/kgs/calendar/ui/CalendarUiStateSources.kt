@@ -20,6 +20,7 @@ import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -88,7 +89,7 @@ internal data class AppBehaviourSettings(
     val maxVisibleAllDayItems: Int,
     val welcomeCompleted: Boolean,
     val showDisabledAndroidProviderCalendars: Boolean,
-    val hiddenCollectionHrefs: Set<String>,
+    val collectionVisibility: CollectionVisibility,
 )
 
 internal data class TimelineZoomSettings(
@@ -205,7 +206,7 @@ internal fun calendarDataState(
  */
 internal fun generalSettings(
     settingsStore: SettingsStore,
-    hiddenCollectionHrefs: Flow<Set<String>>,
+    collectionVisibility: Flow<CollectionVisibility>,
     firstDayOfWeek: Flow<DayOfWeek>,
     weekViewEnabled: Flow<Boolean>,
     fullWeekSwipeEnabled: Flow<Boolean>,
@@ -233,7 +234,7 @@ internal fun generalSettings(
         settingsStore.maxVisibleAllDayItems,
         settingsStore.welcomeCompleted,
         settingsStore.showDisabledAndroidProviderCalendars,
-        hiddenCollectionHrefs,
+        collectionVisibility,
         ::AppBehaviourSettings,
     ),
     combine(
@@ -437,6 +438,6 @@ internal fun calendarUiState(
         hiddenAndroidProviderCalendarNames = transient.hiddenAndroidProviderCalendarNames,
         welcomeCompleted = behaviour.welcomeCompleted,
         showDisabledAndroidProviderCalendars = behaviour.showDisabledAndroidProviderCalendars,
-        hiddenCollectionHrefs = behaviour.hiddenCollectionHrefs,
+        collectionVisibility = behaviour.collectionVisibility,
     )
 }

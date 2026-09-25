@@ -324,7 +324,7 @@
     <string name="sources">Sources</string>
     <string name="task_lists">Task lists</string>
     <string name="active">Active</string>
-    <string name="calendar_sidebar_help">The sidebar checkbox only hides items from views. The Active switch controls whether a calendar syncs and participates in the app.</string>
+    <string name="calendar_sidebar_help">The sidebar checkbox hides items from views and mutes their reminders. The Active switch controls whether a calendar syncs and participates in the app.</string>
     <string name="readonly_urls">Read-only URLs</string>
     <string name="readonly_urls_help">Subscribed ICS/CalDAV URLs appear as separate sources and cannot be edited.</string>
     <string name="calendar_order_help">Drag calendars into your preferred order. The order affects the sidebar, editors, and detail menus.</string>
@@ -375,6 +375,10 @@
     <string name="calendar_inactive">Inactive</string>
     <string name="calendar_visible">Visible</string>
     <string name="calendar_hidden">Hidden</string>
+    <string name="calendar_show_events">Show events</string>
+    <string name="calendar_show_events_help">Hidden events disappear from all views and widgets and send no reminders.</string>
+    <string name="calendar_show_tasks">Show tasks</string>
+    <string name="calendar_show_tasks_help">Hidden tasks disappear from all views and widgets and send no reminders.</string>
     <string name="calendar_supported">Supported</string>
     <string name="calendar_unsupported">Unsupported</string>
     <string name="calendar_unknown">Unknown</string>

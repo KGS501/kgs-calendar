@@ -113,7 +113,7 @@ internal fun widgetMonthPageModelNamespace(
     append('|').append(settings.firstDayOfWeek.name)
     append('|').append(settings.taskColorMode.name)
     append('|').append(settings.showCompletedTasks)
-    append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+    append('|').append(settings.collectionVisibility.signature())
     append('|').append(zoneId)
 }
 

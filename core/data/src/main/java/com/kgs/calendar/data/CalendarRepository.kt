@@ -13,8 +13,10 @@ import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.LocalTime
@@ -222,7 +224,12 @@ class CalendarRepository(
 
     suspend fun deleteCalDavCalendar(href: String) = sources.deleteCalDavCalendar(href)
 
-    suspend fun reminderCandidates(): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates()
+    suspend fun reminderCandidates(
+        visibility: CollectionVisibility = CollectionVisibility(),
+    ): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates(visibility)
+
+    suspend fun isReminderStillVisible(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean? =
+        queries.isReminderStillVisible(occurrenceId, visibility)
 
     suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> =
         queries.notificationCandidates(nowMillis, windowEndMillis)

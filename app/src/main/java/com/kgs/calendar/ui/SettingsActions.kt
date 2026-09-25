@@ -303,8 +303,22 @@ class SettingsActions internal constructor(
     }
 
     fun setCollectionVisibleInViews(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionHiddenInViews(href, hidden = !visible) }
+    }
+
+    fun setCollectionEventsVisible(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionEventsHidden(href, hidden = !visible) }
+    }
+
+    fun setCollectionTasksVisible(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionTasksHidden(href, hidden = !visible) }
+    }
+
+    /** Hidden items never notify, so every visibility change replaces the planned reminders at once. */
+    private fun updateCollectionVisibility(block: suspend () -> Unit) {
         scope.launch {
-            settingsStore.setCollectionHiddenInViews(href, hidden = !visible)
+            block()
+            runCatching { reminderRescheduler.reschedule() }
         }
     }
 

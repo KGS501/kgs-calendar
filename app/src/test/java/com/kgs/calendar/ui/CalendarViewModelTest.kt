@@ -7,6 +7,7 @@ import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
+import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
@@ -63,6 +64,7 @@ class CalendarViewModelTest {
     private lateinit var settingsStore: SettingsStore
     private val widgetRefresher = RecordingWidgetRefresher()
     private val lifecycleSignals = FakeAppLifecycleSignals()
+    private val reminderReschedules = MutableStateFlow(0)
     private val viewModels = mutableListOf<CalendarViewModel>()
     private val today = LocalDate.now(TEST_ZONE)
 
@@ -252,6 +254,52 @@ class CalendarViewModelTest {
         assertEquals("Dentist", hidden.searchQuery)
     }
 
+    @Test
+    fun hidingOnlyTheTasksOfACalendarKeepsItsEventsAndReplansReminders() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createEvent(eventPayload("Team standup", today))
+        harness.repository.createTask(taskPayload("Team report", dueDate = today))
+        val viewModel = viewModel()
+        viewModel.search.setSearchQuery("Team")
+        viewModel.awaitState { state ->
+            state.events.any { it.title == "Team standup" } &&
+                state.datedTasks.any { it.title == "Team report" } &&
+                state.searchResults.isNotEmpty() &&
+                state.searchTaskResults.isNotEmpty()
+        }
+        val reschedulesBefore = reminderReschedules.value
+
+        viewModel.settings.setCollectionTasksVisible(LOCAL_COLLECTION, visible = false)
+
+        val hidden = viewModel.awaitState { state ->
+            LOCAL_COLLECTION in state.collectionVisibility.tasksHiddenIn &&
+                state.datedTasks.isEmpty() &&
+                state.scheduledOpenTasks.isEmpty() &&
+                state.searchTaskResults.isEmpty()
+        }
+        assertEquals(listOf("Team standup"), hidden.events.map { it.title })
+        assertEquals(listOf("Team standup"), hidden.searchResults.map { it.title })
+        assertTrue(hidden.hiddenCollectionHrefs.isEmpty())
+        awaitReminderReschedules { it > reschedulesBefore }
+    }
+
+    @Test
+    fun hidingACalendarReplansReminders() = runTest {
+        harness.repository.ensureLocalCalendar()
+        val viewModel = viewModel()
+        val reschedulesBefore = reminderReschedules.value
+
+        viewModel.settings.setCollectionVisibleInViews(LOCAL_COLLECTION, visible = false)
+
+        viewModel.awaitState { LOCAL_COLLECTION in it.hiddenCollectionHrefs }
+        awaitReminderReschedules { it > reschedulesBefore }
+    }
+
+    private suspend fun awaitReminderReschedules(predicate: (Int) -> Boolean) =
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { reminderReschedules.first(predicate) }
+        }
+
     private fun viewModel(
         widgetTarget: CalendarWidgetLaunchTarget? = null,
         deliverInitialLaunchEvents: Boolean = true,
@@ -281,7 +329,7 @@ class CalendarViewModelTest {
             ),
             timelineViewportMemory = TimelineOrientationViewportMemory(),
             widgetRefresher = widgetRefresher,
-            reminderRescheduler = ReminderRescheduler {},
+            reminderRescheduler = ReminderRescheduler { reminderReschedules.update { it + 1 } },
             appLifecycleSignals = lifecycleSignals,
             uiStrings = UiStrings { "string-$it" },
             zoneId = TEST_ZONE,

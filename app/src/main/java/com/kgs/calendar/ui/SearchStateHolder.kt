@@ -5,6 +5,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
+import com.kgs.calendar.domain.source.CollectionVisibility
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,11 +25,11 @@ internal data class SearchUiState(
     val taskResults: List<TaskEntity>,
 )
 
-/** Search query, mode and occurrence window plus the results filtered by hidden collections. */
+/** Search query, mode and occurrence window plus the results filtered by the hidden calendars and item types. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchStateHolder internal constructor(
     private val repository: CalendarRepository,
-    private val hiddenCollectionHrefs: Flow<Set<String>>,
+    private val collectionVisibility: Flow<CollectionVisibility>,
     private val zoneId: ZoneId,
 ) {
     private val searchQuery = MutableStateFlow("")
@@ -53,9 +54,9 @@ class SearchStateHolder internal constructor(
                         rangeStartMillis = request.range.startMillis(zoneId),
                         rangeEndMillis = request.range.endMillis(zoneId),
                     ),
-                    hiddenCollectionHrefs,
-                ) { events, hidden ->
-                    events.filterNot { it.collectionHref in hidden }
+                    collectionVisibility,
+                ) { events, visibility ->
+                    visibility.visibleEvents(events)
                 }
             }
         }
@@ -72,9 +73,9 @@ class SearchStateHolder internal constructor(
                         rangeStartMillis = request.range.startMillis(zoneId),
                         rangeEndMillis = request.range.endMillis(zoneId),
                     ),
-                    hiddenCollectionHrefs,
-                ) { tasks, hidden ->
-                    tasks.filterNot { it.collectionHref in hidden }
+                    collectionVisibility,
+                ) { tasks, visibility ->
+                    visibility.visibleTasks(tasks)
                 }
             }
         }

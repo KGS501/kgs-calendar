@@ -324,7 +324,7 @@
     <string name="sources">Quellen</string>
     <string name="task_lists">Aufgabenlisten</string>
     <string name="active">Aktiv</string>
-    <string name="calendar_sidebar_help">Die Checkbox in der Seitenleiste blendet Einträge nur in Ansichten aus. Der Aktiv-Schalter steuert, ob ein Kalender synchronisiert wird und in der App mitläuft.</string>
+    <string name="calendar_sidebar_help">Die Checkbox in der Seitenleiste blendet Einträge in Ansichten aus und schaltet ihre Erinnerungen stumm. Der Aktiv-Schalter steuert, ob ein Kalender synchronisiert wird und in der App mitläuft.</string>
     <string name="readonly_urls">Read-only URLs</string>
     <string name="readonly_urls_help">Abonnierte ICS-/CalDAV-URLs erscheinen als eigene Quellen und können nicht bearbeitet werden.</string>
     <string name="calendar_order_help">Ziehe die Kalender per Drag-Handle in deine bevorzugte Reihenfolge. Die Reihenfolge wirkt auf Seitenleiste, Editoren und Detail-Menüs.</string>
@@ -375,6 +375,10 @@
     <string name="calendar_inactive">Inaktiv</string>
     <string name="calendar_visible">Sichtbar</string>
     <string name="calendar_hidden">Ausgeblendet</string>
+    <string name="calendar_show_events">Termine anzeigen</string>
+    <string name="calendar_show_events_help">Ausgeblendete Termine verschwinden aus allen Ansichten und Widgets und erinnern dich nicht mehr.</string>
+    <string name="calendar_show_tasks">Aufgaben anzeigen</string>
+    <string name="calendar_show_tasks_help">Ausgeblendete Aufgaben verschwinden aus allen Ansichten und Widgets und erinnern dich nicht mehr.</string>
     <string name="calendar_supported">Unterstützt</string>
     <string name="calendar_unsupported">Nicht unterstützt</string>
     <string name="calendar_unknown">Unbekannt</string>

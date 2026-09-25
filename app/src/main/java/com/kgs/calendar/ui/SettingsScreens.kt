@@ -1707,7 +1707,7 @@ internal fun SettingsPage(
             title = appString(R.string.default_calendar),
             selectedHref = state.defaultEventCollectionHref,
             collections = state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() },
-            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            hiddenCollectionHrefs = state.collectionVisibility.hrefsHidingEvents,
             onSelected = {
                 onDefaultEventCollectionSelected(it)
                 defaultEventCollectionDialogOpen = false
@@ -1720,7 +1720,7 @@ internal fun SettingsPage(
             title = appString(R.string.default_list),
             selectedHref = state.defaultTaskCollectionHref,
             collections = state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() },
-            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            hiddenCollectionHrefs = state.collectionVisibility.hrefsHidingTasks,
             onSelected = {
                 onDefaultTaskCollectionSelected(it)
                 defaultTaskCollectionDialogOpen = false
@@ -2050,6 +2050,10 @@ internal fun CollectionSettingsSheet(
     onSave: (String, Int?) -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
     onVisibleInViewsChanged: (Boolean) -> Unit,
+    eventsVisible: Boolean = true,
+    tasksVisible: Boolean = true,
+    onEventsVisibleChanged: (Boolean) -> Unit = {},
+    onTasksVisibleChanged: (Boolean) -> Unit = {},
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
@@ -2111,6 +2115,31 @@ internal fun CollectionSettingsSheet(
             subtitle = appString(R.string.calendar_sidebar_help),
             warningUnchecked = !visibleInViews,
         )
+        // Calendars with both events and tasks can hide one of the two. Hiding both hides the calendar.
+        if (collection.supportsEvents && collection.supportsTasks) {
+            AnimatedVisibility(
+                visible = visibleInViews,
+                enter = expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)) + fadeIn(tween(MotionShort)),
+                exit = shrinkVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SettingsSwitchRow(
+                        title = appString(R.string.calendar_show_events),
+                        checked = eventsVisible,
+                        onCheckedChange = onEventsVisibleChanged,
+                        subtitle = appString(R.string.calendar_show_events_help),
+                        warningUnchecked = !eventsVisible,
+                    )
+                    SettingsSwitchRow(
+                        title = appString(R.string.calendar_show_tasks),
+                        checked = tasksVisible,
+                        onCheckedChange = onTasksVisibleChanged,
+                        subtitle = appString(R.string.calendar_show_tasks_help),
+                        warningUnchecked = !tasksVisible,
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

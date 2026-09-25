@@ -19,6 +19,7 @@ import com.kgs.calendar.domain.model.timelineEntryDate
 import com.kgs.calendar.domain.model.timelineRestoreDate
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.reminder.TaskMutationCoordinator
@@ -235,8 +236,8 @@ class CalendarViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
     private val agendaDataRange = MutableStateFlow(AgendaWindowPolicy.around(initialSelectedDate))
-    private val hiddenCollectionHrefs = settingsStore.hiddenCollectionHrefs
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+    private val collectionVisibility = settingsStore.collectionVisibility
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CollectionVisibility())
     private val portraitMultiDayCount = settingsStore.portraitMultiDayCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
     private val landscapeMultiDayCount = settingsStore.landscapeMultiDayCount
@@ -316,11 +317,11 @@ class CalendarViewModel(
     private val loadedEvents = dataRange.flatMapLatest { range ->
         combine(
             repository.observeEvents(range.startMillis(zoneId), range.endMillis(zoneId)),
-            hiddenCollectionHrefs,
-        ) { events, hidden ->
+            collectionVisibility,
+        ) { events, visibility ->
             LoadedCalendarItems(
                 range = range,
-                items = events.filterNot { it.collectionHref in hidden },
+                items = visibility.visibleEvents(events),
             )
         }
     }.stateIn(
@@ -331,11 +332,11 @@ class CalendarViewModel(
     private val loadedDatedTasks = dataRange.flatMapLatest { range ->
         combine(
             repository.observeDatedTasks(range.startMillis(zoneId), range.endMillis(zoneId)),
-            hiddenCollectionHrefs,
-        ) { tasks, hidden ->
+            collectionVisibility,
+        ) { tasks, visibility ->
             LoadedCalendarItems(
                 range = range,
-                items = tasks.filterNot { it.collectionHref in hidden },
+                items = visibility.visibleTasks(tasks),
             )
         }
     }.stateIn(
@@ -348,17 +349,17 @@ class CalendarViewModel(
     private val loadedDataRange = combine(loadedEvents, loadedDatedTasks) { eventWindow, taskWindow ->
         eventWindow.range.takeIf { it == taskWindow.range }
     }
-    private val inboxTasks = combine(repository.observeInboxTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    private val inboxTasks = combine(repository.observeInboxTasks(), collectionVisibility) { tasks, visibility ->
+        visibility.visibleTasks(tasks)
     }
-    private val scheduledOpenTasks = combine(repository.observeScheduledOpenTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    private val scheduledOpenTasks = combine(repository.observeScheduledOpenTasks(), collectionVisibility) { tasks, visibility ->
+        visibility.visibleTasks(tasks)
     }
-    private val completedTasks = combine(repository.observeCompletedTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    private val completedTasks = combine(repository.observeCompletedTasks(), collectionVisibility) { tasks, visibility ->
+        visibility.visibleTasks(tasks)
     }
 
-    val search = SearchStateHolder(repository, hiddenCollectionHrefs, zoneId)
+    val search = SearchStateHolder(repository, collectionVisibility, zoneId)
 
     val settings = SettingsActions(
         scope = viewModelScope,
@@ -389,7 +390,7 @@ class CalendarViewModel(
     private val settingsState = combine(
         generalSettings(
             settingsStore = settingsStore,
-            hiddenCollectionHrefs = hiddenCollectionHrefs,
+            collectionVisibility = collectionVisibility,
             firstDayOfWeek = firstDayOfWeek,
             weekViewEnabled = weekViewEnabled,
             fullWeekSwipeEnabled = fullWeekSwipeEnabled,

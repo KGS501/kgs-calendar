@@ -740,7 +740,7 @@ internal fun TaskEditorSheet(
                                 collection = collection,
                                 selected = collection.href == selectedCollectionHref,
                                 onClick = { selectedCollectionHref = collection.href },
-                                hidden = collection.href in state.hiddenCollectionHrefs,
+                                hidden = collection.href in state.collectionVisibility.hrefsHidingTasks,
                             )
                         }
                     }
