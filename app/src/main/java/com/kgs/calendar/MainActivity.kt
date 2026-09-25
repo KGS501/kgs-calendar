@@ -35,11 +35,13 @@ class MainActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
     private var initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null
     private var initialCalendarLaunchTarget: CalendarLaunchTarget? = null
+    private var restoredFromSavedState = false
     private val calendarViewModel: CalendarViewModel by viewModels {
         CalendarViewModelFactory(
             graph,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+            deliverInitialLaunchEvents = !restoredFromSavedState,
         )
     }
     private val notificationPermissionLauncher =
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        restoredFromSavedState = savedInstanceState != null
         initialCalendarLaunchTarget = CalendarLaunchTarget.readFrom(intent)
         initialWidgetLaunchTarget = if (initialCalendarLaunchTarget == null) {
             intent.toExternalCalendarLaunchTarget() ?: intent.toWidgetLaunchTarget()
@@ -55,7 +58,9 @@ class MainActivity : ComponentActivity() {
             null
         }
         maybeRequestNotificationPermission()
-        maybeRequestExactAlarmPermission()
+        if (savedInstanceState == null) {
+            maybeRequestExactAlarmPermission()
+        }
         setContent {
             KgsCalendarApp(viewModel = calendarViewModel)
         }
@@ -97,13 +102,20 @@ class MainActivity : ComponentActivity() {
     private fun maybeRequestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (!alarmManager.canScheduleExactAlarms()) {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                        Uri.parse("package:$packageName"),
-                    ),
-                )
+            if (alarmManager.canScheduleExactAlarms()) return
+            // Offer the settings screen only once per install; reminders fall back to inexact
+            // alarms when the user declines (see ReminderScheduler.scheduleExactCompat).
+            lifecycleScope.launch {
+                if (graph.settingsStore.markExactAlarmPromptShown()) {
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:$packageName"),
+                            ),
+                        )
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.update.LatestPendingSerialQueue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle

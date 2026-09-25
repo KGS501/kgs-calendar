@@ -214,7 +214,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -302,7 +301,9 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.ui.editor.DraftCodec
+import com.kgs.calendar.ui.editor.EditorDraftStore
+import com.kgs.calendar.ui.editor.rememberEditorDraftFields
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -325,11 +326,15 @@ import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.Organizer
+import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -371,14 +376,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
@@ -397,7 +398,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
-import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.DayOfWeek
 import java.time.Instant
@@ -433,6 +433,8 @@ internal fun EventEditorSheet(
     onScheduleChange: (EditorScheduleState) -> Unit,
     expanded: Boolean,
     initialEvent: EventEntity?,
+    draftStore: EditorDraftStore,
+    draftId: String?,
     transferDraft: EditorTransferDraft? = null,
     headerTitle: String? = null,
     requestTitleFocus: Boolean = false,
@@ -448,19 +450,18 @@ internal fun EventEditorSheet(
             state.collections.filter { it.href == initialEvent.collectionHref }
         } else {
             state.collections
-                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                .filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                 .sortedWithDefaultFirst(state.defaultEventCollectionHref)
         }
     }
-    var title by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.title ?: transferDraft?.title.orEmpty()) }
-    var selectedCollectionHref by remember(initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
+    val draft = rememberEditorDraftFields(draftStore, draftId)
+    var title by draft.field("title", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.title ?: transferDraft?.title.orEmpty() }
+    var selectedCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
         val preferred = state.defaultEventCollectionHref
             ?.takeIf { href -> eventCollections.any { it.href == href } }
-        mutableStateOf(
-            initialEvent?.collectionHref
-                ?: preferred
-                ?: eventCollections.firstOrNull()?.href,
-        )
+        initialEvent?.collectionHref
+            ?: preferred
+            ?: eventCollections.firstOrNull()?.href
     }
     val selectedCollectionIndex = remember(eventCollections, selectedCollectionHref) {
         eventCollections.indexOfFirst { it.href == selectedCollectionHref }
@@ -470,39 +471,39 @@ internal fun EventEditorSheet(
     val startText = schedule.startTimeText
     val endText = schedule.endTimeText
     val allDay = schedule.allDay
-    var location by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.manualColor ?: transferDraft?.manualColor) }
-    var description by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.description ?: transferDraft?.notes.orEmpty()) }
-    var recurrenceRule by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var eventStatus by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.status ?: EventStatusOption.Confirmed.value) }
-    var eventClassification by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.classification ?: EventClassOption.Public.value) }
-    var eventTransparency by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.transparency ?: EventTransparencyOption.Busy.value) }
-    var categories by remember(initialEvent?.uid, transferDraft) { mutableStateOf(initialEvent?.categories ?: transferDraft?.categories.orEmpty()) }
+    var location by draft.field("location", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.location ?: transferDraft?.location.orEmpty() }
+    var locationMapVerified by draft.field("locationMapVerified", DraftCodec.OptionalFlag, initialEvent?.uid, transferDraft) { initialEvent?.locationMapVerified ?: transferDraft?.locationMapVerified }
+    var manualColor by draft.field("manualColor", DraftCodec.OptionalNumber, initialEvent?.uid, transferDraft) { initialEvent?.manualColor ?: transferDraft?.manualColor }
+    var description by draft.field("description", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.description ?: transferDraft?.notes.orEmpty() }
+    var recurrenceRule by draft.field("recurrenceRule", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty() }
+    var eventStatus by draft.field("status", DraftCodec.Text, initialEvent?.uid) { initialEvent?.status ?: EventStatusOption.Confirmed.value }
+    var eventClassification by draft.field("classification", DraftCodec.Text, initialEvent?.uid) { initialEvent?.classification ?: EventClassOption.Public.value }
+    var eventTransparency by draft.field("transparency", DraftCodec.Text, initialEvent?.uid) { initialEvent?.transparency ?: EventTransparencyOption.Busy.value }
+    var categories by draft.field("categories", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.categories ?: transferDraft?.categories.orEmpty() }
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
         state.allKnownCategoryTags()
     }
-    var reminderMinutes by remember(initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
-        mutableStateOf(
-            when {
-                initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
-                transferDraft != null -> transferDraft.reminderMinutes
-                else -> state.defaultEventReminderMinutes
-            },
-        )
+    var reminderMinutes by draft.field("reminderMinutes", DraftCodec.MinuteSet, initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
+        when {
+            initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
+            transferDraft != null -> transferDraft.reminderMinutes
+            else -> state.defaultEventReminderMinutes
+        }
     }
     val organizerJson = initialEvent?.organizerJson ?: remember(selectedCollectionHref, state.accounts, eventCollections) {
         val accountId = eventCollections.firstOrNull { it.href == selectedCollectionHref }?.accountId
         val account = state.accounts.firstOrNull { it.id == accountId }
         val email = account?.username?.trim()?.takeIf { it.isLikelyEmailAddress() }
         email?.let {
-            JSONObject()
-                .put("name", account.displayName?.takeIf { name -> name.isNotBlank() } ?: email)
-                .put("email", email)
-                .toString()
+            ParticipantJson.encodeOrganizer(
+                Organizer(
+                    email = email,
+                    name = account.displayName?.takeIf { name -> name.isNotBlank() } ?: email,
+                ),
+            )
         }
     }
-    var attendeesJson by remember(initialEvent?.uid) { mutableStateOf(initialEvent?.attendeesJson) }
+    var attendeesJson by draft.field("attendeesJson", DraftCodec.OptionalText, initialEvent?.uid) { initialEvent?.attendeesJson }
     var locationPickerOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     var invalidRangeDialogOpen by remember(initialEvent?.uid) { mutableStateOf(false) }
     val invalidTimeRange = eventDateTimeRangeInvalid(

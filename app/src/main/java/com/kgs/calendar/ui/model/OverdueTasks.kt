@@ -1,6 +1,7 @@
 package com.kgs.calendar.ui.model
 
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.task.isOpen
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -12,11 +13,7 @@ internal fun TaskEntity.isOverdueTask(
     today: LocalDate,
     zoneId: ZoneId,
 ): Boolean {
-    if (
-        isCompleted ||
-        status.equals("COMPLETED", ignoreCase = true) ||
-        status.equals("CANCELLED", ignoreCase = true)
-    ) return false
+    if (!isOpen()) return false
     val effectiveAtMillis = effectiveOverdueAtMillis() ?: return false
     val effectiveDate = Instant.ofEpochMilli(effectiveAtMillis).atZone(zoneId).toLocalDate()
     return effectiveDate.isBefore(today)

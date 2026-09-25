@@ -303,7 +303,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -328,9 +327,12 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.task.TaskParentLookup
+import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -372,14 +374,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
@@ -711,24 +709,11 @@ internal fun TaskParentPickerDialog(
 internal fun List<TaskEntity>.filterForParentPicker(query: String): List<TaskEntity> {
     val normalized = query.trim().lowercase(Locale.ROOT)
     if (normalized.isBlank()) return this
-    val byCollectionUid = associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
+    val parents = TaskParentLookup(this)
     val included = mutableSetOf<String>()
 
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
     fun includeWithAncestors(task: TaskEntity) {
-        var cursor: TaskEntity? = task
-        val seen = mutableSetOf<String>()
-        while (cursor != null && seen.add(cursor.resourceHref)) {
-            included += cursor.resourceHref
-            cursor = parentOf(cursor)
-        }
+        parents.selfAndAncestors(task).forEach { included += it.resourceHref }
     }
 
     fun TaskEntity.matchesSearch(): Boolean {
@@ -749,30 +734,12 @@ internal fun List<TaskEntity>.searchHierarchySubsetForMatches(matches: List<Task
     if (matches.isEmpty()) return TaskHierarchySubset(emptyList())
     val base = (this + matches).distinctBy { it.resourceHref }
     val byResource = base.associateBy { it.resourceHref }
-    val byCollectionUid = base.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = base.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
+    val parents = TaskParentLookup(base)
     val childrenByParent = base
         .filter { !it.parentUid.isNullOrBlank() }
         .groupBy { it.collectionHref to it.parentUid.orEmpty() }
     val included = linkedSetOf<String>()
     val expanded = linkedSetOf<String>()
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun rootOf(task: TaskEntity): TaskEntity {
-        var cursor = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(cursor) ?: return cursor
-            if (!seen.add(parent.resourceHref)) return cursor
-            cursor = parent
-        }
-    }
 
     fun includeDescendants(task: TaskEntity) {
         val queue = ArrayDeque<TaskEntity>()
@@ -786,21 +753,10 @@ internal fun List<TaskEntity>.searchHierarchySubsetForMatches(matches: List<Task
         }
     }
 
-    fun defaultOpenAncestorsOf(task: TaskEntity) {
-        var cursor = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(cursor) ?: return
-            if (!seen.add(parent.resourceHref)) return
-            expanded += parent.resourceHref
-            cursor = parent
-        }
-    }
-
     matches.forEach { rawMatch ->
         val match = byResource[rawMatch.resourceHref] ?: rawMatch
-        includeDescendants(rootOf(match))
-        defaultOpenAncestorsOf(match)
+        includeDescendants(parents.rootOf(match))
+        parents.selfAndAncestors(match).drop(1).forEach { expanded += it.resourceHref }
     }
     return TaskHierarchySubset(
         tasks = base.filter { it.resourceHref in included },
@@ -815,27 +771,14 @@ internal fun List<TaskEntity>.chainSubsetForTargets(
     if (targets.isEmpty()) return emptyList()
     val base = (this + targets).distinctBy { it.resourceHref }
     val byResource = base.associateBy { it.resourceHref }
-    val byCollectionUid = base.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = base.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
+    val parents = TaskParentLookup(base)
     val childrenByParent = base
         .filter { !it.parentUid.isNullOrBlank() }
         .groupBy { it.collectionHref to it.parentUid.orEmpty() }
     val included = linkedSetOf<String>()
 
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
     fun includeAncestors(task: TaskEntity) {
-        var cursor: TaskEntity? = task
-        val seen = mutableSetOf<String>()
-        while (cursor != null && seen.add(cursor.resourceHref)) {
-            included += cursor.resourceHref
-            cursor = parentOf(cursor)
-        }
+        parents.selfAndAncestors(task).forEach { included += it.resourceHref }
     }
 
     fun includeDescendants(task: TaskEntity) {
@@ -899,27 +842,8 @@ internal data class TaskRootActivityPartition(
 
 internal fun List<TaskEntity>.partitionByRootActivity(): TaskRootActivityPartition {
     val distinctTasks = distinctBy { it.resourceHref }
-    val byCollectionUid = distinctTasks.associateBy { it.collectionHref to it.uid }
-    val globallyUniqueByUid = distinctTasks.groupBy { it.uid }
-        .filterValues { it.size == 1 }
-        .mapValues { it.value.single() }
-
-    fun parentOf(task: TaskEntity): TaskEntity? {
-        val parentUid = task.parentUid?.takeIf { it.isNotBlank() } ?: return null
-        return byCollectionUid[task.collectionHref to parentUid] ?: globallyUniqueByUid[parentUid]
-    }
-
-    fun rootOf(task: TaskEntity): TaskEntity {
-        var current = task
-        val seen = mutableSetOf(task.resourceHref)
-        while (true) {
-            val parent = parentOf(current) ?: return current
-            if (!seen.add(parent.resourceHref)) return current
-            current = parent
-        }
-    }
-
-    val tasksByRoot = distinctTasks.groupBy { rootOf(it).resourceHref }
+    val parents = TaskParentLookup(distinctTasks)
+    val tasksByRoot = distinctTasks.groupBy { parents.rootOf(it).resourceHref }
     val fullyInactiveRoots = tasksByRoot
         .filterValues { rootTasks -> rootTasks.isNotEmpty() && rootTasks.all { it.isInactive() } }
         .keys

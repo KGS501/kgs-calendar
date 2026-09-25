@@ -1,6 +1,12 @@
 package com.kgs.calendar.widget
 
+import android.content.Context
+import android.content.res.Configuration
 import com.kgs.calendar.R
+import com.kgs.calendar.data.settings.AppLanguageMode
+import com.kgs.calendar.widget.bitmap.WidgetTaskCardRenderer
+import java.util.Locale
+import kotlin.math.roundToInt
 
 internal const val TAG = "KgsWidget"
 internal const val EXTRA_WIDGET_KIND = "kgs_widget_kind"
@@ -119,3 +125,18 @@ internal val WIDGET_AGENDA_PRIORITY_MOTION_FRAME_IDS = WIDGET_TASK_PRIORITY_MOTI
     R.id.widget_task_priority_motion_ac,
     R.id.widget_task_priority_motion_ad,
 )
+
+internal fun AppLanguageMode.toLocale(context: Context): Locale =
+    localeTag?.let(Locale::forLanguageTag) ?: context.resources.configuration.locales[0] ?: Locale.getDefault()
+
+internal fun Context.withWidgetLocale(locale: Locale): Context {
+    val configuration = Configuration(resources.configuration)
+    configuration.setLocale(locale)
+    return createConfigurationContext(configuration)
+}
+
+internal fun Context.dpToPx(value: Int): Int =
+    (value * resources.displayMetrics.density).roundToInt()
+
+internal fun Context.dpToPx(value: Float): Float =
+    value * resources.displayMetrics.density

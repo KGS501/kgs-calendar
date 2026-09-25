@@ -304,7 +304,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -329,10 +328,15 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.source.isReadOnlyCollectionHref
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -375,14 +379,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -645,14 +645,6 @@ internal fun CalendarParticipant.deliveryStatusColor(): Color =
 
 
 
-internal fun TaskEntity.statusSortRank(): Int = when (effectiveStatus()) {
-    "IN-PROCESS" -> 0
-    "NEEDS-ACTION" -> 1
-    "COMPLETED" -> 2
-    "CANCELLED" -> 3
-    else -> 4
-}
-
 @Composable
 internal fun PlannedTaskSort.localizedLabel(): String = when (this) {
     PlannedTaskSort.Date -> appString(R.string.date)
@@ -702,11 +694,11 @@ internal fun CollectionEntity.localizedPermissionMetadataRows(): List<Pair<Strin
     val calDavCanReadFreeBusy = capabilities?.optBooleanOrNull("canReadFreeBusy")
     val calDavIncrementalSync = capabilities?.optBooleanOrNull("supportsSyncCollection")
     val accessLabel = when {
-        isAndroidProviderForUi() && readOnly -> listOfNotNull(
+        isAndroidProviderCollection() && readOnly -> listOfNotNull(
             stringResource(R.string.calendar_access_read_only),
             androidAccessLabel,
         ).joinToString(" · ")
-        isAndroidProviderForUi() && androidAccessLabel != null -> stringResource(R.string.calendar_access_writable_level, androidAccessLabel)
+        isAndroidProviderCollection() && androidAccessLabel != null -> stringResource(R.string.calendar_access_writable_level, androidAccessLabel)
         readOnly -> stringResource(R.string.calendar_access_read_only)
         else -> stringResource(R.string.calendar_access_full)
     }
@@ -714,9 +706,9 @@ internal fun CollectionEntity.localizedPermissionMetadataRows(): List<Pair<Strin
     return buildList {
         add(stringResource(R.string.source) to localizedSourceTypeLabel())
         add(stringResource(R.string.calendar_access) to accessLabel)
-        add(stringResource(R.string.calendar_writes) to if (isReadOnlyForUi()) stringResource(R.string.calendar_writes_not_allowed) else stringResource(R.string.calendar_writes_allowed))
+        add(stringResource(R.string.calendar_writes) to if (isReadOnlyCollection()) stringResource(R.string.calendar_writes_not_allowed) else stringResource(R.string.calendar_writes_allowed))
         add(stringResource(R.string.calendar_sync_state) to if (isEnabled) stringResource(R.string.calendar_active) else stringResource(R.string.calendar_inactive))
-        if (isAndroidProviderForUi()) {
+        if (isAndroidProviderCollection()) {
             add(stringResource(R.string.calendar_device_visibility) to androidVisible.localizedVisibleHidden())
             add(stringResource(R.string.calendar_provider_sync) to androidSyncEvents.localizedSupportedUnsupported())
         } else if (sourceType == SourceType.CalDav) {
@@ -736,9 +728,9 @@ internal fun CollectionEntity.localizedPermissionMetadataRows(): List<Pair<Strin
 
 @Composable
 private fun CollectionEntity.localizedSourceTypeLabel(): String = when {
-    href.isLocalCollectionHrefUi() || sourceType == SourceType.Local -> stringResource(R.string.local_calendar)
-    isAndroidProviderForUi() -> stringResource(R.string.android_device_calendars)
-    href.isReadOnlyCollectionHrefUi() || sourceType == SourceType.ReadOnlyUrl -> stringResource(R.string.read_only_url)
+    href.isLocalCollectionHref() || sourceType == SourceType.Local -> stringResource(R.string.local_calendar)
+    isAndroidProviderCollection() -> stringResource(R.string.android_device_calendars)
+    href.isReadOnlyCollectionHref() || sourceType == SourceType.ReadOnlyUrl -> stringResource(R.string.read_only_url)
     else -> stringResource(R.string.caldav)
 }
 

@@ -14,8 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
-import com.kgs.calendar.widget.KgsWidgetUpdateScheduler
-import com.kgs.calendar.widget.WidgetDataGeneration
+import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,7 +58,7 @@ class KgsCalendarApplication : Application() {
         "pending_mutations",
     ) {
         override fun onInvalidated(tables: Set<String>) {
-            WidgetDataGeneration.increment()
+            appGraph.widgets.state.dataGeneration.increment()
             scheduleWidgetRefresh()
         }
     }
@@ -72,32 +71,24 @@ class KgsCalendarApplication : Application() {
         registerWidgetRefreshHooks()
         registerAndroidCalendarObserverIfPermitted()
         SyncWorker.schedulePeriodic(this)
-        SyncWorker.enqueueImmediate(this)
         scope.launch {
             runCatching { ReminderScheduler.reschedule(this@KgsCalendarApplication) }
         }
         scope.launch {
             // After parser fixes for nested VALARM blocks, recurrence, attendee and category metadata shipped,
             // any rows synced under the previous version may have truncated/incorrect data.
-            // Re-parse the cached raw iCal once so existing events are corrected without
-            // forcing a full re-download.
-            val current = appGraph.settingsStore.parserReparseVersion.first()
-            if (current < PARSER_REPARSE_VERSION) {
-                runCatching {
-                    if (current >= FULL_REPARSE_VERSION) {
-                        appGraph.repository.reparseLocalTaskResources()
-                    } else {
-                        appGraph.repository.reparseLocalResources()
-                    }
-                }
-                appGraph.settingsStore.setParserReparseVersion(PARSER_REPARSE_VERSION)
-            }
+            reparseCachedIcalIfNeeded(
+                storedVersion = appGraph.settingsStore.parserReparseVersion.first(),
+                reparseTaskResources = appGraph.repository::reparseLocalTaskResources,
+                reparseAllResources = appGraph.repository::reparseLocalResources,
+                recordVersion = appGraph.settingsStore::setParserReparseVersion,
+            )
         }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        KgsWidgetUpdateScheduler.updateAll(this)
+        appGraph.widgets.scheduler.updateAll()
     }
 
     fun registerAndroidCalendarObserverIfPermitted() {
@@ -134,7 +125,7 @@ class KgsCalendarApplication : Application() {
             ) { values -> values.toList() }
                 .distinctUntilChanged()
                 .collect {
-                    WidgetDataGeneration.increment()
+                    appGraph.widgets.state.dataGeneration.increment()
                     scheduleWidgetRefresh()
                 }
         }
@@ -145,7 +136,7 @@ class KgsCalendarApplication : Application() {
         widgetRefreshJob?.cancel()
         widgetRefreshJob = scope.launch {
             delay(600)
-            KgsWidgetUpdateScheduler.updateAll(this@KgsCalendarApplication)
+            appGraph.widgets.scheduler.updateAll()
         }
     }
 
@@ -166,8 +157,6 @@ class KgsCalendarApplication : Application() {
     }
 
     companion object {
-        private const val FULL_REPARSE_VERSION = 5
-        private const val PARSER_REPARSE_VERSION = 6
         fun graph(context: Context): AppGraph =
             (context.applicationContext as KgsCalendarApplication).appGraph
     }

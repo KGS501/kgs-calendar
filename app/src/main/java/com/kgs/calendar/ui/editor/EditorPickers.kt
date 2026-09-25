@@ -303,7 +303,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -328,9 +327,11 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.task.priorityColorArgb
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -372,14 +373,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
@@ -840,17 +837,7 @@ internal fun ProgressSlider(
     }
 }
 
-internal fun priorityColor(priority: Int): Color = when (priority.coerceIn(1, 9)) {
-    1 -> Color(0xFFD93025)
-    2 -> Color(0xFFE7602A)
-    3 -> Color(0xFFF29900)
-    4 -> Color(0xFFF8C542)
-    5 -> Color(0xFFFFD84D)
-    6 -> Color(0xFF55A8F5)
-    7 -> Color(0xFF2E8FD8)
-    8 -> Color(0xFF20A386)
-    else -> Color(0xFF2E7D32)
-}
+internal fun priorityColor(priority: Int): Color = Color(priorityColorArgb(priority))
 
 @Composable
 internal fun ColorOverrideEditor(

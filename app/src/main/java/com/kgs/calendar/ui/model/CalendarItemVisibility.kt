@@ -3,11 +3,16 @@ package com.kgs.calendar.ui.model
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.event.endDateInclusive
+import com.kgs.calendar.domain.event.isAllDayTopItemOn
+import com.kgs.calendar.domain.event.isTimedMultiDay
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.domain.task.isRecurring
+import com.kgs.calendar.domain.time.toDate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 internal fun EventEntity.visibleAgendaDates(): List<LocalDate> {
     val start = startsAtMillis.toDate()
@@ -98,28 +103,6 @@ internal fun TaskEntity.isFullDayTaskOn(day: LocalDate): Boolean {
     return day in visibleDates()
 }
 
-internal fun EventEntity.occursOn(date: LocalDate): Boolean {
-    val start = startsAtMillis.toDate()
-    val end = endDateInclusive()
-    return !date.isBefore(start) && !date.isAfter(end)
-}
-
-internal fun EventEntity.endDateInclusive(): LocalDate =
-    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(ZoneId.systemDefault()).toLocalDate()
-
-internal fun EventEntity.isTimedMultiDay(): Boolean =
-    !allDay && startsAtMillis.toDate().isBefore(endDateInclusive())
-
-internal fun EventEntity.isTimedMultiDayMiddleOn(date: LocalDate): Boolean {
-    if (!isTimedMultiDay()) return false
-    val start = startsAtMillis.toDate()
-    val end = endDateInclusive()
-    return date.isAfter(start) && date.isBefore(end)
-}
-
-internal fun EventEntity.isAllDayTopItemOn(date: LocalDate): Boolean =
-    if (allDay) occursOn(date) else isTimedMultiDayMiddleOn(date)
-
 internal fun EventEntity.continuesAllDayTopItemAfter(date: LocalDate): Boolean =
     isAllDayTopItemOn(date.plusDays(1))
 
@@ -157,6 +140,10 @@ internal fun TaskEntity.occurrenceStartForEdit(): Long =
         ?: dueAtMillis
         ?: System.currentTimeMillis()
 
+/** The occurrence of a recurring task, or null for a single task, which has no stable start. */
+internal fun TaskEntity.occurrenceIdOrNull(): CalendarOccurrenceId.Task? =
+    if (isRecurring) CalendarOccurrenceId.Task(resourceHref, occurrenceStartForEdit()) else null
+
 internal fun EventEntity.occurrenceStartForEdit(): Long =
     RecurrenceOverrideCodec.decodeEvents(recurrenceOverridesJson)
         .firstOrNull { it.matchesOccurrence(this) }
@@ -180,11 +167,5 @@ internal fun TaskEntity.visibleDates(): List<LocalDate> {
     return dates
 }
 
-internal fun Long.toDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
-
 internal fun Long.toTime(): LocalTime =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalTime()
-
-internal fun Long.toTimeText(): String =
-    toTime().format(DateTimeFormatter.ofPattern("HH:mm"))

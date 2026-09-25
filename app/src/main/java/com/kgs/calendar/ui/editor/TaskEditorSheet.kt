@@ -214,7 +214,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -302,7 +301,9 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
+import com.kgs.calendar.ui.editor.DraftCodec
+import com.kgs.calendar.ui.editor.EditorDraftStore
+import com.kgs.calendar.ui.editor.rememberEditorDraftFields
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -327,9 +328,11 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -371,14 +374,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
@@ -433,6 +432,8 @@ internal fun TaskEditorSheet(
     onScheduleChange: (EditorScheduleState) -> Unit,
     requestTitleFocus: Boolean = false,
     initialTask: TaskEntity?,
+    draftStore: EditorDraftStore,
+    draftId: String?,
     forcedParentTask: TaskEntity? = null,
     transferDraft: EditorTransferDraft? = null,
     headerTitle: String? = null,
@@ -455,33 +456,32 @@ internal fun TaskEditorSheet(
             state.collections.filter { it.href == initialTask.collectionHref }
         } else {
             state.collections
-                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() }
+                .filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() }
                 .filter { lockedCollectionHref == null || it.href == lockedCollectionHref }
                 .sortedWithDefaultFirst(state.defaultTaskCollectionHref)
         }
     }
-    var title by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.title ?: transferDraft?.title.orEmpty()) }
-    var notes by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.notes ?: transferDraft?.notes.orEmpty()) }
-    var location by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.location ?: transferDraft?.location.orEmpty()) }
-    var locationMapVerified by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.locationMapVerified ?: transferDraft?.locationMapVerified) }
-    var manualColor by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.manualColor ?: transferDraft?.manualColor) }
-    var url by remember(initialTask?.uid) { mutableStateOf(initialTask?.url.orEmpty()) }
-    var categories by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.categories ?: transferDraft?.categories.orEmpty()) }
+    val draft = rememberEditorDraftFields(draftStore, draftId)
+    var title by draft.field("title", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.title ?: transferDraft?.title.orEmpty() }
+    var notes by draft.field("notes", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.notes ?: transferDraft?.notes.orEmpty() }
+    var location by draft.field("location", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.location ?: transferDraft?.location.orEmpty() }
+    var locationMapVerified by draft.field("locationMapVerified", DraftCodec.OptionalFlag, initialTask?.uid, transferDraft) { initialTask?.locationMapVerified ?: transferDraft?.locationMapVerified }
+    var manualColor by draft.field("manualColor", DraftCodec.OptionalNumber, initialTask?.uid, transferDraft) { initialTask?.manualColor ?: transferDraft?.manualColor }
+    var url by draft.field("url", DraftCodec.Text, initialTask?.uid) { initialTask?.url.orEmpty() }
+    var categories by draft.field("categories", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.categories ?: transferDraft?.categories.orEmpty() }
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
         state.allKnownCategoryTags()
     }
-    var percentComplete by remember(initialTask?.uid) { mutableStateOf(initialTask?.percentComplete ?: 0) }
-    var parentUid by remember(initialTask?.resourceHref, forcedParentTask?.resourceHref) {
-        mutableStateOf(forcedParentTask?.uid ?: initialTask?.parentUid)
+    var percentComplete by draft.field("percentComplete", DraftCodec.Number, initialTask?.uid) { initialTask?.percentComplete ?: 0 }
+    var parentUid by draft.field("parentUid", DraftCodec.OptionalText, initialTask?.resourceHref, forcedParentTask?.resourceHref) {
+        forcedParentTask?.uid ?: initialTask?.parentUid
     }
-    var selectedCollectionHref by remember(initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
+    var selectedCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
         val preferred = state.defaultTaskCollectionHref
             ?.takeIf { href -> taskCollections.any { it.href == href } }
-        mutableStateOf(
-            initialTask?.collectionHref
-                ?: preferred
-                ?: taskCollections.firstOrNull()?.href,
-        )
+        initialTask?.collectionHref
+            ?: preferred
+            ?: taskCollections.firstOrNull()?.href
     }
     val selectedCollectionIndex = remember(taskCollections, selectedCollectionHref) {
         taskCollections.indexOfFirst { it.href == selectedCollectionHref }
@@ -494,12 +494,10 @@ internal fun TaskEditorSheet(
             .distinctBy { it.uid }
             .sortedBy { it.title.lowercase(Locale.ROOT) }
     }
-    var isCompleted by remember(initialTask?.uid) { mutableStateOf(initialTask?.isCompleted ?: false) }
-    var statusValue by remember(initialTask?.uid) {
-        mutableStateOf(
-            initialTask?.status?.uppercase()
-                ?: if (initialTask?.isCompleted == true) "COMPLETED" else "NEEDS-ACTION",
-        )
+    var isCompleted by draft.field("isCompleted", DraftCodec.Flag, initialTask?.uid) { initialTask?.isCompleted ?: false }
+    var statusValue by draft.field("status", DraftCodec.Text, initialTask?.uid) {
+        initialTask?.status?.uppercase()
+            ?: if (initialTask?.isCompleted == true) "COMPLETED" else "NEEDS-ACTION"
     }
     val hasStartDate = schedule.hasStartDate
     val hasEndDate = schedule.hasEndDate
@@ -510,16 +508,14 @@ internal fun TaskEditorSheet(
     val hasEndTime = schedule.hasEndTime
     val dueTimeText = schedule.endTimeText
     val allDay = schedule.allDay
-    var priority by remember(initialTask?.uid) { mutableStateOf(initialTask?.priority ?: 9) }
-    var recurrenceRule by remember(initialTask?.uid, transferDraft) { mutableStateOf(initialTask?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty()) }
-    var reminderMinutes by remember(initialTask?.uid, transferDraft, state.defaultTaskReminderMinutes) {
-        mutableStateOf(
-            when {
-                initialTask != null -> initialTask.remindersCsv.parseReminderMinutes()
-                transferDraft != null -> transferDraft.reminderMinutes
-                else -> state.defaultTaskReminderMinutes
-            },
-        )
+    var priority by draft.field("priority", DraftCodec.Number, initialTask?.uid) { initialTask?.priority ?: 9 }
+    var recurrenceRule by draft.field("recurrenceRule", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.recurrenceRule ?: transferDraft?.recurrenceRule.orEmpty() }
+    var reminderMinutes by draft.field("reminderMinutes", DraftCodec.MinuteSet, initialTask?.uid, transferDraft, state.defaultTaskReminderMinutes) {
+        when {
+            initialTask != null -> initialTask.remindersCsv.parseReminderMinutes()
+            transferDraft != null -> transferDraft.reminderMinutes
+            else -> state.defaultTaskReminderMinutes
+        }
     }
     var locationPickerOpen by remember(initialTask?.uid) { mutableStateOf(false) }
     var invalidRangeDialogOpen by remember(initialTask?.uid) { mutableStateOf(false) }

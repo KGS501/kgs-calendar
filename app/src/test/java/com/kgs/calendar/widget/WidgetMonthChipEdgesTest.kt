@@ -1,5 +1,10 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.model.WidgetMonthChipEdge
+import com.kgs.calendar.widget.model.WidgetMonthChipEdges
+import com.kgs.calendar.widget.model.WidgetMonthChipMask
+import com.kgs.calendar.widget.model.monthChipEdges
+import com.kgs.calendar.widget.model.monthChipMask
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

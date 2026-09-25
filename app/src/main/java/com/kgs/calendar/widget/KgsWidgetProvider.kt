@@ -1,76 +1,32 @@
 package com.kgs.calendar.widget
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.DashPathEffect
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.RectF
-import android.graphics.Shader
-import android.graphics.Typeface
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.StyleSpan
-import android.util.Log
-import android.util.TypedValue
-import android.view.Gravity
-import android.view.View
 import android.widget.RemoteViews
-import android.widget.RemoteViewsService
-import androidx.annotation.RequiresApi
 import com.kgs.calendar.KgsCalendarApplication
-import com.kgs.calendar.MainActivity
 import com.kgs.calendar.R
-import com.kgs.calendar.data.local.entity.EventEntity
-import com.kgs.calendar.data.local.entity.TaskEntity
-import com.kgs.calendar.data.settings.AppColorMode
-import com.kgs.calendar.data.settings.AppLanguageMode
-import com.kgs.calendar.data.settings.AppThemeMode
-import com.kgs.calendar.data.settings.SettingsStore
-import com.kgs.calendar.data.settings.TaskColorMode
-import com.kgs.calendar.data.settings.WidgetColorMode
-import com.kgs.calendar.data.settings.WidgetTaskCreateMode
-import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
-import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
-import com.kgs.calendar.data.settings.WidgetThemeMode
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import com.kgs.calendar.widget.model.MonthCommand
+import com.kgs.calendar.widget.model.MonthNavSnapshot
+import com.kgs.calendar.widget.model.next
+import com.kgs.calendar.widget.model.usesDirectCollectionItems
+import com.kgs.calendar.widget.render.WidgetPendingIntents
+import com.kgs.calendar.widget.render.bindTasksSortButtonState
+import com.kgs.calendar.widget.render.widgetButtonWidthDp
+import com.kgs.calendar.widget.state.tasksListTokenKey
+import com.kgs.calendar.widget.state.tasksSortButtonTokenKey
+import com.kgs.calendar.widget.update.WidgetUpdateCause
+import com.kgs.calendar.widget.update.animateTasksSortButton
+import com.kgs.calendar.widget.update.prepareTasksSortButtonForModeChange
+import com.kgs.calendar.widget.update.refreshTasksWidgetRows
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.time.DayOfWeek
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.time.temporal.ChronoUnit
-import java.util.Locale
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.roundToInt
 
 class KgsAgendaWidgetProvider : KgsWidgetProvider(KgsWidgetKind.Agenda)
 
@@ -86,7 +42,7 @@ abstract class KgsWidgetProvider(
     private val kind: KgsWidgetKind,
 ) : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        KgsWidgetUpdateScheduler.update(context, kind, appWidgetIds, cause = WidgetUpdateCause.Periodic)
+        widgetDependencies(context).scheduler.update(kind, appWidgetIds, cause = WidgetUpdateCause.Periodic)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -95,8 +51,7 @@ abstract class KgsWidgetProvider(
         appWidgetId: Int,
         newOptions: Bundle,
     ) {
-        KgsWidgetUpdateScheduler.update(
-            context,
+        widgetDependencies(context).scheduler.update(
             kind,
             intArrayOf(appWidgetId),
             debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160,
@@ -105,24 +60,26 @@ abstract class KgsWidgetProvider(
     }
 
     override fun onEnabled(context: Context) {
-        KgsWidgetUpdateScheduler.update(context, kind)
+        widgetDependencies(context).scheduler.update(kind)
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        val state = widgetDependencies(context).state
         if (kind == KgsWidgetKind.Month || kind == KgsWidgetKind.Multi) {
             appWidgetIds.forEach { appWidgetId ->
-                KgsWidgetMonthState.clear(context.applicationContext, appWidgetId)
+                state.month.clear(appWidgetId)
             }
         }
         if (kind == KgsWidgetKind.Day) {
             appWidgetIds.forEach { appWidgetId ->
-                KgsWidgetDayState.clear(context.applicationContext, appWidgetId)
+                state.day.clear(appWidgetId)
             }
         }
         super.onDeleted(context, appWidgetIds)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        val widgets = widgetDependencies(context)
         if (intent.action?.startsWith("com.kgs.calendar.widget.") == true) {
             WidgetLog.d(context, "Received widget action ${intent.action}")
         }
@@ -137,8 +94,8 @@ abstract class KgsWidgetProvider(
                         ACTION_MONTH_NEXT -> MonthCommand.Next
                         else -> MonthCommand.Today
                     }
-                    val snapshot = KgsWidgetMonthState.apply(context.applicationContext, appWidgetId, command)
-                    navigateMonthAsync(context, appWidgetId, snapshot)
+                    val snapshot = widgets.state.month.apply(appWidgetId, command)
+                    navigateMonthAsync(widgets, appWidgetId, snapshot)
                 } else {
                     super.onReceive(context, intent)
                 }
@@ -150,12 +107,12 @@ abstract class KgsWidgetProvider(
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (kind == KgsWidgetKind.Day && appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     if (intent.action == ACTION_DAY_TODAY) {
-                        KgsWidgetDayState.resetToToday(context.applicationContext, appWidgetId)
+                        widgets.state.day.resetToToday(appWidgetId)
                     } else {
                         val direction = if (intent.action == ACTION_DAY_PREVIOUS) -1 else 1
-                        KgsWidgetDayState.offset(context.applicationContext, appWidgetId, direction)
+                        widgets.state.day.offset(appWidgetId, direction)
                     }
-                    navigateDayAsync(context, appWidgetId)
+                    navigateDayAsync(widgets, appWidgetId)
                 } else {
                     super.onReceive(context, intent)
                 }
@@ -164,7 +121,7 @@ abstract class KgsWidgetProvider(
             ACTION_DAY_TOGGLE_ALL_DAY -> {
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (kind == KgsWidgetKind.Day && appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    toggleDayAllDayAsync(context, appWidgetId)
+                    toggleDayAllDayAsync(widgets, appWidgetId)
                 } else {
                     super.onReceive(context, intent)
                 }
@@ -173,7 +130,7 @@ abstract class KgsWidgetProvider(
             ACTION_TASKS_SORT_NEXT -> {
                 if (kind == KgsWidgetKind.Tasks) {
                     cycleTasksSortAsync(
-                        context = context,
+                        widgets = widgets,
                         appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID),
                     )
                 } else {
@@ -184,7 +141,7 @@ abstract class KgsWidgetProvider(
             ACTION_REFRESH -> {
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 updateAsync(
-                    context = context,
+                    widgets = widgets,
                     appWidgetIds = appWidgetId
                         .takeIf { it != AppWidgetManager.INVALID_APPWIDGET_ID }
                         ?.let { intArrayOf(it) },
@@ -194,7 +151,7 @@ abstract class KgsWidgetProvider(
 
             Intent.ACTION_CONFIGURATION_CHANGED -> {
                 updateAsync(
-                    context = context,
+                    widgets = widgets,
                     forceFullDayUpdate = kind == KgsWidgetKind.Day,
                     cause = WidgetUpdateCause.Configuration,
                 )
@@ -202,7 +159,7 @@ abstract class KgsWidgetProvider(
 
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
                 updateAsync(
-                    context = context,
+                    widgets = widgets,
                     appWidgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS),
                     cause = WidgetUpdateCause.Periodic,
                 )
@@ -211,8 +168,7 @@ abstract class KgsWidgetProvider(
             AppWidgetManager.ACTION_APPWIDGET_OPTIONS_CHANGED -> {
                 val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    KgsWidgetUpdateScheduler.update(
-                        context,
+                    widgets.scheduler.update(
                         kind,
                         intArrayOf(appWidgetId),
                         debounceMillis = if (kind == KgsWidgetKind.Month) WIDGET_MONTH_RESIZE_DEBOUNCE_MS else 160,
@@ -228,14 +184,13 @@ abstract class KgsWidgetProvider(
     }
 
     private fun updateAsync(
-        context: Context,
+        widgets: WidgetDependencies,
         appWidgetIds: IntArray? = null,
         forceFullDayUpdate: Boolean = false,
         cause: WidgetUpdateCause = WidgetUpdateCause.Unknown,
     ) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.update(
-            context = context.applicationContext,
+        widgets.scheduler.update(
             kind = kind,
             appWidgetIds = appWidgetIds,
             forceFullDayUpdate = forceFullDayUpdate,
@@ -244,54 +199,54 @@ abstract class KgsWidgetProvider(
         )
     }
 
-    private fun navigateDayAsync(context: Context, appWidgetId: Int) {
+    private fun navigateDayAsync(widgets: WidgetDependencies, appWidgetId: Int) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launchWidgetLatest(
-            context = context.applicationContext,
+        widgets.scheduler.launchWidgetLatest(
             kind = KgsWidgetKind.Day,
             appWidgetId = appWidgetId,
             cause = WidgetUpdateCause.Navigation,
             onCompletion = pendingResult::finish,
         ) {
-            KgsWidgetUpdater.navigateDay(context.applicationContext, appWidgetId)
+            widgets.updater.navigateDay(appWidgetId)
         }
     }
 
-    private fun toggleDayAllDayAsync(context: Context, appWidgetId: Int) {
+    private fun toggleDayAllDayAsync(widgets: WidgetDependencies, appWidgetId: Int) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launchWidgetLatest(
-            context = context.applicationContext,
+        widgets.scheduler.launchWidgetLatest(
             kind = KgsWidgetKind.Day,
             appWidgetId = appWidgetId,
             cause = WidgetUpdateCause.Interaction,
             onCompletion = pendingResult::finish,
         ) {
-            KgsWidgetUpdater.toggleDayAllDay(context.applicationContext, appWidgetId)
+            widgets.updater.toggleDayAllDay(appWidgetId)
         }
     }
 
-    private fun cycleTasksSortAsync(context: Context, appWidgetId: Int) {
+    private fun cycleTasksSortAsync(widgets: WidgetDependencies, appWidgetId: Int) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launch {
+        val context = widgets.appContext
+        widgets.scheduler.launch {
             try {
                 val targetIds = if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     intArrayOf(appWidgetId)
                 } else {
-                    AppWidgetManager.getInstance(context.applicationContext)
-                        .getAppWidgetIds(ComponentName(context.applicationContext, KgsWidgetKind.Tasks.providerClass))
+                    AppWidgetManager.getInstance(context)
+                        .getAppWidgetIds(ComponentName(context, KgsWidgetKind.Tasks.providerClass))
                 }
-                val graph = KgsCalendarApplication.graph(context.applicationContext)
-                val currentMode = graph.settingsStore.tasksWidgetSortMode.first()
+                val settingsStore = widgets.settingsStore
+                val currentMode = settingsStore.tasksWidgetSortMode.first()
                 val nextMode = currentMode.next()
-                graph.settingsStore.setTasksWidgetSortMode(nextMode)
-                val textContext = context.applicationContext.withWidgetLocale(
-                    graph.settingsStore.languageMode.first().toLocale(context.applicationContext),
+                settingsStore.setTasksWidgetSortMode(nextMode)
+                val textContext = context.withWidgetLocale(
+                    settingsStore.languageMode.first().toLocale(context),
                 )
                 if (KgsWidgetKind.Tasks.usesDirectCollectionItems()) {
-                    val createMode = graph.settingsStore.tasksWidgetCreateMode.first()
-                    val sortButtonTokens = targetIds.associateWith { KgsWidgetInteractionTokens.next(tasksSortButtonTokenKey(it)) }
-                    val listTokens = targetIds.associateWith { KgsWidgetInteractionTokens.next(tasksListTokenKey(it)) }
+                    val createMode = settingsStore.tasksWidgetCreateMode.first()
+                    val sortButtonTokens = targetIds.associateWith { widgets.state.interactionTokens.next(tasksSortButtonTokenKey(it)) }
+                    val listTokens = targetIds.associateWith { widgets.state.interactionTokens.next(tasksListTokenKey(it)) }
                     prepareTasksSortButtonForModeChange(
+                        widgets = widgets,
                         context = textContext,
                         appWidgetIds = targetIds,
                         fromMode = currentMode,
@@ -300,11 +255,12 @@ abstract class KgsWidgetProvider(
                         tokens = sortButtonTokens,
                     )
                     refreshTasksWidgetRows(
-                        context = context.applicationContext,
+                        widgets = widgets,
                         appWidgetIds = targetIds,
-                        shouldApply = { id -> listTokens[id]?.let { KgsWidgetInteractionTokens.isCurrent(tasksListTokenKey(id), it) } == true },
+                        shouldApply = { id -> listTokens[id]?.let { widgets.state.interactionTokens.isCurrent(tasksListTokenKey(id), it) } == true },
                     )
                     animateTasksSortButton(
+                        widgets = widgets,
                         context = textContext,
                         appWidgetIds = targetIds,
                         fromMode = currentMode,
@@ -316,7 +272,7 @@ abstract class KgsWidgetProvider(
                 } else {
                     bindTasksSortLabel(textContext, targetIds, nextMode)
                     delay(180)
-                    refreshTasksWidgetRows(context.applicationContext, targetIds)
+                    refreshTasksWidgetRows(widgets, targetIds)
                 }
             } finally {
                 pendingResult.finish()
@@ -338,32 +294,33 @@ abstract class KgsWidgetProvider(
     private fun RemoteViews.bindTasksCollectionActions(context: Context, appWidgetId: Int) {
         setRemoteAdapter(
             R.id.widget_list,
-            tasksCollectionAdapterIntent(context, appWidgetId),
+            WidgetPendingIntents(context).collectionAdapterIntent(KgsWidgetKind.Tasks, appWidgetId),
         )
-        setPendingIntentTemplate(R.id.widget_list, tasksCollectionClickPendingIntent(context, appWidgetId))
+        setPendingIntentTemplate(R.id.widget_list, WidgetPendingIntents(context).collectionClickPendingIntent(KgsWidgetKind.Tasks, appWidgetId))
     }
 
     private fun navigateMonthAsync(
-        context: Context,
+        widgets: WidgetDependencies,
         appWidgetId: Int,
         snapshot: MonthNavSnapshot,
     ) {
         val pendingResult = goAsync()
-        KgsWidgetUpdateScheduler.launchWidgetLatest(
-            context = context.applicationContext,
+        widgets.scheduler.launchWidgetLatest(
             kind = kind,
             appWidgetId = appWidgetId,
             cause = WidgetUpdateCause.Navigation,
             onCompletion = pendingResult::finish,
         ) {
-            KgsWidgetUpdater.navigateMonth(
-                context = context.applicationContext,
+            widgets.updater.navigateMonth(
                 kind = kind,
                 appWidgetId = appWidgetId,
                 snapshot = snapshot,
             )
         }
     }
+
+    private fun widgetDependencies(context: Context): WidgetDependencies =
+        KgsCalendarApplication.graph(context).widgets
 
     companion object {
         const val ACTION_REFRESH = "com.kgs.calendar.widget.REFRESH"

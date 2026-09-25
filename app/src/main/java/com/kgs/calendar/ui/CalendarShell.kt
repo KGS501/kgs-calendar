@@ -151,6 +151,7 @@ internal fun CalendarShell(
     onLoadEarlierAgenda: () -> Unit = {},
     onLoadLaterAgenda: () -> Unit = {},
     timelineViewportMemory: TimelineOrientationViewportMemory? = null,
+    foregroundRecenterRequest: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -256,9 +257,9 @@ internal fun CalendarShell(
         state.multiDaySidebarControlsEnabled
     val today = LocalCalendarTimeSnapshot.current.today
 
-    LaunchedEffect(state.foregroundRecenterSerial) {
-        if (state.foregroundRecenterSerial <= handledForegroundRecenterSerial) return@LaunchedEffect
-        handledForegroundRecenterSerial = state.foregroundRecenterSerial
+    LaunchedEffect(foregroundRecenterRequest) {
+        if (foregroundRecenterRequest <= handledForegroundRecenterSerial) return@LaunchedEffect
+        handledForegroundRecenterSerial = foregroundRecenterRequest
         when (state.selectedView) {
             CalendarViewMode.Agenda -> {
                 requestAgendaNavigation(today)

@@ -5,7 +5,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
 }
 
 // Release signing comes from the local publishing environment or keystore.properties at the repo
@@ -34,11 +33,11 @@ fun releaseSigningValue(propertyName: String): String =
 
 android {
     namespace = "com.kgs.calendar"
-    compileSdk = 36
+    compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
         applicationId = "com.kgs501.kgscalendar"
-        minSdk = 26
+        minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = 36
         versionCode = 27
         versionName = "V.1.3.7"
@@ -80,9 +79,16 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric widget rendering tests resolve app strings and layouts.
+            isIncludeAndroidResources = true
+        }
+    }
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())
     }
 
     packaging {
@@ -101,17 +107,18 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
 }
 
 dependencies {
+    implementation(project(":core:data"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
 
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -123,23 +130,18 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.security.crypto)
-
     implementation(libs.okhttp)
-    implementation(libs.ical4j)
     implementation(libs.kotlinx.coroutines.android)
 
+    testImplementation(testFixtures(project(":core:data")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.androidx.room.testing)
-    testImplementation(libs.mockwebserver)
+    testImplementation(libs.androidx.datastore.preferences)
     testImplementation(libs.turbine)
     testImplementation(libs.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.core)

@@ -304,7 +304,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.SourceType
 import com.kgs.calendar.data.isSupportedReadOnlyCalendarUrl
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -330,10 +329,15 @@ import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.isAndroidProviderAccount
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -376,14 +380,10 @@ import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
-import com.kgs.calendar.ui.model.isAllDayTopItemOn
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
-import com.kgs.calendar.ui.model.occursOn
 import com.kgs.calendar.ui.model.taskDate
-import com.kgs.calendar.ui.model.toDate
 import com.kgs.calendar.ui.model.toTime
-import com.kgs.calendar.ui.model.toTimeText
 import com.kgs.calendar.ui.model.visibleAgendaDates
 import com.kgs.calendar.ui.model.visibleDates
 import com.kgs.calendar.ui.month.MonthRowOrderComparator
@@ -707,7 +707,7 @@ internal fun SettingsPage(
                         SettingsDestination.Accounts -> {
                             val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
                             val externalAccounts = accounts.filterNot { it.id == UiLocalAccountId }
-                            val localCollection = state.collections.firstOrNull { it.href.isLocalCollectionHrefUi() }
+                            val localCollection = state.collections.firstOrNull { it.href.isLocalCollectionHref() }
                             val visibleAccounts = accounts
                             val visibleCollections = state.collections
                             SettingsSection(title = stringResource(R.string.calendar), icon = Icons.Default.CalendarMonth) {
@@ -722,11 +722,11 @@ internal fun SettingsPage(
                                                 title = account.displayName ?: account.username,
                                                 value = when {
                                                     account.id == UiLocalAccountId -> stringResource(R.string.local_source)
-                                                    account.isAndroidProviderForUi() -> stringResource(R.string.android_device_calendars)
+                                                    account.isAndroidProviderAccount() -> stringResource(R.string.android_device_calendars)
                                                     account.sourceType == SourceType.ReadOnlyUrl || account.username == "Read-only URL" -> stringResource(R.string.read_only_url)
                                                     else -> account.serverUrl
                                                 },
-                                                warningBadge = account.isAndroidProviderForUi() && state.hiddenAndroidProviderCalendarNames.isNotEmpty(),
+                                                warningBadge = account.isAndroidProviderAccount() && state.hiddenAndroidProviderCalendarNames.isNotEmpty(),
                                             ) {
                                                 selectedAccountId = account.id
                                                 editAccountName = account.displayName ?: account.username
@@ -949,7 +949,7 @@ internal fun SettingsPage(
                             val account = state.accounts.firstOrNull { it.id == selectedAccountId }
                             if (account != null) {
                                 val isLocalSource = account.id == UiLocalAccountId || account.serverUrl.startsWith(UiLocalCollectionPrefix)
-                                val isAndroidSource = account.isAndroidProviderForUi()
+                                val isAndroidSource = account.isAndroidProviderAccount()
                                 SettingsSection(title = stringResource(R.string.edit_source), icon = Icons.Default.Settings) {
                                     OutlinedTextField(editAccountName, { editAccountName = it }, label = { Text(stringResource(R.string.name)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                                     if (!isLocalSource && !isAndroidSource) {
@@ -1173,7 +1173,7 @@ internal fun SettingsPage(
                                     onClick = { taskDefaultDialogOpen = true },
                                 )
                                 val eventTargets = remember(state.collections) {
-                                    state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() }
+                                    state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() }
                                 }
                                 if (eventTargets.isNotEmpty()) {
                                     SettingsButtonRow(
@@ -1183,7 +1183,7 @@ internal fun SettingsPage(
                                     )
                                 }
                                 val taskTargets = remember(state.collections) {
-                                    state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() }
+                                    state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() }
                                 }
                                 if (taskTargets.isNotEmpty()) {
                                     SettingsButtonRow(
@@ -1706,7 +1706,7 @@ internal fun SettingsPage(
         CollectionSelectionDialog(
             title = appString(R.string.default_calendar),
             selectedHref = state.defaultEventCollectionHref,
-            collections = state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyForUi() },
+            collections = state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() },
             hiddenCollectionHrefs = state.hiddenCollectionHrefs,
             onSelected = {
                 onDefaultEventCollectionSelected(it)
@@ -1719,7 +1719,7 @@ internal fun SettingsPage(
         CollectionSelectionDialog(
             title = appString(R.string.default_list),
             selectedHref = state.defaultTaskCollectionHref,
-            collections = state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyForUi() },
+            collections = state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() },
             hiddenCollectionHrefs = state.hiddenCollectionHrefs,
             onSelected = {
                 onDefaultTaskCollectionSelected(it)
@@ -2216,12 +2216,12 @@ internal fun JSONObject.optStringOrNull(name: String): String? =
     if (has(name) && !isNull(name)) optString(name) else null
 
 internal fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities =
-    if (!isAndroidProviderForUi()) {
+    if (!isAndroidProviderCollection()) {
         EventEditorCapabilities.Full
     } else {
         EventEditorCapabilities(
             recurrence = true,
-            reminders = capabilitiesJson?.contains("\"reminders\":false", ignoreCase = true) != true,
+            reminders = capabilitiesJson.toJsonObjectOrNull()?.optBooleanOrNull("reminders") != false,
             location = true,
             notes = true,
             status = false,
@@ -2232,4 +2232,4 @@ internal fun CollectionEntity.eventEditorCapabilities(): EventEditorCapabilities
     }
 
 internal fun CollectionEntity.isVisibleInSettingsCalendarList(): Boolean =
-    !(href.isLocalCollectionHrefUi() && !isEnabled)
+    !(href.isLocalCollectionHref() && !isEnabled)

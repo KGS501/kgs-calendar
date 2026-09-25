@@ -11,9 +11,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://jitpack.io")
     }
 }
 
 rootProject.name = "KGS Calendar"
 include(":app")
+include(":core:data")

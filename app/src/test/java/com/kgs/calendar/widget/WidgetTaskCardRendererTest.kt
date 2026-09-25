@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.widget.bitmap.TaskPriorityEffect
+import com.kgs.calendar.widget.bitmap.WidgetTaskCardRenderer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
