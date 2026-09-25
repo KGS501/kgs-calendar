@@ -49,3 +49,21 @@ fun <K> List<TaskEntity>.treeParents(identity: (TaskEntity) -> K): Map<K, TaskEn
         identity(task) to if (parent == null) lookup.parentOf(task) else null
     }
 }
+
+/**
+ * Applies "Show completed tasks" to subtasks: when [showCompleted] is off, subtasks that are done
+ * or cancelled are left out, unless one of their own descendants is still shown, so open work keeps
+ * its place in the tree. A parent whose subtasks are all left out then has no children at all.
+ * Top-level tasks (no parent in this list) are never removed here; each surface filters those itself.
+ */
+fun List<TaskEntity>.withoutHiddenClosedSubtasks(showCompleted: Boolean): List<TaskEntity> {
+    if (showCompleted || none { it.isInactive() }) return this
+    val lookup = TaskParentLookup(this)
+    val shownResourceHrefs = mutableSetOf<String>()
+    forEach { task ->
+        if (!task.isInactive() || lookup.parentOf(task) == null) {
+            lookup.selfAndAncestors(task).mapTo(shownResourceHrefs) { it.resourceHref }
+        }
+    }
+    return filter { it.resourceHref in shownResourceHrefs }
+}

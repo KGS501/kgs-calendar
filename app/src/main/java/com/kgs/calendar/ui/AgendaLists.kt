@@ -340,6 +340,7 @@ import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.task.effectiveStatus
 import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.domain.task.statusSortRank
+import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
@@ -716,8 +717,9 @@ internal fun TaskInbox(
 ) {
     var plannedSort by rememberSaveable { mutableStateOf(PlannedTaskSort.Date) }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val activeRootTasks = remember(state.taskHierarchyTasks) {
+    val activeRootTasks = remember(state.taskHierarchyTasks, state.showCompletedTasksInCalendar) {
         state.taskHierarchyTasks.partitionByRootActivity().activeRootTasks
+            .withoutHiddenClosedSubtasks(state.showCompletedTasksInCalendar)
     }
     val activeSections = remember(activeRootTasks) { activeRootTasks.partitionByRootSchedule() }
     val openInboxTasks = activeSections.first

@@ -343,6 +343,7 @@ import com.kgs.calendar.domain.task.effectiveStatus
 import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.domain.task.taskPriorityIntensity
 import com.kgs.calendar.domain.task.treeParents
+import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
@@ -709,6 +710,7 @@ internal fun DetailSheetContent(
     autoLoadMapPreviews: Boolean,
     accountEmails: List<String>,
     allTasks: List<TaskEntity>,
+    showCompletedTasks: Boolean,
     taskMorphGeneration: Int,
     taskMorphSourceHref: String?,
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
@@ -729,8 +731,17 @@ internal fun DetailSheetContent(
     onClose: () -> Unit,
 ) {
     val task = (detail as? DetailSheet.Task)?.task
-    val descendantTasks = remember(task?.resourceHref, allTasks) {
-        task?.let { allTasks.descendantsOf(it) }.orEmpty()
+    val taskInactive = task?.isInactive() == true
+    val descendantTasks = remember(task?.resourceHref, allTasks, showCompletedTasks, taskInactive) {
+        task?.let { current ->
+            val descendants = allTasks.descendantsOf(current)
+            // A done task's own detail keeps all of its subtasks; open tasks follow the setting.
+            if (taskInactive) {
+                descendants
+            } else {
+                (listOf(current) + descendants).withoutHiddenClosedSubtasks(showCompletedTasks).drop(1)
+            }
+        }.orEmpty()
     }
     val descendantTasksByUid = remember(descendantTasks) {
         descendantTasks.associateBy { it.collectionHref to it.uid }

@@ -65,6 +65,42 @@ class TaskHierarchyTest {
         assertNull(parents.getValue(loopB.resourceHref))
     }
 
+    @Test
+    fun hiddenCompletedTasksDropClosedSubtasksButKeepOpenOnes() {
+        val parent = task("parent")
+        val open = task("open", parent = "parent")
+        val done = task("done", parent = "parent").copy(isCompleted = true, status = "COMPLETED")
+        val cancelled = task("cancelled", parent = "parent").copy(status = "CANCELLED")
+        val tasks = listOf(parent, open, done, cancelled)
+
+        assertEquals(listOf("parent", "open"), tasks.withoutHiddenClosedSubtasks(showCompleted = false).map { it.uid })
+        assertEquals(tasks, tasks.withoutHiddenClosedSubtasks(showCompleted = true))
+    }
+
+    @Test
+    fun parentWhoseSubtasksAreAllDoneIsLeftWithoutChildren() {
+        val parent = task("parent")
+        val first = task("first", parent = "parent").copy(isCompleted = true)
+        val second = task("second", parent = "parent").copy(isCompleted = true)
+
+        val shown = listOf(parent, first, second).withoutHiddenClosedSubtasks(showCompleted = false)
+
+        assertEquals(listOf(parent), shown)
+        assertEquals(emptyList<TaskEntity>(), shown.filter { TaskParentLookup(shown).parentOf(it) != null })
+    }
+
+    @Test
+    fun closedSubtaskStaysWhileItHasAnOpenDescendantAndClosedRootsAreKept() {
+        val closedRoot = task("root").copy(isCompleted = true)
+        val closedMiddle = task("middle", parent = "root").copy(isCompleted = true)
+        val openLeaf = task("leaf", parent = "middle")
+        val closedSibling = task("sibling", parent = "middle").copy(isCompleted = true)
+
+        val shown = listOf(closedRoot, closedMiddle, openLeaf, closedSibling).withoutHiddenClosedSubtasks(showCompleted = false)
+
+        assertEquals(listOf("root", "middle", "leaf"), shown.map { it.uid })
+    }
+
     private fun task(uid: String, collection: String = "a", parent: String? = null) = TaskEntity(
         uid = uid,
         collectionHref = collection,

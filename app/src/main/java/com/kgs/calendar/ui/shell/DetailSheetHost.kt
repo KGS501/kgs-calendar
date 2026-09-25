@@ -99,6 +99,7 @@ internal fun DetailSheetHost(
                                     autoLoadMapPreviews = state.autoLoadMapPreviews,
                                     accountEmails = (state.accounts.map { it.username } + listOfNotNull(state.account?.username)).distinct(),
                                     allTasks = renderState.allTasks,
+                                    showCompletedTasks = state.showCompletedTasksInCalendar,
                                     taskMorphGeneration = shell.detailTaskMorphGeneration,
                                     taskMorphSourceHref = shell.detailTaskMorphSourceHref,
                                     onTaskStatusChanged = viewModel.edits::setTaskStatus,
