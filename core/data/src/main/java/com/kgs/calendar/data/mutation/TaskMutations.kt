@@ -13,6 +13,7 @@ import com.kgs.calendar.data.newResourceHref
 import com.kgs.calendar.data.newUid
 import com.kgs.calendar.data.recurrence.occurrenceAt
 import com.kgs.calendar.data.toMinutesList
+import com.kgs.calendar.data.trash.TrashSnapshots
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.TaskEditPayload
@@ -32,6 +33,7 @@ class TaskMutations internal constructor(
     private val database: KgsDatabase,
     private val localWrites: LocalWriteSupport,
     private val icalCodec: IcalCodec,
+    private val trashSnapshots: TrashSnapshots,
     private val zoneId: ZoneId,
 ) {
     suspend fun createTask(payload: TaskEditPayload): Unit = localWrites.writeTransaction {
@@ -452,12 +454,17 @@ class TaskMutations internal constructor(
         localWrites.enqueuePut(task.collectionHref, task.resourceHref, ComponentType.Task, raw, null)
     }
 
-    suspend fun deleteTask(uid: String): Unit = localWrites.writeTransaction {
+    /**
+     * Deletes the whole task; its subtasks move up to its parent. With [moveToTrash] (every user
+     * delete) a snapshot of this task alone goes to "Recently deleted"; conversions pass false.
+     */
+    suspend fun deleteTask(uid: String, moveToTrash: Boolean = true): Unit = localWrites.writeTransaction {
         val task = database.taskDao().get(uid) ?: return@writeTransaction
         val collection = database.collectionDao().get(task.collectionHref) ?: return@writeTransaction
         if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return@writeTransaction
         reparentTaskChildren(task)
         val resource = database.resourceDao().get(task.resourceHref)
+        if (moveToTrash) trashSnapshots.recordTask(task, collection, resource?.rawIcs)
         if (task.collectionHref.isLocalCollectionHref()) {
             database.taskDao().deleteByResource(task.resourceHref)
             database.resourceDao().delete(task.resourceHref)

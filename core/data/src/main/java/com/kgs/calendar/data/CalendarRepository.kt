@@ -7,12 +7,15 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.mutation.EventMutations
 import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.data.trash.TrashBin
+import com.kgs.calendar.data.trash.TrashRestoreResult
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
@@ -32,6 +35,7 @@ class CalendarRepository(
     private val sources: CalendarSourceManager,
     private val syncOrchestrator: SyncOrchestrator,
     private val repairs: SyncRepairs,
+    private val trash: TrashBin,
 ) {
     fun observeAccount(): Flow<AccountEntity?> = queries.observeAccount()
 
@@ -201,9 +205,19 @@ class CalendarRepository(
 
     suspend fun copyTaskTo(uid: String, collectionHref: String) = taskMutations.copyTaskTo(uid, collectionHref)
 
-    suspend fun deleteTask(uid: String) = taskMutations.deleteTask(uid)
+    suspend fun deleteTask(uid: String, moveToTrash: Boolean = true) = taskMutations.deleteTask(uid, moveToTrash)
 
-    suspend fun deleteEvent(uid: String) = eventMutations.deleteEvent(uid)
+    suspend fun deleteEvent(uid: String, moveToTrash: Boolean = true) = eventMutations.deleteEvent(uid, moveToTrash)
+
+    fun observeTrashedItems(): Flow<List<TrashedItemEntity>> = trash.observeItems()
+
+    suspend fun restoreTrashedItem(id: Long): TrashRestoreResult = trash.restore(id)
+
+    suspend fun deleteTrashedItemPermanently(id: Long) = trash.deletePermanently(id)
+
+    suspend fun emptyTrash() = trash.empty()
+
+    suspend fun purgeExpiredTrash() = trash.purgeExpired()
 
     suspend fun deleteEventOccurrence(uid: String, occurrenceStartMillis: Long) =
         eventMutations.deleteEventOccurrence(uid, occurrenceStartMillis)

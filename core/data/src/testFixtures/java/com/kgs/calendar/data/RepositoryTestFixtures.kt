@@ -96,6 +96,7 @@ class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
         sources = components.sources,
         syncOrchestrator = components.syncOrchestrator,
         repairs = components.repairs,
+        trash = components.trash,
     )
 
     private var startedServer: FakeCalDavServer? = null

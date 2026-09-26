@@ -3,6 +3,7 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
+import com.kgs.calendar.data.trash.TrashBin
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,6 +18,7 @@ class SyncOrchestrator(
     private val repairs: SyncRepairs,
     private val uploader: PendingMutationUploader,
     private val engines: List<CalendarSourceSyncEngine>,
+    private val trash: TrashBin? = null,
 ) {
     private val remoteSyncMutex = Mutex()
 
@@ -28,6 +30,7 @@ class SyncOrchestrator(
     }
 
     private suspend fun syncNowLocked(options: SourceSyncOptions) {
+        trash?.purgeExpired()
         repairs.repairInvalidTaskSchedules()
         repairs.repairPendingTaskMutations()
         repairs.repairDuplicateCalDavResources()

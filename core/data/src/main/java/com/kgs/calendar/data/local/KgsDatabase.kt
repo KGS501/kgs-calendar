@@ -9,12 +9,14 @@ import com.kgs.calendar.data.local.dao.EventDao
 import com.kgs.calendar.data.local.dao.PendingMutationDao
 import com.kgs.calendar.data.local.dao.ResourceDao
 import com.kgs.calendar.data.local.dao.TaskDao
+import com.kgs.calendar.data.local.dao.TrashDao
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
 
 @Database(
     entities = [
@@ -24,8 +26,9 @@ import com.kgs.calendar.data.local.entity.TaskEntity
         EventEntity::class,
         TaskEntity::class,
         PendingMutationEntity::class,
+        TrashedItemEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 @TypeConverters(KgsTypeConverters::class)
@@ -36,4 +39,5 @@ abstract class KgsDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun taskDao(): TaskDao
     abstract fun pendingMutationDao(): PendingMutationDao
+    abstract fun trashDao(): TrashDao
 }

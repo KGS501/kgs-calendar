@@ -25,6 +25,7 @@ object KgsDatabaseMigrations {
         MIGRATION_17_18,
         MIGRATION_18_19,
         MIGRATION_19_20,
+        MIGRATION_20_21,
     )
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -323,4 +324,32 @@ object KgsDatabaseMigrations {
         }
     }
 
+    private val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // "Recently deleted": snapshots of whole events and tasks deleted in the app.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS trashed_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    componentType TEXT NOT NULL,
+                    uid TEXT NOT NULL,
+                    collectionHref TEXT NOT NULL,
+                    accountId TEXT NOT NULL,
+                    sourceType TEXT NOT NULL,
+                    resourceHref TEXT NOT NULL,
+                    providerEventId INTEGER,
+                    rawIcs TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    startMillis INTEGER,
+                    hasTime INTEGER NOT NULL,
+                    collectionName TEXT NOT NULL,
+                    collectionColor INTEGER NOT NULL,
+                    manualColor INTEGER,
+                    deletedAtMillis INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_trashed_items_deletedAtMillis ON trashed_items(deletedAtMillis)")
+        }
+    }
 }

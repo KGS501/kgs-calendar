@@ -90,14 +90,14 @@ class CalendarEditActions internal constructor(
     fun convertEventToTask(eventUid: String, payload: TaskEditPayload) {
         runEdit(rescheduleReminders = true) {
             repository.createTask(payload)
-            repository.deleteEvent(eventUid)
+            repository.deleteEvent(eventUid, moveToTrash = false)
         }
     }
 
     fun convertTaskToEvent(taskUid: String, payload: EventEditPayload) {
         runEdit(rescheduleReminders = true) {
             repository.createEvent(payload)
-            repository.deleteTask(taskUid)
+            repository.deleteTask(taskUid, moveToTrash = false)
         }
     }
 

@@ -18,6 +18,8 @@ import com.kgs.calendar.data.sync.PendingMutationUploader
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.data.trash.TrashBin
+import com.kgs.calendar.data.trash.TrashSnapshots
 import okhttp3.OkHttpClient
 import java.time.ZoneId
 
@@ -38,10 +40,12 @@ class CalendarDataComponents(
 ) {
     private val localWrites = LocalWriteSupport(database, icalCodec)
     private val androidWriteShield = AndroidProviderWriteShield()
+    private val trashSnapshots = TrashSnapshots(database, icalCodec)
 
     val queries = CalendarQueries(database, recurrenceExpander, zoneId)
-    val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, zoneId)
-    val taskMutations = TaskMutations(database, localWrites, icalCodec, zoneId)
+    val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, trashSnapshots, zoneId)
+    val taskMutations = TaskMutations(database, localWrites, icalCodec, trashSnapshots, zoneId)
+    val trash = TrashBin(database, localWrites, icalCodec, eventMutations)
 
     val repairs = SyncRepairs(database, localWrites, icalCodec)
     val uploader = PendingMutationUploader(database, credentialsStore, calDavClient, localWrites)
@@ -55,6 +59,7 @@ class CalendarDataComponents(
         repairs = repairs,
         uploader = uploader,
         engines = listOf(androidProviderSyncEngine, readOnlyUrlSyncEngine, calDavSyncEngine),
+        trash = trash,
     )
 
     val sources = CalendarSourceManager(
