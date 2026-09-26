@@ -60,6 +60,7 @@ import com.kgs.calendar.ui.layout.ListContentMaxWidth
 import com.kgs.calendar.ui.layout.centeredContentPadding
 import com.kgs.calendar.ui.layout.centeredMaxWidth
 import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.model.agendaSortMillis
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -263,7 +264,7 @@ internal fun AgendaTimeline(
     // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
     val listSidePadding = centeredContentPadding(
         availableWidth = currentCalendarWindowLayout().widthDp.dp,
-        maxWidth = ListContentMaxWidth,
+        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
         basePadding = 18.dp,
     )
     Box(modifier.fillMaxSize()) {
@@ -338,7 +339,7 @@ internal fun AgendaTimeline(
             topSpacing = headerTopSpacing,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .centeredMaxWidth(ListContentMaxWidth),
+                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
         )
     }
 }

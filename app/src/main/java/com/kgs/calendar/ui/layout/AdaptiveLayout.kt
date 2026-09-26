@@ -38,18 +38,36 @@ internal fun currentCalendarWindowLayout(): CalendarWindowLayout {
 }
 
 /**
- * Fills the available width up to [maxWidth] and centres the result. When the parent is not wider than
- * [maxWidth] (every phone) this measures and places exactly like `fillMaxWidth()`.
+ * [maxWidth] on a large screen (tablet, unfolded foldable), otherwise [Dp.Unspecified]. Phones keep the full
+ * window width in both orientations, even when a rotated phone is wider than [maxWidth].
  */
-internal fun Modifier.centeredMaxWidth(maxWidth: Dp): Modifier = this
-    .fillMaxWidth()
-    .wrapContentWidth(Alignment.CenterHorizontally)
-    .widthIn(max = maxWidth)
-    .fillMaxWidth()
+@Composable
+@ReadOnlyComposable
+internal fun largeScreenMaxWidth(maxWidth: Dp): Dp =
+    if (currentCalendarWindowLayout().isLargeScreen) maxWidth else Dp.Unspecified
+
+/**
+ * Fills the available width up to [maxWidth] and centres the result. With an unspecified [maxWidth] (see
+ * [largeScreenMaxWidth]) or a parent that is not wider than [maxWidth], it is exactly `fillMaxWidth()`.
+ */
+internal fun Modifier.centeredMaxWidth(maxWidth: Dp): Modifier = if (maxWidth == Dp.Unspecified) {
+    fillMaxWidth()
+} else {
+    this
+        .fillMaxWidth()
+        .wrapContentWidth(Alignment.CenterHorizontally)
+        .widthIn(max = maxWidth)
+        .fillMaxWidth()
+}
 
 /**
  * Horizontal padding that keeps content of at most [maxWidth] centred in [availableWidth] while the
- * scrollable container itself still spans the full width. Returns [basePadding] whenever the content fits.
+ * scrollable container itself still spans the full width. Returns [basePadding] whenever the content fits
+ * or [maxWidth] is unspecified.
  */
 internal fun centeredContentPadding(availableWidth: Dp, maxWidth: Dp, basePadding: Dp): Dp =
-    basePadding + ((availableWidth - maxWidth) / 2).coerceAtLeast(0.dp)
+    if (maxWidth == Dp.Unspecified) {
+        basePadding
+    } else {
+        basePadding + ((availableWidth - maxWidth) / 2).coerceAtLeast(0.dp)
+    }

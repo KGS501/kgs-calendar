@@ -367,6 +367,7 @@ import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.SheetMaxWidth
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
 import com.kgs.calendar.ui.layout.TimedPlacement
@@ -721,6 +722,9 @@ internal fun KgsModalBottomSheet(
                 }
                 .then(sheetDragModifier)
 
+            // On tablets and unfolded foldables the sheet stays at most SheetMaxWidth wide, centred.
+            // Phones, rotated ones included, keep the full window width.
+            val sheetMaxWidth = largeScreenMaxWidth(SheetMaxWidth)
             val separationShadowDark = MaterialTheme.colorScheme.background.isDark()
             if (separationShadow) {
                 val shadowHeight = if (separationShadowDark) 42.dp else 34.dp
@@ -731,7 +735,7 @@ internal fun KgsModalBottomSheet(
                 Canvas(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .widthIn(max = SheetMaxWidth)
+                        .widthIn(max = sheetMaxWidth)
                         .fillMaxWidth()
                         .height(shadowHeight + cornerRadius)
                         .offset {
@@ -754,11 +758,10 @@ internal fun KgsModalBottomSheet(
                 }
             }
 
-            // On tablets and unfolded foldables the sheet stays at most SheetMaxWidth wide, centred.
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .widthIn(max = SheetMaxWidth)
+                    .widthIn(max = sheetMaxWidth)
                     .fillMaxWidth()
                     .testTag(KgsModalBottomSheetSurfaceTag)
                     .height(sheetHeight)

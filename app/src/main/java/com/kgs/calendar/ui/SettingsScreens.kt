@@ -380,6 +380,7 @@ import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
 import com.kgs.calendar.ui.layout.centeredMaxWidth
 import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.layout.SettingsContentMaxWidth
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
@@ -610,7 +611,7 @@ internal fun SettingsPage(
     ) {
         Column(
             modifier = Modifier
-                .centeredMaxWidth(SettingsContentMaxWidth)
+                .centeredMaxWidth(largeScreenMaxWidth(SettingsContentMaxWidth))
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {
             Row(
@@ -1833,7 +1834,7 @@ internal fun ProblemsPage(
     ) {
         Column(
             modifier = Modifier
-                .centeredMaxWidth(SettingsContentMaxWidth)
+                .centeredMaxWidth(largeScreenMaxWidth(SettingsContentMaxWidth))
                 .fillMaxSize()
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {

@@ -346,6 +346,7 @@ import com.kgs.calendar.ui.layout.ListContentMaxWidth
 import com.kgs.calendar.ui.layout.centeredContentPadding
 import com.kgs.calendar.ui.layout.centeredMaxWidth
 import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
@@ -519,7 +520,7 @@ private fun SearchOptionsBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 6.dp)
-            .centeredMaxWidth(ListContentMaxWidth)
+            .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
             .padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -578,7 +579,7 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             .height(statusTop + 62.dp)
             .background(MaterialTheme.colorScheme.background)
             .padding(top = statusTop)
-            .centeredMaxWidth(ListContentMaxWidth)
+            .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
             .padding(start = 16.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1002,7 +1003,7 @@ internal fun SearchResultsList(
     // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
     val listSidePadding = centeredContentPadding(
         availableWidth = currentCalendarWindowLayout().widthDp.dp,
-        maxWidth = ListContentMaxWidth,
+        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
         basePadding = 18.dp,
     )
     Box(Modifier.fillMaxSize()) {
@@ -1123,7 +1124,7 @@ internal fun SearchResultsList(
             topSpacing = agendaHeaderTopSpacing,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .centeredMaxWidth(ListContentMaxWidth),
+                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
         )
     }
     }

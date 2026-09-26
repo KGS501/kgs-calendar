@@ -1,10 +1,10 @@
 package com.kgs.calendar.domain.model
 
-/** Smallest window width, in dp, that counts as a large screen (Material "medium" width class). */
-const val LARGE_SCREEN_MIN_WIDTH_DP = 600
-
-/** Smallest window height, in dp, that counts as a large screen (Material "medium" height class). */
-const val LARGE_SCREEN_MIN_HEIGHT_DP = 480
+/**
+ * A window whose shorter side is at least this many dp is a large screen: Android's `sw600dp` tablet
+ * boundary. No phone reaches it at any display size, in either orientation.
+ */
+const val LARGE_SCREEN_MIN_SMALLEST_WIDTH_DP = 600
 
 /** Days in Multiple days on an upright large screen (tablet or unfolded foldable) until the user changes it. */
 const val DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT = 4
@@ -39,9 +39,10 @@ data class MultiDayCounts(
  * The size of the app window, which drives the layout decisions that used to depend on orientation alone.
  *
  * [isLandscape] is the window's orientation as Android reports it. Phones never qualify as a large screen:
- * upright they are narrower than [LARGE_SCREEN_MIN_WIDTH_DP], rotated they are lower than
- * [LARGE_SCREEN_MIN_HEIGHT_DP]. So on phones every decision below equals the old orientation-only one.
- * Tablets, unfolded foldables and big split-screen or freeform windows are large screens.
+ * their shorter side stays below [LARGE_SCREEN_MIN_SMALLEST_WIDTH_DP] even with the smallest display size
+ * setting, so on phones every decision below equals the old orientation-only one. Tablets, unfolded
+ * foldables and big split-screen or freeform windows are large screens; a window that is low in either
+ * direction (e.g. a tablet split top and bottom) keeps the phone layouts, which are built for that.
  */
 data class CalendarWindowLayout(
     val isLandscape: Boolean,
@@ -49,7 +50,7 @@ data class CalendarWindowLayout(
     val heightDp: Int,
 ) {
     val isLargeScreen: Boolean
-        get() = widthDp >= LARGE_SCREEN_MIN_WIDTH_DP && heightDp >= LARGE_SCREEN_MIN_HEIGHT_DP
+        get() = minOf(widthDp, heightDp) >= LARGE_SCREEN_MIN_SMALLEST_WIDTH_DP
 
     /**
      * The month drop-down fills the whole height beside a vertical month strip only when the window is low

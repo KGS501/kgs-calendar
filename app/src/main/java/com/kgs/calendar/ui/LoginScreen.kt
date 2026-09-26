@@ -387,6 +387,7 @@ import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.CalendarUiTokens
 import com.kgs.calendar.ui.layout.WelcomeContentMaxWidth
 import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import com.kgs.calendar.ui.time.rememberCalendarTimeState
@@ -555,7 +556,7 @@ internal fun WelcomeScreen(
     ) {
         Column(
             modifier = Modifier
-                .centeredMaxWidth(WelcomeContentMaxWidth)
+                .centeredMaxWidth(largeScreenMaxWidth(WelcomeContentMaxWidth))
                 .fillMaxSize()
                 .padding(horizontal = 28.dp)
                 .padding(top = statusTop + 30.dp, bottom = navBottom + 24.dp),

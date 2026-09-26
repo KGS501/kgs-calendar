@@ -6,7 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CalendarWindowLayoutTest {
-    private val phonePortraitSizes = listOf(360 to 640, 360 to 800, 393 to 852, 411 to 891, 448 to 998)
+    private val phonePortraitSizes = listOf(
+        360 to 640, 360 to 800, 393 to 852, 411 to 891, 448 to 998,
+        // Large, high-resolution phones with the smallest display size setting.
+        512 to 1138, 540 to 1170,
+    )
     private val phoneLandscapeSizes = phonePortraitSizes.map { (w, h) -> h to w } +
         // Smaller landscape heights with system bars excluded (API 34 and older).
         listOf(592 to 360, 640 to 336, 891 to 387)
@@ -67,10 +71,22 @@ class CalendarWindowLayoutTest {
     }
 
     @Test
-    fun thresholdsAreInclusive() {
-        assertTrue(CalendarWindowLayout(isLandscape = true, widthDp = 600, heightDp = 480).isLargeScreen)
-        assertFalse(CalendarWindowLayout(isLandscape = true, widthDp = 599, heightDp = 480).isLargeScreen)
-        assertFalse(CalendarWindowLayout(isLandscape = true, widthDp = 600, heightDp = 479).isLargeScreen)
+    fun lowWindowsKeepThePhoneLayouts() {
+        // A landscape tablet split top and bottom, and a low freeform window.
+        listOf(1280 to 396, 900 to 520).forEach { (w, h) ->
+            val layout = CalendarWindowLayout(isLandscape = true, widthDp = w, heightDp = h)
+            assertFalse("$w x $h", layout.isLargeScreen)
+            assertTrue("$w x $h", layout.usesSideBySideMonthOverview)
+            assertEquals(MultiDayCountBucket.Landscape, layout.multiDayCountBucket)
+        }
+    }
+
+    @Test
+    fun thresholdIsTheInclusiveSmallestWidth() {
+        assertTrue(CalendarWindowLayout(isLandscape = false, widthDp = 600, heightDp = 960).isLargeScreen)
+        assertTrue(CalendarWindowLayout(isLandscape = true, widthDp = 960, heightDp = 600).isLargeScreen)
+        assertFalse(CalendarWindowLayout(isLandscape = false, widthDp = 599, heightDp = 960).isLargeScreen)
+        assertFalse(CalendarWindowLayout(isLandscape = true, widthDp = 960, heightDp = 599).isLargeScreen)
     }
 
     @Test
