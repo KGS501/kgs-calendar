@@ -251,8 +251,13 @@ internal class CalendarShellUiState(
         editingCollection = null
     }
 
-    fun openEventCreation(schedule: EditorScheduleState, wireframeColor: Int) {
+    /** [prefill] starts the editor with typed values, e.g. of text shared to the app. */
+    fun openEventCreation(schedule: EditorScheduleState, wireframeColor: Int, prefill: EditorTransferDraft? = null) {
+        // A prefilled editor always starts a fresh draft, even over an editor that is already open.
+        if (prefill != null) creationSheet = null
         openCreation(CreationSheet.EventFull, schedule, wireframeColor)
+        // Set once the sheet (and with it the draft that stores the prefill) exists.
+        if (prefill != null) editorTransferDraft = prefill
     }
 
     fun openTaskCreation(schedule: EditorScheduleState, wireframeColor: Int) {

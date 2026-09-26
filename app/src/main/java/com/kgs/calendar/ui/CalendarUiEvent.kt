@@ -9,6 +9,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.navigation.SharedEventDraft
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,9 @@ import kotlinx.coroutines.withContext
  */
 sealed interface CalendarUiEvent {
     data class CreateEvent(val date: LocalDate) : CalendarUiEvent
+
+    /** Text shared to the app: a new event with the usual defaults, prefilled with [draft]. */
+    data class CreateSharedEvent(val draft: SharedEventDraft) : CalendarUiEvent
 
     data class CreateTask(val date: LocalDate, val scheduledForDay: Boolean) : CalendarUiEvent
 

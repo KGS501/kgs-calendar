@@ -9,8 +9,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -21,6 +23,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.eventDraftColor
 import com.kgs.calendar.ui.shell.newEventSchedule
@@ -30,6 +33,7 @@ import com.kgs.calendar.ui.shell.taskDraftColor
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -177,6 +181,38 @@ internal fun CalendarAppContent(
         )
     }
 
+    /** Like "New event" from the create button, with the shared text as title and description. */
+    fun openSharedEventCreation(shared: SharedEventDraft) {
+        shell.openEventCreation(
+            schedule = newEventSchedule(state.defaultFabCreationDate(), LocalTime.now(), state.defaultEventDurationMinutes),
+            wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+            prefill = EditorTransferDraft(
+                title = shared.title,
+                notes = shared.notes,
+                reminderMinutes = state.defaultEventReminderMinutes,
+                sourceDefaultReminderMinutes = state.defaultEventReminderMinutes,
+            ),
+        )
+    }
+
+    val currentOpenSharedEventCreation by rememberUpdatedState<(SharedEventDraft) -> Unit> { openSharedEventCreation(it) }
+    val shareScope = rememberCoroutineScope()
+
+    /**
+     * After process death the shell reopens its saved sheets only once the data has loaded; a share
+     * that arrives meanwhile waits for that, so the restore does not replace its editor.
+     */
+    fun openSharedEventCreationAfterRestore(shared: SharedEventDraft) {
+        if (!shell.hasPendingRestore) {
+            openSharedEventCreation(shared)
+            return
+        }
+        shareScope.launch {
+            snapshotFlow { shell.hasPendingRestore }.first { !it }
+            currentOpenSharedEventCreation(shared)
+        }
+    }
+
     fun openTaskCreation(date: LocalDate, scheduledForDay: Boolean, useTaskDefaults: Boolean = false) {
         shell.openTaskCreation(
             schedule = newTaskSchedule(
@@ -193,11 +229,16 @@ internal fun CalendarAppContent(
     }
 
     LaunchedEffect(shell.settingsOpen) {
-        if (shell.settingsOpen) viewModel.sources.refreshAndroidProviderDiagnostics()
+        if (shell.settingsOpen) {
+            viewModel.sources.refreshAndroidProviderDiagnostics()
+        } else {
+            viewModel.holdSharedEvent(false)
+        }
     }
     CalendarLaunchEventsEffect(
         events = viewModel.uiEvents,
         onCreateEvent = { openEventCreation(it) },
+        onCreateSharedEvent = { openSharedEventCreationAfterRestore(it) },
         onCreateTask = { date, scheduledForDay -> openTaskCreation(date, scheduledForDay) },
         onOpenDetail = shell::openLaunchedDetail,
         onForegroundRecentered = { foregroundRecenterRequest += 1 },
@@ -246,7 +287,11 @@ internal fun CalendarAppContent(
     WelcomeOverlay(
         viewModel = viewModel,
         welcomeCompleted = state.welcomeCompleted,
-        onConnectCalendars = shell::openAddCalendarSources,
+        onConnectCalendars = {
+            // A share that waited for the welcome screen opens once the new calendars are set up.
+            viewModel.holdSharedEvent(true)
+            shell.openAddCalendarSources()
+        },
     )
     CollectionSettingsHost(viewModel = viewModel, state = state, shell = shell)
     RecurringSaveDialogHost(

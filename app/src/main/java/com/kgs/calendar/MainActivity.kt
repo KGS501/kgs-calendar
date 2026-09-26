@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.navigation.externalCalendarLaunchDate
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.ui.CalendarWidgetLaunchTarget
@@ -35,12 +36,14 @@ class MainActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
     private var initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null
     private var initialCalendarLaunchTarget: CalendarLaunchTarget? = null
+    private var initialSharedEvent: SharedEventDraft? = null
     private var restoredFromSavedState = false
     private val calendarViewModel: CalendarViewModel by viewModels {
         CalendarViewModelFactory(
             graph,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+            initialSharedEvent = initialSharedEvent,
             deliverInitialLaunchEvents = !restoredFromSavedState,
         )
     }
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
+        initialSharedEvent = intent.toSharedEvent()
         maybeRequestNotificationPermission()
         if (savedInstanceState == null) {
             maybeRequestExactAlarmPermission()
@@ -69,7 +73,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        CalendarLaunchTarget.readFrom(intent)?.let(calendarViewModel::openFromCalendarLaunch)
+        intent.toSharedEvent()?.let(calendarViewModel::openFromShare)
+            ?: CalendarLaunchTarget.readFrom(intent)?.let(calendarViewModel::openFromCalendarLaunch)
             ?: applyExternalCalendarLaunch(intent)
             ?: applyWidgetLaunch(intent)
     }
@@ -137,6 +142,11 @@ class MainActivity : ComponentActivity() {
         calendarViewModel.openFromWidget(date = target.date, viewMode = target.viewMode)
         return Unit
     }
+
+    /** A share, unless the task is relaunched from Recents with the share as its old base intent. */
+    private fun Intent.toSharedEvent(): SharedEventDraft? =
+        SharedEventDraft.readFrom(this)
+            ?.takeIf { flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0 }
 
     private fun Intent?.toExternalCalendarLaunchTarget(): CalendarWidgetLaunchTarget? {
         val source = this ?: return null

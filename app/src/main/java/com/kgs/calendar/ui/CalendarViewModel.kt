@@ -25,6 +25,7 @@ import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.ui.editor.EditorDraftFiles
 import com.kgs.calendar.ui.editor.EditorDraftStore
@@ -94,6 +95,7 @@ class CalendarViewModel(
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
+    initialSharedEvent: SharedEventDraft? = null,
     // False when the activity is restored from saved state: the launch was already handled then,
     // so only its date/view selection is reapplied.
     deliverInitialLaunchEvents: Boolean = true,
@@ -111,6 +113,10 @@ class CalendarViewModel(
     val uiEvents: Flow<CalendarUiEvent> = uiEventChannel.receiveAsFlow()
     private var pendingOpenEventJob: Job? = null
     private var pendingOpenTaskJob: Job? = null
+    private var pendingSharedEventJob: Job? = null
+
+    /** True while the user connects calendars right after the welcome screen; a share waits for that. */
+    private val sharedEventHeld = MutableStateFlow(false)
     private val isLandscape = MutableStateFlow(false)
     private val useLandscapeEntryView = MutableStateFlow(false)
     private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
@@ -448,6 +454,9 @@ class CalendarViewModel(
                 openTaskUid = initialWidgetLaunchTarget.openTaskUid,
             )
         }
+        if (initialSharedEvent != null && deliverInitialLaunchEvents) {
+            openFromShare(initialSharedEvent)
+        }
     }
 
     fun selectView(viewMode: CalendarViewMode) {
@@ -488,6 +497,27 @@ class CalendarViewModel(
         dateNavigationSerial.update { it + 1 }
         sendWidgetLaunchEvents(date, createEvent, createTaskScheduled, openEventUid, openTaskUid)
         persistWidgetSelection(date, viewMode)
+    }
+
+    /**
+     * Text shared to the app opens a prefilled new event. It waits until the calendar data is
+     * loaded, the welcome screen is done and a calendar connection started from it has finished
+     * (see [holdSharedEvent]); a newer share replaces one that still waits. The draft stays in
+     * memory only, never in saved state.
+     */
+    fun openFromShare(draft: SharedEventDraft) {
+        pendingSharedEventJob?.cancel()
+        pendingSharedEventJob = viewModelScope.launch {
+            combine(uiState, sharedEventHeld) { state, held ->
+                state.initialDataLoaded && state.welcomeCompleted && !held
+            }.first { it }
+            uiEventChannel.send(CalendarUiEvent.CreateSharedEvent(draft))
+        }
+    }
+
+    /** Held while calendars are being connected from the welcome screen, released when settings close. */
+    fun holdSharedEvent(held: Boolean) {
+        sharedEventHeld.value = held
     }
 
     fun openFromCalendarLaunch(target: CalendarLaunchTarget) {
@@ -658,6 +688,7 @@ class CalendarViewModelFactory(
     private val graph: AppGraph,
     private val initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     private val initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
+    private val initialSharedEvent: SharedEventDraft? = null,
     private val deliverInitialLaunchEvents: Boolean = true,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -674,6 +705,7 @@ class CalendarViewModelFactory(
             uiStrings = graph.uiStrings,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+            initialSharedEvent = initialSharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
             editorDrafts = EditorDraftStore(
                 EditorDraftFiles(File(graph.appContext.noBackupFilesDir, EDITOR_DRAFT_DIRECTORY)),

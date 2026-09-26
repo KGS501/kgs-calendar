@@ -19,6 +19,7 @@ import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.reminder.TaskNotificationReconciler
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
@@ -139,6 +140,74 @@ class CalendarViewModelTest {
         assertEquals(date, viewModel.uiState.value.selectedDate)
         advanceUntilIdle()
         viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun initialShareOpensThePrefilledEditorExactlyOnce() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val draft = SharedEventDraft("Team lunch", "Hi all,\nlunch at noon")
+        val viewModel = viewModel(sharedEvent = draft)
+
+        viewModel.uiEvents.test {
+            assertEquals(CalendarUiEvent.CreateSharedEvent(draft), awaitItem())
+            expectNoEvents()
+        }
+        // It only waits for the loaded data, which the editor defaults come from.
+        assertTrue(viewModel.uiState.value.initialDataLoaded)
+        advanceUntilIdle()
+        // A second collector, e.g. after the activity was recreated, must not see it again.
+        viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun restoredActivityDoesNotReplayTheShare() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val viewModel = viewModel(
+            sharedEvent = SharedEventDraft("Team lunch", "Hi all"),
+            deliverInitialLaunchEvents = false,
+        )
+
+        viewModel.awaitState { it.initialDataLoaded && it.welcomeCompleted }
+        advanceUntilIdle()
+        viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun warmShareReplacesAnOlderShareThatStillWaits() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val viewModel = viewModel()
+        val newer = SharedEventDraft("Newer", "second")
+        viewModel.awaitState { it.initialDataLoaded && it.welcomeCompleted }
+
+        viewModel.uiEvents.test {
+            viewModel.openFromShare(SharedEventDraft("Older", "first"))
+            viewModel.openFromShare(newer)
+            assertEquals(CalendarUiEvent.CreateSharedEvent(newer), awaitItem())
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun shareWaitsForTheWelcomeScreenAndTheCalendarConnection() = runTest {
+        val draft = SharedEventDraft("Team lunch", "Hi all")
+        val viewModel = viewModel(sharedEvent = draft)
+
+        viewModel.uiEvents.test {
+            viewModel.awaitState { it.initialDataLoaded && !it.welcomeCompleted }
+            advanceUntilIdle()
+            expectNoEvents()
+
+            // "Connect existing calendars": the share waits until settings close again.
+            viewModel.holdSharedEvent(true)
+            settingsStore.setWelcomeCompleted(true)
+            viewModel.awaitState { it.welcomeCompleted }
+            advanceUntilIdle()
+            expectNoEvents()
+
+            viewModel.holdSharedEvent(false)
+            assertEquals(CalendarUiEvent.CreateSharedEvent(draft), awaitItem())
+            expectNoEvents()
+        }
     }
 
     @Test
@@ -340,6 +409,7 @@ class CalendarViewModelTest {
 
     private fun viewModel(
         widgetTarget: CalendarWidgetLaunchTarget? = null,
+        sharedEvent: SharedEventDraft? = null,
         deliverInitialLaunchEvents: Boolean = true,
     ): CalendarViewModel {
         val repository = harness.repository
@@ -378,6 +448,7 @@ class CalendarViewModelTest {
             uiStrings = UiStrings { "string-$it" },
             zoneId = TEST_ZONE,
             initialWidgetLaunchTarget = widgetTarget,
+            initialSharedEvent = sharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
         ).also(viewModels::add)
     }

@@ -85,6 +85,7 @@
     <string name="search_load_earlier">Earlier</string>
     <string name="search_load_later">Later</string>
     <string name="create">Create</string>
+    <string name="share_create_event">Create event</string>
     <string name="new_event">New event</string>
     <string name="edit_event">Edit event</string>
     <string name="duplicate_event">Duplicate event</string>
