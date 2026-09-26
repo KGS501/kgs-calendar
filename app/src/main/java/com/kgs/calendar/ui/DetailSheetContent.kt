@@ -345,6 +345,7 @@ import com.kgs.calendar.domain.task.taskPriorityIntensity
 import com.kgs.calendar.domain.task.treeParents
 import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.domain.trash.TrashRetention
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -1660,7 +1661,7 @@ private fun DeleteConfirmationDialog(
                         when (pendingScope) {
                             EventDeleteScope.This -> appString(R.string.only_this_deleted)
                             EventDeleteScope.ThisAndFollowing -> appString(R.string.this_and_following_deleted)
-                            EventDeleteScope.All -> appString(R.string.all_series_deleted)
+                            EventDeleteScope.All -> appString(R.string.all_series_deleted_recoverable, TrashRetention.DAYS)
                         },
                     )
                 },
@@ -1687,7 +1688,7 @@ private fun DeleteConfirmationDialog(
             titleContentColor = WarmInk,
             textContentColor = WarmInk,
             title = { Text(appString(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
-            text = { Text(appString(R.string.delete_irreversible)) },
+            text = { Text(appString(R.string.delete_recoverable, TrashRetention.DAYS)) },
             confirmButton = {
                 TextButton(onClick = onDeleteAll) {
                     Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error)

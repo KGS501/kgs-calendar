@@ -25,6 +25,7 @@ internal enum class SettingsDestination(val title: String) {
     TaskFieldOrder("Task fields"),
     Sources("Calendars & sources"),
     Reorder("Order"),
+    RecentlyDeleted("Recently deleted"),
 }
 
 internal sealed interface CreationSheet {

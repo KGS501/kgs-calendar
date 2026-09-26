@@ -163,6 +163,14 @@ class CalendarViewModel(
         currentState = { uiState.value },
     )
 
+    val trash = CalendarTrashActions(
+        scope = viewModelScope,
+        repository = repository,
+        widgetRefresher = widgetRefresher,
+        reminderRescheduler = reminderRescheduler,
+        message = message,
+    )
+
     init {
         viewModelScope.launch {
             runCatching { repository.ensureLocalCalendar() }

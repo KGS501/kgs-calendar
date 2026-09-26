@@ -313,6 +313,7 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
@@ -501,6 +502,11 @@ internal fun SettingsPage(
     onCollectionSettings: (CollectionEntity) -> Unit,
     onLocalCalendarEnabledChanged: (Boolean) -> Unit,
     onClose: () -> Unit,
+    trash: TrashUiState = TrashUiState(),
+    onRestoreTrashedItem: (TrashedItemEntity) -> Unit = {},
+    onDeleteTrashedItemPermanently: (TrashedItemEntity) -> Unit = {},
+    onEmptyTrash: () -> Unit = {},
+    onDismissTrashNotice: () -> Unit = {},
 ) {
     val timelineVisibility = timelineSettingsVisibility(
         weekViewEnabled = state.weekViewEnabled,
@@ -745,6 +751,13 @@ internal fun SettingsPage(
                                     leadingIcon = Icons.Default.Add,
                                 ) {
                                     navigateTo(SettingsDestination.AddSource)
+                                }
+                                SettingsMenuRow(
+                                    title = stringResource(R.string.recently_deleted),
+                                    value = recentlyDeletedSummary(trash.items.size),
+                                    leadingIcon = Icons.Default.Delete,
+                                ) {
+                                    navigateTo(SettingsDestination.RecentlyDeleted)
                                 }
                                 if (externalAccounts.isNotEmpty() && localCollection != null) {
                                     SettingsSwitchRow(
@@ -1433,6 +1446,13 @@ internal fun SettingsPage(
                             }
                         }
                         SettingsDestination.Privacy -> PrivacyPolicyPage()
+                        SettingsDestination.RecentlyDeleted -> RecentlyDeletedSettings(
+                            trash = trash,
+                            onRestore = onRestoreTrashedItem,
+                            onDeletePermanently = onDeleteTrashedItemPermanently,
+                            onEmptyTrash = onEmptyTrash,
+                            onDismissNotice = onDismissTrashNotice,
+                        )
                         SettingsDestination.EventFieldOrder -> {
                             SettingsSection(title = stringResource(R.string.event_fields), icon = Icons.Default.Event) {
                                 FieldOrderList(
@@ -1886,6 +1906,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
     SettingsDestination.Sources -> stringResource(R.string.calendars_and_sources)
     SettingsDestination.Reorder -> stringResource(R.string.order)
+    SettingsDestination.RecentlyDeleted -> stringResource(R.string.recently_deleted)
 }
 
 @Composable

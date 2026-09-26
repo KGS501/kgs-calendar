@@ -466,7 +466,6 @@
     <string name="truly_delete">Really delete?</string>
     <string name="only_this_deleted">Only this event will be deleted. This action cannot be undone.</string>
     <string name="this_and_following_deleted">This and all following events will be deleted. This action cannot be undone.</string>
-    <string name="all_series_deleted">All events in this series will be deleted. This action cannot be undone.</string>
     <string name="event_belongs_to_series_delete">This event belongs to a series. What do you want to delete?</string>
     <string name="edit_series_body">%1$s belongs to a series. Which occurrences should be changed?</string>
     <string name="source_remove">Remove source</string>
@@ -581,4 +580,32 @@
     <string name="follow_os">Follow OS</string>
     <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
     <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
+    <string name="recently_deleted">Recently deleted</string>
+    <string name="recently_deleted_empty_summary">Nothing deleted</string>
+    <plurals name="recently_deleted_count">
+        <item quantity="one">%1$d item, kept for %2$d days</item>
+        <item quantity="other">%1$d items, kept for %2$d days</item>
+    </plurals>
+    <string name="recently_deleted_empty_title">Nothing here</string>
+    <string name="recently_deleted_empty_body">Deleted events and tasks stay here for %1$d days.</string>
+    <string name="recently_deleted_help">Deleted events and tasks can be restored for %1$d days. After that they are removed for good. Single deleted occurrences of a series are not kept.</string>
+    <string name="trash_deleted_on">Deleted %1$s</string>
+    <string name="restore">Restore</string>
+    <string name="delete_permanently">Delete permanently</string>
+    <string name="delete_permanently_question">Delete “%1$s” permanently?</string>
+    <string name="empty_trash">Empty trash</string>
+    <string name="empty_trash_question">Empty trash?</string>
+    <plurals name="empty_trash_body">
+        <item quantity="one">%1$d item will be deleted permanently. This action cannot be undone.</item>
+        <item quantity="other">%1$d items will be deleted permanently. This action cannot be undone.</item>
+    </plurals>
+    <string name="restored_elsewhere_title">Restored to another calendar</string>
+    <string name="restored_elsewhere_body">The original calendar of “%1$s” no longer exists or is read-only, so it was restored to “%2$s”.</string>
+    <string name="restore_failed_title">Can’t restore</string>
+    <string name="restore_failed_no_calendar">There is no writable calendar left for “%1$s”. Add or show a calendar and try again.</string>
+    <string name="restore_failed_exists">“%1$s” is already back in its calendar, for example after a sync.</string>
+    <string name="restore_failed_unreadable">The saved copy of “%1$s” can’t be read.</string>
+    <string name="restore_failed_generic">“%1$s” could not be restored: %2$s</string>
+    <string name="delete_recoverable">You can restore it from Settings › Calendar › Recently deleted for %1$d days.</string>
+    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted for %1$d days.</string>
 </resources>
