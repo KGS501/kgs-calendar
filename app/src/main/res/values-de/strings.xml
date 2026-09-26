@@ -434,6 +434,8 @@
     <string name="multi_day_count_portrait_help">Anzahl der angezeigten Tage, wenn das Smartphone aufrecht gehalten wird.</string>
     <string name="multi_day_count_landscape">Tage im Querformat</string>
     <string name="multi_day_count_landscape_help">Anzahl der angezeigten Tage, wenn das Smartphone gedreht ist.</string>
+    <string name="multi_day_count_large_portrait_help">Anzahl der angezeigten Tage, wenn das Tablet oder aufgeklappte Smartphone aufrecht gehalten wird.</string>
+    <string name="multi_day_count_large_landscape_help">Anzahl der angezeigten Tage, wenn das Tablet oder aufgeklappte Smartphone gedreht ist.</string>
     <string name="use_week_view">Wochenansicht verwenden</string>
     <string name="use_week_view_help">Zeigt sieben Tage ab dem festgelegten ersten Wochentag.</string>
     <string name="swipe_full_weeks">Ganze Wochen wischen</string>

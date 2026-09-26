@@ -20,6 +20,7 @@ import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.MultiDayCounts
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,8 +94,7 @@ internal data class AppBehaviourSettings(
 )
 
 internal data class TimelineZoomSettings(
-    val portraitMultiDayCount: Int,
-    val landscapeMultiDayCount: Int,
+    val multiDayCounts: MultiDayCounts,
     val portraitTimelineHourHeightDp: Float,
     val landscapeTimelineHourHeightDp: Float,
 )
@@ -211,8 +211,7 @@ internal fun generalSettings(
     firstDayOfWeek: Flow<DayOfWeek>,
     weekViewEnabled: Flow<Boolean>,
     fullWeekSwipeEnabled: Flow<Boolean>,
-    portraitMultiDayCount: Flow<Int>,
-    landscapeMultiDayCount: Flow<Int>,
+    multiDayCounts: Flow<MultiDayCounts>,
 ): Flow<GeneralSettings> = combine(
     combine(
         settingsStore.themeMode,
@@ -244,8 +243,7 @@ internal fun generalSettings(
         fullWeekSwipeEnabled,
         settingsStore.multiDaySidebarControlsEnabled,
         combine(
-            portraitMultiDayCount,
-            landscapeMultiDayCount,
+            multiDayCounts,
             settingsStore.portraitTimelineHourHeightDp,
             settingsStore.landscapeTimelineHourHeightDp,
             ::TimelineZoomSettings,
@@ -410,8 +408,10 @@ internal fun calendarUiState(
         hapticFeedbackEnabled = settings.general.hapticFeedbackEnabled,
         maxVisibleAllDayItems = behaviour.maxVisibleAllDayItems,
         multiDayCount = navigation.multiDayCount,
-        portraitMultiDayCount = timeline.zoom.portraitMultiDayCount,
-        landscapeMultiDayCount = timeline.zoom.landscapeMultiDayCount,
+        portraitMultiDayCount = timeline.zoom.multiDayCounts.portrait,
+        landscapeMultiDayCount = timeline.zoom.multiDayCounts.landscape,
+        largePortraitMultiDayCount = timeline.zoom.multiDayCounts.largePortrait,
+        largeLandscapeMultiDayCount = timeline.zoom.multiDayCounts.largeLandscape,
         portraitTimelineHourHeightDp = timeline.zoom.portraitTimelineHourHeightDp,
         landscapeTimelineHourHeightDp = timeline.zoom.landscapeTimelineHourHeightDp,
         weekViewEnabled = timeline.weekViewEnabled,

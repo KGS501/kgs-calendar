@@ -10,6 +10,8 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
@@ -89,6 +91,8 @@ data class CalendarUiState(
     val multiDayCount: Int = 3,
     val portraitMultiDayCount: Int = 3,
     val landscapeMultiDayCount: Int = 3,
+    val largePortraitMultiDayCount: Int = DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT,
+    val largeLandscapeMultiDayCount: Int = DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT,
     val portraitTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val landscapeTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val weekViewEnabled: Boolean = SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,

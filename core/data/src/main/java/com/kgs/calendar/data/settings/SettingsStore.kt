@@ -15,6 +15,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
@@ -178,6 +180,18 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val landscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_LANDSCAPE_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on an upright large screen (tablet, unfolded foldable); separate from the phone value. */
+    val largePortraitMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on a rotated large screen; separate from the phone value. */
+    val largeLandscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT)
             .coerceMultiDayCount()
     }
 
@@ -433,6 +447,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
     }
 
+    suspend fun setLargePortraitMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLargeLandscapeMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
     suspend fun setPortraitTimelineHourHeightDp(hourHeightDp: Float) {
         dataStore.edit {
             it[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
@@ -634,6 +656,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
         private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")
         private val KEY_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("landscape_multi_day_count")
+        private val KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("large_portrait_multi_day_count")
+        private val KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("large_landscape_multi_day_count")
         private val KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP =
             floatPreferencesKey("portrait_timeline_hour_height_dp")
         private val KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP =

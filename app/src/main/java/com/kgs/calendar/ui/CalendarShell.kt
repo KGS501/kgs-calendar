@@ -2,7 +2,6 @@
 
 package com.kgs.calendar.ui
 
-import android.content.res.Configuration
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
@@ -94,6 +93,7 @@ import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.agenda.AgendaNavigationRequest
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.overviewPanelHeight
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.month.MonthGestureAxis
 import com.kgs.calendar.ui.month.MonthOverviewGestureReducer
 import com.kgs.calendar.ui.month.MonthOverviewGestureState
@@ -166,7 +166,11 @@ internal fun CalendarShell(
     val monthMorphDay = remember(monthMorphDayText) { LocalDate.parse(monthMorphDayText) }
     val isMonthView = state.selectedView == CalendarViewMode.Month
     val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val windowLayout = currentCalendarWindowLayout()
+    val isLandscape = windowLayout.isLandscape
+    // Rotated phones show the month drop-down as a full-height panel beside a vertical month strip.
+    // Large screens have room to keep the timeline visible below the stacked drop-down instead.
+    val monthOverviewSideBySide = windowLayout.usesSideBySideMonthOverview
     val fallbackTimelineViewportMemory = remember { TimelineOrientationViewportMemory() }
     val viewportMemory = timelineViewportMemory ?: fallbackTimelineViewportMemory
     val portraitTimeScroll = rememberScrollState()
@@ -283,7 +287,7 @@ internal fun CalendarShell(
         }
     }
     val monthOverviewVisible = (monthOverviewOpen || monthOverviewGestureClosing) && !isMonthView
-    val monthOverviewExpandedHeight = if (isLandscape) {
+    val monthOverviewExpandedHeight = if (monthOverviewSideBySide) {
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         (configuration.screenHeightDp.dp - 58.dp - statusTop).coerceAtLeast(0.dp)
     } else {
@@ -376,7 +380,7 @@ internal fun CalendarShell(
             Modifier
                 .fillMaxSize()
                 .monthOverviewTimelineDismissGesture(
-                    enabled = monthOverviewOpen && !isMonthView && !isLandscape,
+                    enabled = monthOverviewOpen && !isMonthView && !monthOverviewSideBySide,
                     onVerticalDrag = ::applyMonthOverviewDismissDrag,
                     onVerticalEnd = ::settleMonthOverviewDismissDrag,
                 ),
@@ -448,9 +452,9 @@ internal fun CalendarShell(
                 month = overviewMonth,
                 state = state,
                 firstDayOfWeek = state.firstDayOfWeek,
-                isLandscape = isLandscape,
-                onVerticalDismissDrag = if (isLandscape) ::applyMonthOverviewDismissDrag else null,
-                onVerticalDismissEnd = if (isLandscape) ::settleMonthOverviewDismissDrag else null,
+                sideBySide = monthOverviewSideBySide,
+                onVerticalDismissDrag = if (monthOverviewSideBySide) ::applyMonthOverviewDismissDrag else null,
+                onVerticalDismissEnd = if (monthOverviewSideBySide) ::settleMonthOverviewDismissDrag else null,
                 onDaySelected = { day ->
                     overviewMonthText = YearMonth.from(day).toString()
                     if (state.selectedView == CalendarViewMode.Agenda) {

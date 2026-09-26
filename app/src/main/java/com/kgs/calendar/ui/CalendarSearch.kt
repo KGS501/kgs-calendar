@@ -342,6 +342,10 @@ import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
+import com.kgs.calendar.ui.layout.ListContentMaxWidth
+import com.kgs.calendar.ui.layout.centeredContentPadding
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
@@ -514,7 +518,9 @@ private fun SearchOptionsBar(
             .testTag("search-options-bar")
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 18.dp, top = 6.dp, end = 18.dp),
+            .padding(top = 6.dp)
+            .centeredMaxWidth(ListContentMaxWidth)
+            .padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
@@ -571,7 +577,9 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             .fillMaxWidth()
             .height(statusTop + 62.dp)
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 16.dp, end = 14.dp, top = statusTop),
+            .padding(top = statusTop)
+            .centeredMaxWidth(ListContentMaxWidth)
+            .padding(start = 16.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -991,6 +999,12 @@ internal fun SearchResultsList(
         }
     }
 
+    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    val listSidePadding = centeredContentPadding(
+        availableWidth = currentCalendarWindowLayout().widthDp.dp,
+        maxWidth = ListContentMaxWidth,
+        basePadding = 18.dp,
+    )
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
@@ -998,13 +1012,13 @@ internal fun SearchResultsList(
             .testTag("search-results-list")
             .fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 18.dp,
+            start = listSidePadding,
             top = if (agendaDateHierarchy) {
                 agendaDateStackHeight + 16.dp + agendaHeaderTopSpacing
             } else {
                 20.dp
             },
-            end = 18.dp,
+            end = listSidePadding,
             bottom = 20.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1107,7 +1121,9 @@ internal fun SearchResultsList(
             firstDayOfWeek = firstDayOfWeek,
             background = stickyHeaderBackground,
             topSpacing = agendaHeaderTopSpacing,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .centeredMaxWidth(ListContentMaxWidth),
         )
     }
     }

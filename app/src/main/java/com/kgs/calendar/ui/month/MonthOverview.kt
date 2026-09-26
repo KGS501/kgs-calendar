@@ -438,7 +438,7 @@ internal fun MonthOverview(
     month: YearMonth,
     state: CalendarUiState,
     firstDayOfWeek: DayOfWeek,
-    isLandscape: Boolean = false,
+    sideBySide: Boolean = false,
     onVerticalDismissDrag: ((Float) -> Unit)? = null,
     onVerticalDismissEnd: (() -> Unit)? = null,
     onDaySelected: (LocalDate) -> Unit,
@@ -492,7 +492,7 @@ internal fun MonthOverview(
         dragX.snapTo(0f)
     }
 
-    val presentation = monthOverviewPresentation(isLandscape)
+    val presentation = monthOverviewPresentation(sideBySide)
     val gridContent: @Composable (Modifier) -> Unit = { gridModifier ->
         Column(
             modifier = gridModifier

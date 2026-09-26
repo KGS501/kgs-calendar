@@ -366,6 +366,7 @@ import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
+import com.kgs.calendar.ui.layout.SheetMaxWidth
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
 import com.kgs.calendar.ui.layout.TimedPlacement
@@ -729,6 +730,8 @@ internal fun KgsModalBottomSheet(
                 val bottomAlpha = if (separationShadowDark) 0.36f else 0.15f
                 Canvas(
                     modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .widthIn(max = SheetMaxWidth)
                         .fillMaxWidth()
                         .height(shadowHeight + cornerRadius)
                         .offset {
@@ -751,9 +754,13 @@ internal fun KgsModalBottomSheet(
                 }
             }
 
+            // On tablets and unfolded foldables the sheet stays at most SheetMaxWidth wide, centred.
             Surface(
                 modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = SheetMaxWidth)
                     .fillMaxWidth()
+                    .testTag(KgsModalBottomSheetSurfaceTag)
                     .height(sheetHeight)
                     .offset { IntOffset(x = 0, y = effectiveSheetOffsetPx.roundToInt()) }
                     .then(
@@ -803,6 +810,8 @@ internal fun KgsModalBottomSheet(
             }
         }
 }
+
+internal const val KgsModalBottomSheetSurfaceTag = "kgs-modal-bottom-sheet"
 
 @Composable
 internal fun KgsSheetHandle(modifier: Modifier = Modifier) {

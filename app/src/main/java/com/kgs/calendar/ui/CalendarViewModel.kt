@@ -9,10 +9,11 @@ import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.AgendaWindowPolicy
+import com.kgs.calendar.domain.model.CalendarWindowLayout
+import com.kgs.calendar.domain.model.MultiDayCounts
 import com.kgs.calendar.domain.model.calendarViewModeForOrientation
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
-import com.kgs.calendar.domain.model.multiDayCountForOrientation
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineEntryDate
@@ -117,7 +118,7 @@ class CalendarViewModel(
 
     /** True while the user connects calendars right after the welcome screen; a share waits for that. */
     private val sharedEventHeld = MutableStateFlow(false)
-    private val isLandscape = MutableStateFlow(false)
+    private val windowLayout = MutableStateFlow(CalendarWindowLayout.PhonePortrait)
     private val useLandscapeEntryView = MutableStateFlow(false)
     private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
         initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode,
@@ -226,7 +227,7 @@ class CalendarViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
     private val selectedView = combine(
         requestedSelectedView,
-        isLandscape,
+        windowLayout.map { it.isLandscape }.distinctUntilChanged(),
         useLandscapeEntryView,
     ) { requestedView, landscape, applyLandscapeEntry ->
         if (applyLandscapeEntry) {
@@ -252,16 +253,16 @@ class CalendarViewModel(
     private val agendaDataRange = MutableStateFlow(AgendaWindowPolicy.around(initialSelectedDate))
     private val collectionVisibility = settingsStore.collectionVisibility
         .stateIn(viewModelScope, SharingStarted.Eagerly, CollectionVisibility())
-    private val portraitMultiDayCount = settingsStore.portraitMultiDayCount
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
-    private val landscapeMultiDayCount = settingsStore.landscapeMultiDayCount
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
-    private val multiDayCount = combine(
-        portraitMultiDayCount,
-        landscapeMultiDayCount,
-        isLandscape,
-    ) { portrait, landscape, landscapeOrientation ->
-        multiDayCountForOrientation(landscapeOrientation, portrait, landscape)
+    private val multiDayCounts = combine(
+        settingsStore.portraitMultiDayCount,
+        settingsStore.landscapeMultiDayCount,
+        settingsStore.largePortraitMultiDayCount,
+        settingsStore.largeLandscapeMultiDayCount,
+        ::MultiDayCounts,
+    )
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MultiDayCounts())
+    private val multiDayCount = combine(multiDayCounts, windowLayout) { counts, layout ->
+        counts.countFor(layout.multiDayCountBucket)
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
     private val firstDayOfWeek = settingsStore.firstDayOfWeek
@@ -387,7 +388,7 @@ class CalendarViewModel(
         reminderRescheduler = reminderRescheduler,
         message = message,
         currentState = { uiState.value },
-        isLandscape = { isLandscape.value },
+        windowLayout = { windowLayout.value },
         publishedFirstDayOfWeek = firstDayOfWeek,
         selectDate = ::selectDate,
     )
@@ -413,8 +414,7 @@ class CalendarViewModel(
             firstDayOfWeek = firstDayOfWeek,
             weekViewEnabled = weekViewEnabled,
             fullWeekSwipeEnabled = fullWeekSwipeEnabled,
-            portraitMultiDayCount = portraitMultiDayCount,
-            landscapeMultiDayCount = landscapeMultiDayCount,
+            multiDayCounts = multiDayCounts,
         ),
         settingsStore.editorDefaults(),
         settingsStore.widgetSettings(),
@@ -637,9 +637,15 @@ class CalendarViewModel(
         currentDay.value = date
     }
 
-    fun setDeviceOrientation(landscape: Boolean) {
-        isLandscape.value = landscape
-        useLandscapeEntryView.value = landscape
+    /**
+     * Reports the app window's size class. [applyOrientationEntryView] is true when the window is first
+     * shown or its orientation flips; only then does entering landscape swap Day for the multi-day view.
+     */
+    fun setWindowLayout(layout: CalendarWindowLayout, applyOrientationEntryView: Boolean) {
+        windowLayout.value = layout
+        if (applyOrientationEntryView) {
+            useLandscapeEntryView.value = layout.isLandscape
+        }
     }
 
     fun today() {

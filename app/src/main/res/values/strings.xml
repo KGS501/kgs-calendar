@@ -434,6 +434,8 @@
     <string name="multi_day_count_portrait_help">Number of days shown while the phone is upright.</string>
     <string name="multi_day_count_landscape">Landscape days</string>
     <string name="multi_day_count_landscape_help">Number of days shown while the phone is rotated.</string>
+    <string name="multi_day_count_large_portrait_help">Number of days shown while the tablet or unfolded phone is upright.</string>
+    <string name="multi_day_count_large_landscape_help">Number of days shown while the tablet or unfolded phone is rotated.</string>
     <string name="use_week_view">Use week view</string>
     <string name="use_week_view_help">Shows seven days aligned to your first day of week.</string>
     <string name="swipe_full_weeks">Swipe full weeks</string>

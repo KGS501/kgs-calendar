@@ -327,6 +327,7 @@ import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.MultiDayCountBucket
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
@@ -377,6 +378,9 @@ import com.kgs.calendar.ui.layout.TimedPlacement
 import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
 import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.SettingsContentMaxWidth
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
@@ -468,8 +472,7 @@ internal fun SettingsPage(
     onHapticFeedbackChanged: (Boolean) -> Unit,
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
     onMultiDaySidebarControlsChanged: (Boolean) -> Unit,
-    onPortraitMultiDayCountChanged: (Int) -> Unit,
-    onLandscapeMultiDayCountChanged: (Int) -> Unit,
+    onMultiDayCountChanged: (MultiDayCountBucket, Int) -> Unit,
     onWeekViewEnabledChanged: (Boolean) -> Unit,
     onFullWeekSwipeEnabledChanged: (Boolean) -> Unit,
     onFocusTitleOnCreateChanged: (Boolean) -> Unit,
@@ -607,7 +610,7 @@ internal fun SettingsPage(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .centeredMaxWidth(SettingsContentMaxWidth)
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {
             Row(
@@ -1143,20 +1146,53 @@ internal fun SettingsPage(
                                             exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
                                                 shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
                                         ) {
+                                            // A tablet or unfolded foldable edits its own counts, so the
+                                            // folded phone screen keeps the values that suit it.
+                                            val largeScreen = currentCalendarWindowLayout().isLargeScreen
                                             Column {
                                                 SettingsSliderRow(
                                                     title = stringResource(R.string.multi_day_count_portrait),
-                                                    subtitle = stringResource(R.string.multi_day_count_portrait_help),
-                                                    value = state.portraitMultiDayCount.coerceMultiDayCount(),
+                                                    subtitle = stringResource(
+                                                        if (largeScreen) {
+                                                            R.string.multi_day_count_large_portrait_help
+                                                        } else {
+                                                            R.string.multi_day_count_portrait_help
+                                                        },
+                                                    ),
+                                                    value = if (largeScreen) {
+                                                        state.largePortraitMultiDayCount
+                                                    } else {
+                                                        state.portraitMultiDayCount
+                                                    }.coerceMultiDayCount(),
                                                     range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                                    onValueChanged = onPortraitMultiDayCountChanged,
+                                                    onValueChanged = { count ->
+                                                        onMultiDayCountChanged(
+                                                            if (largeScreen) MultiDayCountBucket.LargePortrait else MultiDayCountBucket.Portrait,
+                                                            count,
+                                                        )
+                                                    },
                                                 )
                                                 SettingsSliderRow(
                                                     title = stringResource(R.string.multi_day_count_landscape),
-                                                    subtitle = stringResource(R.string.multi_day_count_landscape_help),
-                                                    value = state.landscapeMultiDayCount.coerceMultiDayCount(),
+                                                    subtitle = stringResource(
+                                                        if (largeScreen) {
+                                                            R.string.multi_day_count_large_landscape_help
+                                                        } else {
+                                                            R.string.multi_day_count_landscape_help
+                                                        },
+                                                    ),
+                                                    value = if (largeScreen) {
+                                                        state.largeLandscapeMultiDayCount
+                                                    } else {
+                                                        state.landscapeMultiDayCount
+                                                    }.coerceMultiDayCount(),
                                                     range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                                    onValueChanged = onLandscapeMultiDayCountChanged,
+                                                    onValueChanged = { count ->
+                                                        onMultiDayCountChanged(
+                                                            if (largeScreen) MultiDayCountBucket.LargeLandscape else MultiDayCountBucket.Landscape,
+                                                            count,
+                                                        )
+                                                    },
                                                 )
                                             }
                                         }
@@ -1797,6 +1833,7 @@ internal fun ProblemsPage(
     ) {
         Column(
             modifier = Modifier
+                .centeredMaxWidth(SettingsContentMaxWidth)
                 .fillMaxSize()
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {

@@ -87,7 +87,7 @@ class MonthOverviewGestureInstrumentedTest {
                     month = initialMonth,
                     state = CalendarUiState(selectedDate = initialMonth.atDay(10)),
                     firstDayOfWeek = DayOfWeek.MONDAY,
-                    isLandscape = true,
+                    sideBySide = true,
                     onDaySelected = {},
                     onMonthSelected = {},
                 )

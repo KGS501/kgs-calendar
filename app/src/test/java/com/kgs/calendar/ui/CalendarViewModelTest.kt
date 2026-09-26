@@ -15,6 +15,7 @@ import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.CalendarWindowLayout
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
@@ -292,6 +293,51 @@ class CalendarViewModelTest {
             it.selectedView == CalendarViewMode.Month && it.visibleRange == monthRange
         }
         assertEquals(date, monthState.selectedDate)
+    }
+
+    @Test
+    fun windowSizeClassPicksItsOwnMultiDayCount() = runTest {
+        val viewModel = viewModel()
+        viewModel.awaitState { it.initialDataLoaded && it.multiDayCount == 3 }
+
+        val tabletLandscape = CalendarWindowLayout(isLandscape = true, widthDp = 1280, heightDp = 800)
+        viewModel.setWindowLayout(tabletLandscape, applyOrientationEntryView = true)
+        viewModel.awaitState { it.multiDayCount == 5 }
+
+        // The +/- controls on the unfolded screen change only the large-screen value ...
+        viewModel.settings.setMultiDayCount(6)
+        viewModel.awaitState { it.multiDayCount == 6 && it.largeLandscapeMultiDayCount == 6 }
+
+        // ... so the folded phone screen keeps its own count.
+        viewModel.setWindowLayout(CalendarWindowLayout.PhoneLandscape, applyOrientationEntryView = false)
+        val folded = viewModel.awaitState { it.multiDayCount == 3 }
+        assertEquals(3, folded.landscapeMultiDayCount)
+        assertEquals(6, folded.largeLandscapeMultiDayCount)
+
+        viewModel.setWindowLayout(
+            CalendarWindowLayout(isLandscape = false, widthDp = 673, heightDp = 841),
+            applyOrientationEntryView = true,
+        )
+        viewModel.awaitState { it.multiDayCount == 4 }
+    }
+
+    @Test
+    fun enteringLandscapeSwapsDayForMultipleDaysOnlyWhenTheOrientationChanges() = runTest {
+        val viewModel = viewModel()
+        viewModel.selectView(CalendarViewMode.Day)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.Day }
+
+        val tabletLandscape = CalendarWindowLayout(isLandscape = true, widthDp = 1280, heightDp = 800)
+        viewModel.setWindowLayout(tabletLandscape, applyOrientationEntryView = true)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.ThreeDay }
+
+        // Choosing Day in landscape sticks while the window is only resized (split screen, freeform).
+        viewModel.selectView(CalendarViewMode.Day)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.Day }
+        viewModel.setWindowLayout(tabletLandscape.copy(widthDp = 1000), applyOrientationEntryView = false)
+        viewModel.settings.setShowCalendarWeeks(true)
+        val resized = viewModel.awaitState { it.showCalendarWeeks }
+        assertEquals(CalendarViewMode.Day, resized.selectedView)
     }
 
     @Test

@@ -9,7 +9,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -22,6 +24,7 @@ import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.ui.haptics.rememberKgsHaptics
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
@@ -48,10 +51,14 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
     LaunchedEffect(calendarTime.today) {
         viewModel.setCurrentDay(calendarTime.today)
     }
-    LaunchedEffect(configuration.orientation) {
-        viewModel.setDeviceOrientation(
-            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
-        )
+    val windowLayout = currentCalendarWindowLayout()
+    // Forgotten when the Activity is recreated, so a new window re-applies the landscape entry view
+    // exactly like an orientation change; plain resizes (split screen, freeform) only update the size class.
+    var reportedWindowOrientation by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(windowLayout) {
+        val orientationChanged = reportedWindowOrientation != windowLayout.isLandscape
+        reportedWindowOrientation = windowLayout.isLandscape
+        viewModel.setWindowLayout(windowLayout, applyOrientationEntryView = orientationChanged)
     }
     val appLocale = remember(state.languageMode, configuration) {
         state.languageMode.resolveLocale(baseContext)
