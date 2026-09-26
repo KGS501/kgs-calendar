@@ -107,6 +107,30 @@ internal fun CompletedTasksOverlay(
     }
 }
 
+// Composed before the detail sheet as well: tapping an item opens its detail over the trash list.
+@Composable
+internal fun RecentlyDeletedOverlay(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    shell: CalendarShellUiState,
+) {
+    if (shell.trashOpen) {
+        val trash by viewModel.trash.state.collectAsStateWithLifecycle()
+        LaunchedEffect(trash.entries) {
+            shell.resolvePendingTrashedDetail(trash.entries)
+        }
+        RecentlyDeletedPage(
+            trash = trash,
+            taskColorMode = state.taskColorMode,
+            onItemClick = shell::openTrashedDetail,
+            onEmptyTrash = viewModel.trash::emptyTrash,
+            onDismissNotice = viewModel.trash::dismissNotice,
+            onOpened = viewModel.trash::refresh,
+            onClose = shell::closeTrash,
+        )
+    }
+}
+
 @Composable
 internal fun SettingsOverlay(
     viewModel: CalendarViewModel,
@@ -114,7 +138,6 @@ internal fun SettingsOverlay(
     shell: CalendarShellUiState,
 ) {
     if (shell.settingsOpen) {
-        val trash by viewModel.trash.state.collectAsStateWithLifecycle()
         SettingsPage(
             state = state,
             initialDestination = shell.settingsStartDestination,
@@ -187,12 +210,6 @@ internal fun SettingsOverlay(
                 }
             },
             onClose = shell::closeSettings,
-            trash = trash,
-            onRestoreTrashedItem = viewModel.trash::restore,
-            onDeleteTrashedItemPermanently = viewModel.trash::deletePermanently,
-            onEmptyTrash = viewModel.trash::emptyTrash,
-            onDismissTrashNotice = viewModel.trash::dismissNotice,
-            onTrashOpened = viewModel.trash::refresh,
         )
     }
 }

@@ -36,15 +36,17 @@ internal fun DetailSheetHost(
     today: LocalDate,
 ) {
     shell.detailSheet?.let { detail ->
-        val currentDetail = when (detail) {
-            is DetailSheet.Event -> {
+        val currentDetail = when {
+            // A "Recently deleted" item shows its snapshot; it has no live copy to follow.
+            detail.trashedItem != null -> detail
+            detail is DetailSheet.Event -> {
                 val sameResource = renderState.events.filter { it.resourceHref == detail.event.resourceHref }
                 val occurrenceStart = detail.event.occurrenceStartForEdit()
                 val refreshed = sameResource.firstOrNull { it.occurrenceStartForEdit() == occurrenceStart }
                     ?: sameResource.firstOrNull()
                 refreshed?.let { DetailSheet.Event(it) } ?: detail
             }
-            is DetailSheet.Task -> {
+            detail is DetailSheet.Task -> {
                 val occurrenceStart = detail.task.occurrenceStartForEdit()
                 val refreshed = renderState.datedTasks.firstOrNull {
                     it.resourceHref == detail.task.resourceHref && it.occurrenceStartForEdit() == occurrenceStart
@@ -54,6 +56,7 @@ internal fun DetailSheetHost(
                 }
                 refreshed?.let { DetailSheet.Task(it) } ?: detail
             }
+            else -> detail
         }
         KgsModalBottomSheet(
             onDismissRequest = shell::closeDetail,
@@ -136,6 +139,14 @@ internal fun DetailSheetHost(
                                         shell.addSubtask(parent, newSubtaskSchedule(parent.taskDate() ?: state.selectedDate, LocalTime.now()))
                                     },
                                     onClose = shell::closeDetail,
+                                    onRestoreTrashed = {
+                                        viewModel.trash.restore(it)
+                                        shell.closeDetail()
+                                    },
+                                    onDeleteTrashedPermanently = {
+                                        viewModel.trash.deletePermanently(it)
+                                        shell.closeDetail()
+                                    },
                                 )
                             }
                         }

@@ -1231,6 +1231,7 @@ internal fun TaskRow(
     priorityMotionEnabled: Boolean = true,
     detailMorphKey: String? = null,
     detailMorphFromHeader: Boolean = false,
+    statusToggleEnabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val hierarchyLineColor = TaskHierarchyLine
@@ -1387,6 +1388,7 @@ internal fun TaskRow(
                         onStatusChange = { onTaskStatusChanged(task, it) },
                         boxSize = checkboxBoxSize,
                         iconSize = checkboxIconSize,
+                        enabled = statusToggleEnabled,
                     )
                     Spacer(Modifier.width(checkboxTextSpacing))
                     Column(

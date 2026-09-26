@@ -16,6 +16,7 @@ import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
 import com.kgs.calendar.data.trash.TrashBin
 import com.kgs.calendar.data.trash.TrashRestoreResult
+import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
@@ -217,6 +218,9 @@ class CalendarRepository(
 
     /** "Recently deleted": local snapshots and Nextcloud trash bin items in one list, newest delete first. */
     fun observeTrashedItems(): Flow<List<TrashedItemEntity>> = trash.observeItems()
+
+    /** The same list with each item's event or task read back for display with the usual cards. */
+    fun observeTrashedItemPreviews(): Flow<List<TrashedItemPreview>> = trash.observePreviews()
 
     suspend fun trashedItem(id: Long): TrashedItemEntity? = trash.item(id)
 

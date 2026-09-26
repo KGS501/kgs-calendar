@@ -1,278 +1,470 @@
 package com.kgs.calendar.ui
 
-import androidx.compose.foundation.background
+import androidx.annotation.PluralsRes
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.RestoreFromTrash
-import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
-import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.time.toDate
-import com.kgs.calendar.domain.time.toTimeText
+import com.kgs.calendar.domain.trash.TrashOrigin
 import com.kgs.calendar.domain.trash.TrashRetention
+import com.kgs.calendar.ui.layout.ListContentMaxWidth
+import com.kgs.calendar.ui.layout.centeredContentPadding
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
+import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
-/** Summary line of the "Recently deleted" row in the calendar settings. */
+/**
+ * "Recently deleted", opened from the sidebar: the deleted events and tasks as their usual cards
+ * (the ones search and the agenda use), grouped by the day they were deleted, newest first. A tap
+ * opens the item's detail sheet, which offers restore and permanent delete.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun recentlyDeletedSummary(itemCount: Int): String =
-    if (itemCount == 0) {
-        stringResource(R.string.recently_deleted_empty_summary)
-    } else {
-        pluralStringResource(R.plurals.recently_deleted_count, itemCount, itemCount, TrashRetention.DAYS)
-    }
-
-/** Settings subpage listing the trashed events and tasks, with restore and permanent delete. */
-@Composable
-internal fun RecentlyDeletedSettings(
+internal fun RecentlyDeletedPage(
     trash: TrashUiState,
-    onRestore: (TrashedItemEntity) -> Unit,
-    onDeletePermanently: (TrashedItemEntity) -> Unit,
+    taskColorMode: TaskColorMode,
+    onItemClick: (TrashedItemPreview) -> Unit,
     onEmptyTrash: () -> Unit,
     onDismissNotice: () -> Unit,
-    onOpened: () -> Unit = {},
+    onOpened: () -> Unit,
+    onClose: () -> Unit,
 ) {
     LaunchedEffect(Unit) { onOpened() }
-    var deleteCandidate by remember { mutableStateOf<TrashedItemEntity?>(null) }
-    var emptyTrashConfirmOpen by remember { mutableStateOf(false) }
-    SettingsSection(title = stringResource(R.string.recently_deleted), icon = Icons.Default.Delete) {
-        if (trash.items.isEmpty()) {
-            SettingsInfoRow(
-                stringResource(R.string.recently_deleted_empty_title),
-                stringResource(R.string.recently_deleted_empty_body, TrashRetention.DAYS),
-            )
-        } else {
-            trash.items.forEach { item ->
-                key(item.id) {
-                    TrashedItemRow(
-                        item = item,
-                        onRestore = { onRestore(item) },
-                        onDeletePermanently = { deleteCandidate = item },
-                    )
-                }
-            }
-            Button(
-                onClick = { emptyTrashConfirmOpen = true },
-                shape = SettingsControlShape,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth().height(SettingsControlHeight).testTag("empty_trash"),
+    var emptyTrashConfirmOpen by rememberSaveable { mutableStateOf(false) }
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val today = LocalCalendarTimeSnapshot.current.today
+    val groups = remember(trash.entries) { trash.entries.groupBy { it.item.deletedAtMillis.toDate() } }
+    val background = MaterialTheme.colorScheme.background
+    // The cards show the snapshot as it was deleted; nothing of the live sync state applies to them.
+    CompositionLocalProvider(
+        LocalPendingMutations provides emptyList(),
+        LocalExitingResourceHrefs provides emptySet(),
+    ) {
+        Surface(
+            // No z-index: the detail sheet, composed after this page, has to open over it.
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("recently_deleted_page"),
+            color = background,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = statusTop + 8.dp),
             ) {
-                Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.empty_trash))
+                Row(
+                    modifier = Modifier
+                        .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
+                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
+                    }
+                    Text(
+                        stringResource(R.string.recently_deleted),
+                        color = WarmInk,
+                        fontSize = 24.sp,
+                        lineHeight = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (trash.entries.isNotEmpty()) {
+                        IconButton(
+                            onClick = { emptyTrashConfirmOpen = true },
+                            modifier = Modifier.size(40.dp).testTag("empty_trash"),
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteSweep,
+                                contentDescription = stringResource(R.string.empty_trash),
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                }
+                if (trash.entries.isEmpty()) {
+                    RecentlyDeletedEmptyState(Modifier.fillMaxSize().padding(bottom = navBottom))
+                } else {
+                    val listSidePadding = centeredContentPadding(
+                        availableWidth = currentCalendarWindowLayout().widthDp.dp,
+                        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+                        basePadding = 18.dp,
+                    )
+                    val taskHierarchy = rememberTaskHierarchyPresentation(emptyList(), expandedByDefault = false)
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("recently_deleted_list"),
+                        contentPadding = PaddingValues(start = listSidePadding, top = 8.dp, end = listSidePadding, bottom = navBottom + 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        groups.forEach { (deletedOn, entries) ->
+                            stickyHeader(key = "deleted-$deletedOn") {
+                                SearchGroupHeader(deletedOnLabel(deletedOn, today), background)
+                            }
+                            var lastDate: LocalDate? = null
+                            entries.forEachIndexed { index, entry ->
+                                val result = entry.searchResult()
+                                val showDate = index == 0 || result.date != lastDate
+                                lastDate = result.date
+                                item(key = "trashed-${entry.item.id}") {
+                                    Box(Modifier.fillMaxWidth().testTag("trashed_item_${entry.item.id}")) {
+                                        CalendarSearchResultRow(
+                                            item = result,
+                                            showDate = showDate,
+                                            taskColorMode = taskColorMode,
+                                            onTaskStatusChanged = { _, _ -> },
+                                            agendaDateHierarchy = false,
+                                            showCalendarWeeks = false,
+                                            firstDayOfWeek = java.time.DayOfWeek.MONDAY,
+                                            taskHierarchy = taskHierarchy,
+                                            onEventClick = { onItemClick(entry) },
+                                            onTaskClick = { onItemClick(entry) },
+                                            taskStatusToggleEnabled = false,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        item(key = "recently-deleted-help") {
+                            Text(
+                                stringResource(R.string.recently_deleted_help, TrashRetention.DAYS),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(start = 62.dp, top = 10.dp, end = 8.dp),
+                            )
+                        }
+                        item { Spacer(Modifier.height(40.dp)) }
+                    }
+                }
             }
         }
-        SettingsHelpText(stringResource(R.string.recently_deleted_help, TrashRetention.DAYS))
-    }
-    deleteCandidate?.let { item ->
-        AlertDialog(
-            onDismissRequest = { deleteCandidate = null },
-            title = { Text(stringResource(R.string.delete_permanently_question, item.displayTitle())) },
-            text = { Text(stringResource(R.string.delete_irreversible)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeletePermanently(item)
-                        deleteCandidate = null
-                    },
-                ) {
-                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteCandidate = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
     }
     if (emptyTrashConfirmOpen) {
-        AlertDialog(
-            onDismissRequest = { emptyTrashConfirmOpen = false },
-            title = { Text(stringResource(R.string.empty_trash_question)) },
-            text = { Text(pluralStringResource(R.plurals.empty_trash_body, trash.items.size, trash.items.size)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onEmptyTrash()
-                        emptyTrashConfirmOpen = false
-                    },
-                ) {
-                    Text(stringResource(R.string.empty_trash), color = MaterialTheme.colorScheme.error)
-                }
+        val count = trash.entries.size
+        TrashConfirmDialog(
+            title = appString(R.string.empty_trash_question),
+            body = appPluralString(R.plurals.empty_trash_body, count, count),
+            confirmLabel = appString(R.string.empty_trash),
+            onConfirm = {
+                emptyTrashConfirmOpen = false
+                onEmptyTrash()
             },
-            dismissButton = {
-                TextButton(onClick = { emptyTrashConfirmOpen = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
+            onDismiss = { emptyTrashConfirmOpen = false },
         )
     }
-    trash.notice?.let { notice ->
-        val title = notice.title.ifBlank { stringResource(R.string.no_title) }
-        AlertDialog(
-            modifier = Modifier.padding(horizontal = 20.dp),
-            onDismissRequest = onDismissNotice,
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    stringResource(
-                        if (notice is TrashNotice.RestoredElsewhere) R.string.restored_elsewhere_title else R.string.restore_failed_title,
-                    ),
-                    color = WarmInk,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            text = {
-                Text(
-                    when (notice) {
-                        is TrashNotice.RestoredElsewhere -> stringResource(R.string.restored_elsewhere_body, title, notice.collectionName)
-                        is TrashNotice.NoWritableCalendar -> stringResource(R.string.restore_failed_no_calendar, title)
-                        is TrashNotice.AlreadyExists -> stringResource(R.string.restore_failed_exists, title)
-                        is TrashNotice.Unreadable -> stringResource(R.string.restore_failed_unreadable, title)
-                        is TrashNotice.GoneFromServer -> stringResource(R.string.restore_failed_gone_from_server, title)
-                        is TrashNotice.ServerRefused -> stringResource(R.string.restore_failed_server_refused, title, notice.statusCode)
-                        is TrashNotice.Failed -> stringResource(R.string.restore_failed_generic, title, notice.reason)
-                    },
-                    color = WarmInk,
-                    lineHeight = 20.sp,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = onDismissNotice) { Text(stringResource(R.string.close)) }
-            },
-        )
-    }
+    trash.notice?.let { notice -> TrashNoticeDialog(notice, onDismissNotice) }
 }
 
 @Composable
-private fun TrashedItemRow(
+private fun RecentlyDeletedEmptyState(modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(R.string.recently_deleted_empty_title),
+                color = WarmInk,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(R.string.recently_deleted_empty_body, TrashRetention.DAYS),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+private fun TrashedItemPreview.searchResult(): CalendarSearchResult =
+    task?.let(CalendarSearchResult::TaskItem) ?: CalendarSearchResult.Event(requireNotNull(event))
+
+@Composable
+private fun deletedOnLabel(deletedOn: LocalDate, today: LocalDate): String = when (deletedOn) {
+    today -> stringResource(R.string.trash_deleted_today)
+    today.minusDays(1) -> stringResource(R.string.trash_deleted_yesterday)
+    else -> stringResource(R.string.trash_deleted_on, deletedOn.format(trashDateFormatter()))
+}
+
+@Composable
+private fun trashDateFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(LocalAppLocale.current)
+
+/**
+ * The prominent top of the detail sheet of a "Recently deleted" item: where it is, when it was
+ * deleted and how long it stays, with Restore and Delete permanently (after a confirmation).
+ */
+@Composable
+internal fun TrashedItemDetailBanner(
     item: TrashedItemEntity,
     onRestore: () -> Unit,
     onDeletePermanently: () -> Unit,
 ) {
-    val itemColor = Color(item.manualColor ?: item.collectionColor)
+    var deleteConfirmOpen by rememberSaveable(item.id) { mutableStateOf(false) }
+    val dark = MaterialTheme.colorScheme.background.isDark()
+    val accent = WarmBrown
+    val today = LocalCalendarTimeSnapshot.current.today
+    val deletedOn = item.deletedAtMillis.toDate()
+    val daysLeft = TrashRetention.daysLeft(item.expiresAtMillis, System.currentTimeMillis())
+    val deletedLabel = when (deletedOn) {
+        today -> stringResource(R.string.trash_deleted_today)
+        today.minusDays(1) -> stringResource(R.string.trash_deleted_yesterday)
+        else -> stringResource(R.string.trash_deleted_on, deletedOn.format(trashDateFormatter()))
+    }
+    val remainingLabel = if (daysLeft > 0) {
+        appPluralString(R.plurals.trash_days_left, daysLeft, daysLeft)
+    } else {
+        stringResource(R.string.trash_expires_today)
+    }
+    val sourceLabel = buildList {
+        add(stringResource(R.string.trash_from_calendar, item.collectionName))
+        if (item.origin == TrashOrigin.ServerTrashBin) add(stringResource(R.string.trash_in_nextcloud_trash_bin))
+    }.joinToString(" · ")
     Surface(
-        modifier = Modifier.fillMaxWidth().testTag("trashed_item_${item.id}"),
-        shape = SettingsControlShape,
-        color = settingsControlColor(),
+        shape = RoundedCornerShape(18.dp),
+        color = accent.copy(alpha = if (dark) 0.26f else 0.14f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("trashed_detail_banner"),
     ) {
         Column(
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(
-                modifier = Modifier.padding(end = 8.dp),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(
-                    if (item.componentType == ComponentType.Task) Icons.Default.TaskAlt else Icons.Default.Event,
-                    contentDescription = stringResource(if (item.componentType == ComponentType.Task) R.string.task else R.string.event),
-                    tint = itemColor,
-                    modifier = Modifier.size(22.dp),
-                )
+                Icon(Icons.Default.Delete, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        item.displayTitle(),
+                        stringResource(R.string.trash_in_recently_deleted),
                         color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
+                        fontSize = 17.sp,
+                        lineHeight = 21.sp,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(item.collectionColor)),
-                        )
-                        Text(
-                            "${item.collectionName} · ${item.originalDateLabel()}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                     Text(
-                        stringResource(R.string.trash_deleted_on, item.deletedAtMillis.toDate().format(DateTimeFormatter.ofPattern("d. MMM yyyy", LocalAppLocale.current))),
+                        "$deletedLabel · $remainingLabel",
+                        color = WarmInk,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                    )
+                    Text(
+                        sourceLabel,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
                     )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onDeletePermanently) {
-                    Text(stringResource(R.string.delete_permanently), color = MaterialTheme.colorScheme.error)
+            // Stacked full width, so both labels fit in every language.
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onRestore,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = accentContainerContentColor()),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("trashed_detail_restore"),
+                ) {
+                    Icon(Icons.Default.RestoreFromTrash, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.restore),
+                        fontSize = 15.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                TextButton(onClick = onRestore) {
-                    Icon(Icons.Default.RestoreFromTrash, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.restore), color = WarmBrown)
+                Button(
+                    onClick = { deleteConfirmOpen = true },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.46f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("trashed_detail_delete"),
+                ) {
+                    Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.delete_permanently),
+                        fontSize = 15.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
     }
+    if (deleteConfirmOpen) {
+        TrashConfirmDialog(
+            title = appString(R.string.delete_permanently_question, item.title.ifBlank { appString(R.string.no_title) }),
+            body = appString(R.string.delete_irreversible),
+            confirmLabel = appString(R.string.delete_permanently),
+            onConfirm = {
+                deleteConfirmOpen = false
+                onDeletePermanently()
+            },
+            onDismiss = { deleteConfirmOpen = false },
+        )
+    }
+}
+
+/** A destructive confirmation in the style of the detail sheet's delete dialog. */
+@Composable
+private fun TrashConfirmDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = popupSurfaceColor(),
+        titleContentColor = WarmInk,
+        textContentColor = WarmInk,
+        title = { Text(title, fontWeight = FontWeight.SemiBold) },
+        text = { Text(body) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
+    )
 }
 
 @Composable
-private fun TrashedItemEntity.displayTitle(): String = title.ifBlank { stringResource(R.string.no_title) }
+private fun TrashNoticeDialog(notice: TrashNotice, onDismiss: () -> Unit) {
+    val noTitle = appString(R.string.no_title)
+    fun String.orNoTitle() = ifBlank { noTitle }
+    val title = when (notice) {
+        is TrashNotice.RestoredElsewhere -> appString(R.string.restored_elsewhere_title)
+        is TrashNotice.DeleteFailed -> appString(R.string.delete_permanently_failed_title)
+        is TrashNotice.EmptyTrashFailed -> appString(R.string.empty_trash_failed_title)
+        else -> appString(R.string.restore_failed_title)
+    }
+    val body = when (notice) {
+        is TrashNotice.RestoredElsewhere -> appString(R.string.restored_elsewhere_body, notice.title.orNoTitle(), notice.collectionName)
+        is TrashNotice.NoWritableCalendar -> appString(R.string.restore_failed_no_calendar, notice.title.orNoTitle())
+        is TrashNotice.AlreadyExists -> appString(R.string.restore_failed_exists, notice.title.orNoTitle())
+        is TrashNotice.Unreadable -> appString(R.string.restore_failed_unreadable, notice.title.orNoTitle())
+        is TrashNotice.GoneFromServer -> appString(R.string.restore_failed_gone_from_server, notice.title.orNoTitle())
+        is TrashNotice.ServerRefused -> appString(R.string.restore_failed_server_refused, notice.title.orNoTitle(), notice.statusCode)
+        is TrashNotice.Failed -> appString(R.string.restore_failed_generic, notice.title.orNoTitle(), notice.reason)
+        is TrashNotice.DeleteFailed -> notice.statusCode
+            ?.let { appString(R.string.delete_permanently_failed_server_refused, notice.title.orNoTitle(), it) }
+            ?: appString(R.string.delete_permanently_failed_generic, notice.title.orNoTitle(), notice.reason)
+        is TrashNotice.EmptyTrashFailed -> notice.statusCode
+            ?.let { appString(R.string.empty_trash_failed_server_refused, it) }
+            ?: appString(R.string.empty_trash_failed_generic, notice.reason)
+    }
+    AlertDialog(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = popupSurfaceColor(),
+        title = { Text(title, color = WarmInk, fontWeight = FontWeight.SemiBold) },
+        text = { Text(body, color = WarmInk, lineHeight = 20.sp) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(appString(R.string.close)) }
+        },
+    )
+}
 
+/** Like [appString], for plurals: the app's language also inside dialogs. */
 @Composable
-private fun TrashedItemEntity.originalDateLabel(): String {
-    val start = startMillis ?: return stringResource(R.string.no_date)
-    val date = start.toDate().format(DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", LocalAppLocale.current))
-    return if (hasTime) "$date, ${start.toTimeText()}" else date
+internal fun appPluralString(@PluralsRes id: Int, count: Int, vararg args: Any): String {
+    val context = LocalContext.current
+    val locale = LocalAppLocale.current
+    return remember(id, count, args.toList(), context, locale) {
+        context.withAppLocale(locale).resources.getQuantityString(id, count, *args)
+    }
 }

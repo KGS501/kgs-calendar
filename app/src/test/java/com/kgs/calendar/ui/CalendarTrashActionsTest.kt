@@ -1,6 +1,10 @@
 package com.kgs.calendar.ui
 
 import com.kgs.calendar.data.LOCAL_COLLECTION
+import com.kgs.calendar.data.SampleIcs
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
+import okhttp3.mockwebserver.MockResponse
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.eventPayload
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -83,10 +87,12 @@ class CalendarTrashActionsTest {
 
         actions.restore(listed.items.single { it.title == "Older" })
 
+        // The item leaves the list as soon as the restore starts.
         val remaining = awaitState { it.items.map { item -> item.title } == listOf("Newer") }
         assertNull(remaining.notice)
-        assertEquals("Older", harness.eventsIn(LOCAL_COLLECTION).single().title)
         awaitCondition { widgetUpdates.get() == 1 && reminderReschedules.get() == 1 }
+        assertEquals("Older", harness.eventsIn(LOCAL_COLLECTION).single().title)
+        assertEquals(listOf("Newer"), repository.observeTrashedItems().first().map { it.title })
         assertNull(message.value)
     }
 
@@ -135,7 +141,8 @@ class CalendarTrashActionsTest {
 
         actions.restore(item)
 
-        val state = awaitState { it.notice != null }
+        // Hidden while the restore ran, back once it failed.
+        val state = awaitState { it.notice != null && it.items.isNotEmpty() }
         assertEquals(TrashNotice.NoWritableCalendar("Orphan"), state.notice)
         assertEquals(listOf(item.id), state.items.map { it.id })
         assertEquals(0, widgetUpdates.get())
@@ -156,5 +163,86 @@ class CalendarTrashActionsTest {
 
         awaitState { it.items.isEmpty() }
         assertTrue(harness.eventsIn(LOCAL_COLLECTION).isEmpty())
+    }
+
+    @Test
+    fun entriesCarryTheItemsAsEventsAndTasksForTheUsualCards() = runBlocking {
+        repository.ensureLocalCalendar()
+        repository.createEvent(eventPayload("Picnic", day))
+        repository.createTask(taskPayload("Pack basket"))
+        val event = harness.eventsIn(LOCAL_COLLECTION).single()
+        harness.database.eventDao().upsert(event.copy(manualColor = 0xFF123456.toInt()))
+        repository.deleteEvent(event.uid)
+        repository.deleteTask(harness.tasksIn(LOCAL_COLLECTION).single().uid)
+
+        val entries = awaitState { it.entries.size == 2 }.entries
+        val picnic = entries.single { it.event != null }
+        assertEquals("Picnic", picnic.event!!.title)
+        assertEquals(event.startsAtMillis, picnic.event!!.startsAtMillis)
+        assertEquals(LOCAL_COLLECTION, picnic.event!!.collectionHref)
+        assertEquals(0xFF123456.toInt(), picnic.event!!.manualColor)
+        assertNull(picnic.task)
+        val basket = entries.single { it.task != null }
+        assertEquals("Pack basket", basket.task!!.title)
+        // Display copies never share an href with a live item or with each other.
+        assertEquals(TrashedItemPreview.displayHref(basket.item), basket.task!!.resourceHref)
+        assertTrue(harness.tasksIn(LOCAL_COLLECTION).isEmpty())
+    }
+
+    @Test
+    fun aServerRefusingAPermanentDeleteKeepsTheItemWithANotice() = runBlocking {
+        val item = serverTrashItem()
+        // Nextcloud refuses read-only sharees.
+        harness.server.respondNext("DELETE", "/trashbin/objects/") { MockResponse().setResponseCode(403) }
+
+        actions.deletePermanently(item)
+
+        val state = awaitState { it.notice != null && it.items.isNotEmpty() }
+        val notice = state.notice as TrashNotice.DeleteFailed
+        assertEquals("Kickoff", notice.title)
+        assertEquals(403, notice.statusCode)
+        // Hidden while the delete ran, back once it failed.
+        assertEquals(listOf(item.id), state.items.map { it.id })
+        assertEquals(1, harness.server.trashedObjects().size)
+    }
+
+    @Test
+    fun aServerRefusingToEmptyTheTrashKeepsItsItemsWithANotice() = runBlocking {
+        val item = serverTrashItem()
+        repository.ensureLocalCalendar()
+        repository.createEvent(eventPayload("Dentist", day))
+        repository.deleteEvent(harness.eventsIn(LOCAL_COLLECTION).single().uid)
+        awaitState { it.items.size == 2 }
+        harness.server.respondNext("DELETE", "/trashbin/objects/") { MockResponse().setResponseCode(403) }
+
+        actions.emptyTrash()
+
+        val state = awaitState { it.notice != null && it.items.size == 1 }
+        assertEquals(TrashNotice.EmptyTrashFailed(403, (state.notice as TrashNotice.EmptyTrashFailed).reason), state.notice)
+        // The local snapshot went; the refused server item stays.
+        assertEquals(listOf(item.id), state.items.map { it.id })
+    }
+
+    @Test
+    fun aRestoreTheServerRefusesKeepsTheItemWithANotice() = runBlocking {
+        val item = serverTrashItem()
+        harness.server.respondNext("MOVE", "/trashbin/objects/") { MockResponse().setResponseCode(409) }
+
+        actions.restore(item)
+
+        val state = awaitState { it.notice != null && it.items.isNotEmpty() }
+        assertEquals(TrashNotice.ServerRefused("Kickoff", 409), state.notice)
+        assertEquals(listOf(item.id), state.items.map { it.id })
+    }
+
+    /** A Nextcloud account with one event deleted in its web UI, listed in the trash. */
+    private fun serverTrashItem(): TrashedItemEntity = runBlocking {
+        val server = harness.server
+        server.trashBinEnabled = true
+        val href = server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff"))
+        harness.addSyncedCalDavAccount()
+        server.trashRemote(href)
+        assertTrue(repository.refreshTrash())
+        awaitState { it.items.size == 1 }.items.single()
     }
 }

@@ -583,14 +583,9 @@
     <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
     <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
     <string name="recently_deleted">Recently deleted</string>
-    <string name="recently_deleted_empty_summary">Nothing deleted</string>
-    <plurals name="recently_deleted_count">
-        <item quantity="one">%1$d item, kept for %2$d days</item>
-        <item quantity="other">%1$d items, kept for %2$d days</item>
-    </plurals>
     <string name="recently_deleted_empty_title">Nothing here</string>
-    <string name="recently_deleted_empty_body">Deleted events and tasks stay here for %1$d days.</string>
-    <string name="recently_deleted_help">Deleted events and tasks can be restored for %1$d days. After that they are removed for good. Single deleted occurrences of a series are not kept.</string>
+    <string name="recently_deleted_empty_body">Deleted events and tasks stay here for %1$d days, or as long as your Nextcloud server keeps them.</string>
+    <string name="recently_deleted_help">Items are removed for good after %1$d days, or when the retention of your Nextcloud server runs out. Single deleted occurrences of a series are not kept.</string>
     <string name="trash_deleted_on">Deleted %1$s</string>
     <string name="restore">Restore</string>
     <string name="delete_permanently">Delete permanently</string>
@@ -610,6 +605,30 @@
     <string name="restore_failed_generic">“%1$s” could not be restored: %2$s</string>
     <string name="restore_failed_gone_from_server">“%1$s” is no longer in the Nextcloud trash bin. Its time there may have run out, or it was deleted on another device.</string>
     <string name="restore_failed_server_refused">The server refused to restore “%1$s” (HTTP %2$d). Its calendar may already contain an item with the same name, be shared read-only, or no longer exist.</string>
-    <string name="delete_recoverable">You can restore it from Settings › Calendar › Recently deleted for %1$d days.</string>
-    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted for %1$d days.</string>
+    <string name="delete_recoverable">You can restore it from Recently deleted in the sidebar while it is kept there.</string>
+    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar while it is kept there.</string>
+    <plurals name="delete_recoverable_days">
+        <item quantity="one">You can restore it from Recently deleted in the sidebar for %1$d day.</item>
+        <item quantity="other">You can restore it from Recently deleted in the sidebar for %1$d days.</item>
+    </plurals>
+    <plurals name="all_series_deleted_recoverable_days">
+        <item quantity="one">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d day.</item>
+        <item quantity="other">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d days.</item>
+    </plurals>
+    <string name="trash_deleted_today">Deleted today</string>
+    <string name="trash_deleted_yesterday">Deleted yesterday</string>
+    <string name="trash_in_recently_deleted">In Recently deleted</string>
+    <plurals name="trash_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <string name="trash_expires_today">Removed for good today</string>
+    <string name="trash_in_nextcloud_trash_bin">Nextcloud trash bin</string>
+    <string name="trash_from_calendar">From %1$s</string>
+    <string name="delete_permanently_failed_title">Can’t delete permanently</string>
+    <string name="delete_permanently_failed_server_refused">The server refused to delete “%1$s” permanently (HTTP %2$d). Its calendar may be shared with you read-only. It stays in Recently deleted.</string>
+    <string name="delete_permanently_failed_generic">“%1$s” could not be deleted permanently: %2$s</string>
+    <string name="empty_trash_failed_title">Trash not fully emptied</string>
+    <string name="empty_trash_failed_server_refused">The server refused to delete some items permanently (HTTP %1$d), for example ones in calendars shared with you read-only. They are still listed.</string>
+    <string name="empty_trash_failed_generic">Some items could not be deleted permanently and are still listed: %1$s</string>
 </resources>

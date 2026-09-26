@@ -1067,21 +1067,7 @@ internal fun SearchResultsList(
                 var futureDividerInserted = false
                 groupedResults.forEach { (group, groupItems) ->
                     stickyHeader(key = "search-year-$group") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .zIndex(1_000f)
-                                .background(stickyHeaderBackground.copy(alpha = 0.97f))
-                                .padding(start = 62.dp, top = 7.dp, bottom = 7.dp),
-                        ) {
-                            Text(
-                                group,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 15.sp,
-                                lineHeight = 19.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
+                        SearchGroupHeader(group, stickyHeaderBackground)
                     }
                     var lastDateKey: String? = null
                     groupItems.forEach { item ->
@@ -1227,6 +1213,7 @@ internal fun CalendarSearchResultRow(
     taskHierarchy: TaskHierarchyPresentation,
     onEventClick: (EventEntity) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
+    taskStatusToggleEnabled: Boolean = true,
 ) {
     when (item) {
         is CalendarSearchResult.Event -> SearchResultCard(
@@ -1253,6 +1240,7 @@ internal fun CalendarSearchResultRow(
             hasSubtasks = false,
             subtasksExpanded = false,
             onToggleSubtasks = {},
+            statusToggleEnabled = taskStatusToggleEnabled,
             onClick = { onTaskClick(item.task) },
         )
         is CalendarSearchResult.TaskGroup -> Column(
@@ -1276,6 +1264,7 @@ internal fun CalendarSearchResultRow(
                         hasSubtasks = entry.hasChildren,
                         subtasksExpanded = entry.expanded,
                         onToggleSubtasks = { taskHierarchy.toggle(entry.task) },
+                        statusToggleEnabled = taskStatusToggleEnabled,
                         onClick = { onTaskClick(entry.task) },
                     )
                 }
@@ -1556,6 +1545,26 @@ internal fun AgendaBoundaryMarker(
     }
 }
 
+/** The sticky header of a group of search results, e.g. a year; also used by "Recently deleted". */
+@Composable
+internal fun SearchGroupHeader(text: String, background: Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(1_000f)
+            .background(background.copy(alpha = 0.97f))
+            .padding(start = 62.dp, top = 7.dp, bottom = 7.dp),
+    ) {
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 15.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 @Composable
 internal fun SearchPastFutureDivider() {
     Column(
@@ -1692,6 +1701,7 @@ private fun SearchTaskResultCard(
     hasSubtasks: Boolean = false,
     subtasksExpanded: Boolean = true,
     onToggleSubtasks: (() -> Unit)? = null,
+    statusToggleEnabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val taskDate = (task.startAtMillis ?: task.dueAtMillis)?.toDate()
@@ -1732,6 +1742,7 @@ private fun SearchTaskResultCard(
             outerVerticalPadding = 3.dp,
             connectorStemInset = TaskHierarchyStemInset,
             priorityMotionEnabled = !isMuted,
+            statusToggleEnabled = statusToggleEnabled,
             onClick = onClick,
         )
     }

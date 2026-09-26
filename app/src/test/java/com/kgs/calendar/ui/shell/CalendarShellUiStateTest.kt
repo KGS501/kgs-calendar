@@ -3,6 +3,10 @@ package com.kgs.calendar.ui.shell
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
+import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.source.CollectionVisibility
@@ -248,6 +252,62 @@ class CalendarShellUiStateTest {
         recurrenceRule = "FREQ=DAILY",
     )
 
+    @Test
+    fun theTrashOpensFromTheDrawerAndItsItemsOpenReadOnlyDetails() {
+        shell.openMenuDrawer()
+        shell.openTrash()
+
+        assertTrue(shell.trashOpen)
+        assertFalse(shell.drawerOpen)
+        assertTrue(shell.anyOverlayOpen)
+
+        val trashed = trashedTask("gone", id = 5)
+        shell.openTrashedDetail(trashed)
+
+        val detail = shell.detailSheet as DetailSheet.Task
+        assertEquals(trashed.item, detail.trashedItem)
+        assertEquals(trashed.task, detail.task)
+        assertEquals(0, shell.detailTaskMorphGeneration)
+    }
+
+    @Test
+    fun backClosesTheTrashedDetailBeforeTheTrash() {
+        fun back() = shell.navigateBack(closeSearch = shell::closeSearch, selectView = {})
+        shell.openTrash()
+        shell.openTrashedDetail(trashedTask("gone", id = 5))
+
+        back()
+        assertNull(shell.detailSheet)
+        assertTrue(shell.trashOpen)
+        back()
+        assertFalse(shell.trashOpen)
+        assertFalse(shell.anyOverlayOpen)
+    }
+
+    @Test
+    fun closingTheTrashClosesItsDetailButNotALiveOne() {
+        shell.openTrash()
+        shell.openTrashedDetail(trashedTask("gone", id = 5))
+        shell.closeTrash()
+        assertNull(shell.detailSheet)
+
+        shell.openTrash()
+        shell.openDetail(DetailSheet.Event(event("meeting")))
+        shell.closeTrash()
+        assertEquals(DetailSheet.Event(event("meeting")), shell.detailSheet)
+    }
+
+    @Test
+    fun aLaunchedDetailOrANewEditorClosesTheTrash() {
+        shell.openTrash()
+        shell.openLaunchedDetail(DetailSheet.Event(event("meeting")))
+        assertFalse(shell.trashOpen)
+
+        shell.openTrash()
+        shell.openTaskCreation(newTaskSchedule(today, LocalTime.of(9, 0), false, true, true, true, 30), wireframeColor = 1)
+        assertFalse(shell.trashOpen)
+    }
+
     companion object {
         const val DefaultColor = 0xFF8A5A44.toInt()
 
@@ -276,6 +336,27 @@ class CalendarShellUiStateTest {
             isRecurring = false,
             color = 1,
         )
+
+        /** A "Recently deleted" task as the trash list hands it over. */
+        fun trashedTask(name: String, id: Long): TrashedItemPreview {
+            val item = TrashedItemEntity(
+                id = id,
+                componentType = ComponentType.Task,
+                uid = name,
+                collectionHref = "work",
+                accountId = "account",
+                sourceType = SourceType.Local,
+                resourceHref = "$name.ics",
+                rawIcs = "",
+                title = name,
+                startMillis = null,
+                hasTime = false,
+                collectionName = "work",
+                collectionColor = 1,
+                deletedAtMillis = 1_790_000_000_000L,
+            )
+            return TrashedItemPreview(item, task = task(name).copy(resourceHref = TrashedItemPreview.displayHref(item)))
+        }
 
         fun task(name: String, startAt: Long? = null, recurrenceRule: String? = null) = TaskEntity(
             uid = name,

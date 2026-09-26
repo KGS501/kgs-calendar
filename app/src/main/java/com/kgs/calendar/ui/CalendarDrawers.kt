@@ -439,6 +439,8 @@ internal fun CalendarDrawer(
     onCollectionVisibleInViews: (String, Boolean) -> Unit,
     onCollectionSettings: (CollectionEntity) -> Unit,
     onAppSettings: () -> Unit,
+    trashCount: Int,
+    onRecentlyDeleted: () -> Unit,
     problems: List<ProblemItem>,
     onProblems: () -> Unit,
 ) {
@@ -559,6 +561,12 @@ internal fun CalendarDrawer(
                 }
                 HorizontalDivider(color = WarmLine, modifier = Modifier.padding(top = 12.dp))
                 DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
+                DrawerActionRow(
+                    stringResource(R.string.recently_deleted),
+                    Icons.Default.Delete,
+                    onRecentlyDeleted,
+                    count = trashCount.takeIf { it > 0 },
+                )
                 if (problems.isNotEmpty()) {
                     DrawerProblemRow(
                         count = problems.size,
@@ -692,7 +700,7 @@ private fun DrawerViewItem(
 }
 
 @Composable
-private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Unit, count: Int? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -702,7 +710,10 @@ private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Uni
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Icon(icon, contentDescription = null, tint = WarmInk, modifier = Modifier.size(23.dp))
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp)
+        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        if (count != null) {
+            Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
+        }
     }
 }
 

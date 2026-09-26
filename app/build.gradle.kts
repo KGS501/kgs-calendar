@@ -135,6 +135,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(testFixtures(project(":core:data")))
+    testImplementation(libs.mockwebserver)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.datastore.preferences)

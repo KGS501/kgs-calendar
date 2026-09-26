@@ -284,6 +284,7 @@ internal fun CalendarAppContent(
     )
     HiddenSaveNoticeDialog(viewModel = viewModel, state = state, shell = shell)
     CompletedTasksOverlay(viewModel = viewModel, renderState = renderState, shell = shell)
+    RecentlyDeletedOverlay(viewModel = viewModel, state = state, shell = shell)
     DetailSheetHost(
         viewModel = viewModel,
         state = state,

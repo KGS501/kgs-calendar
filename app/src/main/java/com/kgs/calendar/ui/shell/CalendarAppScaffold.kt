@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.shell.CalendarShellUiState
@@ -50,6 +51,8 @@ internal fun CalendarAppScaffold(
         animationSpec = tween(180, easing = MotionStandard),
         label = "createMenuBackgroundBlur",
     )
+    // The drawer shows how many items "Recently deleted" holds.
+    val trash by viewModel.trash.state.collectAsStateWithLifecycle()
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
@@ -143,6 +146,8 @@ internal fun CalendarAppScaffold(
                 onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
                 onCollectionSettings = shell::editCollection,
                 onAppSettings = { shell.openSettings(SettingsDestination.Main) },
+                trashCount = trash.entries.size,
+                onRecentlyDeleted = shell::openTrash,
                 problems = problemItems,
                 onProblems = shell::openProblems,
             )

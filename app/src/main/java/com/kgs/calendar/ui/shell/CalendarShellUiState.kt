@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
@@ -26,6 +27,7 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.RecurringSaveRequest
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.SheetSnap
+import com.kgs.calendar.ui.toDetailSheet
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
@@ -83,6 +85,11 @@ internal class CalendarShellUiState(
         private set
     var problemsOpen by mutableStateOf(false)
         private set
+    var trashOpen by mutableStateOf(false)
+        private set
+
+    /** The "Recently deleted" item whose detail was open before a recreation, until the trash list is back. */
+    private var pendingTrashedDetailId by mutableStateOf<Long?>(null)
     var editingCollection by mutableStateOf<CollectionEntity?>(null)
         private set
     var editorSchedule by mutableStateOf(initialEditorSchedule)
@@ -120,7 +127,7 @@ internal class CalendarShellUiState(
 
     val anyOverlayOpen: Boolean
         get() = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
-            completedTasksOpen || settingsOpen || problemsOpen || editingCollection != null ||
+            completedTasksOpen || settingsOpen || problemsOpen || trashOpen || editingCollection != null ||
             detailSheet != null || creationSheet != null
 
     val canNavigateBack: Boolean
@@ -149,6 +156,7 @@ internal class CalendarShellUiState(
             drawerOpen -> drawerOpen = false
             completedTasksOpen -> completedTasksOpen = false
             problemsOpen -> problemsOpen = false
+            trashOpen -> trashOpen = false
             settingsOpen -> settingsOpen = false
             viewHistory.isNotEmpty() -> selectView(viewHistory.removeAt(viewHistory.lastIndex))
         }
@@ -219,6 +227,39 @@ internal class CalendarShellUiState(
         problemsOpen = false
     }
 
+    fun openTrash() {
+        drawerOpen = false
+        trashOpen = true
+    }
+
+    fun closeTrash() {
+        trashOpen = false
+        pendingTrashedDetailId = null
+        if (detailSheet?.trashedItem != null) closeDetail()
+    }
+
+    /** Opens a "Recently deleted" item in the detail sheet, read-only with restore and delete. */
+    fun openTrashedDetail(preview: TrashedItemPreview) {
+        pendingTrashedDetailId = null
+        detailTaskStack.clear()
+        detailTaskMorphGeneration = 0
+        detailTaskMorphSourceHref = null
+        detailSheet = preview.toDetailSheet()
+    }
+
+    /**
+     * Reopens the trashed item's detail that was open before a recreation once [entries], the
+     * trash list, holds it again; an item that has left the trash meanwhile stays closed.
+     */
+    fun resolvePendingTrashedDetail(entries: List<TrashedItemPreview>) {
+        val id = pendingTrashedDetailId ?: return
+        if (!trashOpen || detailSheet != null) {
+            pendingTrashedDetailId = null
+            return
+        }
+        entries.firstOrNull { it.item.id == id }?.let(::openTrashedDetail)
+    }
+
     fun openSettings(destination: SettingsDestination) {
         drawerOpen = false
         settingsStartDestination = destination
@@ -275,6 +316,7 @@ internal class CalendarShellUiState(
         taskDrawerOpen = false
         settingsOpen = false
         problemsOpen = false
+        trashOpen = false
         editingCollection = null
         detailSheet = null
         detailTaskStack.clear()
@@ -420,6 +462,7 @@ internal class CalendarShellUiState(
         taskDrawerOpen = false
         settingsOpen = false
         problemsOpen = false
+        trashOpen = false
         editingCollection = null
         creationSheet = null
         detailTaskStack.clear()
@@ -514,9 +557,12 @@ internal class CalendarShellUiState(
         settingsOpen = settingsOpen,
         settingsStartDestination = settingsStartDestination,
         problemsOpen = problemsOpen,
+        trashOpen = trashOpen,
         editingCollectionHref = editingCollection?.href,
         creationSheet = creationSheet?.toSaved(),
-        detailSheet = detailSheet?.savedRef(),
+        // A trashed item's detail isn't part of the calendar data; the trash list brings it back.
+        detailSheet = detailSheet?.takeIf { it.trashedItem == null }?.savedRef(),
+        trashedDetailId = detailSheet?.trashedItem?.id ?: pendingTrashedDetailId,
         detailTaskBackStack = detailTaskStack.map { it.savedRef() },
         editorSchedule = editorSchedule,
         draftWireframeColor = draftWireframeColor,
@@ -549,6 +595,8 @@ internal class CalendarShellUiState(
         settingsOpen = saved.settingsOpen
         settingsStartDestination = saved.settingsStartDestination
         problemsOpen = saved.problemsOpen
+        trashOpen = saved.trashOpen
+        pendingTrashedDetailId = saved.trashedDetailId?.takeIf { saved.trashOpen && saved.detailSheet == null }
         editingCollection = saved.editingCollectionHref?.let { href ->
             state.collections.firstOrNull { it.href == href }
         }

@@ -134,9 +134,12 @@ internal data class SavedShellState(
     val settingsOpen: Boolean = false,
     val settingsStartDestination: SettingsDestination = SettingsDestination.Main,
     val problemsOpen: Boolean = false,
+    val trashOpen: Boolean = false,
     val editingCollectionHref: String? = null,
     val creationSheet: SavedCreationSheet? = null,
     val detailSheet: SavedItemRef? = null,
+    /** The id of the "Recently deleted" item whose detail was open. */
+    val trashedDetailId: Long? = null,
     val detailTaskBackStack: List<SavedItemRef.Task> = emptyList(),
     val editorSchedule: EditorScheduleState,
     val draftWireframeColor: Int,
@@ -167,9 +170,11 @@ internal data class SavedShellState(
         "settingsOpen" to settingsOpen,
         "settingsStartDestination" to settingsStartDestination.name,
         "problemsOpen" to problemsOpen,
+        "trashOpen" to trashOpen,
         "editingCollectionHref" to editingCollectionHref,
         "creationSheet" to creationSheet?.let { arrayListOf(it.kind.name, it.item?.toSaveable()) },
         "detailSheet" to detailSheet?.toSaveable(),
+        "trashedDetailId" to trashedDetailId,
         "detailTaskBackStack" to ArrayList(detailTaskBackStack.map { it.toSaveable() }),
         "editorSchedule" to editorSchedule.toSaveable(),
         "draftWireframeColor" to draftWireframeColor,
@@ -197,6 +202,7 @@ internal data class SavedShellState(
                 settingsStartDestination = enumValueOrNull<SettingsDestination>(map["settingsStartDestination"])
                     ?: SettingsDestination.Main,
                 problemsOpen = map["problemsOpen"] == true,
+                trashOpen = map["trashOpen"] == true,
                 editingCollectionHref = map["editingCollectionHref"] as? String,
                 creationSheet = (map["creationSheet"] as? List<*>)?.let { saved ->
                     enumValueOrNull<SavedCreationSheet.Kind>(saved.getOrNull(0))?.let { kind ->
@@ -204,6 +210,7 @@ internal data class SavedShellState(
                     }
                 },
                 detailSheet = itemRefFromSaveable(map["detailSheet"]),
+                trashedDetailId = (map["trashedDetailId"] as? Number)?.toLong(),
                 detailTaskBackStack = (map["detailTaskBackStack"] as? List<*>).orEmpty()
                     .mapNotNull { itemRefFromSaveable(it) as? SavedItemRef.Task },
                 editorSchedule = editorSchedule,

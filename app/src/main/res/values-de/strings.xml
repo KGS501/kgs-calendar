@@ -583,14 +583,9 @@
     <string name="calendar_settings_saved_refresh_failed">Die Kalendereinstellung wurde gespeichert, aber die vollst&#228;ndige Aktualisierung ist fehlgeschlagen. Beim n&#228;chsten Abgleich wird sie erneut versucht.</string>
     <string name="calendar_settings_saved_reconciliation_failed">Die Kalendereinstellung und Aktualisierung wurden abgeschlossen, aber Erinnerungen oder Widgets konnten nicht aktualisiert werden.</string>
     <string name="recently_deleted">Zuletzt gelöscht</string>
-    <string name="recently_deleted_empty_summary">Nichts gelöscht</string>
-    <plurals name="recently_deleted_count">
-        <item quantity="one">%1$d Element, %2$d Tage aufbewahrt</item>
-        <item quantity="other">%1$d Elemente, %2$d Tage aufbewahrt</item>
-    </plurals>
     <string name="recently_deleted_empty_title">Hier ist nichts</string>
-    <string name="recently_deleted_empty_body">Gelöschte Termine und Aufgaben bleiben hier %1$d Tage lang.</string>
-    <string name="recently_deleted_help">Gelöschte Termine und Aufgaben kannst du %1$d Tage lang wiederherstellen. Danach werden sie endgültig entfernt. Einzelne gelöschte Termine einer Serie landen nicht hier.</string>
+    <string name="recently_deleted_empty_body">Gelöschte Termine und Aufgaben bleiben hier %1$d Tage lang oder so lange, wie dein Nextcloud-Server sie aufbewahrt.</string>
+    <string name="recently_deleted_help">Elemente werden nach %1$d Tagen endgültig entfernt oder wenn die Aufbewahrungszeit deines Nextcloud-Servers abläuft. Einzelne gelöschte Termine einer Serie landen nicht hier.</string>
     <string name="trash_deleted_on">Gelöscht am %1$s</string>
     <string name="restore">Wiederherstellen</string>
     <string name="delete_permanently">Endgültig löschen</string>
@@ -610,6 +605,30 @@
     <string name="restore_failed_generic">„%1$s“ konnte nicht wiederhergestellt werden: %2$s</string>
     <string name="restore_failed_gone_from_server">„%1$s“ ist nicht mehr im Nextcloud-Papierkorb. Vielleicht ist seine Zeit dort abgelaufen oder es wurde auf einem anderen Gerät gelöscht.</string>
     <string name="restore_failed_server_refused">Der Server hat das Wiederherstellen von „%1$s“ abgelehnt (HTTP %2$d). Vielleicht enthält sein Kalender schon einen Eintrag mit demselben Namen, ist nur lesbar freigegeben oder existiert nicht mehr.</string>
-    <string name="delete_recoverable">Du kannst es %1$d Tage lang unter Einstellungen › Kalender › Zuletzt gelöscht wiederherstellen.</string>
-    <string name="all_series_deleted_recoverable">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tage lang unter Zuletzt gelöscht wiederherstellen.</string>
+    <string name="delete_recoverable">Du kannst es in der Seitenleiste unter Zuletzt gelöscht wiederherstellen, solange es dort aufbewahrt wird.</string>
+    <string name="all_series_deleted_recoverable">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie in der Seitenleiste unter Zuletzt gelöscht wiederherstellen, solange sie dort aufbewahrt wird.</string>
+    <plurals name="delete_recoverable_days">
+        <item quantity="one">Du kannst es %1$d Tag lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="other">Du kannst es %1$d Tage lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+    </plurals>
+    <plurals name="all_series_deleted_recoverable_days">
+        <item quantity="one">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tag lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="other">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tage lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+    </plurals>
+    <string name="trash_deleted_today">Heute gelöscht</string>
+    <string name="trash_deleted_yesterday">Gestern gelöscht</string>
+    <string name="trash_in_recently_deleted">In Zuletzt gelöscht</string>
+    <plurals name="trash_days_left">
+        <item quantity="one">Noch %1$d Tag</item>
+        <item quantity="other">Noch %1$d Tage</item>
+    </plurals>
+    <string name="trash_expires_today">Wird heute endgültig entfernt</string>
+    <string name="trash_in_nextcloud_trash_bin">Nextcloud-Papierkorb</string>
+    <string name="trash_from_calendar">Aus %1$s</string>
+    <string name="delete_permanently_failed_title">Endgültiges Löschen nicht möglich</string>
+    <string name="delete_permanently_failed_server_refused">Der Server hat das endgültige Löschen von „%1$s“ abgelehnt (HTTP %2$d). Vielleicht ist sein Kalender nur lesbar mit dir geteilt. Es bleibt unter Zuletzt gelöscht.</string>
+    <string name="delete_permanently_failed_generic">„%1$s“ konnte nicht endgültig gelöscht werden: %2$s</string>
+    <string name="empty_trash_failed_title">Papierkorb nicht ganz geleert</string>
+    <string name="empty_trash_failed_server_refused">Der Server hat das endgültige Löschen einiger Elemente abgelehnt (HTTP %1$d), zum Beispiel in Kalendern, die nur lesbar mit dir geteilt sind. Sie sind weiterhin aufgeführt.</string>
+    <string name="empty_trash_failed_generic">Einige Elemente konnten nicht endgültig gelöscht werden und sind weiterhin aufgeführt: %1$s</string>
 </resources>

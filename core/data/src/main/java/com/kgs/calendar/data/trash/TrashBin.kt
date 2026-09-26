@@ -20,7 +20,10 @@ import com.kgs.calendar.domain.source.isAndroidProviderCollection
 import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.domain.trash.TrashOrigin
 import com.kgs.calendar.domain.trash.TrashRetention
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -81,6 +84,11 @@ class TrashBin internal constructor(
 ) {
     /** Every item, newest delete first. */
     fun observeItems(): Flow<List<TrashedItemEntity>> = database.trashDao().observeAll()
+
+    /** Every item with its event or task read back for display, newest delete first. */
+    fun observePreviews(): Flow<List<TrashedItemPreview>> = observeItems()
+        .map { items -> items.map(icalCodec::previewOf) }
+        .flowOn(Dispatchers.Default)
 
     suspend fun items(): List<TrashedItemEntity> = database.trashDao().all()
 

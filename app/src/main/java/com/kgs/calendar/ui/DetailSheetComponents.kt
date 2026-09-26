@@ -850,6 +850,8 @@ internal fun TaskStatusCheckbox(
     tapOpensPicker: Boolean = false,
     boxSize: Dp = 40.dp,
     iconSize: Dp = 24.dp,
+    /** False shows the status only; taps then reach the card underneath. */
+    enabled: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val haptics = LocalKgsHaptics.current
@@ -858,6 +860,7 @@ internal fun TaskStatusCheckbox(
             .size(boxSize)
             .clip(CircleShape)
             .combinedClickable(
+                enabled = enabled,
                 onClick = {
                     if (tapOpensPicker) {
                         menuOpen = true
@@ -988,7 +991,13 @@ private fun TaskStatusPickerDialog(
  * picks a calendar for a new entry so the chosen default is always the first chip.
  */
 
-internal fun DetailSheet.preferredInitialSnap(): SheetSnap = when (this) {
+internal fun DetailSheet.preferredInitialSnap(): SheetSnap = when {
+    // The restore and delete buttons at the top of a trashed item must be in view right away.
+    trashedItem != null -> detailSnap().takeUnless { it == SheetSnap.Quarter } ?: SheetSnap.Half
+    else -> detailSnap()
+}
+
+private fun DetailSheet.detailSnap(): SheetSnap = when (this) {
     is DetailSheet.Event -> {
         val description = event.description.orEmpty().cleanCalendarDisplayText()
         val metadataScore =
@@ -1024,7 +1033,13 @@ internal fun DetailSheet.preferredInitialSnap(): SheetSnap = when (this) {
     }
 }
 
-internal fun DetailSheet.estimatedPopoverHeight(): Dp = when (this) {
+internal fun DetailSheet.estimatedPopoverHeight(): Dp =
+    detailPopoverHeight() + if (trashedItem != null) TrashedDetailBannerHeight else 0.dp
+
+/** The "Recently deleted" banner with its buttons, plus the gap below it. */
+private val TrashedDetailBannerHeight = 176.dp
+
+private fun DetailSheet.detailPopoverHeight(): Dp = when (this) {
     is DetailSheet.Event -> {
         val description = event.description.orEmpty().cleanCalendarDisplayText()
         val location = event.location.orEmpty()

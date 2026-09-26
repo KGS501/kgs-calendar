@@ -312,6 +312,8 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.trashRetentionDays
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
@@ -345,7 +347,6 @@ import com.kgs.calendar.domain.task.taskPriorityIntensity
 import com.kgs.calendar.domain.task.treeParents
 import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
-import com.kgs.calendar.domain.trash.TrashRetention
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
@@ -537,6 +538,9 @@ private fun TaskDetailHeaderCard(
     onCopyTaskTo: (TaskEntity, String) -> Unit,
     onDeleteTask: (String) -> Unit,
     morphGeneration: Int,
+    trashRetentionDays: Int?,
+    /** False for a trashed task: no edit or overflow actions and no status toggle. */
+    editable: Boolean = true,
 ) {
     val cardColor = Color(task.displayColor(taskColorMode))
     val contentColor = if (cardColor.isDark()) Color.White else Color(0xFF1C1A18)
@@ -556,7 +560,7 @@ private fun TaskDetailHeaderCard(
     val rowStartPadding = lerpFloat(9f, 14f, morphProgress).dp
     val rowEndPadding = lerpFloat(9f, 6f, morphProgress).dp
     val rowVerticalPadding = lerpFloat(7f, 12f, morphProgress).dp
-    val actionSpaceWidth = lerpFloat(if (hasSubtasks) 30f else 0f, 96f, morphProgress).dp
+    val actionSpaceWidth = lerpFloat(if (hasSubtasks) 30f else 0f, if (editable) 96f else 0f, morphProgress).dp
     val titleFontWeight = FontWeight(lerpFloat(500f, 600f, morphProgress).roundToInt())
     val subtitleText = if (morphProgress < 0.52f) {
         task.localizedTaskTimeLabel()
@@ -597,6 +601,7 @@ private fun TaskDetailHeaderCard(
                     onStatusChange = { onTaskStatusChanged(task, it) },
                     boxSize = checkboxBoxSize,
                     iconSize = checkboxIconSize,
+                    enabled = editable,
                 )
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -642,12 +647,13 @@ private fun TaskDetailHeaderCard(
                     )
                 }
                 TaskDetailHeaderActions(
-                    visible = controlsVisible,
+                    visible = controlsVisible && editable,
                     task = task,
                     collections = collections,
                     hiddenCollectionHrefs = hiddenCollectionHrefs,
                     readOnlySource = readOnlySource,
                     contentColor = contentColor,
+                    trashRetentionDays = trashRetentionDays,
                     onEditTask = onEditTask,
                     onDuplicateTask = onDuplicateTask,
                     onCopyTaskTo = onCopyTaskTo,
@@ -666,6 +672,7 @@ private fun TaskDetailHeaderActions(
     hiddenCollectionHrefs: Set<String>,
     readOnlySource: Boolean,
     contentColor: Color,
+    trashRetentionDays: Int?,
     onEditTask: (TaskEntity) -> Unit,
     onDuplicateTask: (TaskEntity) -> Unit,
     onCopyTaskTo: (TaskEntity, String) -> Unit,
@@ -688,6 +695,7 @@ private fun TaskDetailHeaderActions(
                 itemLabel = stringResource(R.string.task),
                 canDelete = !readOnlySource,
                 iconTint = contentColor,
+                trashRetentionDays = trashRetentionDays,
                 onDuplicate = { onDuplicateTask(task) },
                 onCopyTo = { onCopyTaskTo(task, it) },
                 onDeleteThis = {},
@@ -730,11 +738,15 @@ internal fun DetailSheetContent(
     onOpenParentTask: (TaskEntity) -> Unit,
     onAddSubtask: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    onRestoreTrashed: (TrashedItemEntity) -> Unit = {},
+    onDeleteTrashedPermanently: (TrashedItemEntity) -> Unit = {},
 ) {
+    // An item from "Recently deleted" is shown read-only, as it was deleted, without its live relatives.
+    val trashedItem = detail.trashedItem
     val task = (detail as? DetailSheet.Task)?.task
     val taskInactive = task?.isInactive() == true
     val descendantTasks = remember(task?.resourceHref, allTasks, showCompletedTasks, taskInactive) {
-        task?.let { current ->
+        task?.takeIf { trashedItem == null }?.let { current ->
             val descendants = allTasks.descendantsOf(current)
             // A done task's own detail keeps all of its subtasks; open tasks follow the setting.
             if (taskInactive) {
@@ -765,7 +777,7 @@ internal fun DetailSheetContent(
         return cursor.uid
     }
     val parentTask = remember(task?.parentUid, task?.collectionHref, allTasks) {
-        task?.parentUid?.takeIf { it.isNotBlank() }?.let { parentUid ->
+        task?.parentUid?.takeIf { it.isNotBlank() && trashedItem == null }?.let { parentUid ->
             allTasks.firstOrNull { it.collectionHref == task.collectionHref && it.uid == parentUid }
         }
     }
@@ -780,7 +792,10 @@ internal fun DetailSheetContent(
             }
         }
     }
-    val readOnlySource = sourceCollection?.isReadOnlyCollection() == true
+    val readOnlySource = trashedItem != null || sourceCollection?.isReadOnlyCollection() == true
+    val trashRetentionDays = remember(sourceCollection, accounts) {
+        trashRetentionDays(sourceCollection, accounts.firstOrNull { it.id == sourceCollection?.accountId })
+    }
     val eventDetailCapabilities = sourceCollection?.eventEditorCapabilities() ?: EventEditorCapabilities.Full
     var lastCompleted by remember(task?.resourceHref) { mutableStateOf(task?.isCompleted ?: false) }
     var burstKey by remember(task?.resourceHref) { mutableStateOf(0) }
@@ -796,8 +811,9 @@ internal fun DetailSheetContent(
     val pendingMutation = when (detail) {
         is DetailSheet.Event -> pendingMutationFor(detail.event)
         is DetailSheet.Task -> pendingMutationFor(detail.task)
-    }
+    }?.takeIf { trashedItem == null }
     val problemResource = remember(detailResourceHref, problemResources) {
+        if (trashedItem != null) return@remember null
         problemResources.firstOrNull {
             it.href == detailResourceHref && !it.syncError.isNullOrBlank()
         }
@@ -811,6 +827,11 @@ internal fun DetailSheetContent(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         when {
+            trashedItem != null -> TrashedItemDetailBanner(
+                item = trashedItem,
+                onRestore = { onRestoreTrashed(trashedItem) },
+                onDeletePermanently = { onDeleteTrashedPermanently(trashedItem) },
+            )
             pendingMutation != null -> PendingSyncDetailBanner(pendingMutation)
             problemResource != null -> SyncIssueDetailBanner(problemResource.syncError.orEmpty())
         }
@@ -847,21 +868,24 @@ internal fun DetailSheetContent(
                         }
                         val ev = detail.event
                         val recurring = ev.isRecurring || !ev.recurrenceRule.isNullOrBlank()
-                        IconButton(onClick = { onEditEvent(ev) }) {
-                            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = WarmInk)
+                        if (trashedItem == null) {
+                            IconButton(onClick = { onEditEvent(ev) }) {
+                                Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = WarmInk)
+                            }
+                            DetailOverflowMenu(
+                                copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
+                                hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
+                                recurringScopes = recurring,
+                                itemLabel = stringResource(R.string.event),
+                                canDelete = !readOnlySource,
+                                trashRetentionDays = trashRetentionDays,
+                                onDuplicate = { onDuplicateEvent(ev) },
+                                onCopyTo = { onCopyEventTo(ev, it) },
+                                onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
+                                onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
+                                onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
+                            )
                         }
-                        DetailOverflowMenu(
-                            copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
-                            hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
-                            recurringScopes = recurring,
-                            itemLabel = stringResource(R.string.event),
-                            canDelete = !readOnlySource,
-                            onDuplicate = { onDuplicateEvent(ev) },
-                            onCopyTo = { onCopyEventTo(ev, it) },
-                            onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
-                            onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
-                            onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
-                        )
                     }
                 }
             }
@@ -903,6 +927,8 @@ internal fun DetailSheetContent(
                             onCopyTaskTo = onCopyTaskTo,
                             onDeleteTask = onDeleteTask,
                             morphGeneration = taskMorphGeneration,
+                            trashRetentionDays = trashRetentionDays,
+                            editable = trashedItem == null,
                         )
                         val detailMorphProgress = rememberTaskDetailMorphProgress()
                         val hierarchyProgress = if (taskMorphGeneration > 0) {
@@ -1006,7 +1032,7 @@ internal fun DetailSheetContent(
                     autoLoadMapPreviews = autoLoadMapPreviews,
                     onParticipationChanged = { partstat -> onEventParticipationChanged(detail.event.resourceHref, partstat) },
                 )
-                detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
+                if (trashedItem == null) detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
                 Spacer(Modifier.height(56.dp))
             }
             is DetailSheet.Task -> {
@@ -1037,7 +1063,7 @@ internal fun DetailSheetContent(
                         onPriorityChanged = { onTaskPriorityChanged(detail.task.resourceHref, it) },
                         onProgressChanged = { onTaskProgressChanged(detail.task.resourceHref, it) },
                     )
-                    detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
+                    if (trashedItem == null) detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
                     Spacer(Modifier.height(56.dp))
                 }
             }
@@ -1436,6 +1462,7 @@ private fun DetailOverflowMenu(
     itemLabel: String,
     canDelete: Boolean = true,
     iconTint: Color = WarmInk,
+    trashRetentionDays: Int?,
     onDuplicate: () -> Unit,
     onCopyTo: (String) -> Unit,
     onDeleteThis: () -> Unit,
@@ -1496,6 +1523,7 @@ private fun DetailOverflowMenu(
             DeleteConfirmationDialog(
                 itemLabel = itemLabel,
                 recurringScopes = recurringScopes,
+                trashRetentionDays = trashRetentionDays,
                 onDismiss = { deleteDialogOpen = false },
                 onDeleteThis = {
                     deleteDialogOpen = false
@@ -1610,6 +1638,8 @@ internal fun RecurringSaveScopeDialog(
 private fun DeleteConfirmationDialog(
     itemLabel: String,
     recurringScopes: Boolean,
+    /** How long the deleted item can be restored; null when that isn't known yet. */
+    trashRetentionDays: Int?,
     onDismiss: () -> Unit,
     onDeleteThis: () -> Unit,
     onDeleteFollowing: () -> Unit,
@@ -1661,7 +1691,9 @@ private fun DeleteConfirmationDialog(
                         when (pendingScope) {
                             EventDeleteScope.This -> appString(R.string.only_this_deleted)
                             EventDeleteScope.ThisAndFollowing -> appString(R.string.this_and_following_deleted)
-                            EventDeleteScope.All -> appString(R.string.all_series_deleted_recoverable, TrashRetention.DAYS)
+                            EventDeleteScope.All -> trashRetentionDays
+                                ?.let { appPluralString(R.plurals.all_series_deleted_recoverable_days, it, it) }
+                                ?: appString(R.string.all_series_deleted_recoverable)
                         },
                     )
                 },
@@ -1688,7 +1720,13 @@ private fun DeleteConfirmationDialog(
             titleContentColor = WarmInk,
             textContentColor = WarmInk,
             title = { Text(appString(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
-            text = { Text(appString(R.string.delete_recoverable, TrashRetention.DAYS)) },
+            text = {
+                Text(
+                    trashRetentionDays
+                        ?.let { appPluralString(R.plurals.delete_recoverable_days, it, it) }
+                        ?: appString(R.string.delete_recoverable),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = onDeleteAll) {
                     Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error)
