@@ -117,6 +117,8 @@
     <string name="show_map_preview">Show map preview</string>
     <string name="auto_map_previews">Always show map previews</string>
     <string name="auto_map_previews_help">Automatically loads map previews in event and task details when the location looks like a real place. Off by default to avoid map tile requests unless you choose them.</string>
+    <string name="haptic_feedback">Haptic feedback</string>
+    <string name="haptic_feedback_help">A light vibration when you drag events and tasks and when you tick off tasks. The system touch feedback setting still applies.</string>
     <string name="osm_attribution">&#169; OpenStreetMap contributors</string>
     <string name="map_preview_content_description">Map preview</string>
     <string name="location_search_unavailable">Location search is currently unavailable.</string>

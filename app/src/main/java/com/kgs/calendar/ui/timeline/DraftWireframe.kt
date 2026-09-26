@@ -302,6 +302,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -462,8 +463,11 @@ internal fun DraftEventWireframe(
     val wireframeColor = Color(color)
     var dragX by remember { mutableFloatStateOf(0f) }
     var draggingBody by remember { mutableStateOf(false) }
+    var dragging by remember { mutableStateOf(false) }
     val dayStepPx = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
     val snappedDayDelta = if (draggingBody && dayStepPx > 0f) (dragX / dayStepPx).roundToInt() else 0
+    // One light tick each time a moved or resized draft snaps to another time slot or day.
+    if (dragging) DragSnapHaptics(slot = Triple(startMinute, endMinute, snappedDayDelta))
     val animatedDragX by animateFloatAsState(
         targetValue = if (draggingBody) snappedDayDelta * dayStepPx else 0f,
         animationSpec = tween(110, easing = MotionStandard),
@@ -536,6 +540,7 @@ internal fun DraftEventWireframe(
                 lastPublishedDraft = snapshot
                 dragX = 0f
                 draggingBody = mode == DraftDragMode.Move
+                dragging = true
             },
             onDrag = { change, dragAmount ->
                 change.consume()
@@ -556,11 +561,13 @@ internal fun DraftEventWireframe(
                 updateAutoScroll(0f)
                 publishDraft(commitDate = true)
                 draggingBody = false
+                dragging = false
                 dragX = 0f
             },
             onDragCancel = {
                 updateAutoScroll(0f)
                 draggingBody = false
+                dragging = false
                 dragX = 0f
             },
         )

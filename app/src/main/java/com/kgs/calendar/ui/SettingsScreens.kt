@@ -464,6 +464,7 @@ internal fun SettingsPage(
     onOverdueSummaryPriorityAnimationChanged: (Boolean) -> Unit,
     onSubtasksExpandedByDefaultChanged: (Boolean) -> Unit,
     onAutoLoadMapPreviewsChanged: (Boolean) -> Unit,
+    onHapticFeedbackChanged: (Boolean) -> Unit,
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
     onMultiDaySidebarControlsChanged: (Boolean) -> Unit,
     onPortraitMultiDayCountChanged: (Int) -> Unit,
@@ -1153,6 +1154,12 @@ internal fun SettingsPage(
                                     checked = state.autoLoadMapPreviews,
                                     onCheckedChange = onAutoLoadMapPreviewsChanged,
                                     subtitle = stringResource(R.string.auto_map_previews_help),
+                                )
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.haptic_feedback),
+                                    checked = state.hapticFeedbackEnabled,
+                                    onCheckedChange = onHapticFeedbackChanged,
+                                    subtitle = stringResource(R.string.haptic_feedback_help),
                                 )
                             }
                             SettingsSection(title = stringResource(R.string.new_items), icon = Icons.Default.Add) {

@@ -200,6 +200,10 @@ class SettingsActions internal constructor(
         scope.launch { settingsStore.setAutoLoadMapPreviews(enabled) }
     }
 
+    fun setHapticFeedbackEnabled(enabled: Boolean) {
+        scope.launch { settingsStore.setHapticFeedbackEnabled(enabled) }
+    }
+
     fun setMaxVisibleAllDayItems(maxItems: Int) {
         scope.launch { settingsStore.setMaxVisibleAllDayItems(maxItems) }
     }

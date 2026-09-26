@@ -303,6 +303,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -851,6 +852,7 @@ internal fun TaskStatusCheckbox(
     iconSize: Dp = 24.dp,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val haptics = LocalKgsHaptics.current
     Box(
         modifier = modifier
             .size(boxSize)
@@ -860,10 +862,14 @@ internal fun TaskStatusCheckbox(
                     if (tapOpensPicker) {
                         menuOpen = true
                     } else {
-                        onStatusChange(if (status == "COMPLETED") "NEEDS-ACTION" else "COMPLETED")
+                        val completing = status != "COMPLETED"
+                        haptics.taskToggled(completed = completing)
+                        onStatusChange(if (completing) "COMPLETED" else "NEEDS-ACTION")
                     }
                 },
                 onLongClick = { menuOpen = true },
+                // The long-press buzz Compose adds for the status menu follows the app setting too.
+                hapticFeedbackEnabled = haptics.enabled,
             ),
         contentAlignment = Alignment.Center,
     ) {

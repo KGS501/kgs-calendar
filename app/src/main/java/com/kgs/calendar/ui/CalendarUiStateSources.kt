@@ -112,6 +112,7 @@ internal data class GeneralSettings(
     val display: DisplaySettings,
     val behaviour: AppBehaviourSettings,
     val timeline: TimelineSettings,
+    val hapticFeedbackEnabled: Boolean,
 )
 
 internal data class NewItemDefaults(
@@ -251,6 +252,7 @@ internal fun generalSettings(
         ),
         ::TimelineSettings,
     ),
+    settingsStore.hapticFeedbackEnabled,
     ::GeneralSettings,
 )
 
@@ -405,6 +407,7 @@ internal fun calendarUiState(
         overdueSummaryPriorityAnimationEnabled = display.overdueSummaryPriorityAnimationEnabled,
         subtasksExpandedByDefault = display.subtasksExpandedByDefault,
         autoLoadMapPreviews = display.autoLoadMapPreviews,
+        hapticFeedbackEnabled = settings.general.hapticFeedbackEnabled,
         maxVisibleAllDayItems = behaviour.maxVisibleAllDayItems,
         multiDayCount = navigation.multiDayCount,
         portraitMultiDayCount = timeline.zoom.portraitMultiDayCount,

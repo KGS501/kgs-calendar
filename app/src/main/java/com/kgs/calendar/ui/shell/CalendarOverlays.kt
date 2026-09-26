@@ -142,6 +142,7 @@ internal fun SettingsOverlay(
             onOverdueSummaryPriorityAnimationChanged = viewModel.settings::setOverdueSummaryPriorityAnimationEnabled,
             onSubtasksExpandedByDefaultChanged = viewModel.settings::setSubtasksExpandedByDefault,
             onAutoLoadMapPreviewsChanged = viewModel.settings::setAutoLoadMapPreviews,
+            onHapticFeedbackChanged = viewModel.settings::setHapticFeedbackEnabled,
             onMaxVisibleAllDayItemsChanged = viewModel.settings::setMaxVisibleAllDayItems,
             onMultiDaySidebarControlsChanged = viewModel.settings::setMultiDaySidebarControlsEnabled,
             onPortraitMultiDayCountChanged = viewModel.settings::setPortraitMultiDayCount,

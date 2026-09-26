@@ -305,6 +305,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -700,6 +702,7 @@ private fun TimedEventBlock(
     var rootOverlayDrag by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(false) }
     var cardCoordinates by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
     DisposableEffect(event.resourceHref, event.startsAtMillis, dragReporter) {
         onDispose {
@@ -720,6 +723,8 @@ private fun TimedEventBlock(
         .snapDraftMinute()
         .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
     val snappedDragYPx = with(density) { ((snappedStart - placement.startMinute) / 60f * hourHeightDp).dp.toPx() }
+    // Root-overlay drags tick in TimelineView, which owns their drop target.
+    if (isDragging && !rootOverlayDrag) DragSnapHaptics(slot = snappedDayDelta to snappedStart)
     val animatedDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDayDelta * dayStepPx else 0f,
         animationSpec = tween(110, easing = MotionStandard),
@@ -773,6 +778,7 @@ private fun TimedEventBlock(
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 isDragging = true
                 val coordinates = cardCoordinates
                 rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
@@ -824,6 +830,7 @@ private fun TimedEventBlock(
                 dragY = 0f
             },
             onDragEnd = {
+                haptics.drop()
                 val awaitingRootCommit = rootOverlayDrag
                 if (awaitingRootCommit) {
                     dragReporter.end()
@@ -1039,6 +1046,7 @@ private fun TimedTaskBlock(
     var rootOverlayDrag by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(false) }
     var cardCoordinates by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
     DisposableEffect(task.resourceHref, task.startAtMillis, task.dueAtMillis, dragReporter) {
         onDispose {
@@ -1059,6 +1067,8 @@ private fun TimedTaskBlock(
         .snapDraftMinute()
         .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
     val snappedDragYPx = with(density) { ((snappedStart - placement.startMinute) / 60f * hourHeightDp).dp.toPx() }
+    // Root-overlay drags tick in TimelineView, which owns their drop target.
+    if (isDragging && !rootOverlayDrag) DragSnapHaptics(slot = snappedDayDelta to snappedStart)
     val animatedDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDayDelta * dayStepPx else 0f,
         animationSpec = tween(110, easing = MotionStandard),
@@ -1097,6 +1107,7 @@ private fun TimedTaskBlock(
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 isDragging = true
                 val coordinates = cardCoordinates
                 rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
@@ -1148,6 +1159,7 @@ private fun TimedTaskBlock(
                 dragY = 0f
             },
             onDragEnd = {
+                haptics.drop()
                 val awaitingRootCommit = rootOverlayDrag
                 if (awaitingRootCommit) {
                     dragReporter.end()

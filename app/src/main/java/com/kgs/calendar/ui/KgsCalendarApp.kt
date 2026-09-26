@@ -20,6 +20,8 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
+import com.kgs.calendar.ui.haptics.rememberKgsHaptics
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
@@ -71,6 +73,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LocalConfiguration provides localizedConfiguration,
         LocalAppLocale provides appLocale,
         LocalCalendarTimeSnapshot provides calendarTime,
+        LocalKgsHaptics provides rememberKgsHaptics(state.hapticFeedbackEnabled),
     ) {
         KgsCalendarTheme(
             themeMode = state.themeMode,

@@ -308,6 +308,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -1310,6 +1312,7 @@ private fun AllDayViewportChip(
         if (item.completed && !lastCompleted) burstKey++
         lastCompleted = item.completed
     }
+    val haptics = LocalKgsHaptics.current
     var dragX by remember(item.id) { mutableFloatStateOf(0f) }
     var dragY by remember(item.id) { mutableFloatStateOf(0f) }
     var isDragging by remember(item.id) { mutableStateOf(false) }
@@ -1348,6 +1351,8 @@ private fun AllDayViewportChip(
         (laneTopPx + lane * laneStridePx).coerceIn(0f, (allDayHeightPxForDrag - with(density) { 24.dp.toPx() }).coerceAtLeast(0f)) -
             chipTopPxForDrag
     }
+    // One light tick each time the dragged chip visibly snaps to another day, lane or time slot.
+    if (isDragging) DragSnapHaptics(slot = snappedDragX.roundToInt() to snappedDragY.roundToInt())
     val displayDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDragX else 0f,
         animationSpec = tween(90, easing = MotionStandard),
@@ -1377,6 +1382,7 @@ private fun AllDayViewportChip(
         val hourHeightPx = hourHeightDp.dp.toPx()
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 dragPointerOffset = offset
                 isDragging = true
                 onDragStateChanged(true)
@@ -1393,6 +1399,7 @@ private fun AllDayViewportChip(
                 onDragStateChanged(false)
             },
             onDragEnd = {
+                haptics.drop()
                 val fingerX = chipLeftPx + dragPointerOffset.x + dragX
                 val fingerY = chipTopPx + dragPointerOffset.y + dragY
                 val pageDelta = if (dayStepPx > 0f) floor((fingerX - anchorOffsetPx) / dayStepPx).toInt() else 0
@@ -1954,6 +1961,7 @@ private fun OverdueTaskChip(
     val textColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val shape = RoundedCornerShape(10.dp)
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     var coordinates by remember(task.resourceHref) { mutableStateOf<LayoutCoordinates?>(null) }
     var rootOverlayDrag by remember(task.resourceHref) { mutableStateOf(false) }
     val durationMinutes = (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt()
@@ -1967,6 +1975,7 @@ private fun OverdueTaskChip(
                 val cardCoordinates = coordinates ?: return@detectDragGesturesAfterLongPress
                 rootOverlayDrag = dragReporter.usesRootOverlay
                 if (rootOverlayDrag) {
+                    haptics.dragStart()
                     val pointer = cardCoordinates.localToRoot(offset)
                     val topLeft = cardCoordinates.positionInRoot()
                     dragReporter.start(
@@ -2011,7 +2020,10 @@ private fun OverdueTaskChip(
                 onDragFinished()
             },
             onDragEnd = {
-                if (rootOverlayDrag) dragReporter.end()
+                if (rootOverlayDrag) {
+                    haptics.drop()
+                    dragReporter.end()
+                }
                 rootOverlayDrag = false
                 onDragFinished()
             },

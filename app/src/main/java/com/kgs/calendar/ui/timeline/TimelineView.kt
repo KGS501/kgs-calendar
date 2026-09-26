@@ -305,6 +305,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -1269,6 +1270,8 @@ internal fun TimelineView(
             override fun cancel() = currentDragCancel.value()
         }
     }
+    // One light tick each time a dragged event or task snaps to another slot, day or all-day lane.
+    activeTimedDrag?.takeUnless { it.awaitingCommit }?.let { DragSnapHaptics(slot = it.session.target) }
 
     Box(
         Modifier

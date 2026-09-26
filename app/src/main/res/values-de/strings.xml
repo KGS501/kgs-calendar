@@ -118,6 +118,8 @@
     <string name="show_map_preview">Kartenvorschau anzeigen</string>
     <string name="auto_map_previews">Kartenvorschauen immer anzeigen</string>
     <string name="auto_map_previews_help">L&#228;dt Kartenvorschauen in Termin- und Aufgabendetails automatisch, wenn der Ort wie ein echter Ort aussieht. Standardm&#228;&#223;ig aus, damit Kartenkacheln nur nach deiner Auswahl geladen werden.</string>
+    <string name="haptic_feedback">Haptisches Feedback</string>
+    <string name="haptic_feedback_help">Eine leichte Vibration, wenn du Termine und Aufgaben verschiebst und Aufgaben abhakst. Die Systemeinstellung für Berührungsfeedback gilt weiterhin.</string>
     <string name="osm_attribution">&#169; OpenStreetMap contributors</string>
     <string name="map_preview_content_description">Kartenvorschau</string>
     <string name="location_search_unavailable">Ortssuche aktuell nicht erreichbar.</string>

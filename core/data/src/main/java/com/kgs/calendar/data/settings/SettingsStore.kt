@@ -162,6 +162,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_AUTO_LOAD_MAP_PREVIEWS] ?: false
     }
 
+    /** Subtle haptic cues for drags and task toggles; the system touch-feedback setting still applies. */
+    val hapticFeedbackEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_HAPTIC_FEEDBACK_ENABLED] ?: DEFAULT_HAPTIC_FEEDBACK_ENABLED
+    }
+
     val maxVisibleAllDayItems: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
     }
@@ -412,6 +417,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_AUTO_LOAD_MAP_PREVIEWS] = enabled }
     }
 
+    suspend fun setHapticFeedbackEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_HAPTIC_FEEDBACK_ENABLED] = enabled }
+    }
+
     suspend fun setMaxVisibleAllDayItems(maxItems: Int) {
         dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
     }
@@ -620,6 +629,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED = booleanPreferencesKey("overdue_summary_priority_animation_enabled")
         private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
+        private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
         private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")
@@ -664,6 +674,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_WEEK_VIEW_ENABLED = false
         const val DEFAULT_FULL_WEEK_SWIPE_ENABLED = true
         const val DEFAULT_SHOW_CALENDAR_WEEKS = false
+        const val DEFAULT_HAPTIC_FEEDBACK_ENABLED = true
         const val DEFAULT_TIMELINE_HOUR_HEIGHT_DP = 46f
         const val MIN_TIMELINE_HOUR_HEIGHT_DP = 18f
         const val MAX_TIMELINE_HOUR_HEIGHT_DP = 92f
