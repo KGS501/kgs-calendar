@@ -12,13 +12,17 @@ import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.mutation.EventMutations
 import com.kgs.calendar.data.newResourceHref
+import com.kgs.calendar.data.sync.RemoteSyncLock
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.source.isAndroidProviderCollection
 import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.trash.TrashOrigin
 import com.kgs.calendar.domain.trash.TrashRetention
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Outcome of [TrashBin.restore]. */
 sealed interface TrashRestoreResult {
@@ -43,39 +47,118 @@ sealed interface TrashRestoreResult {
 
     /** The stored iCalendar data can't be read back. */
     data object Unreadable : TrashRestoreResult
+
+    /**
+     * The item was in a Nextcloud trash bin but the server no longer has it (HTTP 404), usually
+     * because its retention ran out or it was purged elsewhere. It has been removed from the list.
+     */
+    data object GoneFromServer : TrashRestoreResult
+
+    /**
+     * The server refused to restore a Nextcloud trash bin item with [statusCode], e.g. 403 when its
+     * calendar already holds a resource with the same name or the calendar is shared read-only,
+     * or 409 when the calendar is gone. The item stays in the list.
+     */
+    data class ServerRefused(val statusCode: Int) : TrashRestoreResult
 }
 
 /**
- * "Recently deleted": whole events and tasks the user deleted in the app, for every source.
- * The deletes themselves write the snapshots ([TrashSnapshots]); remote deletes found by a sync
- * never reach the trash. Items are purged [TrashRetention.DAYS] days after their deletion.
+ * "Recently deleted", one list over two kinds of items ([TrashedItemEntity.origin]):
+ * - [TrashOrigin.LocalSnapshot]: whole events and tasks the user deleted in the app, for every
+ *   source. The deletes themselves write the snapshots ([TrashSnapshots]); remote deletes found by
+ *   a sync never become snapshots. They are purged [TrashRetention.DAYS] days after the delete.
+ * - [TrashOrigin.ServerTrashBin]: the objects of Nextcloud CalDAV trash bins ([ServerTrashBin]),
+ *   including ones deleted elsewhere. The server expires them; the cache follows on refresh.
+ * A snapshot is dropped in favour of the server's copy once its DELETE has been uploaded.
  */
 class TrashBin internal constructor(
     private val database: KgsDatabase,
     private val localWrites: LocalWriteSupport,
     private val icalCodec: IcalCodec,
     private val eventMutations: EventMutations,
+    private val serverTrash: ServerTrashBin,
+    private val syncLock: RemoteSyncLock,
 ) {
+    /** Every item, newest delete first. */
     fun observeItems(): Flow<List<TrashedItemEntity>> = database.trashDao().observeAll()
 
     suspend fun items(): List<TrashedItemEntity> = database.trashDao().all()
 
-    suspend fun deletePermanently(id: Long) = database.trashDao().delete(id)
-
-    suspend fun empty() = database.trashDao().deleteAll()
-
-    /** Removes the items deleted more than [TrashRetention.DAYS] days before [nowMillis]. */
-    suspend fun purgeExpired(nowMillis: Long = System.currentTimeMillis()): Int =
-        database.trashDao().deleteDeletedBefore(TrashRetention.cutoffMillis(nowMillis))
+    suspend fun item(id: Long): TrashedItemEntity? = database.trashDao().get(id)
 
     /**
-     * Recreates the item in its original calendar, or, when that calendar is gone or read-only, in
-     * a writable calendar of the same account, then of the same source type, then any. CalDAV items
-     * are queued as a create (If-None-Match) with the same UID; a queued DELETE that hasn't been
-     * uploaded yet is withdrawn instead. Device calendar events are inserted into the provider again.
+     * Re-reads the trash bins of all CalDAV accounts whose server has one (checking servers whose
+     * support is unknown or due), e.g. when the trash is opened. Returns false when a server
+     * couldn't be reached; its cached items stay listed.
+     */
+    suspend fun refresh(): Boolean = syncLock.withLock {
+        database.trashDao().deleteServerItemsWithoutAccount()
+        database.accountDao().getAll()
+            .filter { it.sourceType == SourceType.CalDav }
+            .map { serverTrash.refreshAccount(it.id) }
+            .all { it }
+    }
+
+    /** The sync's refresh of one account; the sync already holds the remote sync lock. */
+    internal suspend fun refreshAccountLocked(accountId: String): Boolean = serverTrash.refreshAccount(accountId)
+
+    /**
+     * Removes the item for good: server trash items are deleted on the server first, and stay listed
+     * when that fails (the error is thrown).
+     */
+    suspend fun deletePermanently(id: Long) {
+        val item = database.trashDao().get(id) ?: return
+        when (item.origin) {
+            TrashOrigin.LocalSnapshot -> database.trashDao().delete(id)
+            TrashOrigin.ServerTrashBin -> serverTrash.deletePermanently(item)
+        }
+    }
+
+    /**
+     * Removes every item; server trash items are deleted on their servers. Items whose server delete
+     * fails stay listed, and the first failure is thrown after all others were tried.
+     */
+    suspend fun empty() {
+        database.trashDao().deleteWithOrigin(TrashOrigin.LocalSnapshot)
+        var firstFailure: Throwable? = null
+        database.trashDao().withOrigin(TrashOrigin.ServerTrashBin).forEach { item ->
+            try {
+                serverTrash.deletePermanently(item)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val first = firstFailure
+                if (first == null) firstFailure = error else first.addSuppressed(error)
+            }
+        }
+        firstFailure?.let { throw it }
+    }
+
+    /**
+     * Removes local snapshots deleted more than [TrashRetention.DAYS] days before [nowMillis], server
+     * trash items past their server's retention (the server purges them itself) and server items of
+     * removed accounts.
+     */
+    suspend fun purgeExpired(nowMillis: Long = System.currentTimeMillis()): Int {
+        val dao = database.trashDao()
+        return dao.deleteDeletedBefore(TrashRetention.cutoffMillis(nowMillis)) +
+            dao.deleteServerItemsExpiredBefore(nowMillis) +
+            dao.deleteServerItemsWithoutAccount()
+    }
+
+    /**
+     * Server trash items are restored on the server (a MOVE), which puts them back into their calendar
+     * with their original name; the calendar is then pulled so they show up right away.
+     *
+     * Local snapshots are recreated in their original calendar, or, when that calendar is gone or
+     * read-only, in a writable calendar of the same account, then of the same source type, then any.
+     * CalDAV items are queued as a create (If-None-Match) with the same UID; a queued DELETE that
+     * hasn't been uploaded yet is withdrawn instead. Device calendar events are inserted into the
+     * provider again.
      */
     suspend fun restore(id: Long): TrashRestoreResult {
         val item = database.trashDao().get(id) ?: return TrashRestoreResult.NotFound
+        if (item.origin == TrashOrigin.ServerTrashBin) return serverTrash.restore(item)
         val target = restoreTarget(item) ?: return TrashRestoreResult.NoWritableCalendar
         val result = if (target.isAndroidProviderCollection()) {
             restoreIntoAndroidCalendar(item, target)
@@ -228,8 +311,8 @@ internal class TrashSnapshots(
                 resourceHref = task.resourceHref,
                 rawIcs = rawIcs.usableIcs() ?: icalCodec.serializeTask(task),
                 title = task.title,
-                startMillis = task.dueAtMillis ?: task.startAtMillis,
-                hasTime = if (task.dueAtMillis != null) task.dueHasTime else task.startHasTime,
+                startMillis = task.trashStartMillis(),
+                hasTime = task.trashHasTime(),
                 collectionName = collection.displayName,
                 collectionColor = collection.color,
                 manualColor = task.manualColor,
@@ -239,3 +322,8 @@ internal class TrashSnapshots(
 
     private fun String?.usableIcs(): String? = this?.takeIf { it.contains("BEGIN:VCALENDAR", ignoreCase = true) }
 }
+
+/** The date a trashed task is listed with: its due date, else its start. */
+internal fun TaskEntity.trashStartMillis(): Long? = dueAtMillis ?: startAtMillis
+
+internal fun TaskEntity.trashHasTime(): Boolean = if (dueAtMillis != null) dueHasTime else startHasTime

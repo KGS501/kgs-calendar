@@ -30,6 +30,12 @@ sealed interface TrashNotice {
 
     data class Unreadable(override val title: String) : TrashNotice
 
+    /** A Nextcloud trash bin item the server no longer has, e.g. because its retention ran out. */
+    data class GoneFromServer(override val title: String) : TrashNotice
+
+    /** The server refused to restore a Nextcloud trash bin item with HTTP [statusCode]. */
+    data class ServerRefused(override val title: String, val statusCode: Int) : TrashNotice
+
     data class Failed(override val title: String, val reason: String) : TrashNotice
 }
 
@@ -69,6 +75,8 @@ class CalendarTrashActions internal constructor(
                 TrashRestoreResult.NoWritableCalendar -> TrashNotice.NoWritableCalendar(item.title)
                 TrashRestoreResult.AlreadyExists -> TrashNotice.AlreadyExists(item.title)
                 TrashRestoreResult.Unreadable -> TrashNotice.Unreadable(item.title)
+                TrashRestoreResult.GoneFromServer -> TrashNotice.GoneFromServer(item.title)
+                is TrashRestoreResult.ServerRefused -> TrashNotice.ServerRefused(item.title, result.statusCode)
             }
             if (result !is TrashRestoreResult.Restored) return@launch
             runCatching { repository.pushPendingChangesCreatedSince(startedAt) }
@@ -77,6 +85,11 @@ class CalendarTrashActions internal constructor(
             widgetRefresher.updateAll()
             runCatching { reminderRescheduler.reschedule() }
         }
+    }
+
+    /** Re-reads the Nextcloud trash bins; call when the trash is opened. */
+    fun refresh() {
+        scope.launch { runCatching { repository.refreshTrash() } }
     }
 
     fun deletePermanently(item: TrashedItemEntity) {

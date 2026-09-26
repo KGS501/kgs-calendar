@@ -445,6 +445,90 @@ class CalDavHttpClient(
         appPassword: String,
     ) = deleteResource(serverUrl, collectionHref, username, appPassword, null)
 
+    /**
+     * Looks for Nextcloud's CalDAV trash bin (Nextcloud 22+) at `{calendar home}/trashbin/`. Returns
+     * null when the server has none: it answers the PROPFIND with a client error, or the collection
+     * isn't a `{http://nextcloud.com/ns}trash-bin`. Network trouble and server errors are thrown.
+     */
+    suspend fun findTrashBin(
+        calendarHomeUrl: String,
+        username: String,
+        appPassword: String,
+    ): RemoteTrashBin? = withContext(Dispatchers.IO) {
+        val url = ensureTrailingSlash(calendarHomeUrl) + TRASH_BIN_NAME + "/"
+        val responses = try {
+            propfind(url, username, appPassword, "0", TRASH_BIN_PROPERTIES)
+        } catch (error: HttpStatusException) {
+            if (error.statusCode in TRASH_BIN_ABSENT_STATUSES) return@withContext null
+            throw error
+        }
+        val trashBin = responses.firstOrNull { "trash-bin" in it.resourceTypes } ?: return@withContext null
+        RemoteTrashBin(url = url, retentionSeconds = trashBin.trashBinRetentionSeconds)
+    }
+
+    /**
+     * Lists the deleted calendar objects of [trashBin]. Nextcloud's `objects` collection only answers
+     * a calendar-query REPORT (a Depth 1 PROPFIND is not implemented) and ignores its filter, so the
+     * query matches every component. Objects of deleted calendars are not listed by the server.
+     */
+    suspend fun listTrashBinObjects(
+        trashBin: RemoteTrashBin,
+        username: String,
+        appPassword: String,
+    ): List<RemoteTrashedObject> = withContext(Dispatchers.IO) {
+        val request = authenticatedRequest(trashBin.objectsUrl, username, appPassword)
+            .method("REPORT", TRASH_BIN_OBJECTS_QUERY.toRequestBody(XML_MEDIA_TYPE))
+            .header("Depth", "1")
+            .header("Content-Type", XML_MEDIA_TYPE.toString())
+            .build()
+        okHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw HttpStatusException(response.code, "REPORT calendar-query ${trashBin.objectsUrl} failed: HTTP ${response.code}")
+            }
+            parseDavResponses(response.body?.string().orEmpty())
+                .filterNot { it.href.isSameDavHref(trashBin.objectsUrl) }
+                .filterNot { it.href.endsWith("/") }
+                .map { dav ->
+                    RemoteTrashedObject(
+                        href = stableHref(trashBin.objectsUrl, dav.href),
+                        etag = dav.etag,
+                        calendarData = dav.calendarData,
+                        deletedAtMillis = dav.deletedAt?.let(::parseDavTimestampMillis),
+                        calendarUri = dav.calendarUri,
+                    )
+                }
+        }
+    }
+
+    /**
+     * Restores a trash bin object into the calendar it was deleted from: a MOVE onto the trash bin's
+     * `restore` collection. Fails with [HttpStatusException], e.g. 404 once the object has expired or
+     * 403 when its calendar already holds a resource with the same name.
+     */
+    suspend fun restoreTrashBinObject(
+        serverUrl: String,
+        objectHref: String,
+        username: String,
+        appPassword: String,
+    ) = withContext(Dispatchers.IO) {
+        val objectUrl = absoluteUrl(serverUrl, objectHref)
+        val request = authenticatedRequest(objectUrl, username, appPassword)
+            .method("MOVE", null)
+            .header("Destination", trashBinRestoreUrl(objectUrl))
+            .build()
+        okHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw HttpStatusException(response.code, "MOVE $objectHref failed: HTTP ${response.code}")
+        }
+    }
+
+    /** Deletes a trash bin object for good; one that is already gone counts as deleted. */
+    suspend fun deleteTrashBinObject(
+        serverUrl: String,
+        objectHref: String,
+        username: String,
+        appPassword: String,
+    ) = deleteResource(serverUrl, objectHref, username, appPassword, null)
+
     private fun discoverFromEndpoint(
         endpoint: String,
         username: String,
@@ -574,6 +658,9 @@ class CalDavHttpClient(
                 maxResourceSize = response.firstText("max-resource-size")?.toLongOrNull(),
                 maxAttendeesPerInstance = response.firstText("max-attendees-per-instance")?.toIntOrNull(),
                 statusCodes = response.statusCodes(),
+                deletedAt = response.firstText("deleted-at"),
+                calendarUri = response.firstText("calendar-uri"),
+                trashBinRetentionSeconds = response.firstText("trash-bin-retention-duration")?.toLongOrNull(),
             )
         }
     }
@@ -761,6 +848,9 @@ class CalDavHttpClient(
         val maxResourceSize: Long? = null,
         val maxAttendeesPerInstance: Int? = null,
         val statusCodes: Set<Int> = emptySet(),
+        val deletedAt: String? = null,
+        val calendarUri: String? = null,
+        val trashBinRetentionSeconds: Long? = null,
     ) {
         val successfulPropertyStatus: Boolean
             get() = statusCodes.isEmpty() || statusCodes.any { it in 200..299 }
@@ -818,6 +908,36 @@ class CalDavHttpClient(
             </d:propfind>
         """.trimIndent()
 
+        private const val TRASH_BIN_NAME = "trashbin"
+
+        /** Answers of servers without a trash bin at the probed URL. */
+        private val TRASH_BIN_ABSENT_STATUSES = setOf(400, 403, 404, 405, 409, 501)
+
+        private val TRASH_BIN_PROPERTIES = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <d:propfind xmlns:d="DAV:" xmlns:nc="http://nextcloud.com/ns">
+              <d:prop>
+                <d:resourcetype />
+                <nc:trash-bin-retention-duration />
+              </d:prop>
+            </d:propfind>
+        """.trimIndent()
+
+        private val TRASH_BIN_OBJECTS_QUERY = """
+            <?xml version="1.0" encoding="utf-8" ?>
+            <cal:calendar-query xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:nc="http://nextcloud.com/ns">
+              <d:prop>
+                <d:getetag />
+                <cal:calendar-data />
+                <nc:deleted-at />
+                <nc:calendar-uri />
+              </d:prop>
+              <cal:filter>
+                <cal:comp-filter name="VCALENDAR" />
+              </cal:filter>
+            </cal:calendar-query>
+        """.trimIndent()
+
         private val ETAG_PROPERTIES = """
             <?xml version="1.0" encoding="utf-8" ?>
             <d:propfind xmlns:d="DAV:"><d:prop><d:getetag /></d:prop></d:propfind>
@@ -843,6 +963,22 @@ private fun String.davPathKey(): String =
         val uri = URI(this)
         (uri.path ?: uri.rawPath ?: this).trimEnd('/')
     }.getOrDefault(trimEnd('/'))
+
+/** `…/trashbin/objects/<name>` restores by moving to `…/trashbin/restore/<name>`. */
+internal fun trashBinRestoreUrl(objectUrl: String): String {
+    val objectName = objectUrl.trimEnd('/').substringAfterLast('/')
+    val trashBinUrl = objectUrl.trimEnd('/').substringBeforeLast('/').substringBeforeLast('/')
+    return "$trashBinUrl/restore/$objectName"
+}
+
+/** Nextcloud writes `{http://nextcloud.com/ns}deleted-at` as ISO 8601 with an offset (PHP's ATOM format). */
+internal fun parseDavTimestampMillis(value: String): Long? {
+    val text = value.trim()
+    return runCatching { java.time.OffsetDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.Instant.parse(text).toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.ZonedDateTime.parse(text, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }.getOrNull()
+        ?: text.toLongOrNull()?.let { if (it < 100_000_000_000L) it * 1000 else it }
+}
 
 private fun String?.isLikelyReadOnlyCalendarName(): Boolean? {
     val value = this?.lowercase() ?: return null

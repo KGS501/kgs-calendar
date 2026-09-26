@@ -215,7 +215,13 @@ class CalendarRepository(
 
     suspend fun deleteEvent(uid: String, moveToTrash: Boolean = true) = eventMutations.deleteEvent(uid, moveToTrash)
 
+    /** "Recently deleted": local snapshots and Nextcloud trash bin items in one list, newest delete first. */
     fun observeTrashedItems(): Flow<List<TrashedItemEntity>> = trash.observeItems()
+
+    suspend fun trashedItem(id: Long): TrashedItemEntity? = trash.item(id)
+
+    /** Re-reads the Nextcloud trash bins, e.g. when the trash is opened; false if a server couldn't be reached. */
+    suspend fun refreshTrash(): Boolean = trash.refresh()
 
     suspend fun restoreTrashedItem(id: Long): TrashRestoreResult = trash.restore(id)
 

@@ -254,7 +254,7 @@ object SampleIcs {
 /** Canned multistatus bodies in the shapes [CalDavHttpClient] parses. */
 object CalDavXml {
     private const val NAMESPACES =
-        """xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:a="http://apple.com/ns/ical/""""
+        """xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:a="http://apple.com/ns/ical/" xmlns:nc="http://nextcloud.com/ns""""
     private const val OK = "<d:status>HTTP/1.1 200 OK</d:status>"
 
     fun multistatus(vararg responses: String, syncToken: String? = null): String = buildString {
@@ -329,6 +329,20 @@ object CalDavXml {
         href,
         "<d:getetag>$etag</d:getetag><cal:calendar-data><![CDATA[$ics]]></cal:calendar-data>",
     )
+
+    /** Nextcloud's `trashbin` collection; [retentionSeconds] null leaves the retention property out. */
+    fun trashBin(href: String, retentionSeconds: Long?) = okResponse(
+        href,
+        "<d:resourcetype><d:collection /><nc:trash-bin /></d:resourcetype>" +
+            (retentionSeconds?.let { "<nc:trash-bin-retention-duration>$it</nc:trash-bin-retention-duration>" } ?: ""),
+    )
+
+    /** A deleted object as Nextcloud lists it in `trashbin/objects/`, with `deleted-at` in PHP's ATOM format. */
+    fun trashedObject(href: String, etag: String, ics: String, deletedAt: String, calendarUri: String) = okResponse(
+        href,
+        "<d:getetag>$etag</d:getetag><cal:calendar-data><![CDATA[$ics]]></cal:calendar-data>" +
+            "<nc:deleted-at>$deletedAt</nc:deleted-at><nc:calendar-uri>$calendarUri</nc:calendar-uri>",
+    )
 }
 
 /**
@@ -351,6 +365,19 @@ class FakeCalDavServer(
     }
 
     data class StoredResource(val href: String, val etag: String, val ics: String)
+
+    /**
+     * A resource in the Nextcloud-style trash bin: listed as `trashbin/objects/<id>.ics`, restored to
+     * [originalHref] in the calendar [collectionHref].
+     */
+    data class TrashedResource(
+        val objectHref: String,
+        val collectionHref: String,
+        val originalHref: String,
+        val etag: String,
+        val ics: String,
+        val deletedAtEpochSeconds: Long,
+    )
 
     private class Collection(
         val href: String,
@@ -377,6 +404,8 @@ class FakeCalDavServer(
     private val overrides = CopyOnWriteArrayList<Override>()
     private val etagCounter = AtomicInteger(0)
     private val putsWithoutEtag = ConcurrentHashMap.newKeySet<String>()
+    private val trashBin = LinkedHashMap<String, TrashedResource>()
+    private val trashObjectIds = AtomicInteger(100)
     private val lock = Any()
 
     val requests = CopyOnWriteArrayList<CapturedRequest>()
@@ -390,11 +419,23 @@ class FakeCalDavServer(
     /** When true every `/dav` request answers 401, as after a revoked app password. */
     @Volatile var rejectCredentials = false
 
+    /**
+     * When true the server behaves like Nextcloud 22+: DELETE moves resources into a CalDAV trash bin
+     * at [trashBinHref], which answers a Depth 0 PROPFIND, a calendar-query REPORT on its `objects/`
+     * (a Depth 1 PROPFIND there is not implemented), MOVE onto `restore/` and DELETE.
+     */
+    @Volatile var trashBinEnabled = false
+
+    /** `{http://nextcloud.com/ns}trash-bin-retention-duration`; null leaves the property out. */
+    @Volatile var trashBinRetentionSeconds: Long? = 30L * 24 * 60 * 60
+
     val root = "/dav/"
     val principalHref = "/dav/principals/$username/"
     val homeHref = "/dav/calendars/$username/"
     val eventsHref = "${homeHref}events/"
     val tasksHref = "${homeHref}tasks/"
+    val trashBinHref = "${homeHref}trashbin/"
+    val trashObjectsHref = "${trashBinHref}objects/"
 
     val serverUrl: String get() = server.url(root).toString()
 
@@ -432,6 +473,19 @@ class FakeCalDavServer(
     }
 
     fun stored(href: String): StoredResource? = synchronized(lock) { collectionFor(href)?.resources?.get(href) }
+
+    /** Deletes a resource into the trash bin as if another client or the web UI had deleted it. Returns the trash object href. */
+    fun trashRemote(href: String, deletedAtEpochSeconds: Long = System.currentTimeMillis() / 1000): String = synchronized(lock) {
+        val collection = collectionFor(href) ?: error("No collection for $href")
+        moveToTrash(collection, collection.resources.getValue(href), deletedAtEpochSeconds).objectHref
+    }
+
+    fun trashedObjects(): List<TrashedResource> = synchronized(lock) { trashBin.values.toList() }
+
+    /** Drops a trash bin object as the server's retention job would. */
+    fun expireTrashed(objectHref: String) = synchronized(lock) { trashBin.remove(objectHref) }
+
+    fun removeCollection(href: String) { synchronized(lock) { collections.remove(href) } }
 
     fun setFeed(path: String, body: String, contentType: String = "text/calendar; charset=utf-8") {
         feeds[path] = { MockResponse().setResponseCode(200).addHeader("Content-Type", contentType).setBody(body) }
@@ -499,11 +553,16 @@ class FakeCalDavServer(
                 key == root.trimEnd('/') || path == WELL_KNOWN -> xml(CalDavXml.serviceRoot(root, principalHref))
                 key == principalHref.trimEnd('/') -> xml(CalDavXml.principal(principalHref, homeHref, "$username@example.test"))
                 key == homeHref.trimEnd('/') -> xml(homeListing())
+                trashBinEnabled && key == trashBinHref.trimEnd('/') ->
+                    xml(CalDavXml.multistatus(CalDavXml.trashBin(trashBinHref, trashBinRetentionSeconds)))
+                // Nextcloud's DeletedCalendarObjectsCollection::getChildren() throws NotImplemented.
+                trashBinEnabled && key == trashObjectsHref.trimEnd('/') -> MockResponse().setResponseCode(501)
                 collectionAt(path) != null -> xml(etagListing(collectionAt(path)!!))
                 else -> resourceAt(path)?.let { xml(CalDavXml.multistatus(CalDavXml.etag(it.href, it.etag))) }
                     ?: MockResponse().setResponseCode(404)
             }
             "REPORT" -> {
+                if (trashBinEnabled && key == trashObjectsHref.trimEnd('/')) return trashBinQuery(request)
                 val collection = collectionAt(path) ?: return MockResponse().setResponseCode(404)
                 when {
                     "sync-collection" in request.body -> syncCollection(collection, request.body)
@@ -549,14 +608,35 @@ class FakeCalDavServer(
                 }
             }
             "DELETE" -> {
+                if (trashBinEnabled && path.startsWith(trashObjectsHref)) {
+                    return MockResponse().setResponseCode(if (trashBin.remove(path) != null) 204 else 404)
+                }
                 val collection = collectionFor(path) ?: return MockResponse().setResponseCode(404)
                 val existing = collection.resources[path] ?: return MockResponse().setResponseCode(404)
                 val ifMatch = request.header("If-Match")
                 if (ifMatch != null && ifMatch != existing.etag) return MockResponse().setResponseCode(412)
-                collection.resources.remove(path)
-                collection.version++
-                collection.changeLog += collection.version to path
+                if (trashBinEnabled) {
+                    moveToTrash(collection, existing, System.currentTimeMillis() / 1000)
+                } else {
+                    collection.resources.remove(path)
+                    collection.version++
+                    collection.changeLog += collection.version to path
+                }
                 MockResponse().setResponseCode(204)
+            }
+            "MOVE" -> {
+                if (!trashBinEnabled || !path.startsWith(trashObjectsHref)) return MockResponse().setResponseCode(405)
+                val trashed = trashBin[path] ?: return MockResponse().setResponseCode(404)
+                val destination = request.header("Destination").orEmpty()
+                if (destination != url("${trashBinHref}restore/${path.substringAfterLast('/')}")) return MockResponse().setResponseCode(400)
+                val collection = collections[trashed.collectionHref] ?: return MockResponse().setResponseCode(409)
+                // CalDavBackend::restoreCalendarObject throws Forbidden when the original name is taken.
+                if (collection.resources.containsKey(trashed.originalHref)) return MockResponse().setResponseCode(403)
+                trashBin.remove(path)
+                collection.resources[trashed.originalHref] = StoredResource(trashed.originalHref, trashed.etag, trashed.ics)
+                collection.version++
+                collection.changeLog += collection.version to trashed.originalHref
+                MockResponse().setResponseCode(201)
             }
             else -> MockResponse().setResponseCode(405)
         }
@@ -570,8 +650,44 @@ class FakeCalDavServer(
         return stored
     }
 
+    private fun moveToTrash(collection: Collection, resource: StoredResource, deletedAtEpochSeconds: Long): TrashedResource {
+        collection.resources.remove(resource.href)
+        collection.version++
+        collection.changeLog += collection.version to resource.href
+        val trashed = TrashedResource(
+            objectHref = "$trashObjectsHref${trashObjectIds.incrementAndGet()}.ics",
+            collectionHref = collection.href,
+            originalHref = resource.href,
+            etag = resource.etag,
+            ics = resource.ics,
+            deletedAtEpochSeconds = deletedAtEpochSeconds,
+        )
+        trashBin[trashed.objectHref] = trashed
+        return trashed
+    }
+
+    /** Like Nextcloud, the query's filter is ignored and every trashed object of the user is listed. */
+    private fun trashBinQuery(request: CapturedRequest): MockResponse {
+        if ("calendar-query" !in request.body || request.header("Depth") != "1") return MockResponse().setResponseCode(400)
+        return xml(
+            CalDavXml.multistatus(
+                *trashBin.values.map {
+                    CalDavXml.trashedObject(
+                        href = it.objectHref,
+                        etag = it.etag,
+                        ics = it.ics,
+                        deletedAt = java.time.Instant.ofEpochSecond(it.deletedAtEpochSeconds).atOffset(java.time.ZoneOffset.UTC)
+                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        calendarUri = it.collectionHref.trimEnd('/').substringAfterLast('/'),
+                    )
+                }.toTypedArray(),
+            ),
+        )
+    }
+
     private fun homeListing(): String = CalDavXml.multistatus(
         CalDavXml.okResponse(homeHref, "<d:resourcetype><d:collection /></d:resourcetype>"),
+        *(if (trashBinEnabled) listOf(CalDavXml.trashBin(trashBinHref, trashBinRetentionSeconds)) else emptyList()).toTypedArray(),
         *collections.values.map {
             CalDavXml.calendarCollection(
                 href = it.href,

@@ -608,6 +608,8 @@
     <string name="restore_failed_exists">“%1$s” is already back in its calendar, for example after a sync.</string>
     <string name="restore_failed_unreadable">The saved copy of “%1$s” can’t be read.</string>
     <string name="restore_failed_generic">“%1$s” could not be restored: %2$s</string>
+    <string name="restore_failed_gone_from_server">“%1$s” is no longer in the Nextcloud trash bin. Its time there may have run out, or it was deleted on another device.</string>
+    <string name="restore_failed_server_refused">The server refused to restore “%1$s” (HTTP %2$d). Its calendar may already contain an item with the same name, be shared read-only, or no longer exist.</string>
     <string name="delete_recoverable">You can restore it from Settings › Calendar › Recently deleted for %1$d days.</string>
     <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted for %1$d days.</string>
 </resources>

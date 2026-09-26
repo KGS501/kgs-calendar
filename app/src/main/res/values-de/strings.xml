@@ -608,6 +608,8 @@
     <string name="restore_failed_exists">„%1$s“ ist schon wieder in seinem Kalender, zum Beispiel nach einer Synchronisierung.</string>
     <string name="restore_failed_unreadable">Die gespeicherte Kopie von „%1$s“ kann nicht gelesen werden.</string>
     <string name="restore_failed_generic">„%1$s“ konnte nicht wiederhergestellt werden: %2$s</string>
+    <string name="restore_failed_gone_from_server">„%1$s“ ist nicht mehr im Nextcloud-Papierkorb. Vielleicht ist seine Zeit dort abgelaufen oder es wurde auf einem anderen Gerät gelöscht.</string>
+    <string name="restore_failed_server_refused">Der Server hat das Wiederherstellen von „%1$s“ abgelehnt (HTTP %2$d). Vielleicht enthält sein Kalender schon einen Eintrag mit demselben Namen, ist nur lesbar freigegeben oder existiert nicht mehr.</string>
     <string name="delete_recoverable">Du kannst es %1$d Tage lang unter Einstellungen › Kalender › Zuletzt gelöscht wiederherstellen.</string>
     <string name="all_series_deleted_recoverable">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tage lang unter Zuletzt gelöscht wiederherstellen.</string>
 </resources>

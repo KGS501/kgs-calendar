@@ -192,6 +192,7 @@ internal fun SettingsOverlay(
             onDeleteTrashedItemPermanently = viewModel.trash::deletePermanently,
             onEmptyTrash = viewModel.trash::emptyTrash,
             onDismissTrashNotice = viewModel.trash::dismissNotice,
+            onTrashOpened = viewModel.trash::refresh,
         )
     }
 }

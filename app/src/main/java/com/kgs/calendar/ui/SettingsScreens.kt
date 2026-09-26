@@ -511,6 +511,7 @@ internal fun SettingsPage(
     onDeleteTrashedItemPermanently: (TrashedItemEntity) -> Unit = {},
     onEmptyTrash: () -> Unit = {},
     onDismissTrashNotice: () -> Unit = {},
+    onTrashOpened: () -> Unit = {},
 ) {
     val timelineVisibility = timelineSettingsVisibility(
         weekViewEnabled = state.weekViewEnabled,
@@ -1489,6 +1490,7 @@ internal fun SettingsPage(
                             onDeletePermanently = onDeleteTrashedItemPermanently,
                             onEmptyTrash = onEmptyTrash,
                             onDismissNotice = onDismissTrashNotice,
+                            onOpened = onTrashOpened,
                         )
                         SettingsDestination.EventFieldOrder -> {
                             SettingsSection(title = stringResource(R.string.event_fields), icon = Icons.Default.Event) {

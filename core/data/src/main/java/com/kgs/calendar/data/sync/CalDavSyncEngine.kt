@@ -14,7 +14,9 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.normalizedIcsText
+import com.kgs.calendar.data.remote.CalDavCollectionCapabilities
 import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.CalDavTrashBinSupport
 import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
 import com.kgs.calendar.data.remote.RemoteResourceData
@@ -23,6 +25,7 @@ import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import org.json.JSONObject
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 import java.time.Instant
@@ -67,6 +70,36 @@ class CalDavSyncEngine internal constructor(
         return true
     }
 
+    /**
+     * Pulls one stored calendar without discovery, e.g. right after an item was restored on the
+     * server. It goes incremental when the calendar supports sync-collection and lists all ETags
+     * otherwise. Returns false when the calendar isn't a synced CalDAV calendar or has no login.
+     */
+    internal suspend fun syncStoredCollection(collectionHref: String): Boolean {
+        val collection = database.collectionDao().get(collectionHref)
+            ?.takeIf { it.sourceType == SourceType.CalDav && it.isEnabled }
+            ?: return false
+        val credentials = credentialsStore.get(collection.accountId) ?: return false
+        val supportsSyncCollection = collection.capabilitiesJson
+            ?.let { runCatching { JSONObject(it).optBoolean("supportsSyncCollection", false) }.getOrNull() } == true
+        val stored = RemoteCollection(
+            href = collection.href,
+            displayName = collection.remoteDisplayName ?: collection.displayName,
+            color = collection.sourceColor,
+            supportsEvents = collection.supportsEvents,
+            supportsTasks = collection.supportsTasks,
+            syncToken = collection.syncToken,
+            // No ctag: this pull must not be skipped as unchanged. The next full sync stores a fresh one.
+            ctag = null,
+            readOnly = collection.readOnly,
+            capabilities = CalDavCollectionCapabilities(
+                supportedReports = if (supportsSyncCollection) setOf("sync-collection") else emptySet(),
+            ),
+        )
+        syncCollection(credentials, collection, stored)
+        return true
+    }
+
     private suspend fun pullAccount(account: AccountEntity, credentials: StoredCredentials, options: SourceSyncOptions) {
         val discovery = calDavClient.discoverAccount(
             serverUrl = credentials.serverUrl,
@@ -77,7 +110,11 @@ class CalDavSyncEngine internal constructor(
             id = account.id,
             principalUrl = discovery.principalUrl,
             calendarHomeUrl = discovery.calendarHomeUrl,
-            capabilitiesJson = discovery.toCapabilitiesJson(),
+            // The trash bin check is not part of discovery; keep it until it is due again.
+            capabilitiesJson = CalDavTrashBinSupport.carryOver(
+                previousJson = database.accountDao().get(account.id)?.capabilitiesJson ?: account.capabilitiesJson,
+                into = discovery.toCapabilitiesJson(),
+            ),
         )
         val remoteCollections = calDavClient.discoverCollections(
             discovery = discovery,

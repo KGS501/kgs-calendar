@@ -1,13 +1,16 @@
 package com.kgs.calendar.data.local
 
+import android.database.sqlite.SQLiteConstraintException
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kgs.calendar.domain.trash.TrashRetention
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -104,6 +107,66 @@ class KgsDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migrate21To22MarksExistingTrashAsLocalSnapshots() {
+        helper.createDatabase(TEST_DB, 21).use { db ->
+            insertAccountAndPendingMutation(db)
+            insertTrashedItem(db)
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 22, true, *KgsDatabaseMigrations.ALL).use { db ->
+            assertPendingMutationSurvived(db)
+            assertMigratedLocalSnapshot(db)
+            insertServerTrashItem(db)
+        }
+    }
+
+    @Test
+    fun migrate19To22ChainsAllMigrations() {
+        helper.createDatabase(TEST_DB, 19).use { db ->
+            insertAccountAndPendingMutation(db, withOccurrenceScope = false)
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 22, true, *KgsDatabaseMigrations.ALL).use { db ->
+            assertPendingMutationSurvived(db)
+            insertTrashedItem(db)
+            insertServerTrashItem(db)
+        }
+    }
+
+    /** A snapshot written by DB 21 is a local one that expires 30 days after its delete. */
+    private fun assertMigratedLocalSnapshot(db: SupportSQLiteDatabase) {
+        db.query("SELECT title, origin, serverHref, deletedAtMillis, expiresAtMillis FROM trashed_items WHERE id = 1").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Weekly", cursor.getString(0))
+            assertEquals("local", cursor.getString(1))
+            assertTrue(cursor.isNull(2))
+            assertEquals(2000L, cursor.getLong(3))
+            assertEquals(2000L + TrashRetention.MILLIS, cursor.getLong(4))
+        }
+    }
+
+    /** DB 22 caches Nextcloud trash bin objects, at most once per account and trash bin href. */
+    private fun insertServerTrashItem(db: SupportSQLiteDatabase) {
+        val insert =
+            """
+            INSERT INTO trashed_items (componentType, uid, collectionHref, accountId, sourceType, resourceHref,
+                providerEventId, rawIcs, title, startMillis, hasTime, collectionName, collectionColor, manualColor, deletedAtMillis,
+                origin, serverHref, expiresAtMillis)
+            VALUES ('VTODO', 'todo', '/cal/work/', 'primary', 'caldav', '/cal/work/todo.ics',
+                NULL, 'BEGIN:VCALENDAR', 'Todo', NULL, 0, 'Work', -16777216, NULL, 3000,
+                'server', '/cal/trashbin/objects/12.ics', 5000)
+            """.trimIndent()
+        db.execSQL(insert)
+        db.query("SELECT origin, serverHref, expiresAtMillis FROM trashed_items WHERE uid = 'todo'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("server", cursor.getString(0))
+            assertEquals("/cal/trashbin/objects/12.ics", cursor.getString(1))
+            assertEquals(5000L, cursor.getLong(2))
+        }
+        assertThrows(SQLiteConstraintException::class.java) { db.execSQL(insert) }
+    }
+
     private fun insertAccountAndPendingMutation(db: SupportSQLiteDatabase, withOccurrenceScope: Boolean = true) {
         db.execSQL(
             """
@@ -178,6 +241,6 @@ class KgsDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "kgs-migration-test.db"
-        const val CURRENT_VERSION = 21
+        const val CURRENT_VERSION = 22
     }
 }

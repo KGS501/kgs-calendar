@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -69,7 +70,9 @@ internal fun RecentlyDeletedSettings(
     onDeletePermanently: (TrashedItemEntity) -> Unit,
     onEmptyTrash: () -> Unit,
     onDismissNotice: () -> Unit,
+    onOpened: () -> Unit = {},
 ) {
+    LaunchedEffect(Unit) { onOpened() }
     var deleteCandidate by remember { mutableStateOf<TrashedItemEntity?>(null) }
     var emptyTrashConfirmOpen by remember { mutableStateOf(false) }
     SettingsSection(title = stringResource(R.string.recently_deleted), icon = Icons.Default.Delete) {
@@ -167,6 +170,8 @@ internal fun RecentlyDeletedSettings(
                         is TrashNotice.NoWritableCalendar -> stringResource(R.string.restore_failed_no_calendar, title)
                         is TrashNotice.AlreadyExists -> stringResource(R.string.restore_failed_exists, title)
                         is TrashNotice.Unreadable -> stringResource(R.string.restore_failed_unreadable, title)
+                        is TrashNotice.GoneFromServer -> stringResource(R.string.restore_failed_gone_from_server, title)
+                        is TrashNotice.ServerRefused -> stringResource(R.string.restore_failed_server_refused, title, notice.statusCode)
                         is TrashNotice.Failed -> stringResource(R.string.restore_failed_generic, title, notice.reason)
                     },
                     color = WarmInk,

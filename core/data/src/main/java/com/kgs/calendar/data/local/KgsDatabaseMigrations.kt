@@ -3,6 +3,7 @@ package com.kgs.calendar.data.local
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.trash.TrashRetention
 
 object KgsDatabaseMigrations {
     val ALL: Array<Migration> get() = arrayOf(
@@ -26,6 +27,7 @@ object KgsDatabaseMigrations {
         MIGRATION_18_19,
         MIGRATION_19_20,
         MIGRATION_20_21,
+        MIGRATION_21_22,
     )
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -350,6 +352,20 @@ object KgsDatabaseMigrations {
                 """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS index_trashed_items_deletedAtMillis ON trashed_items(deletedAtMillis)")
+        }
+    }
+
+    private val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // The trash also caches the objects of Nextcloud's server-side trash bin.
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'")
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN serverHref TEXT")
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN expiresAtMillis INTEGER NOT NULL DEFAULT 0")
+            // Existing rows are local snapshots, which expire 30 days after their delete.
+            db.execSQL("UPDATE trashed_items SET expiresAtMillis = deletedAtMillis + ${TrashRetention.MILLIS}")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_trashed_items_accountId_serverHref ON trashed_items(accountId, serverHref)",
+            )
         }
     }
 }
