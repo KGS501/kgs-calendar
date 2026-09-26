@@ -685,9 +685,9 @@ private fun CalendarToolbar(
     val quietInteraction = remember { MutableInteractionSource() }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val today = LocalCalendarTimeSnapshot.current.today
-    val hasOpenTasks = remember(state.scheduledOpenTasks, state.datedTasks, today) {
+    val hasOpenTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, state.datedTasks, today) {
         hasTaskToolbarAttention(
-            tasks = state.scheduledOpenTasks + state.datedTasks,
+            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences + state.datedTasks,
             today = today,
             zoneId = ZoneId.systemDefault(),
         )

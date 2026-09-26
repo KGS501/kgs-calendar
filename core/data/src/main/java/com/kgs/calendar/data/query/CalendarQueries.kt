@@ -131,6 +131,24 @@ class CalendarQueries(
             taskRecurrenceExpander.withCurrentOccurrences(tasks, todayStart).sortedWith(scheduledTaskOrder)
         }.flowOn(Dispatchers.Default)
 
+    /**
+     * Missed occurrences of open recurring series for the overdue list: every open occurrence due
+     * before the start of today given by [todayStartMillis], at most
+     * [TaskRecurrenceExpander.MAX_MISSED_OCCURRENCES_PER_SERIES] (the most recent) per series. The
+     * task list keeps showing each series as its next occurrence ([observeScheduledOpenTasks]).
+     */
+    fun observeMissedTaskOccurrences(todayStartMillis: Flow<Long>): Flow<List<TaskEntity>> =
+        combine(
+            database.taskDao().observeScheduledOpen(),
+            todayStartMillis.distinctUntilChanged(),
+        ) { tasks, todayStart ->
+            taskRecurrenceExpander.missedOccurrences(tasks, todayStart)
+        }.flowOn(Dispatchers.Default)
+
+    /** Snapshot of [observeMissedTaskOccurrences], for widgets. */
+    suspend fun missedTaskOccurrencesSnapshot(todayStartMillis: Long): List<TaskEntity> =
+        taskRecurrenceExpander.missedOccurrences(database.taskDao().snapshotScheduledOpen(), todayStartMillis)
+
     suspend fun inboxTasksSnapshot(): List<TaskEntity> = database.taskDao().snapshotInbox()
 
     suspend fun scheduledOpenTasksSnapshot(): List<TaskEntity> = database.taskDao().snapshotScheduledOpen()

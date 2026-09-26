@@ -56,6 +56,27 @@ class RecurringTaskListRepositoryTest {
         assertEquals(listOf(today.plusDays(1)), widgetList.map { it.dueDate() })
     }
 
+    @Test
+    fun missedOccurrencesStayInTheOverdueListUntilCompletedWhileTheTaskListShowsTheNextOne() = runTest {
+        repository.ensureLocalCalendar()
+        repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        repository.createTask(taskPayload("Single", dueDate = today.minusDays(1)))
+
+        val missed = repository.observeMissedTaskOccurrences(flowOf(todayStart)).first()
+        assertEquals(listOf(3L, 2L, 1L).map { today.minusDays(it) }, missed.map { it.dueDate() })
+        assertTrue(missed.all { it.title == "Water plants" && !it.isCompleted })
+        assertEquals(missed, repository.missedTaskOccurrencesSnapshot(todayStart))
+
+        val completed = missed[1].occurrenceIdOrNull()!!
+        repository.setTaskOccurrenceStatus(completed.resourceHref, completed.recurrenceIdMillis, "COMPLETED")
+
+        val remaining = repository.observeMissedTaskOccurrences(flowOf(todayStart)).first()
+        assertEquals(listOf(today.minusDays(3), today.minusDays(1)), remaining.map { it.dueDate() })
+        val listed = repository.observeScheduledOpenTasks(flowOf(todayStart)).first()
+        assertEquals(listOf("Single" to today.minusDays(1), "Water plants" to today), listed.map { it.title to it.dueDate() })
+        assertFalse(repository.taskByResource(completed.resourceHref)!!.isCompleted)
+    }
+
     private fun com.kgs.calendar.data.local.entity.TaskEntity.dueDate(): LocalDate =
         Instant.ofEpochMilli(dueAtMillis!!).atZone(TEST_ZONE).toLocalDate()
 }

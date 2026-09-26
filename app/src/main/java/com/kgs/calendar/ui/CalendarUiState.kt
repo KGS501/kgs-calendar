@@ -65,6 +65,11 @@ data class CalendarUiState(
     val datedTasks: List<TaskEntity> = emptyList(),
     val inboxTasks: List<TaskEntity> = emptyList(),
     val scheduledOpenTasks: List<TaskEntity> = emptyList(),
+    /**
+     * Missed occurrences of open recurring series (open, due before today), one entry each, for the
+     * overdue list only; the task list shows the series as its next occurrence in [scheduledOpenTasks].
+     */
+    val missedTaskOccurrences: List<TaskEntity> = emptyList(),
     val pendingMutations: Int = 0,
     val pendingMutationItems: List<PendingMutationEntity> = emptyList(),
     val problemResources: List<CalendarResourceEntity> = emptyList(),

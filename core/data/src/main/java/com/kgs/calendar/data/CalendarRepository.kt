@@ -74,6 +74,12 @@ class CalendarRepository(
     fun observeScheduledOpenTasks(todayStartMillis: Flow<Long>): Flow<List<TaskEntity>> =
         queries.observeScheduledOpenTasks(todayStartMillis)
 
+    fun observeMissedTaskOccurrences(todayStartMillis: Flow<Long>): Flow<List<TaskEntity>> =
+        queries.observeMissedTaskOccurrences(todayStartMillis)
+
+    suspend fun missedTaskOccurrencesSnapshot(todayStartMillis: Long): List<TaskEntity> =
+        queries.missedTaskOccurrencesSnapshot(todayStartMillis)
+
     suspend fun inboxTasksSnapshot(): List<TaskEntity> = queries.inboxTasksSnapshot()
 
     suspend fun scheduledOpenTasksSnapshot(): List<TaskEntity> = queries.scheduledOpenTasksSnapshot()

@@ -43,6 +43,7 @@ internal data class CalendarItemData(
     val inboxTasks: List<TaskEntity>,
     val scheduledOpenTasks: List<TaskEntity>,
     val completedTasks: List<TaskEntity>,
+    val missedTaskOccurrences: List<TaskEntity> = emptyList(),
 )
 
 internal data class SyncStatusData(
@@ -384,6 +385,7 @@ internal fun calendarUiState(
         datedTasks = data.items.datedTasks,
         inboxTasks = data.items.inboxTasks,
         scheduledOpenTasks = data.items.scheduledOpenTasks,
+        missedTaskOccurrences = data.items.missedTaskOccurrences,
         pendingMutations = data.syncStatus.pendingMutations,
         pendingMutationItems = data.syncStatus.pendingMutationItems,
         problemResources = data.syncStatus.problemResources,

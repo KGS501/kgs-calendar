@@ -272,6 +272,81 @@ class TaskRecurrenceExpanderTest {
         assertEquals(at(today, 9), listed.last().startAtMillis)
     }
 
+    @Test
+    fun missedOpenOccurrencesAreTheOpenOnesDueBeforeTodayAndLeaveOnceClosed() {
+        val today = LocalDate.of(2026, 9, 25)
+        val master = dailyTask(firstDay = today.minusDays(3))
+
+        val missed = expander.missedOpenOccurrences(master, startOfDay(today))
+        assertEquals((3 downTo 1).map { at(today.minusDays(it.toLong()), 9) }, missed.map { it.startAtMillis })
+        assertEquals(
+            missed.map { CalendarOccurrenceId.Task(master.resourceHref, it.startAtMillis!!) },
+            missed.map { it.occurrenceIdOrNull() },
+        )
+
+        val middleDone = master.withClosedOccurrences(at(today.minusDays(2), 9))
+        assertEquals(
+            listOf(at(today.minusDays(3), 9), at(today.minusDays(1), 9)),
+            expander.missedOpenOccurrences(middleDone, startOfDay(today)).map { it.startAtMillis },
+        )
+        // The task list still shows today's occurrence.
+        assertEquals(at(today, 9), expander.currentOpenOccurrence(middleDone, startOfDay(today))?.startAtMillis)
+
+        val firstCancelled = middleDone.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(
+                RecurrenceOverrideCodec.decodeTasks(middleDone.recurrenceOverridesJson) +
+                    TaskRecurrenceOverride.fromTask(
+                        at(today.minusDays(3), 9),
+                        master.occurrenceAt(at(today.minusDays(3), 9)).copy(status = "CANCELLED"),
+                    ),
+            ),
+        )
+        assertEquals(
+            listOf(at(today.minusDays(1), 9)),
+            expander.missedOpenOccurrences(firstCancelled, startOfDay(today)).map { it.startAtMillis },
+        )
+    }
+
+    @Test
+    fun missedOpenOccurrencesKeepOnlyTheMostRecentOnesOfASeriesMissedForYears() {
+        val today = LocalDate.of(2026, 9, 25)
+        val master = dailyTask(firstDay = today.minusYears(3))
+
+        val missed = expander.missedOpenOccurrences(master, startOfDay(today))
+
+        assertEquals(TaskRecurrenceExpander.MAX_MISSED_OCCURRENCES_PER_SERIES, missed.size)
+        assertEquals(at(today.minusDays(30), 9), missed.first().startAtMillis)
+        assertEquals(at(today.minusDays(1), 9), missed.last().startAtMillis)
+    }
+
+    @Test
+    fun missedOpenOccurrencesFindAnOldMissOfASeriesOtherwiseDone() {
+        val today = LocalDate.of(2026, 9, 25)
+        val firstDay = today.minusYears(4)
+        val master = dailyTask(firstDay = firstDay, rule = "FREQ=YEARLY")
+        val allButFirstDone = master.withClosedOccurrences(*(1L..3L).map { at(firstDay.plusYears(it), 9) }.toLongArray())
+
+        assertEquals(
+            listOf(at(firstDay, 9)),
+            expander.missedOpenOccurrences(allButFirstDone, startOfDay(today)).map { it.startAtMillis },
+        )
+    }
+
+    @Test
+    fun onlyOpenDatedSeriesHaveMissedOccurrences() {
+        val today = LocalDate.of(2026, 9, 25)
+        val single = dailyTask(firstDay = today.minusDays(2), rule = null).copy(resourceHref = "/tasks/single.ics")
+        val undated = dailyTask(firstDay = today).copy(resourceHref = "/tasks/undated.ics", startAtMillis = null, dueAtMillis = null)
+        val closedSeries = dailyTask(firstDay = today.minusDays(2)).copy(resourceHref = "/tasks/closed.ics", isCompleted = true)
+        val future = dailyTask(firstDay = today).copy(resourceHref = "/tasks/future.ics")
+        val open = dailyTask(firstDay = today.minusDays(2))
+
+        val missed = expander.missedOccurrences(listOf(single, undated, closedSeries, future, open), startOfDay(today))
+
+        assertEquals(listOf(open.resourceHref, open.resourceHref), missed.map { it.resourceHref })
+        assertEquals(listOf(at(today.minusDays(2), 9), at(today.minusDays(1), 9)), missed.map { it.startAtMillis })
+    }
+
     private fun startOfDay(date: LocalDate): Long = date.atStartOfDay(zone).toInstant().toEpochMilli()
 
     private fun at(date: LocalDate, hour: Int): Long = date.atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()

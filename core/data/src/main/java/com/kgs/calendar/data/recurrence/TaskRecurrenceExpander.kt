@@ -104,10 +104,7 @@ class TaskRecurrenceExpander(
                 .minByOrNull { it.startAtMillis ?: it.dueAtMillis ?: Long.MAX_VALUE }
                 ?.let { return it }
         }
-        val seriesStart = listOfNotNull(master.startAtMillis, master.dueAtMillis)
-            .plus(master.rDatesCsv?.split(',')?.mapNotNull { it.trim().toLongOrNull() }.orEmpty())
-            .minOrNull()
-            ?: return null
+        val seriesStart = master.seriesStartMillis() ?: return null
         return expand(master, seriesStart, todayStartMillis)
             .filter { it.isOpen() }
             .minByOrNull { it.startAtMillis ?: it.dueAtMillis ?: Long.MAX_VALUE }
@@ -127,12 +124,56 @@ class TaskRecurrenceExpander(
             }
         }
 
+    /**
+     * The missed occurrences of the recurring [master]: open occurrences due (DUE, or DTSTART
+     * without one) before [todayStartMillis]. The overdue list shows each of them until it is
+     * completed or cancelled, next to the series' [currentOpenOccurrence] in the task list. Only
+     * the most recent [limit] are returned, oldest first, so a series missed for years stays
+     * bounded. Empty for a single task, a closed series and a recurring task without a date.
+     */
+    fun missedOpenOccurrences(
+        master: TaskEntity,
+        todayStartMillis: Long,
+        limit: Int = MAX_MISSED_OCCURRENCES_PER_SERIES,
+    ): List<TaskEntity> {
+        if (!master.isRecurring || !master.isOpen() || limit <= 0) return emptyList()
+        val seriesStart = master.seriesStartMillis()?.takeIf { it < todayStartMillis } ?: return emptyList()
+        // Look back in growing windows: a series missed daily fills the limit from the first one,
+        // and only a series with few missed occurrences is expanded from its start.
+        for (window in MISSED_OCCURRENCE_WINDOWS_MILLIS) {
+            val from = maxOf(seriesStart, todayStartMillis - window)
+            val missed = missedOpenOccurrencesBetween(master, from, todayStartMillis)
+            if (missed.size >= limit || from == seriesStart) return missed.takeLast(limit)
+        }
+        return missedOpenOccurrencesBetween(master, seriesStart, todayStartMillis).takeLast(limit)
+    }
+
+    /** The [missedOpenOccurrences] of every open recurring series in [tasks]. */
+    fun missedOccurrences(tasks: List<TaskEntity>, todayStartMillis: Long): List<TaskEntity> =
+        tasks.flatMap { missedOpenOccurrences(it, todayStartMillis) }
+
+    private fun missedOpenOccurrencesBetween(master: TaskEntity, fromMillis: Long, todayStartMillis: Long): List<TaskEntity> =
+        expand(master, fromMillis, todayStartMillis)
+            .filter { it.isOpen() && (it.dueAtMillis ?: it.startAtMillis ?: Long.MAX_VALUE) < todayStartMillis }
+            .sortedBy { it.dueAtMillis ?: it.startAtMillis }
+
+    private fun TaskEntity.seriesStartMillis(): Long? =
+        listOfNotNull(startAtMillis, dueAtMillis)
+            .plus(rDatesCsv?.split(',')?.mapNotNull { it.trim().toLongOrNull() }.orEmpty())
+            .minOrNull()
+
     companion object {
+        /** How many missed occurrences of one series the overdue list shows at most: the most recent ones. */
+        const val MAX_MISSED_OCCURRENCES_PER_SERIES = 30
+
         private const val DEFAULT_TASK_DURATION_MILLIS = 30L * 60L * 1000L
         private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
 
         /** Growing look-ahead windows, so daily and weekly series stay cheap and yearly ones are found. */
         private val CURRENT_OCCURRENCE_WINDOWS_MILLIS = longArrayOf(62L * DAY_MILLIS, 800L * DAY_MILLIS, 7_400L * DAY_MILLIS)
+
+        /** Growing look-back windows for [missedOpenOccurrences]; the last resort is the series start. */
+        private val MISSED_OCCURRENCE_WINDOWS_MILLIS = CURRENT_OCCURRENCE_WINDOWS_MILLIS
     }
 }
 

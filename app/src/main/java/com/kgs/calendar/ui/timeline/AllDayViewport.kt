@@ -406,6 +406,7 @@ import com.kgs.calendar.ui.model.allDayTopStartDate
 import com.kgs.calendar.ui.model.continuesAllDayTopItemAfter
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.highestOverduePriority
+import com.kgs.calendar.ui.model.overdueEntryKey
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.model.taskDate
 import com.kgs.calendar.ui.model.toTime
@@ -1822,7 +1823,7 @@ internal fun OverdueTasksBand(
                         verticalArrangement = Arrangement.spacedBy(OverdueTaskChipSpacing),
                     ) {
                         tasks.forEach { task ->
-                            key(task.resourceHref) {
+                            key(task.overdueEntryKey()) {
                                 OverdueTaskChip(
                                     task = task,
                                     color = Color(task.displayColor(taskColorMode)),

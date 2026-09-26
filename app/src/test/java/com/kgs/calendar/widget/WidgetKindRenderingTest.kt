@@ -15,6 +15,7 @@ import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.reminder.TaskMutationCoordinator
@@ -220,6 +221,38 @@ class WidgetKindRenderingTest {
         val next = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows.single { it.title == "Water plants" }
         assertEquals(today.plusDays(1), next.date)
         assertFalse(next.completed)
+    }
+
+    @Test
+    fun tasksWidgetForTodayListsEveryMissedOccurrenceUntilItIsCompleted() = runBlocking {
+        val repository = harness.repository
+        repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        repository.createTask(taskPayload("Pay bill", dueDate = today.minusDays(1)))
+        widgets.settingsStore.setTasksWidgetDisplayMode(WidgetTaskDisplayMode.Today)
+        val renderer = widgets.renderer()
+
+        val rows = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        val waterRows = rows.filter { it.title == "Water plants" }
+        assertEquals(listOf(3L, 2L, 1L, 0L).map { today.minusDays(it) }, waterRows.map { it.date })
+        assertEquals(rows.size, rows.map { it.stableId }.toSet().size)
+        assertEquals(today.minusDays(1), rows.single { it.title == "Pay bill" }.date)
+
+        val missed = waterRows[1]
+        repository.setTaskOccurrenceStatus(
+            requireNotNull(missed.taskResourceHref),
+            requireNotNull(missed.taskOccurrenceMillis),
+            "COMPLETED",
+        )
+        val afterCompletion = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        assertEquals(
+            listOf(3L, 1L, 0L).map { today.minusDays(it) },
+            afterCompletion.filter { it.title == "Water plants" }.map { it.date },
+        )
+
+        widgets.settingsStore.setTasksWidgetIncludeOverdue(false)
+        val withoutOverdue = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        assertEquals(listOf(today), withoutOverdue.filter { it.title == "Water plants" }.map { it.date })
+        assertTrue(withoutOverdue.none { it.title == "Pay bill" })
     }
 
     @Test

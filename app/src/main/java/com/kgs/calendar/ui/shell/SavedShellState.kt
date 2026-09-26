@@ -44,7 +44,7 @@ internal fun CalendarUiState.findEvent(ref: SavedItemRef.Event): EventEntity? =
         .firstOrNull { it.resourceHref == ref.resourceHref && it.occurrenceStartForEdit() == ref.occurrenceStart }
 
 internal fun CalendarUiState.findTask(ref: SavedItemRef.Task): TaskEntity? =
-    (datedTasks.asSequence() + allTasks.asSequence()).firstOrNull {
+    (datedTasks.asSequence() + allTasks.asSequence() + missedTaskOccurrences.asSequence()).firstOrNull {
         it.resourceHref == ref.resourceHref && (ref.occurrence == null || it.occurrenceIdOrNull() == ref.occurrence)
     }
 

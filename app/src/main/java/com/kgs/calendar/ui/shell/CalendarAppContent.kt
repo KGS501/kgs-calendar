@@ -106,6 +106,12 @@ internal fun CalendarAppContent(
         TaskEntity::resourceHref,
         retainedDeleteHrefs,
     )
+    val smoothMissedTaskOccurrences = rememberSmoothRemoval(
+        state.missedTaskOccurrences,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
     val smoothCompletedTasks = rememberSmoothRemoval(
         state.completedTasks,
         TaskEntity::smoothRemovalKey,
@@ -125,6 +131,7 @@ internal fun CalendarAppContent(
         datedTasks = smoothDatedTasks.items,
         inboxTasks = smoothInboxTasks.items,
         scheduledOpenTasks = smoothScheduledOpenTasks.items,
+        missedTaskOccurrences = smoothMissedTaskOccurrences.items,
         completedTasks = smoothCompletedTasks.items,
     )
     val exitingResourceHrefs = smoothEvents.exitingResourceHrefs +
@@ -132,6 +139,7 @@ internal fun CalendarAppContent(
         smoothDatedTasks.exitingResourceHrefs +
         smoothInboxTasks.exitingResourceHrefs +
         smoothScheduledOpenTasks.exitingResourceHrefs +
+        smoothMissedTaskOccurrences.exitingResourceHrefs +
         smoothCompletedTasks.exitingResourceHrefs +
         smoothSearchTasks.exitingResourceHrefs
     val problemItems = state.problemItems()

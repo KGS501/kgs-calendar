@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kgs.calendar.AppGraph
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -74,6 +75,12 @@ private data class TimelinePolicySettings(
 private data class LoadedCalendarItems<T>(
     val range: CalendarRange,
     val items: List<T>,
+)
+
+/** Dated open tasks for the task list ([open]) and the missed recurring occurrences for the overdue list. */
+private data class ScheduledOpenTasks(
+    val open: List<TaskEntity>,
+    val missed: List<TaskEntity>,
 )
 
 /**
@@ -369,11 +376,13 @@ class CalendarViewModel(
     }
     /** The local day task lists are relative to; recurring tasks appear as their occurrence due on or after it. */
     private val currentDay = MutableStateFlow(LocalDate.now(zoneId))
+    private val currentDayStartMillis = currentDay.map { it.atStartOfDay(zoneId).toInstant().toEpochMilli() }
     private val scheduledOpenTasks = combine(
-        repository.observeScheduledOpenTasks(currentDay.map { it.atStartOfDay(zoneId).toInstant().toEpochMilli() }),
+        repository.observeScheduledOpenTasks(currentDayStartMillis),
+        repository.observeMissedTaskOccurrences(currentDayStartMillis),
         collectionVisibility,
-    ) { tasks, visibility ->
-        visibility.visibleTasks(tasks)
+    ) { tasks, missed, visibility ->
+        ScheduledOpenTasks(open = visibility.visibleTasks(tasks), missed = visibility.visibleTasks(missed))
     }
     private val completedTasks = combine(repository.observeCompletedTasks(), collectionVisibility) { tasks, visibility ->
         visibility.visibleTasks(tasks)
@@ -395,7 +404,16 @@ class CalendarViewModel(
 
     private val dataState = calendarDataState(
         repository = repository,
-        items = combine(events, datedTasks, inboxTasks, scheduledOpenTasks, completedTasks, ::CalendarItemData),
+        items = combine(events, datedTasks, inboxTasks, scheduledOpenTasks, completedTasks) { events, dated, inbox, scheduled, completed ->
+            CalendarItemData(
+                events = events,
+                datedTasks = dated,
+                inboxTasks = inbox,
+                scheduledOpenTasks = scheduled.open,
+                completedTasks = completed,
+                missedTaskOccurrences = scheduled.missed,
+            )
+        },
         loadedDataRange = loadedDataRange,
         requestedDataRange = dataRange,
     )

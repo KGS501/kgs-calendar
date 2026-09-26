@@ -212,6 +212,8 @@ internal data class WidgetListRow(
             priorityMotionEnabled: Boolean,
             launchKind: KgsWidgetKind = KgsWidgetKind.Tasks,
             taskOccurrenceMillis: Long? = null,
+            /** True for one of several rows of the same recurring task, e.g. a missed occurrence. */
+            distinctOccurrence: Boolean = false,
         ): WidgetListRow = WidgetListRow(
             type = WidgetListRowType.Task,
             title = title,
@@ -222,7 +224,11 @@ internal data class WidgetListRow(
             completed = completed,
             allDaySort = 1,
             launchKind = launchKind,
-            stableId = stableId("task-row:$taskResourceHref"),
+            stableId = if (distinctOccurrence) {
+                stableId("task-row:$taskResourceHref@$taskOccurrenceMillis")
+            } else {
+                stableId("task-row:$taskResourceHref")
+            },
             location = location,
             eventStatus = null,
             endMillis = sortMillis,

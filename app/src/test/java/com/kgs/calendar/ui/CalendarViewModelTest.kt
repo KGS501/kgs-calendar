@@ -24,6 +24,7 @@ import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.reminder.TaskNotificationReconciler
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.ui.model.orderedOverdueTasks
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import java.io.File
@@ -432,6 +433,39 @@ class CalendarViewModelTest {
         val master = harness.repository.taskByResource(listed.resourceHref)!!
         assertFalse(master.isCompleted)
         assertTrue(master.occurrenceAt(listed.startAtMillis ?: listed.dueAtMillis!!).isCompleted)
+    }
+
+    @Test
+    fun tickingAMissedOccurrenceInTheOverdueListCompletesOnlyThatOccurrence() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        harness.repository.createTask(taskPayload("Single", dueDate = today.minusDays(1)))
+        val viewModel = viewModel()
+        val initial = viewModel.awaitState { state ->
+            state.missedTaskOccurrences.size == 3 && state.scheduledOpenTasks.size == 2
+        }
+        val overdue = orderedOverdueTasks(initial.scheduledOpenTasks + initial.missedTaskOccurrences, today, TEST_ZONE)
+        assertEquals(
+            listOf("Water plants", "Water plants", "Single", "Water plants"),
+            overdue.map { it.title },
+        )
+        assertEquals(
+            listOf(today.minusDays(3), today.minusDays(2), today.minusDays(1), today.minusDays(1)),
+            overdue.map { it.dueDate() },
+        )
+        assertEquals(today, initial.scheduledOpenTasks.single { it.title == "Water plants" }.dueDate())
+
+        val ticked = initial.missedTaskOccurrences.single { it.dueDate() == today.minusDays(2) }
+        viewModel.edits.setTaskStatus(ticked, "COMPLETED")
+
+        val after = viewModel.awaitState { state ->
+            state.missedTaskOccurrences.map { it.dueDate() } == listOf(today.minusDays(3), today.minusDays(1))
+        }
+        assertEquals(today, after.scheduledOpenTasks.single { it.title == "Water plants" }.dueDate())
+        assertEquals(today.minusDays(1), after.scheduledOpenTasks.single { it.title == "Single" }.dueDate())
+        val master = harness.repository.taskByResource(ticked.resourceHref)!!
+        assertFalse(master.isCompleted)
+        assertTrue(master.occurrenceAt(ticked.dueAtMillis!!).isCompleted)
     }
 
     @Test

@@ -785,9 +785,9 @@ internal fun TimelineView(
     val visibleStartDate = actualVisiblePages.minOrNull()?.toDayDate() ?: state.selectedDate
     val visibleEndDate = actualVisiblePages.maxOrNull()?.toDayDate() ?: visibleStartDate.plusDays((clampedDayCount - 1).toLong())
     val pagerVisibleDays = actualVisiblePages.map { it.toDayDate() }
-    val overdueTasks = remember(state.scheduledOpenTasks, calendarTime.today, calendarTime.revision) {
+    val overdueTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, calendarTime.today, calendarTime.revision) {
         orderedOverdueTasks(
-            tasks = state.scheduledOpenTasks,
+            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences,
             today = calendarTime.today,
             zoneId = ZoneId.systemDefault(),
         )

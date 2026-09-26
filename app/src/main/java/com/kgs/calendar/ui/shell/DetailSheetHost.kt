@@ -48,7 +48,7 @@ internal fun DetailSheetHost(
                 val occurrenceStart = detail.task.occurrenceStartForEdit()
                 val refreshed = renderState.datedTasks.firstOrNull {
                     it.resourceHref == detail.task.resourceHref && it.occurrenceStartForEdit() == occurrenceStart
-                } ?: renderState.allTasks.firstOrNull {
+                } ?: (renderState.allTasks + renderState.missedTaskOccurrences).firstOrNull {
                     it.resourceHref == detail.task.resourceHref &&
                         (!detail.task.isRecurring || it.occurrenceStartForEdit() == occurrenceStart)
                 }
