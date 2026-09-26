@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -209,6 +210,41 @@ class LandscapeCalendarShellInstrumentedTest {
             composeRule.onNodeWithTag("calendar-month-overview-container")
                 .fetchSemanticsNode().boundsInRoot.height < 2f
         }
+    }
+
+    @Test
+    fun largeLandscapeWindowStacksTheMonthOverviewAboveTheTimeline() {
+        // A landscape tablet: the drop-down keeps the horizontal month strip and the timeline stays visible.
+        setShell(screenWidthDp = 1280, screenHeightDp = 800)
+        composeRule.onNodeWithTag("calendar-toolbar-month").performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onNodeWithTag("calendar-month-overview-container")
+                .fetchSemanticsNode().boundsInRoot.height > 100f
+        }
+        composeRule.waitForIdle()
+
+        val strip = composeRule.onNodeWithTag("month-overview-strip", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Expected a horizontal month strip, was $strip", strip.width > strip.height)
+        val overview = composeRule.onNodeWithTag("calendar-month-overview-container")
+            .fetchSemanticsNode().boundsInRoot
+        val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        assertTrue("The overview must leave room for the timeline", overview.bottom < root.bottom * 0.8f)
+    }
+
+    @Test
+    fun phoneLandscapeKeepsTheVerticalMonthStripBesideTheGrid() {
+        setShell()
+        composeRule.onNodeWithTag("calendar-toolbar-month").performClick()
+        composeRule.waitUntil(timeoutMillis = 2_000) {
+            composeRule.onNodeWithTag("calendar-month-overview-container")
+                .fetchSemanticsNode().boundsInRoot.height > 100f
+        }
+        composeRule.waitForIdle()
+
+        val strip = composeRule.onNodeWithTag("month-overview-strip", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Expected a vertical month strip, was $strip", strip.height > strip.width)
     }
 
     @Test
