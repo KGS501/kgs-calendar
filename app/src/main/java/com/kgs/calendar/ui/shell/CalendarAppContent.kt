@@ -24,6 +24,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.navigation.SharedEventDraft
+import com.kgs.calendar.ui.layout.SheetOrigin
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.eventDraftColor
 import com.kgs.calendar.ui.shell.newEventSchedule
@@ -221,7 +222,12 @@ internal fun CalendarAppContent(
         }
     }
 
-    fun openTaskCreation(date: LocalDate, scheduledForDay: Boolean, useTaskDefaults: Boolean = false) {
+    fun openTaskCreation(
+        date: LocalDate,
+        scheduledForDay: Boolean,
+        useTaskDefaults: Boolean = false,
+        origin: SheetOrigin = SheetOrigin.Calendar,
+    ) {
         shell.openTaskCreation(
             schedule = newTaskSchedule(
                 date = date,
@@ -233,6 +239,7 @@ internal fun CalendarAppContent(
                 defaultEventDurationMinutes = state.defaultEventDurationMinutes,
             ),
             wireframeColor = state.collections.taskDraftColor(state.defaultTaskCollectionHref, defaultWireframeColor),
+            origin = origin,
         )
     }
 
@@ -267,8 +274,8 @@ internal fun CalendarAppContent(
             foregroundRecenterRequest = foregroundRecenterRequest,
             onViewSelected = { selectCalendarView(it) },
             onCreateEvent = { openEventCreation(it) },
-            onCreateTask = { date, useTaskDefaults ->
-                openTaskCreation(date, scheduledForDay = false, useTaskDefaults = useTaskDefaults)
+            onCreateTask = { date, useTaskDefaults, origin ->
+                openTaskCreation(date, scheduledForDay = false, useTaskDefaults = useTaskDefaults, origin = origin)
             },
             onCloseSearch = ::closeSearch,
         )

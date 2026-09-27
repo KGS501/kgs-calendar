@@ -183,7 +183,7 @@ internal fun CalendarShell(
     // Large screens have room to keep the timeline visible below the stacked drop-down instead.
     val monthOverviewSideBySide = windowLayout.usesSideBySideMonthOverview
     // Tabletop posture (half-opened, horizontal hinge): the month overview always fills the top half and
-    // Day, Multiple days and Agenda sit below the hinge. Book posture keeps this layout for now.
+    // Day, Multiple days and Agenda sit below the hinge. In the book posture the shell simply fills the left pane.
     val tabletopPosture = LocalFoldPosture.current as? FoldPosture.Tabletop
     val tabletopSplit = tabletopPosture != null && state.selectedView.usesTabletopSplit()
     var shellTopInRootPx by remember { mutableFloatStateOf(0f) }
@@ -478,6 +478,8 @@ internal fun CalendarShell(
             monthOverviewOpen = if (isMonthView) yearStripOpen else monthOverviewOpen,
             // The tabletop overview is always visible above the hinge, so it has no drop-down toggle.
             monthToggleEnabled = !tabletopSplit,
+            // The book posture shows the task sidebar as a permanent pane, so it needs no button.
+            tasksButtonVisible = LocalFoldPosture.current !is FoldPosture.Book,
             showTimelineCompactControl = showLandscapeTimelineControl,
             timelineCompact = landscapeTimelineCompactRequested,
             onTimelineCompactToggle = {
@@ -754,6 +756,7 @@ private fun CalendarToolbar(
     onTasks: () -> Unit,
     monthOverviewOpen: Boolean,
     monthToggleEnabled: Boolean,
+    tasksButtonVisible: Boolean,
     showTimelineCompactControl: Boolean,
     timelineCompact: Boolean,
     onTimelineCompactToggle: () -> Unit,
@@ -861,24 +864,30 @@ private fun CalendarToolbar(
             IconButton(onClick = onToday, modifier = Modifier.size(40.dp)) {
                 TodayDateIcon(day = LocalCalendarTimeSnapshot.current.today.dayOfMonth, modifier = Modifier.size(24.dp))
             }
-            IconButton(onClick = onTasks, modifier = Modifier.size(40.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = androidx.compose.ui.res.stringResource(R.string.tasks),
-                        tint = WarmInk,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    if (hasOpenTasks) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 2.dp, y = (-1).dp)
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .testTag("tasks-open-indicator")
-                                .background(WarmBrown),
+            AnimatedVisibility(
+                visible = tasksButtonVisible,
+                enter = expandHorizontally(tween(MotionMedium, easing = MotionEmphasized)) + fadeIn(tween(MotionShort)),
+                exit = shrinkHorizontally(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
+            ) {
+                IconButton(onClick = onTasks, modifier = Modifier.size(40.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = androidx.compose.ui.res.stringResource(R.string.tasks),
+                            tint = WarmInk,
+                            modifier = Modifier.size(24.dp),
                         )
+                        if (hasOpenTasks) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 2.dp, y = (-1).dp)
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .testTag("tasks-open-indicator")
+                                    .background(WarmBrown),
+                            )
+                        }
                     }
                 }
             }

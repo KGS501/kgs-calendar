@@ -14,6 +14,8 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.SavedDraft
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.DefaultColor
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.collection
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
@@ -81,6 +83,8 @@ class SavedShellStateTest {
             conversionSource = SavedItemRef.Event("lunch.ics", occurrenceStart),
             hiddenSaveNotice = HiddenSaveNotice("work", HiddenSaveKind.Task),
             viewHistory = listOf(CalendarViewMode.Month, CalendarViewMode.Day),
+            detailBookPane = BookPane.Left,
+            creationBookPane = BookPane.Left,
         )
 
         val saveable = saved.toSaveable()
@@ -104,6 +108,17 @@ class SavedShellStateTest {
         assertEquals(42, restored.draftWireframeColor)
         assertFalse(restored.hasPendingRestore)
         assertTrue(restored.canNavigateBack)
+    }
+
+    @Test
+    fun aTaskOpenedFromTheTaskPaneReopensInTheLeftPane() {
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
+        original.openTaskDetail(task("inbox"), SheetOrigin.TaskPane)
+
+        val restored = saveAndRestore(original, loadedState)
+
+        assertEquals(DetailSheet.Task(task("inbox")), restored.detailSheet)
+        assertEquals(BookPane.Left, restored.detailBookPane)
     }
 
     @Test

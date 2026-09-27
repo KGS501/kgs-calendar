@@ -2,35 +2,54 @@ package com.kgs.calendar.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
+import com.kgs.calendar.ui.layout.BookPane
 import com.kgs.calendar.ui.layout.FoldPosture
 import com.kgs.calendar.ui.layout.LocalFoldPosture
+import com.kgs.calendar.ui.layout.SheetOrigin
+import com.kgs.calendar.ui.layout.bookCalendarWidthPx
+import com.kgs.calendar.ui.layout.paneBounds
 import com.kgs.calendar.ui.shell.CalendarShellUiState
 import com.kgs.calendar.ui.shell.allDaySlotDraftPreview
 import com.kgs.calendar.ui.shell.eventDraftColor
 import com.kgs.calendar.ui.shell.timelineSlotDraftPreview
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
 /** The calendar with its create button, drawers and search overlay, blurred behind the create menu. */
 @Composable
@@ -45,7 +64,7 @@ internal fun CalendarAppScaffold(
     foregroundRecenterRequest: Int,
     onViewSelected: (CalendarViewMode) -> Unit,
     onCreateEvent: (LocalDate) -> Unit,
-    onCreateTask: (date: LocalDate, useTaskDefaults: Boolean) -> Unit,
+    onCreateTask: (date: LocalDate, useTaskDefaults: Boolean, origin: SheetOrigin) -> Unit,
     onCloseSearch: () -> Unit,
 ) {
     val backgroundBlur by animateDpAsState(
@@ -53,18 +72,51 @@ internal fun CalendarAppScaffold(
         animationSpec = tween(180, easing = MotionStandard),
         label = "createMenuBackgroundBlur",
     )
-    val tabletop = LocalFoldPosture.current is FoldPosture.Tabletop
+    val foldPosture = LocalFoldPosture.current
+    // Book posture (half-opened, vertical hinge): the calendar left of the hinge and the task sidebar as a
+    // permanent pane right of it. The last hinge stays known while the panes animate away after unfolding.
+    val bookPosture = foldPosture as? FoldPosture.Book
+    var lastBookPosture by remember { mutableStateOf<FoldPosture.Book?>(null) }
+    SideEffect { if (bookPosture != null) lastBookPosture = bookPosture }
+    val bookLayout = bookPosture ?: lastBookPosture
+    val bookProgress by animateFloatAsState(
+        targetValue = if (bookPosture != null) 1f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "bookLayoutProgress",
+    )
+    val bookPanesShown = bookLayout != null && bookProgress > 0f
+    // The task pane replaces the task drawer, so an open drawer becomes the pane.
+    LaunchedEffect(bookPosture != null) {
+        if (bookPosture != null) shell.closeTaskDrawer()
+    }
+    val density = LocalDensity.current
+    val quietInteraction = remember { MutableInteractionSource() }
     // The drawer shows how many items "Recently deleted" holds.
     val trash by viewModel.trash.state.collectAsStateWithLifecycle()
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background),
         ) {
+            val rootWidthPx = constraints.maxWidth.toFloat()
+            // The calendar pane: the whole window, or left of the hinge in the book posture.
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .then(
+                        if (bookLayout != null && bookPanesShown) {
+                            Modifier.width(
+                                with(density) { bookCalendarWidthPx(rootWidthPx, bookLayout.hingeLeftPx, bookProgress).toDp() },
+                            )
+                        } else {
+                            Modifier.fillMaxWidth()
+                        },
+                    ),
+            ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -103,8 +155,12 @@ internal fun CalendarAppScaffold(
                     },
                     onDraftInteraction = shell::onDraftInteraction,
                     onDraftTap = shell::requestCreationExpand,
-                    // In the tabletop posture the editor is a panel above the hinge, not a low sheet over the timeline.
-                    timelineBottomInset = if (shell.editorWireframeMode && !tabletop) EditorTinyVisibleHeight else 0.dp,
+                    // In the tabletop and book postures the editor is a panel beside the calendar, not a low sheet over it.
+                    timelineBottomInset = if (shell.editorWireframeMode && foldPosture == FoldPosture.Normal) {
+                        EditorTinyVisibleHeight
+                    } else {
+                        0.dp
+                    },
                     onDetail = shell::openDetail,
                     overdueTasksExpanded = shell.overdueTasksExpanded,
                     onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },
@@ -128,7 +184,7 @@ internal fun CalendarAppScaffold(
                         onCreateEvent(state.defaultFabCreationDate())
                     },
                     onCreateTask = {
-                        onCreateTask(state.defaultFabCreationDate(), true)
+                        onCreateTask(state.defaultFabCreationDate(), true, SheetOrigin.Calendar)
                     },
                 )
             }
@@ -155,15 +211,50 @@ internal fun CalendarAppScaffold(
                 problems = problemItems,
                 onProblems = shell::openProblems,
             )
+            }
+            if (bookLayout != null && bookPanesShown) {
+                val pane = bookLayout.paneBounds(BookPane.Right, rootWidthPx)
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset((pane.leftPx + pane.widthPx * (1f - bookProgress)).roundToInt(), 0) }
+                        .width(with(density) { pane.widthPx.toDp() })
+                        .fillMaxHeight(),
+                ) {
+                    TaskPane(
+                        state = renderState,
+                        onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                        onTaskClick = { shell.openTaskDetail(it, SheetOrigin.TaskPane) },
+                        onShowCompleted = shell::openCompletedTasks,
+                        onCreateTask = {
+                            onCreateTask(today, false, SheetOrigin.TaskPane)
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(backgroundBlur),
+                    )
+                    if (shell.createMenuOpen) {
+                        // Like the create menu's own backdrop: a tap beside it closes the menu.
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .clickable(
+                                    interactionSource = quietInteraction,
+                                    indication = null,
+                                    onClick = { shell.setCreateMenuExpanded(false) },
+                                ),
+                        )
+                    }
+                }
+            }
             TaskDrawer(
                 visible = shell.taskDrawerOpen,
                 state = renderState,
                 onDismiss = shell::closeTaskDrawer,
                 onTaskStatusChanged = viewModel.edits::setTaskStatus,
-                onTaskClick = shell::openTaskDetail,
+                onTaskClick = { shell.openTaskDetail(it) },
                 onShowCompleted = shell::openCompletedTasks,
                 onCreateTask = {
-                    onCreateTask(today, false)
+                    onCreateTask(today, false, SheetOrigin.Calendar)
                 },
             )
             CalendarSearchOverlay(
@@ -183,7 +274,7 @@ internal fun CalendarAppScaffold(
                 onEventClick = {
                     shell.openDetail(DetailSheet.Event(it))
                 },
-                onTaskClick = shell::openTaskDetail,
+                onTaskClick = { shell.openTaskDetail(it) },
                 onClose = onCloseSearch,
                 showCalendarWeeks = renderState.showCalendarWeeks,
                 firstDayOfWeek = renderState.firstDayOfWeek,

@@ -101,7 +101,7 @@ internal fun CompletedTasksOverlay(
             taskColorMode = renderState.taskColorMode,
             subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
             onTaskStatusChanged = viewModel.edits::setTaskStatus,
-            onTaskClick = shell::openTaskDetail,
+            onTaskClick = { shell.openTaskDetail(it) },
             onClose = shell::closeCompletedTasks,
         )
     }

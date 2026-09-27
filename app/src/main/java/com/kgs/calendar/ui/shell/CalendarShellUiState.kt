@@ -31,6 +31,9 @@ import com.kgs.calendar.ui.toDetailSheet
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
+import com.kgs.calendar.ui.layout.bookPaneFor
 import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -64,6 +67,14 @@ internal class CalendarShellUiState(
     var editorDraftId by mutableStateOf<String?>(null)
         private set
     var detailSheet by mutableStateOf<DetailSheet?>(null)
+        private set
+
+    /** The pane the detail sheet uses in the book posture; it follows where the detail was opened from. */
+    var detailBookPane by mutableStateOf(BookPane.Right)
+        private set
+
+    /** The pane the editor uses in the book posture; an editor opened from a detail keeps the detail's pane. */
+    var creationBookPane by mutableStateOf(BookPane.Right)
         private set
     private val detailTaskStack = mutableStateListOf<TaskEntity>()
     val detailTaskBackStack: List<TaskEntity> get() = detailTaskStack
@@ -245,6 +256,7 @@ internal class CalendarShellUiState(
         detailTaskMorphGeneration = 0
         detailTaskMorphSourceHref = null
         detailSheet = preview.toDetailSheet()
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     /**
@@ -301,11 +313,17 @@ internal class CalendarShellUiState(
         if (prefill != null) editorTransferDraft = prefill
     }
 
-    fun openTaskCreation(schedule: EditorScheduleState, wireframeColor: Int) {
-        openCreation(CreationSheet.Task, schedule, wireframeColor)
+    /** [origin] is where "new task" was tapped: the create button or the task sidebar. */
+    fun openTaskCreation(schedule: EditorScheduleState, wireframeColor: Int, origin: SheetOrigin = SheetOrigin.Calendar) {
+        openCreation(CreationSheet.Task, schedule, wireframeColor, origin)
     }
 
-    private fun openCreation(sheet: CreationSheet, schedule: EditorScheduleState, wireframeColor: Int) {
+    private fun openCreation(
+        sheet: CreationSheet,
+        schedule: EditorScheduleState,
+        wireframeColor: Int,
+        origin: SheetOrigin = SheetOrigin.Calendar,
+    ) {
         editorSchedule = schedule
         draftWireframeColor = wireframeColor
         editorTransferDraft = null
@@ -321,6 +339,7 @@ internal class CalendarShellUiState(
         detailSheet = null
         detailTaskStack.clear()
         creationSheet = sheet
+        creationBookPane = bookPaneFor(origin)
     }
 
     /** A tap on an empty timeline or all-day slot: start (or move) the low event draft there. */
@@ -334,6 +353,7 @@ internal class CalendarShellUiState(
         draftWireframeColor = wireframeColor
         editorTransferDraft = null
         creationSheet = CreationSheet.EventLow
+        creationBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun moveDraft(preview: EditorSchedulePreview) {
@@ -434,21 +454,25 @@ internal class CalendarShellUiState(
         hiddenSaveNotice = null
     }
 
+    /** A detail opened from the calendar or search. */
     fun openDetail(detail: DetailSheet) {
         detailSheet = detail
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
-    /** Opens a task detail without a subtask morph. */
-    fun openTaskDetail(task: TaskEntity) {
+    /** Opens a task detail without a subtask morph; [origin] is where the task was tapped. */
+    fun openTaskDetail(task: TaskEntity, origin: SheetOrigin = SheetOrigin.Calendar) {
         detailTaskMorphGeneration = 0
         detailTaskMorphSourceHref = null
         detailSheet = DetailSheet.Task(task)
+        detailBookPane = bookPaneFor(origin)
     }
 
     fun openProblemEventDetail(event: EventEntity) {
         problemsOpen = false
         detailTaskStack.clear()
         detailSheet = DetailSheet.Event(event)
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun openProblemTaskDetail(task: TaskEntity) {
@@ -472,6 +496,7 @@ internal class CalendarShellUiState(
         detailTaskMorphGeneration = 0
         detailTaskMorphSourceHref = null
         detailSheet = detail
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun closeDetail() {
@@ -521,30 +546,35 @@ internal class CalendarShellUiState(
     }
 
     fun editEvent(event: EventEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.EditEvent(event)
         detailSheet = null
     }
 
     fun duplicateEvent(event: EventEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.DuplicateEvent(event)
         detailSheet = null
     }
 
     fun editTask(task: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.EditTask(task)
         closeDetail()
     }
 
     fun duplicateTask(task: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.DuplicateTask(task)
         closeDetail()
     }
 
     fun addSubtask(parent: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         closeDetail()
         creationSheet = CreationSheet.TaskForParent(parent)
@@ -575,6 +605,8 @@ internal class CalendarShellUiState(
         conversionSource = conversionSource?.savedRef(),
         hiddenSaveNotice = hiddenSaveNotice,
         viewHistory = viewHistory.toList(),
+        detailBookPane = detailBookPane,
+        creationBookPane = creationBookPane,
     )
 
     /**
@@ -631,6 +663,8 @@ internal class CalendarShellUiState(
             detailTaskStack.addAll(saved.detailTaskBackStack.mapNotNull(state::findTask))
         }
         hiddenSaveNotice = saved.hiddenSaveNotice
+        detailBookPane = saved.detailBookPane
+        creationBookPane = saved.creationBookPane
         viewHistory.clear()
         viewHistory.addAll(saved.viewHistory)
     }

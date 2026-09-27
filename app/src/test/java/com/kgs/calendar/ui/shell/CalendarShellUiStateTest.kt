@@ -21,6 +21,8 @@ import com.kgs.calendar.ui.RecurringSaveRequest
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.SheetSnap
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -56,6 +58,53 @@ class CalendarShellUiStateTest {
         assertTrue(shell.detailTaskBackStack.isEmpty())
         assertNull(shell.editorTransferDraft)
         assertNull(shell.conversionSource)
+    }
+
+    @Test
+    fun bookPanesFollowWhereTheSheetWasOpenedFrom() {
+        // Tapped in the task pane: the detail, its editor and a new subtask use the left pane.
+        shell.openTaskDetail(task("inbox"), SheetOrigin.TaskPane)
+        assertEquals(BookPane.Left, shell.detailBookPane)
+        shell.editTask(task("inbox"), newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60))
+        assertEquals(BookPane.Left, shell.creationBookPane)
+
+        // Tapped in the calendar: the right pane, for the detail and the editor it opens.
+        shell.openDetail(DetailSheet.Event(event("meeting")))
+        assertEquals(BookPane.Right, shell.detailBookPane)
+        shell.editEvent(event("meeting"), newEventSchedule(today, LocalTime.NOON, 60))
+        assertEquals(BookPane.Right, shell.creationBookPane)
+
+        // "New task" in the task pane opens on the left; the create button on the right.
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
+        assertEquals(BookPane.Left, shell.creationBookPane)
+        shell.openTaskCreation(schedule, wireframeColor = 1)
+        assertEquals(BookPane.Right, shell.creationBookPane)
+    }
+
+    @Test
+    fun switchingTheEditorTypeKeepsItsPane() {
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
+
+        shell.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.EventFull, conversion = null, today = today)
+
+        assertEquals(CreationSheet.EventFull, shell.creationSheet)
+        assertEquals(BookPane.Left, shell.creationBookPane)
+    }
+
+    @Test
+    fun aTimelineSlotDraftOpensItsEditorInTheRightPane() {
+        shell.openTaskCreation(
+            newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60),
+            wireframeColor = 1,
+            origin = SheetOrigin.TaskPane,
+        )
+
+        shell.selectDraftSlot(EditorSchedulePreview(today, LocalTime.of(9, 0), LocalTime.of(10, 0), false), wireframeColor = 1)
+
+        assertEquals(CreationSheet.EventLow, shell.creationSheet)
+        assertEquals(BookPane.Right, shell.creationBookPane)
     }
 
     @Test

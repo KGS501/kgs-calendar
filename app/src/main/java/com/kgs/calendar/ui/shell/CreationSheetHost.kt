@@ -32,6 +32,7 @@ internal fun CreationSheetHost(
             onSnapChanged = shell::onEditorSnapChanged,
             separationShadow = true,
             followFoldPosture = true,
+            bookPane = shell.creationBookPane,
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
             when (shell.creationSheet) {
@@ -101,6 +102,7 @@ internal fun CreationSheetHost(
             anchorMode = SheetAnchorMode.Editor,
             separationShadow = sheet == CreationSheet.EventFull || sheet == CreationSheet.Task,
             followFoldPosture = true,
+            bookPane = shell.creationBookPane,
             initialSnap = when (sheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,

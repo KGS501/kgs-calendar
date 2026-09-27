@@ -16,6 +16,7 @@ import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.editor.SavedDraft
+import com.kgs.calendar.ui.layout.BookPane
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -149,6 +150,9 @@ internal data class SavedShellState(
     val conversionSource: SavedItemRef? = null,
     val hiddenSaveNotice: HiddenSaveNotice? = null,
     val viewHistory: List<CalendarViewMode> = emptyList(),
+    /** The book-posture panes of the detail and the editor, so they reopen on the same side. */
+    val detailBookPane: BookPane = BookPane.Right,
+    val creationBookPane: BookPane = BookPane.Right,
 ) {
     /** Whether every item the saved sheets refer to is part of [state]. */
     fun canResolveAll(state: CalendarUiState): Boolean =
@@ -184,6 +188,8 @@ internal data class SavedShellState(
         "conversionSource" to conversionSource?.toSaveable(),
         "hiddenSaveNotice" to hiddenSaveNotice?.let { arrayListOf(it.collectionHref, it.kind.name) },
         "viewHistory" to ArrayList(viewHistory.map { it.name }),
+        "detailBookPane" to detailBookPane.name,
+        "creationBookPane" to creationBookPane.name,
     )
 
     companion object {
@@ -226,6 +232,8 @@ internal data class SavedShellState(
                 },
                 viewHistory = (map["viewHistory"] as? List<*>).orEmpty()
                     .mapNotNull { enumValueOrNull<CalendarViewMode>(it) },
+                detailBookPane = enumValueOrNull<BookPane>(map["detailBookPane"]) ?: BookPane.Right,
+                creationBookPane = enumValueOrNull<BookPane>(map["creationBookPane"]) ?: BookPane.Right,
             )
         }
     }

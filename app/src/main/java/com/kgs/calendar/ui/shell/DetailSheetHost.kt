@@ -60,15 +60,17 @@ internal fun DetailSheetHost(
             }
             else -> detail
         }
-        // In the tabletop top panel, back on a top-level detail slides the panel away like the other closes.
-        val tabletopPanel = LocalFoldPosture.current is FoldPosture.Tabletop
+        // In a fold panel (the tabletop top panel or a book pane), back on a top-level detail slides the panel
+        // away like the other closes.
+        val foldPanel = LocalFoldPosture.current != FoldPosture.Normal
         val backReturnsToParentTask = currentDetail is DetailSheet.Task && shell.detailTaskBackStack.isNotEmpty()
         KgsModalBottomSheet(
             onDismissRequest = shell::closeDetail,
             initialSnap = currentDetail.preferredInitialSnap(),
             initialContentHeight = currentDetail.estimatedPopoverHeight(),
-            onBackRequest = if (tabletopPanel && !backReturnsToParentTask) null else shell::navigateDetailBack,
+            onBackRequest = if (foldPanel && !backReturnsToParentTask) null else shell::navigateDetailBack,
             followFoldPosture = true,
+            bookPane = shell.detailBookPane,
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
             SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
