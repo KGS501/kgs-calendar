@@ -10,11 +10,13 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -57,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -79,6 +82,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
@@ -93,7 +98,13 @@ import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.agenda.AgendaNavigationRequest
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.overviewPanelHeight
+import com.kgs.calendar.ui.layout.FoldPosture
+import com.kgs.calendar.ui.layout.LocalFoldPosture
 import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.tabletopShellLayout
+import com.kgs.calendar.ui.layout.usesTabletopSplit
+import com.kgs.calendar.ui.month.MonthOverviewPresentation
+import com.kgs.calendar.ui.month.tabletopMonthOverviewPresentation
 import com.kgs.calendar.ui.month.MonthGestureAxis
 import com.kgs.calendar.ui.month.MonthOverviewGestureReducer
 import com.kgs.calendar.ui.month.MonthOverviewGestureState
@@ -171,6 +182,20 @@ internal fun CalendarShell(
     // Rotated phones show the month drop-down as a full-height panel beside a vertical month strip.
     // Large screens have room to keep the timeline visible below the stacked drop-down instead.
     val monthOverviewSideBySide = windowLayout.usesSideBySideMonthOverview
+    // Tabletop posture (half-opened, horizontal hinge): the month overview always fills the top half and
+    // Day, Multiple days and Agenda sit below the hinge. Book posture keeps this layout for now.
+    val tabletopPosture = LocalFoldPosture.current as? FoldPosture.Tabletop
+    val tabletopSplit = tabletopPosture != null && state.selectedView.usesTabletopSplit()
+    var shellTopInRootPx by remember { mutableFloatStateOf(0f) }
+    val tabletopLayout = tabletopPosture?.let { posture ->
+        with(density) {
+            tabletopShellLayout(
+                hingeTop = (posture.hingeTopPx - shellTopInRootPx).toDp(),
+                hingeBottom = (posture.hingeBottomPx - shellTopInRootPx).toDp(),
+                toolbarBottom = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 58.dp,
+            )
+        }
+    }
     val fallbackTimelineViewportMemory = remember { TimelineOrientationViewportMemory() }
     val viewportMemory = timelineViewportMemory ?: fallbackTimelineViewportMemory
     val portraitTimeScroll = rememberScrollState()
@@ -253,8 +278,7 @@ internal fun CalendarShell(
     )
     val showLandscapeTimelineControl = isLandscape &&
         state.selectedView.group() == CalendarViewGroup.Timeline &&
-        !monthOverviewOpen &&
-        !monthOverviewGestureClosing
+        (tabletopSplit || (!monthOverviewOpen && !monthOverviewGestureClosing))
     val showLandscapeMultiDayControls = showLandscapeTimelineControl &&
         state.selectedView == CalendarViewMode.ThreeDay &&
         !state.weekViewEnabled &&
@@ -286,18 +310,55 @@ internal fun CalendarShell(
             yearStripOpen = false
         }
     }
-    val monthOverviewVisible = (monthOverviewOpen || monthOverviewGestureClosing) && !isMonthView
-    val monthOverviewExpandedHeight = if (monthOverviewSideBySide) {
+    val monthOverviewVisible = tabletopSplit ||
+        ((monthOverviewOpen || monthOverviewGestureClosing) && !isMonthView)
+    val monthOverviewExpandedHeight = if (tabletopSplit && tabletopLayout != null) {
+        tabletopLayout.monthOverviewHeight
+    } else if (monthOverviewSideBySide) {
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         (configuration.screenHeightDp.dp - 58.dp - statusTop).coerceAtLeast(0.dp)
     } else {
         overviewMonth.overviewPanelHeight(state.firstDayOfWeek)
     }
+    // The hinge band below the overview: the selected view's date header starts at its bottom edge.
+    val tabletopHingeHeight by animateDpAsState(
+        targetValue = if (tabletopSplit && tabletopLayout != null) tabletopLayout.hingeHeight else 0.dp,
+        animationSpec = tween(220, easing = MotionEmphasized),
+        label = "tabletopHingeHeight",
+    )
+    val tabletopViewTop by animateDpAsState(
+        targetValue = if (tabletopSplit && tabletopLayout != null) {
+            tabletopLayout.monthOverviewHeight + tabletopLayout.hingeHeight
+        } else {
+            0.dp
+        },
+        animationSpec = tween(220, easing = MotionEmphasized),
+        label = "tabletopViewTop",
+    )
+    // Unfolding keeps the tabletop presentation while the overview collapses, so its content does not jump.
+    val currentTabletopSideBySide = tabletopLayout?.takeIf { tabletopSplit }?.let { layout ->
+        tabletopMonthOverviewPresentation(
+            widthDp = windowLayout.widthDp.toFloat(),
+            heightDp = layout.monthOverviewHeight.value,
+        ) == MonthOverviewPresentation.SideBySide
+    }
+    var lastTabletopSideBySide by remember { mutableStateOf(false) }
+    SideEffect { currentTabletopSideBySide?.let { lastTabletopSideBySide = it } }
+    val tabletopOverviewSideBySide = currentTabletopSideBySide ?: lastTabletopSideBySide
+    var tabletopOverviewCollapsing by remember { mutableStateOf(false) }
     val monthOverviewHeight by animateDpAsState(
         targetValue = if (monthOverviewVisible) monthOverviewExpandedHeight else 0.dp,
         animationSpec = tween(220, easing = MotionEmphasized),
         label = "monthOverviewHeight",
     )
+    LaunchedEffect(tabletopSplit, monthOverviewHeight == 0.dp, monthOverviewOpen) {
+        tabletopOverviewCollapsing = when {
+            tabletopSplit -> true
+            monthOverviewOpen || monthOverviewHeight == 0.dp -> false
+            else -> tabletopOverviewCollapsing
+        }
+    }
+    val tabletopOverviewPresentation = tabletopSplit || (tabletopOverviewCollapsing && !monthOverviewOpen)
     val monthOverviewAlpha by animateFloatAsState(
         targetValue = if (monthOverviewVisible) 1f else 0f,
         animationSpec = tween(160, easing = MotionStandard),
@@ -371,6 +432,13 @@ internal fun CalendarShell(
     Box(
         Modifier
             .fillMaxSize()
+            .then(
+                if (tabletopPosture != null) {
+                    Modifier.onGloballyPositioned { shellTopInRootPx = it.positionInRoot().y }
+                } else {
+                    Modifier
+                },
+            )
             // Calendar chrome owns the solid backing. The toolbar itself is a transparent
             // foreground layer so the calendar-week band can occupy its intentional 10 dp
             // overlap without being painted over by an opaque sibling.
@@ -380,7 +448,7 @@ internal fun CalendarShell(
             Modifier
                 .fillMaxSize()
                 .monthOverviewTimelineDismissGesture(
-                    enabled = monthOverviewOpen && !isMonthView && !monthOverviewSideBySide,
+                    enabled = monthOverviewOpen && !isMonthView && !monthOverviewSideBySide && !tabletopSplit,
                     onVerticalDrag = ::applyMonthOverviewDismissDrag,
                     onVerticalEnd = ::settleMonthOverviewDismissDrag,
                 ),
@@ -408,6 +476,8 @@ internal fun CalendarShell(
                 if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onTasks()
             },
             monthOverviewOpen = if (isMonthView) yearStripOpen else monthOverviewOpen,
+            // The tabletop overview is always visible above the hinge, so it has no drop-down toggle.
+            monthToggleEnabled = !tabletopSplit,
             showTimelineCompactControl = showLandscapeTimelineControl,
             timelineCompact = landscapeTimelineCompactRequested,
             onTimelineCompactToggle = {
@@ -448,13 +518,15 @@ internal fun CalendarShell(
                     alpha = monthOverviewAlpha * (1f - monthDismissProgress * 0.35f)
                 },
         ) {
+            val dismissibleSideBySide = monthOverviewSideBySide && !tabletopSplit
             MonthOverview(
                 month = overviewMonth,
                 state = state,
                 firstDayOfWeek = state.firstDayOfWeek,
-                sideBySide = monthOverviewSideBySide,
-                onVerticalDismissDrag = if (monthOverviewSideBySide) ::applyMonthOverviewDismissDrag else null,
-                onVerticalDismissEnd = if (monthOverviewSideBySide) ::settleMonthOverviewDismissDrag else null,
+                sideBySide = if (tabletopOverviewPresentation) tabletopOverviewSideBySide else monthOverviewSideBySide,
+                fillHeight = tabletopOverviewPresentation,
+                onVerticalDismissDrag = if (dismissibleSideBySide) ::applyMonthOverviewDismissDrag else null,
+                onVerticalDismissEnd = if (dismissibleSideBySide) ::settleMonthOverviewDismissDrag else null,
                 onDaySelected = { day ->
                     overviewMonthText = YearMonth.from(day).toString()
                     if (state.selectedView == CalendarViewMode.Agenda) {
@@ -472,10 +544,14 @@ internal fun CalendarShell(
                 },
             )
         }
+        if (tabletopHingeHeight > 0.dp) {
+            Spacer(Modifier.fillMaxWidth().height(tabletopHingeHeight))
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .testTag(CalendarViewContainerTag),
         ) {
             SharedTransitionLayout(modifier = Modifier.matchParentSize()) {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this) {
@@ -614,7 +690,7 @@ internal fun CalendarShell(
             ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(y = statusTop + 58.dp + landscapeMultiDayControlsTopOffset)
+                .offset(y = statusTop + 58.dp + landscapeMultiDayControlsTopOffset + tabletopViewTop)
                 .width(TimeSidebarWidth)
                 .height(landscapeHeaderPresentation.multiDayControlsHeight)
                 .zIndex(40f),
@@ -677,6 +753,7 @@ private fun CalendarToolbar(
     onSearch: () -> Unit,
     onTasks: () -> Unit,
     monthOverviewOpen: Boolean,
+    monthToggleEnabled: Boolean,
     showTimelineCompactControl: Boolean,
     timelineCompact: Boolean,
     onTimelineCompactToggle: () -> Unit,
@@ -724,7 +801,7 @@ private fun CalendarToolbar(
                     .testTag("calendar-toolbar-month")
                     .offset(x = monthOffset.x, y = monthOffset.y)
                     .clip(RoundedCornerShape(22.dp))
-                    .clickable(onClick = onMonthClick)
+                    .clickable(enabled = monthToggleEnabled, onClick = onMonthClick)
                     .padding(horizontal = 4.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -757,14 +834,20 @@ private fun CalendarToolbar(
                         lineHeight = 30.sp,
                     )
                 }
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = WarmInk,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .scale(scaleX = 1f, scaleY = if (monthOverviewOpen) -1f else 1f),
-                )
+                AnimatedVisibility(
+                    visible = monthToggleEnabled,
+                    enter = expandHorizontally(tween(MotionMedium, easing = MotionEmphasized)) + fadeIn(tween(MotionShort)),
+                    exit = shrinkHorizontally(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = WarmInk,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .scale(scaleX = 1f, scaleY = if (monthOverviewOpen) -1f else 1f),
+                    )
+                }
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onSearch, modifier = Modifier.size(40.dp)) {
@@ -899,6 +982,9 @@ private fun TodayDateIcon(day: Int, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** The box holding the selected view; in the tabletop posture its top edge sits at the hinge. */
+internal const val CalendarViewContainerTag = "calendar-view-container"
 
 private enum class CalendarViewGroup { Timeline, MonthGrid, Agenda, Tasks }
 

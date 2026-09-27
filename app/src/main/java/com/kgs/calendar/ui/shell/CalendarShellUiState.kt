@@ -325,6 +325,9 @@ internal class CalendarShellUiState(
 
     /** A tap on an empty timeline or all-day slot: start (or move) the low event draft there. */
     fun selectDraftSlot(preview: EditorSchedulePreview, wireframeColor: Int) {
+        // Only reachable with a detail open in the tabletop posture, where the calendar below stays usable.
+        detailSheet = null
+        detailTaskStack.clear()
         editorWireframeMode = true
         if (creationSheet != null) creationCollapseRequest++
         editorSchedule = editorSchedule.applyTimelineChange(preview)

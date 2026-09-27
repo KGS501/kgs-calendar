@@ -351,6 +351,9 @@ import com.kgs.calendar.ui.calendar.toMonth
 import com.kgs.calendar.ui.calendar.toMonthPage
 import com.kgs.calendar.ui.calendar.toMonthViewPage
 import com.kgs.calendar.ui.calendar.weekHeaderLabels
+import com.kgs.calendar.ui.month.MonthOverviewRowHeight
+import com.kgs.calendar.ui.month.monthOverviewDayCircleSize
+import com.kgs.calendar.ui.month.monthOverviewFitRowHeight
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.labels.RecurrenceOption
@@ -439,6 +442,7 @@ internal fun MonthOverview(
     state: CalendarUiState,
     firstDayOfWeek: DayOfWeek,
     sideBySide: Boolean = false,
+    fillHeight: Boolean = false,
     onVerticalDismissDrag: ((Float) -> Unit)? = null,
     onVerticalDismissEnd: (() -> Unit)? = null,
     onDaySelected: (LocalDate) -> Unit,
@@ -633,9 +637,13 @@ internal fun MonthOverview(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(month.monthGridHeight(firstDayOfWeek))
+                    .then(
+                        // In the tabletop posture the overview is exactly the top half: the rows share its height.
+                        if (fillHeight) Modifier.weight(1f) else Modifier.height(month.monthGridHeight(firstDayOfWeek)),
+                    )
                     .clipToBounds(),
             ) {
+                val gridHeight = maxHeight
                 val density = LocalDensity.current
                 val widthPx = with(density) { maxWidth.toPx() }
                 LaunchedEffect(widthPx) { monthViewportWidthPx = widthPx }
@@ -663,6 +671,11 @@ internal fun MonthOverview(
                             firstDayOfWeek = firstDayOfWeek,
                             showCalendarWeeks = state.showCalendarWeeks,
                             selectedStart = state.selectedDate,
+                            rowHeight = if (fillHeight) {
+                                monthOverviewFitRowHeight(gridHeight, visibleMonth.monthGridRowCount(firstDayOfWeek))
+                            } else {
+                                MonthOverviewRowHeight
+                            },
                             daysEnabled = !monthGestureMoved &&
                                 abs(dragX.value) < 1f &&
                                 transitionTargetMonth == null,
@@ -690,7 +703,7 @@ internal fun MonthOverview(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                gridContent(Modifier.fillMaxWidth())
+                gridContent(Modifier.fillMaxWidth().then(if (fillHeight) Modifier.weight(1f) else Modifier))
                 Spacer(Modifier.height(8.dp))
                 MonthStrip(
                     month = month,
@@ -730,6 +743,7 @@ private fun MonthGrid(
     firstDayOfWeek: DayOfWeek,
     showCalendarWeeks: Boolean,
     selectedStart: LocalDate,
+    rowHeight: Dp = MonthOverviewRowHeight,
     daysEnabled: Boolean = true,
     onDaySelected: (LocalDate) -> Unit,
 ) {
@@ -749,7 +763,7 @@ private fun MonthGrid(
             Row(Modifier.fillMaxWidth()) {
                 if (showCalendarWeeks) {
                     Box(
-                        modifier = Modifier.width(34.dp).height(44.dp),
+                        modifier = Modifier.width(34.dp).height(rowHeight),
                         contentAlignment = Alignment.Center,
                     ) {
                         CalendarWeekNumberPill(
@@ -771,10 +785,11 @@ private fun MonthGrid(
                             isSelectedStart = day == selectedStart,
                             enabled = daysEnabled,
                             onClick = { onDaySelected(day) },
+                            rowHeight = rowHeight,
                             modifier = Modifier.weight(1f),
                         )
                     } else {
-                        Spacer(Modifier.weight(1f).height(44.dp))
+                        Spacer(Modifier.weight(1f).height(rowHeight))
                     }
                 }
             }
@@ -791,6 +806,7 @@ private fun MonthDayCell(
     isSelectedStart: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    rowHeight: Dp = MonthOverviewRowHeight,
     modifier: Modifier = Modifier,
 ) {
     val background = when {
@@ -802,7 +818,7 @@ private fun MonthDayCell(
     Column(
         modifier = modifier
             .testTag("month-overview-day-$day")
-            .height(44.dp)
+            .height(rowHeight)
             .clip(RoundedCornerShape(18.dp))
             .clickable(enabled = enabled, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -810,7 +826,7 @@ private fun MonthDayCell(
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(monthOverviewDayCircleSize(rowHeight))
                 .clip(CircleShape)
                 .background(background)
                 .then(

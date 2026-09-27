@@ -31,7 +31,9 @@ internal fun CreationSheetHost(
             anchorMode = SheetAnchorMode.Editor,
             onSnapChanged = shell::onEditorSnapChanged,
             separationShadow = true,
+            followFoldPosture = true,
         ) {
+            val closeAnimated = LocalSheetCloseAnimator.current
             when (shell.creationSheet) {
                 CreationSheet.EventLow -> EventEditorSheet(
                     state = state,
@@ -47,7 +49,7 @@ internal fun CreationSheetHost(
                     onSave = { payload ->
                         viewModel.edits.createEvent(payload)
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -58,7 +60,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 CreationSheet.TaskLow -> TaskEditorSheet(
                     state = state,
@@ -73,7 +75,7 @@ internal fun CreationSheetHost(
                     onSave = { payload ->
                         viewModel.edits.createTask(payload)
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -84,7 +86,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 else -> Unit
             }
@@ -98,6 +100,7 @@ internal fun CreationSheetHost(
             collapseRequest = 0,
             anchorMode = SheetAnchorMode.Editor,
             separationShadow = sheet == CreationSheet.EventFull || sheet == CreationSheet.Task,
+            followFoldPosture = true,
             initialSnap = when (sheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,
@@ -112,6 +115,7 @@ internal fun CreationSheetHost(
                 -> SheetSnap.Expanded
             },
         ) {
+            val closeAnimated = LocalSheetCloseAnimator.current
             when (sheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,
@@ -134,7 +138,7 @@ internal fun CreationSheetHost(
                             else -> viewModel.edits.createEvent(payload)
                         }
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -145,7 +149,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 is CreationSheet.EditEvent -> EventEditorSheet(
                     state = state,
@@ -162,13 +166,13 @@ internal fun CreationSheetHost(
                         if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true) {
                             viewModel.edits.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
                             showHiddenSaveNotice(sheet.event.collectionHref, HiddenSaveKind.Event)
-                            shell.closeCreationSheet()
+                            closeAnimated(shell::closeCreationSheet)
                         } else if (!sheet.event.recurrenceRule.isNullOrBlank() || sheet.event.isRecurring) {
                             shell.requestRecurringSave(RecurringSaveRequest.Event(sheet.event, payload))
                         } else {
                             viewModel.edits.updateEvent(sheet.event.resourceHref, payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                            shell.closeCreationSheet()
+                            closeAnimated(shell::closeCreationSheet)
                         }
                     },
                     onSwitchToTask = { transfer ->
@@ -180,7 +184,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 is CreationSheet.DuplicateEvent -> EventEditorSheet(
                     state = state,
@@ -196,7 +200,7 @@ internal fun CreationSheetHost(
                     onSave = { payload ->
                         viewModel.edits.createEvent(payload)
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -207,7 +211,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 CreationSheet.Task -> TaskEditorSheet(
                     state = state,
@@ -225,7 +229,7 @@ internal fun CreationSheetHost(
                             else -> viewModel.edits.createTask(payload)
                         }
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -236,7 +240,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 is CreationSheet.TaskForParent -> TaskEditorSheet(
                     state = state,
@@ -251,11 +255,11 @@ internal fun CreationSheetHost(
                     onSave = { payload ->
                         viewModel.edits.createTask(payload)
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        shell.closeCreationSheet()
+                        closeAnimated(shell::closeCreationSheet)
                     },
                     onSwitchToEvent = {},
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 is CreationSheet.EditTask -> TaskEditorSheet(
                     state = state,
@@ -271,13 +275,13 @@ internal fun CreationSheetHost(
                         if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true) {
                             viewModel.edits.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
                             showHiddenSaveNotice(sheet.task.collectionHref, HiddenSaveKind.Task)
-                            shell.closeCreationSheet()
+                            closeAnimated(shell::closeCreationSheet)
                         } else if (!sheet.task.recurrenceRule.isNullOrBlank()) {
                             shell.requestRecurringSave(RecurringSaveRequest.Task(sheet.task, payload))
                         } else {
                             viewModel.edits.updateTask(sheet.task.resourceHref, payload)
                             showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                            shell.closeCreationSheet()
+                            closeAnimated(shell::closeCreationSheet)
                         }
                     },
                     onSwitchToEvent = { transfer ->
@@ -289,7 +293,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
                 is CreationSheet.DuplicateTask -> TaskEditorSheet(
                     state = state,
@@ -304,7 +308,7 @@ internal fun CreationSheetHost(
                     onSave = { payload ->
                         viewModel.edits.createTask(payload)
                         showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        shell.finishCreation()
+                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -315,7 +319,7 @@ internal fun CreationSheetHost(
                         )
                     },
                     onOpenCalendarSources = shell::openAddCalendarSources,
-                    onClose = shell::closeCreationSheet,
+                    onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
             }
         }

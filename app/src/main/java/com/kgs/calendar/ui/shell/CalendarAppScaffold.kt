@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
+import com.kgs.calendar.ui.layout.FoldPosture
+import com.kgs.calendar.ui.layout.LocalFoldPosture
 import com.kgs.calendar.ui.shell.CalendarShellUiState
 import com.kgs.calendar.ui.shell.allDaySlotDraftPreview
 import com.kgs.calendar.ui.shell.eventDraftColor
@@ -51,6 +53,7 @@ internal fun CalendarAppScaffold(
         animationSpec = tween(180, easing = MotionStandard),
         label = "createMenuBackgroundBlur",
     )
+    val tabletop = LocalFoldPosture.current is FoldPosture.Tabletop
     // The drawer shows how many items "Recently deleted" holds.
     val trash by viewModel.trash.state.collectAsStateWithLifecycle()
     Scaffold(
@@ -100,7 +103,8 @@ internal fun CalendarAppScaffold(
                     },
                     onDraftInteraction = shell::onDraftInteraction,
                     onDraftTap = shell::requestCreationExpand,
-                    timelineBottomInset = if (shell.editorWireframeMode) EditorTinyVisibleHeight else 0.dp,
+                    // In the tabletop posture the editor is a panel above the hinge, not a low sheet over the timeline.
+                    timelineBottomInset = if (shell.editorWireframeMode && !tabletop) EditorTinyVisibleHeight else 0.dp,
                     onDetail = shell::openDetail,
                     overdueTasksExpanded = shell.overdueTasksExpanded,
                     onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },

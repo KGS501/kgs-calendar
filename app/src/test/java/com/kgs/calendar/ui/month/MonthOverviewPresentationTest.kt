@@ -46,4 +46,31 @@ class MonthOverviewPresentationTest {
         assertEquals(MonthOverviewPresentation.Stacked, monthOverviewPresentation(tabletLandscape))
         assertEquals(MonthOverviewPresentation.Stacked, monthOverviewPresentation(unfoldedFoldable))
     }
+
+    @Test
+    fun regularRowsKeepTheirHeightAndCircle() {
+        assertEquals(44.dp, MonthOverviewRowHeight)
+        assertEquals(34.dp, monthOverviewDayCircleSize(MonthOverviewRowHeight))
+    }
+
+    @Test
+    fun tabletopRowsShareTheTopHalf() {
+        // 224.8 dp for six rows with 2 dp gaps.
+        assertEquals(35.8f, monthOverviewFitRowHeight(224.8.dp, rows = 6).value, 0.01f)
+        assertEquals(25.8f, monthOverviewDayCircleSize(monthOverviewFitRowHeight(224.8.dp, rows = 6)).value, 0.01f)
+    }
+
+    @Test
+    fun tabletopRowsNeverGrowBeyondTheRegularHeightOrBelowTheMinimum() {
+        assertEquals(44.dp, monthOverviewFitRowHeight(600.dp, rows = 5))
+        assertEquals(MonthOverviewMinRowHeight, monthOverviewFitRowHeight(100.dp, rows = 6))
+    }
+
+    @Test
+    fun aWideTabletopTopHalfPutsTheMonthStripBesideTheGrid() {
+        // A book-style foldable turned sideways: 841 x 255 dp above the hinge.
+        assertEquals(MonthOverviewPresentation.SideBySide, tabletopMonthOverviewPresentation(841f, 255f))
+        // A flip phone: 412 x 360 dp above the hinge.
+        assertEquals(MonthOverviewPresentation.Stacked, tabletopMonthOverviewPresentation(412f, 360f))
+    }
 }
