@@ -15,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -27,6 +28,8 @@ import com.kgs.calendar.ui.CalendarWidgetLaunchTarget
 import com.kgs.calendar.ui.CalendarViewModel
 import com.kgs.calendar.ui.CalendarViewModelFactory
 import com.kgs.calendar.ui.KgsCalendarApp
+import com.kgs.calendar.ui.layout.ProvideFoldPosture
+import com.kgs.calendar.ui.layout.rememberWindowFoldFeatures
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -66,7 +69,11 @@ class MainActivity : ComponentActivity() {
             maybeRequestExactAlarmPermission()
         }
         setContent {
-            KgsCalendarApp(viewModel = calendarViewModel)
+            // Jetpack WindowManager reports the fold; the tabletop and book layouts read it as LocalFoldPosture.
+            val foldFeatures by rememberWindowFoldFeatures()
+            ProvideFoldPosture(foldFeatures) {
+                KgsCalendarApp(viewModel = calendarViewModel)
+            }
         }
     }
 

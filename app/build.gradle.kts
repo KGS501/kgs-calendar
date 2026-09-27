@@ -119,6 +119,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.window)
 
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -149,4 +150,5 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.window.testing)
 }
