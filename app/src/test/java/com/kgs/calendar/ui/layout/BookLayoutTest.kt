@@ -1,6 +1,9 @@
 package com.kgs.calendar.ui.layout
 
+import com.kgs.calendar.domain.model.CalendarWindowLayout
+import com.kgs.calendar.domain.model.MultiDayCountBucket
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -68,5 +71,17 @@ class BookLayoutTest {
         assertEquals(FoldPanelSlot.TabletopTop, foldPanelSlot(FoldPosture.Tabletop(300f, 300f), BookPane.Left))
         assertEquals(FoldPanelSlot.BookLeft, foldPanelSlot(book, BookPane.Left))
         assertEquals(FoldPanelSlot.BookRight, foldPanelSlot(book, BookPane.Right))
+    }
+
+    @Test
+    fun theCalendarPaneOfABookIsPhoneSized() {
+        val unfolded = CalendarWindowLayout(isLandscape = false, widthDp = 673, heightDp = 841)
+
+        val pane = unfolded.forBookCalendarPane(hingeLeftDp = 336.8f)
+
+        assertEquals(336, pane.widthDp)
+        assertFalse(pane.isLargeScreen)
+        assertEquals(MultiDayCountBucket.Portrait, pane.multiDayCountBucket)
+        assertFalse(pane.usesSideBySideMonthOverview)
     }
 }

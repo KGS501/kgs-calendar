@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.layout
 
+import com.kgs.calendar.domain.model.CalendarWindowLayout
+
 /** The two panes of the book posture (half opened, vertical hinge), in physical screen order. */
 internal enum class BookPane { Left, Right }
 
@@ -87,3 +89,11 @@ internal fun foldPanelSlot(posture: FoldPosture, bookPane: BookPane): FoldPanelS
         BookPane.Right -> FoldPanelSlot.BookRight
     }
 }
+
+/**
+ * The window as the calendar sees it in the book posture: only the left pane, [hingeLeftDp] wide. On a
+ * book-style foldable that pane is phone-sized, so Multiple days uses the phone's day count there instead of
+ * squeezing the unfolded screen's count into half the width.
+ */
+internal fun CalendarWindowLayout.forBookCalendarPane(hingeLeftDp: Float): CalendarWindowLayout =
+    copy(widthDp = hingeLeftDp.toInt().coerceIn(0, widthDp))
