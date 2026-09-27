@@ -1214,6 +1214,7 @@ internal fun CalendarSearchResultRow(
     onEventClick: (EventEntity) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     taskStatusToggleEnabled: Boolean = true,
+    mutePastEvents: Boolean = true,
 ) {
     when (item) {
         is CalendarSearchResult.Event -> SearchResultCard(
@@ -1224,6 +1225,7 @@ internal fun CalendarSearchResultRow(
             agendaDateHierarchy = agendaDateHierarchy,
             showCalendarWeeks = showCalendarWeeks,
             firstDayOfWeek = firstDayOfWeek,
+            mutePast = mutePastEvents,
             onClick = { onEventClick(item.event) },
         )
         is CalendarSearchResult.TaskItem -> SearchTaskResultCard(
@@ -1603,8 +1605,9 @@ private fun SearchResultCard(
     agendaDateHierarchy: Boolean = false,
     showCalendarWeeks: Boolean = false,
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
+    mutePast: Boolean = true,
 ) {
-    val isPast = event.endsAtMillis < System.currentTimeMillis()
+    val isPast = mutePast && event.endsAtMillis < System.currentTimeMillis()
     val isSpan = spanEndDate.isAfter(displayDate)
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val rowHeight = when {
@@ -1776,62 +1779,46 @@ private fun SearchDateColumn(
             .then(if (height != null) Modifier.height(height) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (visible) {
-            if (date == null) {
+        // An undated (inbox) task leaves the column empty, like the agenda-style date column.
+        if (visible && date != null) {
+            Text(
+                date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
+                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                date.dayOfMonth.toString(),
+                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (endDate != null) {
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(WarmInk.copy(alpha = if (muted) 0.22f else 0.42f)),
+                )
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    appString(R.string.none),
+                    endDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
                     color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
                     fontSize = 10.sp,
                     lineHeight = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    appString(R.string.date),
+                    endDate.dayOfMonth.toString(),
                     color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 17.sp,
+                    lineHeight = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
-            } else {
-                Text(
-                    date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    date.dayOfMonth.toString(),
-                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 20.sp,
-                    lineHeight = 23.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (endDate != null) {
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .weight(1f)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(WarmInk.copy(alpha = if (muted) 0.22f else 0.42f)),
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        endDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        endDate.dayOfMonth.toString(),
-                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                        fontSize = 17.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
             }
         }
     }

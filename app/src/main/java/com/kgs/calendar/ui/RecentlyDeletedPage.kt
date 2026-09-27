@@ -184,6 +184,8 @@ internal fun RecentlyDeletedPage(
                                             onEventClick = { onItemClick(entry) },
                                             onTaskClick = { onItemClick(entry) },
                                             taskStatusToggleEnabled = false,
+                                            // Being in the past means nothing here: show the cards in their normal colours.
+                                            mutePastEvents = false,
                                         )
                                     }
                                 }
