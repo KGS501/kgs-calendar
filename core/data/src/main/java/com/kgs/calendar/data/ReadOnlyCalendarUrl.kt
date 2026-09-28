@@ -2,18 +2,33 @@ package com.kgs.calendar.data
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+/** Preserve subscription schemes in settings; translate them only at the HTTP boundary. */
 internal fun normalizeReadOnlyCalendarUrl(value: String): String {
     val trimmed = value.trim()
-    val httpValue = if (trimmed.startsWith("webcal://", ignoreCase = true)) {
-        "https://${trimmed.substringAfter("://")}"
+    val scheme = trimmed.substringBefore("://").lowercase()
+    val transportScheme = when (scheme) {
+        "webcal" -> "http"
+        "webcals" -> "https"
+        else -> scheme
+    }
+    val parsed = "$transportScheme://${trimmed.substringAfter("://", "")}".toHttpUrlOrNull()
+    require(parsed != null && scheme in setOf("http", "https", "webcal", "webcals")) {
+        "Enter a valid http(s) or webcal(s) URL."
+    }
+    return if (scheme == "webcal" || scheme == "webcals") {
+        "$scheme://${parsed.toString().substringAfter("://")}"
     } else {
-        trimmed
+        parsed.toString()
     }
-    val parsed = httpValue.toHttpUrlOrNull()
-    require(parsed != null && (parsed.scheme == "http" || parsed.scheme == "https")) {
-        "Enter a valid http(s) or webcal URL."
+}
+
+internal fun readOnlyCalendarTransportUrl(value: String): String {
+    val normalized = normalizeReadOnlyCalendarUrl(value)
+    return when {
+        normalized.startsWith("webcal://") -> "http://${normalized.substringAfter("://")}"
+        normalized.startsWith("webcals://") -> "https://${normalized.substringAfter("://")}"
+        else -> normalized
     }
-    return parsed.toString()
 }
 
 fun isSupportedReadOnlyCalendarUrl(value: String): Boolean =

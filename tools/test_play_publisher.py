@@ -77,11 +77,13 @@ class PlayPublisherTest(unittest.TestCase):
             "English release notes",
             "en-US",
             localized_notes=[("de-DE", "Deutsche Versionshinweise")],
+            release_name="V.1.4.0-2",
         )
 
         _, kwargs = http_json.call_args
         payload = json.loads(kwargs["data"])
         self.assertEqual(payload["track"], "internal")
+        self.assertEqual(payload["releases"][0]["name"], "V.1.4.0-2")
         self.assertEqual(payload["releases"][0]["status"], "completed")
         self.assertEqual(payload["releases"][0]["versionCodes"], ["24"])
         self.assertEqual(

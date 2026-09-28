@@ -7,11 +7,18 @@ import org.junit.Test
 
 class ReadOnlyCalendarUrlTest {
     @Test
-    fun webcalUrlsAreFetchedOverHttps() {
+    fun webcalSchemeIsPreservedInSettings() {
         assertEquals(
-            "https://example.com/calendar.ics?token=abc",
+            "webcal://example.com/calendar.ics?token=abc",
             normalizeReadOnlyCalendarUrl("  WEBCAL://example.com/calendar.ics?token=abc  "),
         )
+    }
+
+    @Test
+    fun subscriptionSchemesUseTheirCorrespondingTransport() {
+        assertEquals("http://example.com/feed.ics?key=abc", readOnlyCalendarTransportUrl("WEBCAL://example.com/feed.ics?key=abc"))
+        assertEquals("https://example.com/feed.ics", readOnlyCalendarTransportUrl("webcals://example.com/feed.ics"))
+        assertEquals("https://example.com/feed.ics", readOnlyCalendarTransportUrl("https://example.com/feed.ics"))
     }
 
     @Test

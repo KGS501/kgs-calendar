@@ -228,6 +228,7 @@ class PlayEdit:
         notes: str,
         language: str,
         localized_notes: list[tuple[str, str]] | None = None,
+        release_name: str | None = None,
     ) -> None:
         release_notes = [{"language": language, "text": notes}]
         release_notes.extend(
@@ -238,7 +239,7 @@ class PlayEdit:
             "track": TRACK,
             "releases": [
                 {
-                    "name": f"Version code {version_code}",
+                    "name": release_name or f"Version code {version_code}",
                     "versionCodes": [str(version_code)],
                     "status": "completed",
                     "releaseNotes": release_notes,
@@ -281,6 +282,9 @@ class PlayEdit:
 def _gradle_command() -> list[str]:
     if os.name == "nt":
         return [str(REPO_ROOT / "gradlew.bat")]
+    local_wrapper = REPO_ROOT / ".local-dev/gradlew-local.sh"
+    if local_wrapper.is_file():
+        return [str(local_wrapper)]
     return ["bash", str(REPO_ROOT / "gradlew")]
 
 
@@ -341,6 +345,7 @@ def parse_args() -> argparse.Namespace:
     publish.add_argument("--aab", type=Path, help="upload this ready AAB instead of building")
     publish.add_argument("--skip-tests", action="store_true", help="skip tests when building")
     publish.add_argument("--release-notes", required=True)
+    publish.add_argument("--release-name", help="version tag shown in Play Console")
     publish.add_argument("--language", default="en-US")
     publish.add_argument(
         "--localized-release-note",
@@ -402,6 +407,7 @@ def main() -> int:
             notes,
             args.language,
             localized_notes=localized_notes,
+            release_name=args.release_name,
         )
         edit.validate()
         edit.commit()

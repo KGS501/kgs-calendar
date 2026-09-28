@@ -404,6 +404,8 @@ class CalDavSyncEngine internal constructor(
             .forEach { collection ->
                 database.resourceDao().missingEtagForCollection(collection.href)
                     .forEach { resource ->
+                        // A remote ETag cannot become the base of an unsent local edit.
+                        if (database.pendingMutationDao().forResource(resource.href).isNotEmpty()) return@forEach
                         val fetched = runCatching {
                             calDavClient.getResourceWithEtag(
                                 serverUrl = credentials.serverUrl,
@@ -421,7 +423,7 @@ class CalDavSyncEngine internal constructor(
                             )
                         }.getOrNull() ?: return@forEach
                         val holdsFetchedContent = fetched.calendarData.normalizedIcsText() == resource.rawIcs.normalizedIcsText()
-                        if (holdsFetchedContent || database.pendingMutationDao().forResource(resource.href).isNotEmpty()) {
+                        if (holdsFetchedContent) {
                             database.resourceDao().markSynced(resource.href, etag)
                             return@forEach
                         }

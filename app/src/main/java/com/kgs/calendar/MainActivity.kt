@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
 
     /** A share, unless the task is relaunched from Recents with the share as its old base intent. */
     private fun Intent.toSharedEvent(): SharedEventDraft? =
-        SharedEventDraft.readFrom(this)
+        (SharedEventDraft.readFrom(this) ?: SharedEventDraft.fromCalendarInsertIntent(this))
             ?.takeIf { flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0 }
 
     private fun Intent?.toExternalCalendarLaunchTarget(): CalendarWidgetLaunchTarget? {

@@ -3,15 +3,13 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
-import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.CalDavHttpClient
-import com.kgs.calendar.data.remote.PutResult
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
 
-/** Drains the pending-mutation queue to CalDAV: conditional PUT/DELETE, the 412 retry and the local bookkeeping. */
+/** Drains the pending-mutation queue to CalDAV: conditional PUT/DELETE and local bookkeeping; conflicts remain pending. */
 class PendingMutationUploader internal constructor(
     private val database: KgsDatabase,
     private val credentialsStore: CredentialsStore,
@@ -57,28 +55,15 @@ class PendingMutationUploader internal constructor(
                             queuedPayload = raw,
                             currentRawIcs = resource?.rawIcs,
                         )
-                        val putAttempt = putCalDavResourceWithConflictRetry(
-                            initialBaseEtag = effectiveBaseEtag,
-                            put = { baseEtag ->
-                                calDavClient.putResource(
-                                    serverUrl = credentials.serverUrl,
-                                    href = mutation.resourceHref,
-                                    username = credentials.username,
-                                    appPassword = credentials.appPassword,
-                                    rawIcs = raw,
-                                    baseEtag = baseEtag,
-                                )
-                            },
-                            resolveCurrentEtag = {
-                                calDavClient.getResourceEtag(
-                                    serverUrl = credentials.serverUrl,
-                                    href = mutation.resourceHref,
-                                    username = credentials.username,
-                                    appPassword = credentials.appPassword,
-                                )
-                            },
+                        // Never refresh a rejected precondition: that would overwrite another client's edit.
+                        val result = calDavClient.putResource(
+                            serverUrl = credentials.serverUrl,
+                            href = mutation.resourceHref,
+                            username = credentials.username,
+                            appPassword = credentials.appPassword,
+                            rawIcs = raw,
+                            baseEtag = effectiveBaseEtag,
                         )
-                        val result = putAttempt.result
                         val uploadedEtag = result.etag
                             ?: runCatching {
                                 calDavClient.getResourceEtag(
@@ -88,7 +73,7 @@ class PendingMutationUploader internal constructor(
                                     appPassword = credentials.appPassword,
                                 )
                             }.getOrNull()
-                            ?: putAttempt.submittedBaseEtag
+                            ?: effectiveBaseEtag
                         // The stored ETag is what later syncs use to recognise this upload as our own write.
                         localWrites.writeTransaction {
                             database.resourceDao().markSynced(mutation.resourceHref, uploadedEtag)
@@ -147,29 +132,6 @@ internal fun resolveCalDavUploadBaseEtag(
         queuedBaseEtag != null -> queuedBaseEtag
         else -> currentResourceEtag
     }
-}
-
-internal data class CalDavPutAttemptResult(
-    val result: PutResult,
-    val submittedBaseEtag: String?,
-)
-
-internal suspend fun putCalDavResourceWithConflictRetry(
-    initialBaseEtag: String?,
-    put: suspend (baseEtag: String?) -> PutResult,
-    resolveCurrentEtag: suspend () -> String?,
-): CalDavPutAttemptResult = try {
-    CalDavPutAttemptResult(
-        result = put(initialBaseEtag),
-        submittedBaseEtag = initialBaseEtag,
-    )
-} catch (conflict: CalDavConflictException) {
-    val currentEtag = resolveCurrentEtag() ?: throw conflict
-    if (currentEtag == initialBaseEtag) throw conflict
-    CalDavPutAttemptResult(
-        result = put(currentEtag),
-        submittedBaseEtag = currentEtag,
-    )
 }
 
 private fun String.normalizedIcsForUploadComparison(): String =

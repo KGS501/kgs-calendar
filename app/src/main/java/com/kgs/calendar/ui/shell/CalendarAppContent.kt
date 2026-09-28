@@ -193,11 +193,12 @@ internal fun CalendarAppContent(
     /** Like "New event" from the create button, with the shared text as title and description. */
     fun openSharedEventCreation(shared: SharedEventDraft) {
         shell.openEventCreation(
-            schedule = newEventSchedule(state.defaultFabCreationDate(), LocalTime.now(), state.defaultEventDurationMinutes),
+            schedule = shared.editorSchedule(state.defaultFabCreationDate(), LocalTime.now(), state.defaultEventDurationMinutes),
             wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
             prefill = EditorTransferDraft(
                 title = shared.title,
                 notes = shared.notes,
+                location = shared.location,
                 reminderMinutes = state.defaultEventReminderMinutes,
                 sourceDefaultReminderMinutes = state.defaultEventReminderMinutes,
             ),

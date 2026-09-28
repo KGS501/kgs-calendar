@@ -132,7 +132,7 @@ class HttpStatusException(
 class CalDavConflictException(
     method: String,
     href: String,
-) : IllegalStateException("Conflict while executing $method for $href")
+) : IllegalStateException("Sync conflict: this item changed on the server. Your local change is still saved on this device; the server version was not overwritten. ($method $href)")
 
 data class SyncCollectionResult(
     val changedResources: List<RemoteResource>,

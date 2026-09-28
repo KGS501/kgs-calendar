@@ -1,8 +1,5 @@
 package com.kgs.calendar.data.sync
 
-import com.kgs.calendar.data.remote.CalDavConflictException
-import com.kgs.calendar.data.remote.PutResult
-import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -68,46 +65,4 @@ class CalDavUploadBaseEtagTest {
         )
     }
 
-    @Test
-    fun conflictRefreshesTheEtagAndRetriesTheOfflineEditOnce() = runTest {
-        val attemptedEtags = mutableListOf<String?>()
-
-        val result = putCalDavResourceWithConflictRetry(
-            initialBaseEtag = "etag-before-outage",
-            put = { etag ->
-                attemptedEtags += etag
-                if (attemptedEtags.size == 1) {
-                    throw CalDavConflictException("PUT", "/calendar/event.ics")
-                }
-                PutResult("/calendar/event.ics", "etag-after-retry")
-            },
-            resolveCurrentEtag = { "etag-after-outage" },
-        )
-
-        assertEquals(listOf("etag-before-outage", "etag-after-outage"), attemptedEtags)
-        assertEquals("etag-after-retry", result.result.etag)
-        assertEquals("etag-after-outage", result.submittedBaseEtag)
-    }
-
-    @Test
-    fun unresolvedConflictRemainsPendingInsteadOfRetryingForever() = runTest {
-        var attempts = 0
-        var thrown: Throwable? = null
-
-        try {
-            putCalDavResourceWithConflictRetry(
-                initialBaseEtag = "unchanged-etag",
-                put = {
-                    attempts++
-                    throw CalDavConflictException("PUT", "/calendar/event.ics")
-                },
-                resolveCurrentEtag = { "unchanged-etag" },
-            )
-        } catch (error: Throwable) {
-            thrown = error
-        }
-
-        assertTrue(thrown is CalDavConflictException)
-        assertEquals(1, attempts)
-    }
 }
