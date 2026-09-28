@@ -4,8 +4,10 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -41,7 +43,8 @@ class SettingsStoreLargeScreenMultiDayCountTest {
         val (firstScope, firstStore) = store(file)
         firstStore.setLargePortraitMultiDayCount(6)
         firstStore.setLargeLandscapeMultiDayCount(42)
-        firstScope.cancel()
+        // Wait until the first DataStore has released the file before opening it again.
+        firstScope.coroutineContext[Job]!!.cancelAndJoin()
         scopes.remove(firstScope)
 
         val (_, reopened) = store(file)
