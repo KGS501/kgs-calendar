@@ -7,21 +7,28 @@ import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.recurrence.occurrenceAt
+import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.CalendarWindowLayout
 import com.kgs.calendar.domain.model.visibleRangeFor
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.reminder.TaskNotificationReconciler
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
+import com.kgs.calendar.ui.model.orderedOverdueTasks
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +50,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -63,6 +71,7 @@ class CalendarViewModelTest {
     private lateinit var settingsStore: SettingsStore
     private val widgetRefresher = RecordingWidgetRefresher()
     private val lifecycleSignals = FakeAppLifecycleSignals()
+    private val reminderReschedules = MutableStateFlow(0)
     private val viewModels = mutableListOf<CalendarViewModel>()
     private val today = LocalDate.now(TEST_ZONE)
 
@@ -133,6 +142,74 @@ class CalendarViewModelTest {
         assertEquals(date, viewModel.uiState.value.selectedDate)
         advanceUntilIdle()
         viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun initialShareOpensThePrefilledEditorExactlyOnce() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val draft = SharedEventDraft("Team lunch", "Hi all,\nlunch at noon")
+        val viewModel = viewModel(sharedEvent = draft)
+
+        viewModel.uiEvents.test {
+            assertEquals(CalendarUiEvent.CreateSharedEvent(draft), awaitItem())
+            expectNoEvents()
+        }
+        // It only waits for the loaded data, which the editor defaults come from.
+        assertTrue(viewModel.uiState.value.initialDataLoaded)
+        advanceUntilIdle()
+        // A second collector, e.g. after the activity was recreated, must not see it again.
+        viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun restoredActivityDoesNotReplayTheShare() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val viewModel = viewModel(
+            sharedEvent = SharedEventDraft("Team lunch", "Hi all"),
+            deliverInitialLaunchEvents = false,
+        )
+
+        viewModel.awaitState { it.initialDataLoaded && it.welcomeCompleted }
+        advanceUntilIdle()
+        viewModel.uiEvents.test { expectNoEvents() }
+    }
+
+    @Test
+    fun warmShareReplacesAnOlderShareThatStillWaits() = runTest {
+        settingsStore.setWelcomeCompleted(true)
+        val viewModel = viewModel()
+        val newer = SharedEventDraft("Newer", "second")
+        viewModel.awaitState { it.initialDataLoaded && it.welcomeCompleted }
+
+        viewModel.uiEvents.test {
+            viewModel.openFromShare(SharedEventDraft("Older", "first"))
+            viewModel.openFromShare(newer)
+            assertEquals(CalendarUiEvent.CreateSharedEvent(newer), awaitItem())
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun shareWaitsForTheWelcomeScreenAndTheCalendarConnection() = runTest {
+        val draft = SharedEventDraft("Team lunch", "Hi all")
+        val viewModel = viewModel(sharedEvent = draft)
+
+        viewModel.uiEvents.test {
+            viewModel.awaitState { it.initialDataLoaded && !it.welcomeCompleted }
+            advanceUntilIdle()
+            expectNoEvents()
+
+            // "Connect existing calendars": the share waits until settings close again.
+            viewModel.holdSharedEvent(true)
+            settingsStore.setWelcomeCompleted(true)
+            viewModel.awaitState { it.welcomeCompleted }
+            advanceUntilIdle()
+            expectNoEvents()
+
+            viewModel.holdSharedEvent(false)
+            assertEquals(CalendarUiEvent.CreateSharedEvent(draft), awaitItem())
+            expectNoEvents()
+        }
     }
 
     @Test
@@ -220,6 +297,51 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun windowSizeClassPicksItsOwnMultiDayCount() = runTest {
+        val viewModel = viewModel()
+        viewModel.awaitState { it.initialDataLoaded && it.multiDayCount == 3 }
+
+        val tabletLandscape = CalendarWindowLayout(isLandscape = true, widthDp = 1280, heightDp = 800)
+        viewModel.setWindowLayout(tabletLandscape, applyOrientationEntryView = true)
+        viewModel.awaitState { it.multiDayCount == 5 }
+
+        // The +/- controls on the unfolded screen change only the large-screen value ...
+        viewModel.settings.setMultiDayCount(6)
+        viewModel.awaitState { it.multiDayCount == 6 && it.largeLandscapeMultiDayCount == 6 }
+
+        // ... so the folded phone screen keeps its own count.
+        viewModel.setWindowLayout(CalendarWindowLayout.PhoneLandscape, applyOrientationEntryView = false)
+        val folded = viewModel.awaitState { it.multiDayCount == 3 }
+        assertEquals(3, folded.landscapeMultiDayCount)
+        assertEquals(6, folded.largeLandscapeMultiDayCount)
+
+        viewModel.setWindowLayout(
+            CalendarWindowLayout(isLandscape = false, widthDp = 673, heightDp = 841),
+            applyOrientationEntryView = true,
+        )
+        viewModel.awaitState { it.multiDayCount == 4 }
+    }
+
+    @Test
+    fun enteringLandscapeSwapsDayForMultipleDaysOnlyWhenTheOrientationChanges() = runTest {
+        val viewModel = viewModel()
+        viewModel.selectView(CalendarViewMode.Day)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.Day }
+
+        val tabletLandscape = CalendarWindowLayout(isLandscape = true, widthDp = 1280, heightDp = 800)
+        viewModel.setWindowLayout(tabletLandscape, applyOrientationEntryView = true)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.ThreeDay }
+
+        // Choosing Day in landscape sticks while the window is only resized (split screen, freeform).
+        viewModel.selectView(CalendarViewMode.Day)
+        viewModel.awaitState { it.selectedView == CalendarViewMode.Day }
+        viewModel.setWindowLayout(tabletLandscape.copy(widthDp = 1000), applyOrientationEntryView = false)
+        viewModel.settings.setShowCalendarWeeks(true)
+        val resized = viewModel.awaitState { it.showCalendarWeeks }
+        assertEquals(CalendarViewMode.Day, resized.selectedView)
+    }
+
+    @Test
     fun settingsChangesReachUiStateAndRefreshWidgets() = runTest {
         val viewModel = viewModel()
         viewModel.awaitState { it.initialDataLoaded }
@@ -252,8 +374,122 @@ class CalendarViewModelTest {
         assertEquals("Dentist", hidden.searchQuery)
     }
 
+    @Test
+    fun hidingOnlyTheTasksOfACalendarKeepsItsEventsAndReplansReminders() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createEvent(eventPayload("Team standup", today))
+        harness.repository.createTask(taskPayload("Team report", dueDate = today))
+        val viewModel = viewModel()
+        viewModel.search.setSearchQuery("Team")
+        viewModel.awaitState { state ->
+            state.events.any { it.title == "Team standup" } &&
+                state.datedTasks.any { it.title == "Team report" } &&
+                state.searchResults.isNotEmpty() &&
+                state.searchTaskResults.isNotEmpty()
+        }
+        val reschedulesBefore = reminderReschedules.value
+
+        viewModel.settings.setCollectionTasksVisible(LOCAL_COLLECTION, visible = false)
+
+        val hidden = viewModel.awaitState { state ->
+            LOCAL_COLLECTION in state.collectionVisibility.tasksHiddenIn &&
+                state.datedTasks.isEmpty() &&
+                state.scheduledOpenTasks.isEmpty() &&
+                state.searchTaskResults.isEmpty()
+        }
+        assertEquals(listOf("Team standup"), hidden.events.map { it.title })
+        assertEquals(listOf("Team standup"), hidden.searchResults.map { it.title })
+        assertTrue(hidden.hiddenCollectionHrefs.isEmpty())
+        awaitReminderReschedules { it > reschedulesBefore }
+    }
+
+    @Test
+    fun hidingACalendarReplansReminders() = runTest {
+        harness.repository.ensureLocalCalendar()
+        val viewModel = viewModel()
+        val reschedulesBefore = reminderReschedules.value
+
+        viewModel.settings.setCollectionVisibleInViews(LOCAL_COLLECTION, visible = false)
+
+        viewModel.awaitState { LOCAL_COLLECTION in it.hiddenCollectionHrefs }
+        awaitReminderReschedules { it > reschedulesBefore }
+    }
+
+    @Test
+    fun completingARecurringTaskInTheTaskListCompletesOnlyTheListedOccurrence() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        val viewModel = viewModel()
+        val listed = viewModel.awaitState { state -> state.scheduledOpenTasks.any { it.title == "Water plants" } }
+            .scheduledOpenTasks.single { it.title == "Water plants" }
+        assertEquals(today, listed.dueDate())
+
+        viewModel.edits.setTaskStatus(listed, "COMPLETED")
+
+        val next = viewModel.awaitState { state ->
+            state.scheduledOpenTasks.singleOrNull { it.title == "Water plants" }?.dueDate() == today.plusDays(1)
+        }.scheduledOpenTasks.single { it.title == "Water plants" }
+        assertFalse(next.isCompleted)
+        val master = harness.repository.taskByResource(listed.resourceHref)!!
+        assertFalse(master.isCompleted)
+        assertTrue(master.occurrenceAt(listed.startAtMillis ?: listed.dueAtMillis!!).isCompleted)
+    }
+
+    @Test
+    fun tickingAMissedOccurrenceInTheOverdueListCompletesOnlyThatOccurrence() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        harness.repository.createTask(taskPayload("Single", dueDate = today.minusDays(1)))
+        val viewModel = viewModel()
+        val initial = viewModel.awaitState { state ->
+            state.missedTaskOccurrences.size == 3 && state.scheduledOpenTasks.size == 2
+        }
+        val overdue = orderedOverdueTasks(initial.scheduledOpenTasks + initial.missedTaskOccurrences, today, TEST_ZONE)
+        assertEquals(
+            listOf("Water plants", "Water plants", "Single", "Water plants"),
+            overdue.map { it.title },
+        )
+        assertEquals(
+            listOf(today.minusDays(3), today.minusDays(2), today.minusDays(1), today.minusDays(1)),
+            overdue.map { it.dueDate() },
+        )
+        assertEquals(today, initial.scheduledOpenTasks.single { it.title == "Water plants" }.dueDate())
+
+        val ticked = initial.missedTaskOccurrences.single { it.dueDate() == today.minusDays(2) }
+        viewModel.edits.setTaskStatus(ticked, "COMPLETED")
+
+        val after = viewModel.awaitState { state ->
+            state.missedTaskOccurrences.map { it.dueDate() } == listOf(today.minusDays(3), today.minusDays(1))
+        }
+        assertEquals(today, after.scheduledOpenTasks.single { it.title == "Water plants" }.dueDate())
+        assertEquals(today.minusDays(1), after.scheduledOpenTasks.single { it.title == "Single" }.dueDate())
+        val master = harness.repository.taskByResource(ticked.resourceHref)!!
+        assertFalse(master.isCompleted)
+        assertTrue(master.occurrenceAt(ticked.dueAtMillis!!).isCompleted)
+    }
+
+    @Test
+    fun taskListFollowsTheCurrentDay() = runTest {
+        harness.repository.ensureLocalCalendar()
+        harness.repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        val viewModel = viewModel()
+        viewModel.awaitState { state -> state.scheduledOpenTasks.singleOrNull()?.dueDate() == today }
+
+        viewModel.setCurrentDay(today.plusDays(1))
+
+        viewModel.awaitState { state -> state.scheduledOpenTasks.singleOrNull()?.dueDate() == today.plusDays(1) }
+    }
+
+    private fun TaskEntity.dueDate(): LocalDate = Instant.ofEpochMilli(dueAtMillis!!).atZone(TEST_ZONE).toLocalDate()
+
+    private suspend fun awaitReminderReschedules(predicate: (Int) -> Boolean) =
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { reminderReschedules.first(predicate) }
+        }
+
     private fun viewModel(
         widgetTarget: CalendarWidgetLaunchTarget? = null,
+        sharedEvent: SharedEventDraft? = null,
         deliverInitialLaunchEvents: Boolean = true,
     ): CalendarViewModel {
         val repository = harness.repository
@@ -266,7 +502,13 @@ class CalendarViewModelTest {
                 reconcileLocalState = {},
             ),
             taskMutationCoordinator = TaskMutationCoordinator(
-                persistStatus = { resourceHref, status, _ -> repository.setTaskStatus(resourceHref, status) },
+                persistStatus = { resourceHref, status, occurrenceId ->
+                    if (occurrenceId == null) {
+                        repository.setTaskStatus(resourceHref, status)
+                    } else {
+                        repository.setTaskOccurrenceStatus(resourceHref, occurrenceId.recurrenceIdMillis, status)
+                    }
+                },
                 pushPendingChanges = repository::pushPendingChangesCreatedSince,
                 notificationReconciler = NoOpNotificationReconciler,
                 rescheduleReminders = {},
@@ -281,11 +523,12 @@ class CalendarViewModelTest {
             ),
             timelineViewportMemory = TimelineOrientationViewportMemory(),
             widgetRefresher = widgetRefresher,
-            reminderRescheduler = ReminderRescheduler {},
+            reminderRescheduler = ReminderRescheduler { reminderReschedules.update { it + 1 } },
             appLifecycleSignals = lifecycleSignals,
             uiStrings = UiStrings { "string-$it" },
             zoneId = TEST_ZONE,
             initialWidgetLaunchTarget = widgetTarget,
+            initialSharedEvent = sharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
         ).also(viewModels::add)
     }

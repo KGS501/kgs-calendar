@@ -3,8 +3,13 @@ package com.kgs.calendar.ui.shell
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
+import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.TaskEditPayload
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
 import com.kgs.calendar.ui.CreationSheet
@@ -16,6 +21,8 @@ import com.kgs.calendar.ui.RecurringSaveRequest
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.SheetSnap
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -51,6 +58,53 @@ class CalendarShellUiStateTest {
         assertTrue(shell.detailTaskBackStack.isEmpty())
         assertNull(shell.editorTransferDraft)
         assertNull(shell.conversionSource)
+    }
+
+    @Test
+    fun bookPanesFollowWhereTheSheetWasOpenedFrom() {
+        // Tapped in the task pane: the detail, its editor and a new subtask use the left pane.
+        shell.openTaskDetail(task("inbox"), SheetOrigin.TaskPane)
+        assertEquals(BookPane.Left, shell.detailBookPane)
+        shell.editTask(task("inbox"), newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60))
+        assertEquals(BookPane.Left, shell.creationBookPane)
+
+        // Tapped in the calendar: the right pane, for the detail and the editor it opens.
+        shell.openDetail(DetailSheet.Event(event("meeting")))
+        assertEquals(BookPane.Right, shell.detailBookPane)
+        shell.editEvent(event("meeting"), newEventSchedule(today, LocalTime.NOON, 60))
+        assertEquals(BookPane.Right, shell.creationBookPane)
+
+        // "New task" in the task pane opens on the left; the create button on the right.
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
+        assertEquals(BookPane.Left, shell.creationBookPane)
+        shell.openTaskCreation(schedule, wireframeColor = 1)
+        assertEquals(BookPane.Right, shell.creationBookPane)
+    }
+
+    @Test
+    fun switchingTheEditorTypeKeepsItsPane() {
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
+
+        shell.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.EventFull, conversion = null, today = today)
+
+        assertEquals(CreationSheet.EventFull, shell.creationSheet)
+        assertEquals(BookPane.Left, shell.creationBookPane)
+    }
+
+    @Test
+    fun aTimelineSlotDraftOpensItsEditorInTheRightPane() {
+        shell.openTaskCreation(
+            newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60),
+            wireframeColor = 1,
+            origin = SheetOrigin.TaskPane,
+        )
+
+        shell.selectDraftSlot(EditorSchedulePreview(today, LocalTime.of(9, 0), LocalTime.of(10, 0), false), wireframeColor = 1)
+
+        assertEquals(CreationSheet.EventLow, shell.creationSheet)
+        assertEquals(BookPane.Right, shell.creationBookPane)
     }
 
     @Test
@@ -185,12 +239,23 @@ class CalendarShellUiStateTest {
     fun hiddenSaveNoticeOnlyForHiddenCalendars() {
         val state = CalendarUiState(
             defaultTaskCollectionHref = "hidden",
-            hiddenCollectionHrefs = setOf("hidden"),
+            collectionVisibility = CollectionVisibility(hiddenCollectionHrefs = setOf("hidden")),
         )
         shell.showHiddenSaveNotice("visible", HiddenSaveKind.Event, state)
         assertNull(shell.hiddenSaveNotice)
         shell.showHiddenSaveNotice(null, HiddenSaveKind.Task, state)
         assertEquals(HiddenSaveNotice("hidden", HiddenSaveKind.Task), shell.hiddenSaveNotice)
+    }
+
+    @Test
+    fun hiddenSaveNoticeFollowsTheHiddenItemTypeOfACalendar() {
+        val state = CalendarUiState(
+            collectionVisibility = CollectionVisibility(tasksHiddenIn = setOf("shared")),
+        )
+        shell.showHiddenSaveNotice("shared", HiddenSaveKind.Event, state)
+        assertNull(shell.hiddenSaveNotice)
+        shell.showHiddenSaveNotice("shared", HiddenSaveKind.Task, state)
+        assertEquals(HiddenSaveNotice("shared", HiddenSaveKind.Task), shell.hiddenSaveNotice)
     }
 
     @Test
@@ -236,6 +301,62 @@ class CalendarShellUiStateTest {
         recurrenceRule = "FREQ=DAILY",
     )
 
+    @Test
+    fun theTrashOpensFromTheDrawerAndItsItemsOpenReadOnlyDetails() {
+        shell.openMenuDrawer()
+        shell.openTrash()
+
+        assertTrue(shell.trashOpen)
+        assertFalse(shell.drawerOpen)
+        assertTrue(shell.anyOverlayOpen)
+
+        val trashed = trashedTask("gone", id = 5)
+        shell.openTrashedDetail(trashed)
+
+        val detail = shell.detailSheet as DetailSheet.Task
+        assertEquals(trashed.item, detail.trashedItem)
+        assertEquals(trashed.task, detail.task)
+        assertEquals(0, shell.detailTaskMorphGeneration)
+    }
+
+    @Test
+    fun backClosesTheTrashedDetailBeforeTheTrash() {
+        fun back() = shell.navigateBack(closeSearch = shell::closeSearch, selectView = {})
+        shell.openTrash()
+        shell.openTrashedDetail(trashedTask("gone", id = 5))
+
+        back()
+        assertNull(shell.detailSheet)
+        assertTrue(shell.trashOpen)
+        back()
+        assertFalse(shell.trashOpen)
+        assertFalse(shell.anyOverlayOpen)
+    }
+
+    @Test
+    fun closingTheTrashClosesItsDetailButNotALiveOne() {
+        shell.openTrash()
+        shell.openTrashedDetail(trashedTask("gone", id = 5))
+        shell.closeTrash()
+        assertNull(shell.detailSheet)
+
+        shell.openTrash()
+        shell.openDetail(DetailSheet.Event(event("meeting")))
+        shell.closeTrash()
+        assertEquals(DetailSheet.Event(event("meeting")), shell.detailSheet)
+    }
+
+    @Test
+    fun aLaunchedDetailOrANewEditorClosesTheTrash() {
+        shell.openTrash()
+        shell.openLaunchedDetail(DetailSheet.Event(event("meeting")))
+        assertFalse(shell.trashOpen)
+
+        shell.openTrash()
+        shell.openTaskCreation(newTaskSchedule(today, LocalTime.of(9, 0), false, true, true, true, 30), wireframeColor = 1)
+        assertFalse(shell.trashOpen)
+    }
+
     companion object {
         const val DefaultColor = 0xFF8A5A44.toInt()
 
@@ -264,6 +385,27 @@ class CalendarShellUiStateTest {
             isRecurring = false,
             color = 1,
         )
+
+        /** A "Recently deleted" task as the trash list hands it over. */
+        fun trashedTask(name: String, id: Long): TrashedItemPreview {
+            val item = TrashedItemEntity(
+                id = id,
+                componentType = ComponentType.Task,
+                uid = name,
+                collectionHref = "work",
+                accountId = "account",
+                sourceType = SourceType.Local,
+                resourceHref = "$name.ics",
+                rawIcs = "",
+                title = name,
+                startMillis = null,
+                hasTime = false,
+                collectionName = "work",
+                collectionColor = 1,
+                deletedAtMillis = 1_790_000_000_000L,
+            )
+            return TrashedItemPreview(item, task = task(name).copy(resourceHref = TrashedItemPreview.displayHref(item)))
+        }
 
         fun task(name: String, startAt: Long? = null, recurrenceRule: String? = null) = TaskEntity(
             uid = name,

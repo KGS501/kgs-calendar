@@ -3,6 +3,7 @@ package com.kgs.calendar.data.local
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.trash.TrashRetention
 
 object KgsDatabaseMigrations {
     val ALL: Array<Migration> get() = arrayOf(
@@ -24,6 +25,9 @@ object KgsDatabaseMigrations {
         MIGRATION_16_17,
         MIGRATION_17_18,
         MIGRATION_18_19,
+        MIGRATION_19_20,
+        MIGRATION_20_21,
+        MIGRATION_21_22,
     )
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -315,4 +319,53 @@ object KgsDatabaseMigrations {
         }
     }
 
+    private val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Queued changes from older versions keep a null scope, which marks the whole resource.
+            db.execSQL("ALTER TABLE pending_mutations ADD COLUMN occurrenceScope TEXT")
+        }
+    }
+
+    private val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // "Recently deleted": snapshots of whole events and tasks deleted in the app.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS trashed_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    componentType TEXT NOT NULL,
+                    uid TEXT NOT NULL,
+                    collectionHref TEXT NOT NULL,
+                    accountId TEXT NOT NULL,
+                    sourceType TEXT NOT NULL,
+                    resourceHref TEXT NOT NULL,
+                    providerEventId INTEGER,
+                    rawIcs TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    startMillis INTEGER,
+                    hasTime INTEGER NOT NULL,
+                    collectionName TEXT NOT NULL,
+                    collectionColor INTEGER NOT NULL,
+                    manualColor INTEGER,
+                    deletedAtMillis INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_trashed_items_deletedAtMillis ON trashed_items(deletedAtMillis)")
+        }
+    }
+
+    private val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // The trash also caches the objects of Nextcloud's server-side trash bin.
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'")
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN serverHref TEXT")
+            db.execSQL("ALTER TABLE trashed_items ADD COLUMN expiresAtMillis INTEGER NOT NULL DEFAULT 0")
+            // Existing rows are local snapshots, which expire 30 days after their delete.
+            db.execSQL("UPDATE trashed_items SET expiresAtMillis = deletedAtMillis + ${TrashRetention.MILLIS}")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_trashed_items_accountId_serverHref ON trashed_items(accountId, serverHref)",
+            )
+        }
+    }
 }

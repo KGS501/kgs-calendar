@@ -104,7 +104,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -204,6 +206,8 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.composed
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -366,6 +370,17 @@ import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.FoldPanelSlot
+import com.kgs.calendar.ui.layout.FoldPosture
+import com.kgs.calendar.ui.layout.LocalFoldPosture
+import com.kgs.calendar.ui.layout.bookPaneHideDeltaPx
+import com.kgs.calendar.ui.layout.bookPaneSlideOffsetPx
+import com.kgs.calendar.ui.layout.foldPanelSlot
+import com.kgs.calendar.ui.layout.paneBounds
+import com.kgs.calendar.ui.layout.SheetMaxWidth
+import com.kgs.calendar.ui.layout.tabletopPanelImeOverlapPx
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
 import com.kgs.calendar.ui.layout.TimedPlacement
@@ -454,8 +469,18 @@ internal fun KgsModalBottomSheet(
     onSnapChanged: (SheetSnap) -> Unit = {},
     onBackRequest: (() -> Unit)? = null,
     separationShadow: Boolean = false,
+    followFoldPosture: Boolean = false,
+    bookPane: BookPane = BookPane.Right,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val foldPosture = if (followFoldPosture) LocalFoldPosture.current else FoldPosture.Normal
+    // In the tabletop posture the detail and editor sheets become a panel covering the top half, above
+    // the hinge, so the calendar below stays visible and usable and the keyboard opens below the panel.
+    val tabletopPanelBottomPx = (foldPosture as? FoldPosture.Tabletop)?.hingeTopPx
+    // In the book posture they fill [bookPane] from top to bottom, beside the hinge, while the other pane
+    // stays visible and usable. The keyboard spans both panes, so the pane pads for it like a bottom sheet.
+    val bookPosture = foldPosture as? FoldPosture.Book
+    val panelSlot = foldPanelSlot(foldPosture, bookPane)
     val scope = rememberCoroutineScope()
     val quietInteraction = remember { MutableInteractionSource() }
     val view = LocalView.current
@@ -504,6 +529,61 @@ internal fun KgsModalBottomSheet(
             var lastCollapseRequest by remember { mutableStateOf(collapseRequest) }
             var lastExpandRequest by remember { mutableStateOf(expandRequest) }
             val maxEdgeBouncePx = min(with(density) { 24.dp.toPx() }, expandedAnchor * 0.45f)
+            val inTopPanel = tabletopPanelBottomPx != null
+            val topPanelHeightPx = (tabletopPanelBottomPx ?: 0f).coerceIn(1f, screenHeightPx)
+            val bookPaneBounds = bookPosture?.paneBounds(bookPane, constraints.maxWidth.toFloat())
+            val inBookPane = bookPaneBounds != null
+            // The tabletop top panel and the book panes are fold panels: always fully open, sliding in from
+            // their outer screen edge (the top, or the pane's side) over the length of [panelExtentPx].
+            val inPanel = inTopPanel || inBookPane
+            val panelExtentPx = if (bookPaneBounds != null) bookPaneBounds.widthPx.coerceAtLeast(1f) else topPanelHeightPx
+            val foldPanels = LocalFoldPanels.current
+            // A panel that replaces another one in the same place (detail -> editor) stays in place and only
+            // fades its content in.
+            val enterPanelInPlace = remember(panelSlot) { panelSlot != null && foldPanels.isOpen(panelSlot) }
+            // How far the panel is pushed out towards its outer edge: -panelExtentPx is hidden, 0 is open.
+            var panelOffsetPx by remember { mutableFloatStateOf(-panelExtentPx) }
+            var panelShownIn by remember { mutableStateOf<FoldPanelSlot?>(null) }
+            var panelClosing by remember { mutableStateOf(false) }
+            val panelContentAlpha = remember { Animatable(1f) }
+            DisposableEffect(panelSlot) {
+                panelSlot?.let(foldPanels::opened)
+                onDispose { panelSlot?.let(foldPanels::closed) }
+            }
+
+            suspend fun animatePanelTo(target: Float, easing: androidx.compose.animation.core.Easing = MotionEmphasized) {
+                animate(
+                    initialValue = panelOffsetPx,
+                    targetValue = target,
+                    animationSpec = tween(MotionMedium, easing = easing),
+                ) { value, _ ->
+                    panelOffsetPx = value
+                }
+            }
+
+            fun closePanel(afterClose: () -> Unit = onDismissRequest) {
+                if (panelClosing) return
+                panelClosing = true
+                scope.launch {
+                    animatePanelTo(-panelExtentPx, MotionStandardAccelerate)
+                    afterClose()
+                }
+            }
+
+            /** [delta] towards open is positive: down for the top panel, towards the hinge for a pane. */
+            fun dragPanelBy(delta: Float) {
+                if (panelClosing) return
+                panelOffsetPx = (panelOffsetPx + delta).coerceIn(-panelExtentPx, 0f)
+            }
+
+            fun settlePanel(velocity: Float) {
+                if (panelClosing) return
+                if (velocity < -850f || panelOffsetPx < -panelExtentPx * 0.3f) {
+                    closePanel()
+                } else {
+                    scope.launch { animatePanelTo(0f) }
+                }
+            }
 
             fun clampedOffset(value: Float): Float = value.coerceIn(expandedAnchor, hiddenAnchor)
 
@@ -593,14 +673,38 @@ internal fun KgsModalBottomSheet(
             }
 
             fun closeSheet() {
-                scope.launch { animateSheetTo(hiddenAnchor, dismissAfter = true) }
+                if (inPanel) {
+                    closePanel()
+                } else {
+                    scope.launch { animateSheetTo(hiddenAnchor, dismissAfter = true) }
+                }
             }
 
             BackHandler(enabled = true) {
                 onBackRequest?.invoke() ?: closeSheet()
             }
 
-            LaunchedEffect(screenHeightPx, initialSnap, initialContentHeight) {
+            LaunchedEffect(screenHeightPx, initialSnap, initialContentHeight, panelSlot, panelExtentPx) {
+                if (panelSlot != null) {
+                    // Leaving the posture later brings the bottom sheet up again instead of showing it at once.
+                    shown = false
+                    if (panelShownIn != panelSlot) {
+                        panelShownIn = panelSlot
+                        if (enterPanelInPlace) {
+                            panelOffsetPx = 0f
+                            panelContentAlpha.snapTo(0f)
+                            panelContentAlpha.animateTo(1f, tween(MotionMedium, easing = MotionStandard))
+                        } else {
+                            panelContentAlpha.snapTo(1f)
+                            panelOffsetPx = -panelExtentPx
+                            animatePanelTo(0f)
+                        }
+                    } else {
+                        panelOffsetPx = panelOffsetPx.coerceIn(-panelExtentPx, 0f)
+                    }
+                    return@LaunchedEffect
+                }
+                panelShownIn = null
                 if (!shown) {
                     sheetOffsetPx = hiddenAnchor
                     shown = true
@@ -613,7 +717,7 @@ internal fun KgsModalBottomSheet(
             LaunchedEffect(collapseRequest) {
                 val shouldCollapse = collapseRequest != lastCollapseRequest
                 lastCollapseRequest = collapseRequest
-                if (shown && shouldCollapse) {
+                if (shown && shouldCollapse && !inPanel) {
                     animateSheetTo(anchorFor(collapseSnap))
                 }
             }
@@ -621,7 +725,7 @@ internal fun KgsModalBottomSheet(
             LaunchedEffect(expandRequest) {
                 val shouldExpand = expandRequest != lastExpandRequest
                 lastExpandRequest = expandRequest
-                if (shown && shouldExpand) {
+                if (shown && shouldExpand && !inPanel) {
                     animateSheetTo(expandedAnchor)
                 }
             }
@@ -685,11 +789,25 @@ internal fun KgsModalBottomSheet(
             val sheetHeight = with(density) { (sheetBottomPx - effectiveSheetOffsetPx).coerceAtLeast(1f).toDp() }
             val cornerRadius = 28.dp
 
+            val panelProgress = (1f + panelOffsetPx / panelExtentPx).coerceIn(0f, 1f)
+            val topPanelHeight = with(density) { topPanelHeightPx.toDp() }
+            val bookPaneLeftPx = bookPaneBounds?.leftPx ?: 0f
+            val bookPaneWidth = with(density) { (bookPaneBounds?.widthPx ?: 0f).toDp() }
             if (dimBackground || dismissOnOutsideTap) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(if (dimBackground) openProgress else 1f)
+                        // A fold panel dims only its own half; the other half of the screen stays usable.
+                        .then(
+                            when {
+                                inTopPanel -> Modifier.fillMaxWidth().height(topPanelHeight)
+                                inBookPane -> Modifier
+                                    .offset { IntOffset(x = bookPaneLeftPx.roundToInt(), y = 0) }
+                                    .width(bookPaneWidth)
+                                    .fillMaxHeight()
+                                else -> Modifier.fillMaxSize()
+                            },
+                        )
+                        .alpha(if (dimBackground) (if (inPanel) panelProgress else openProgress) else 1f)
                         .then(if (dimBackground) Modifier.background(Color.Black.copy(alpha = 0.38f)) else Modifier)
                         .then(
                             if (dismissOnOutsideTap) {
@@ -719,9 +837,27 @@ internal fun KgsModalBottomSheet(
                     )
                 }
                 .then(sheetDragModifier)
+            // The top panel is always fully open; dragging its header or handle up puts it away.
+            val topPanelDragModifier = Modifier.draggable(
+                state = rememberDraggableState { delta -> dragPanelBy(delta) },
+                orientation = Orientation.Vertical,
+                onDragStopped = { velocity -> settlePanel(velocity) },
+            )
+            // A book pane puts its header away sideways, towards the screen edge it came from, like a drawer.
+            val bookPaneDragModifier = Modifier.draggable(
+                state = rememberDraggableState { delta -> dragPanelBy(-bookPaneHideDeltaPx(bookPane, delta)) },
+                orientation = Orientation.Horizontal,
+                onDragStopped = { velocity -> settlePanel(-bookPaneHideDeltaPx(bookPane, velocity)) },
+            )
+            val closeAnimator: (() -> Unit) -> Unit = { action ->
+                if (inPanel) closePanel(afterClose = action) else action()
+            }
 
+            // On tablets and unfolded foldables the sheet stays at most SheetMaxWidth wide, centred.
+            // Phones, rotated ones included, keep the full window width.
+            val sheetMaxWidth = largeScreenMaxWidth(SheetMaxWidth)
             val separationShadowDark = MaterialTheme.colorScheme.background.isDark()
-            if (separationShadow) {
+            if (separationShadow && !inPanel) {
                 val shadowHeight = if (separationShadowDark) 42.dp else 34.dp
                 val shadowHeightPx = with(density) { shadowHeight.toPx() }
                 val cornerRadiusPx = with(density) { cornerRadius.toPx() }
@@ -729,6 +865,8 @@ internal fun KgsModalBottomSheet(
                 val bottomAlpha = if (separationShadowDark) 0.36f else 0.15f
                 Canvas(
                     modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .widthIn(max = sheetMaxWidth)
                         .fillMaxWidth()
                         .height(shadowHeight + cornerRadius)
                         .offset {
@@ -751,13 +889,60 @@ internal fun KgsModalBottomSheet(
                 }
             }
 
+            // Fold panels round only the corners next to the hinge.
+            val panelShape = when {
+                inTopPanel -> RoundedCornerShape(bottomStart = cornerRadius, bottomEnd = cornerRadius)
+                bookPane == BookPane.Left -> RoundedCornerShape(topEnd = cornerRadius, bottomEnd = cornerRadius)
+                else -> RoundedCornerShape(topStart = cornerRadius, bottomStart = cornerRadius)
+            }
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(sheetHeight)
-                    .offset { IntOffset(x = 0, y = effectiveSheetOffsetPx.roundToInt()) }
                     .then(
-                        if (separationShadow) {
+                        if (inBookPane) {
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .offset {
+                                    IntOffset(
+                                        x = (bookPaneLeftPx + bookPaneSlideOffsetPx(bookPane, -panelOffsetPx)).roundToInt(),
+                                        y = 0,
+                                    )
+                                }
+                                .width(bookPaneWidth)
+                        } else {
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .widthIn(max = sheetMaxWidth)
+                                .fillMaxWidth()
+                        },
+                    )
+                    .testTag(KgsModalBottomSheetSurfaceTag)
+                    .then(
+                        if (inPanel) {
+                            Modifier
+                                .then(
+                                    if (inTopPanel) {
+                                        Modifier
+                                            .height(topPanelHeight)
+                                            .offset { IntOffset(x = 0, y = panelOffsetPx.roundToInt()) }
+                                    } else {
+                                        Modifier.fillMaxHeight()
+                                    },
+                                )
+                                .shadow(
+                                    elevation = if (separationShadowDark) 30.dp else 18.dp,
+                                    shape = panelShape,
+                                    clip = false,
+                                    ambientColor = Color.Black.copy(alpha = if (separationShadowDark) 0.24f else 0.13f),
+                                    spotColor = Color.Black.copy(alpha = if (separationShadowDark) 0.28f else 0.17f),
+                                )
+                        } else {
+                            Modifier
+                                .height(sheetHeight)
+                                .offset { IntOffset(x = 0, y = effectiveSheetOffsetPx.roundToInt()) }
+                        },
+                    )
+                    .then(
+                        if (separationShadow && !inPanel) {
                             Modifier.shadow(
                                 elevation = if (separationShadowDark) 30.dp else 18.dp,
                                 shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
@@ -769,39 +954,124 @@ internal fun KgsModalBottomSheet(
                             Modifier
                         },
                     )
-                    .nestedScroll(sheetNestedScrollConnection),
-                shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
+                    .then(if (inPanel) Modifier else Modifier.nestedScroll(sheetNestedScrollConnection)),
+                shape = if (inPanel) {
+                    panelShape
+                } else {
+                    RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius)
+                },
                 color = containerColor,
                 shadowElevation = 0.dp,
             ) {
                 CompositionLocalProvider(LocalOverscrollFactory provides null) {
-                    CompositionLocalProvider(LocalSheetHeaderDragModifier provides sheetHeaderModifier) {
+                    CompositionLocalProvider(
+                        LocalSheetHeaderDragModifier provides when {
+                            inTopPanel -> topPanelDragModifier
+                            inBookPane -> bookPaneDragModifier
+                            else -> sheetHeaderModifier
+                        },
+                        LocalSheetCloseAnimator provides closeAnimator,
+                    ) {
                     Column(
                         Modifier
                             .fillMaxSize()
                             .then(
-                                if (sheetInsetPolicy.respectsImeBottomInset) {
+                                if (inTopPanel) {
+                                    Modifier
+                                        .windowInsetsPadding(WindowInsets.statusBars)
+                                        .tabletopPanelImePadding(panelBottomPx = topPanelHeightPx, windowHeightPx = screenHeightPx)
+                                } else if (inBookPane) {
+                                    // The keyboard spans both panes, so a pane pads for it exactly like a bottom sheet.
+                                    Modifier
+                                        .windowInsetsPadding(WindowInsets.statusBars)
+                                        .imePadding()
+                                } else if (sheetInsetPolicy.respectsImeBottomInset) {
                                     Modifier.imePadding()
                                 } else {
                                     Modifier
                                 },
                             ),
                     ) {
-                        KgsSheetHandle(
-                            modifier = sheetHeaderModifier,
-                        )
+                        if (!inPanel) {
+                            KgsSheetHandle(
+                                modifier = sheetHeaderModifier,
+                            )
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f),
+                                .weight(1f)
+                                .then(
+                                    if (inPanel) {
+                                        Modifier.graphicsLayer { alpha = panelContentAlpha.value }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         ) {
                             content()
+                        }
+                        if (inTopPanel) {
+                            // The handle sits at the panel's lower edge, next to the hinge.
+                            KgsSheetHandle(
+                                modifier = topPanelDragModifier.testTag(TabletopTopPanelHandleTag),
+                            )
                         }
                     }
                     }
                 }
+                if (inPanel && panelClosing) {
+                    // The content stays visible while the panel slides away; it must not take a second save.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(interactionSource = quietInteraction, indication = null, onClick = {}),
+                    )
+                }
             }
         }
+}
+
+internal const val KgsModalBottomSheetSurfaceTag = "kgs-modal-bottom-sheet"
+internal const val TabletopTopPanelHandleTag = "tabletop-top-panel-handle"
+
+/**
+ * Runs a close action from inside a sheet (the editor's close button, a save, a delete). A fold panel (the
+ * tabletop top panel or a book pane) first slides away and then runs it; a regular bottom sheet runs it at
+ * once, exactly as before.
+ */
+internal val LocalSheetCloseAnimator = compositionLocalOf<(() -> Unit) -> Unit> { { action -> action() } }
+
+/** Counts the open fold panels per place, so a panel that replaces another one does not slide in again. */
+internal class FoldPanels {
+    private val openCounts = mutableMapOf<FoldPanelSlot, Int>()
+
+    fun isOpen(slot: FoldPanelSlot): Boolean = (openCounts[slot] ?: 0) > 0
+
+    fun opened(slot: FoldPanelSlot) {
+        openCounts[slot] = (openCounts[slot] ?: 0) + 1
+    }
+
+    fun closed(slot: FoldPanelSlot) {
+        openCounts[slot] = ((openCounts[slot] ?: 0) - 1).coerceAtLeast(0)
+    }
+}
+
+internal val LocalFoldPanels = staticCompositionLocalOf { FoldPanels() }
+
+/**
+ * The keyboard opens in the bottom half, below the hinge, so the top panel ignores it; only the part of a
+ * keyboard taller than the bottom half pads the panel's content.
+ */
+private fun Modifier.tabletopPanelImePadding(panelBottomPx: Float, windowHeightPx: Float): Modifier = composed {
+    val density = LocalDensity.current
+    val imeHeightPx = WindowInsets.ime.getBottom(density).toFloat()
+    val overlapPx = tabletopPanelImeOverlapPx(
+        imeHeightPx = imeHeightPx,
+        windowHeightPx = windowHeightPx,
+        panelBottomPx = panelBottomPx,
+    )
+    padding(bottom = with(density) { overlapPx.toDp() })
 }
 
 @Composable

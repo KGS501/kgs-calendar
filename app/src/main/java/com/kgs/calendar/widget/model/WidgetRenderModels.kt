@@ -143,7 +143,7 @@ internal fun monthRenderSignature(
     append('|').append(today.toEpochDay())
     append('|').append(settings.locale.toLanguageTag())
     append('|').append(settings.firstDayOfWeek.name)
-    append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+    append('|').append(settings.collectionVisibility.signature())
     append('|').append(settings.showCompletedTasks)
     append('|').append(settings.themeMode.name)
     append('|').append(settings.colorMode.name)

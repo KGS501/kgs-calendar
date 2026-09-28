@@ -326,6 +326,7 @@ import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.MultiDayCountBucket
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
@@ -376,6 +377,10 @@ import com.kgs.calendar.ui.layout.TimedPlacement
 import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
 import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildCollapsedAllDayLayout
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
+import com.kgs.calendar.ui.layout.SettingsContentMaxWidth
 import com.kgs.calendar.ui.layout.layoutTimedItemsForDay
 import com.kgs.calendar.ui.model.agendaSortMillis
 import com.kgs.calendar.ui.model.allDayTopEndDate
@@ -464,10 +469,10 @@ internal fun SettingsPage(
     onOverdueSummaryPriorityAnimationChanged: (Boolean) -> Unit,
     onSubtasksExpandedByDefaultChanged: (Boolean) -> Unit,
     onAutoLoadMapPreviewsChanged: (Boolean) -> Unit,
+    onHapticFeedbackChanged: (Boolean) -> Unit,
     onMaxVisibleAllDayItemsChanged: (Int) -> Unit,
     onMultiDaySidebarControlsChanged: (Boolean) -> Unit,
-    onPortraitMultiDayCountChanged: (Int) -> Unit,
-    onLandscapeMultiDayCountChanged: (Int) -> Unit,
+    onMultiDayCountChanged: (MultiDayCountBucket, Int) -> Unit,
     onWeekViewEnabledChanged: (Boolean) -> Unit,
     onFullWeekSwipeEnabledChanged: (Boolean) -> Unit,
     onFocusTitleOnCreateChanged: (Boolean) -> Unit,
@@ -600,7 +605,7 @@ internal fun SettingsPage(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .centeredMaxWidth(largeScreenMaxWidth(SettingsContentMaxWidth))
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {
             Row(
@@ -1129,20 +1134,53 @@ internal fun SettingsPage(
                                             exit = fadeOut(animationSpec = tween(120, easing = MotionStandardAccelerate)) +
                                                 shrinkVertically(animationSpec = tween(160, easing = MotionStandardAccelerate)),
                                         ) {
+                                            // A tablet or unfolded foldable edits its own counts, so the
+                                            // folded phone screen keeps the values that suit it.
+                                            val largeScreen = currentCalendarWindowLayout().isLargeScreen
                                             Column {
                                                 SettingsSliderRow(
                                                     title = stringResource(R.string.multi_day_count_portrait),
-                                                    subtitle = stringResource(R.string.multi_day_count_portrait_help),
-                                                    value = state.portraitMultiDayCount.coerceMultiDayCount(),
+                                                    subtitle = stringResource(
+                                                        if (largeScreen) {
+                                                            R.string.multi_day_count_large_portrait_help
+                                                        } else {
+                                                            R.string.multi_day_count_portrait_help
+                                                        },
+                                                    ),
+                                                    value = if (largeScreen) {
+                                                        state.largePortraitMultiDayCount
+                                                    } else {
+                                                        state.portraitMultiDayCount
+                                                    }.coerceMultiDayCount(),
                                                     range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                                    onValueChanged = onPortraitMultiDayCountChanged,
+                                                    onValueChanged = { count ->
+                                                        onMultiDayCountChanged(
+                                                            if (largeScreen) MultiDayCountBucket.LargePortrait else MultiDayCountBucket.Portrait,
+                                                            count,
+                                                        )
+                                                    },
                                                 )
                                                 SettingsSliderRow(
                                                     title = stringResource(R.string.multi_day_count_landscape),
-                                                    subtitle = stringResource(R.string.multi_day_count_landscape_help),
-                                                    value = state.landscapeMultiDayCount.coerceMultiDayCount(),
+                                                    subtitle = stringResource(
+                                                        if (largeScreen) {
+                                                            R.string.multi_day_count_large_landscape_help
+                                                        } else {
+                                                            R.string.multi_day_count_landscape_help
+                                                        },
+                                                    ),
+                                                    value = if (largeScreen) {
+                                                        state.largeLandscapeMultiDayCount
+                                                    } else {
+                                                        state.landscapeMultiDayCount
+                                                    }.coerceMultiDayCount(),
                                                     range = MIN_MULTI_DAY_COUNT..MAX_MULTI_DAY_COUNT,
-                                                    onValueChanged = onLandscapeMultiDayCountChanged,
+                                                    onValueChanged = { count ->
+                                                        onMultiDayCountChanged(
+                                                            if (largeScreen) MultiDayCountBucket.LargeLandscape else MultiDayCountBucket.Landscape,
+                                                            count,
+                                                        )
+                                                    },
                                                 )
                                             }
                                         }
@@ -1153,6 +1191,12 @@ internal fun SettingsPage(
                                     checked = state.autoLoadMapPreviews,
                                     onCheckedChange = onAutoLoadMapPreviewsChanged,
                                     subtitle = stringResource(R.string.auto_map_previews_help),
+                                )
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.haptic_feedback),
+                                    checked = state.hapticFeedbackEnabled,
+                                    onCheckedChange = onHapticFeedbackChanged,
+                                    subtitle = stringResource(R.string.haptic_feedback_help),
                                 )
                             }
                             SettingsSection(title = stringResource(R.string.new_items), icon = Icons.Default.Add) {
@@ -1707,7 +1751,7 @@ internal fun SettingsPage(
             title = appString(R.string.default_calendar),
             selectedHref = state.defaultEventCollectionHref,
             collections = state.collections.filter { it.supportsEvents && it.isEnabled && !it.isReadOnlyCollection() },
-            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            hiddenCollectionHrefs = state.collectionVisibility.hrefsHidingEvents,
             onSelected = {
                 onDefaultEventCollectionSelected(it)
                 defaultEventCollectionDialogOpen = false
@@ -1720,7 +1764,7 @@ internal fun SettingsPage(
             title = appString(R.string.default_list),
             selectedHref = state.defaultTaskCollectionHref,
             collections = state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() },
-            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            hiddenCollectionHrefs = state.collectionVisibility.hrefsHidingTasks,
             onSelected = {
                 onDefaultTaskCollectionSelected(it)
                 defaultTaskCollectionDialogOpen = false
@@ -1770,6 +1814,7 @@ internal fun ProblemsPage(
     ) {
         Column(
             modifier = Modifier
+                .centeredMaxWidth(largeScreenMaxWidth(SettingsContentMaxWidth))
                 .fillMaxSize()
                 .padding(top = statusTop + 8.dp, bottom = navBottom),
         ) {
@@ -2050,6 +2095,10 @@ internal fun CollectionSettingsSheet(
     onSave: (String, Int?) -> Unit,
     onEnabledChanged: (Boolean) -> Unit,
     onVisibleInViewsChanged: (Boolean) -> Unit,
+    eventsVisible: Boolean = true,
+    tasksVisible: Boolean = true,
+    onEventsVisibleChanged: (Boolean) -> Unit = {},
+    onTasksVisibleChanged: (Boolean) -> Unit = {},
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
@@ -2111,6 +2160,31 @@ internal fun CollectionSettingsSheet(
             subtitle = appString(R.string.calendar_sidebar_help),
             warningUnchecked = !visibleInViews,
         )
+        // Calendars with both events and tasks can hide one of the two. Hiding both hides the calendar.
+        if (collection.supportsEvents && collection.supportsTasks) {
+            AnimatedVisibility(
+                visible = visibleInViews,
+                enter = expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)) + fadeIn(tween(MotionShort)),
+                exit = shrinkVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SettingsSwitchRow(
+                        title = appString(R.string.calendar_show_events),
+                        checked = eventsVisible,
+                        onCheckedChange = onEventsVisibleChanged,
+                        subtitle = appString(R.string.calendar_show_events_help),
+                        warningUnchecked = !eventsVisible,
+                    )
+                    SettingsSwitchRow(
+                        title = appString(R.string.calendar_show_tasks),
+                        checked = tasksVisible,
+                        onCheckedChange = onTasksVisibleChanged,
+                        subtitle = appString(R.string.calendar_show_tasks_help),
+                        warningUnchecked = !tasksVisible,
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

@@ -33,4 +33,9 @@ data class PendingMutationEntity(
     val payloadIcs: String?,
     val baseEtag: String?,
     val createdAtMillis: Long,
+    /**
+     * Which occurrences this change covers, for the pending-sync indicators only (see
+     * [com.kgs.calendar.domain.sync.PendingOccurrenceScope]); null means the whole resource.
+     */
+    val occurrenceScope: String? = null,
 )

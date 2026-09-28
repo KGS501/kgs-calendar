@@ -29,6 +29,8 @@ internal data class WidgetListRow(
     val subtasksExpanded: Boolean,
     val priority: Int?,
     val priorityMotionEnabled: Boolean,
+    /** RECURRENCE-ID of the task occurrence this row shows; null for single tasks. */
+    val taskOccurrenceMillis: Long? = null,
 ) {
     fun appendSignatureTo(builder: StringBuilder) {
         builder
@@ -57,6 +59,7 @@ internal data class WidgetListRow(
             .append('|').append(subtasksExpanded)
             .append('|').append(priority ?: 0)
             .append('|').append(priorityMotionEnabled)
+            .append('|').append(taskOccurrenceMillis ?: Long.MIN_VALUE)
     }
 
     companion object {
@@ -160,6 +163,7 @@ internal data class WidgetListRow(
             eventStatus: String? = null,
             endMillis: Long = sortMillis,
             spanEndDate: LocalDate? = null,
+            taskOccurrenceMillis: Long? = null,
         ): WidgetListRow = WidgetListRow(
             type = WidgetListRowType.Item,
             title = title,
@@ -186,6 +190,7 @@ internal data class WidgetListRow(
             subtasksExpanded = true,
             priority = null,
             priorityMotionEnabled = false,
+            taskOccurrenceMillis = taskOccurrenceMillis,
         )
 
         fun task(
@@ -206,6 +211,9 @@ internal data class WidgetListRow(
             priority: Int?,
             priorityMotionEnabled: Boolean,
             launchKind: KgsWidgetKind = KgsWidgetKind.Tasks,
+            taskOccurrenceMillis: Long? = null,
+            /** True for one of several rows of the same recurring task, e.g. a missed occurrence. */
+            distinctOccurrence: Boolean = false,
         ): WidgetListRow = WidgetListRow(
             type = WidgetListRowType.Task,
             title = title,
@@ -216,7 +224,11 @@ internal data class WidgetListRow(
             completed = completed,
             allDaySort = 1,
             launchKind = launchKind,
-            stableId = stableId("task-row:$taskResourceHref"),
+            stableId = if (distinctOccurrence) {
+                stableId("task-row:$taskResourceHref@$taskOccurrenceMillis")
+            } else {
+                stableId("task-row:$taskResourceHref")
+            },
             location = location,
             eventStatus = null,
             endMillis = sortMillis,
@@ -232,6 +244,7 @@ internal data class WidgetListRow(
             subtasksExpanded = subtasksExpanded,
             priority = priority,
             priorityMotionEnabled = priorityMotionEnabled,
+            taskOccurrenceMillis = taskOccurrenceMillis,
         )
 
         private fun stableId(value: String): Long =

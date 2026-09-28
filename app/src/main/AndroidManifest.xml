@@ -43,6 +43,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Share target: turns shared text (e.g. an email) into a prefilled new event. -->
+        <activity
+            android:name=".ShareToCalendarActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_create_event"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter android:label="@string/share_create_event">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".reminder.ReminderReceiver"
             android:exported="false" />

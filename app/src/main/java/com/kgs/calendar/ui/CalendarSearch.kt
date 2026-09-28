@@ -342,6 +342,11 @@ import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
+import com.kgs.calendar.ui.layout.ListContentMaxWidth
+import com.kgs.calendar.ui.layout.centeredContentPadding
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
@@ -514,7 +519,9 @@ private fun SearchOptionsBar(
             .testTag("search-options-bar")
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 18.dp, top = 6.dp, end = 18.dp),
+            .padding(top = 6.dp)
+            .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
+            .padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
@@ -571,7 +578,9 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             .fillMaxWidth()
             .height(statusTop + 62.dp)
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 16.dp, end = 14.dp, top = statusTop),
+            .padding(top = statusTop)
+            .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
+            .padding(start = 16.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -991,6 +1000,12 @@ internal fun SearchResultsList(
         }
     }
 
+    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    val listSidePadding = centeredContentPadding(
+        availableWidth = currentCalendarWindowLayout().widthDp.dp,
+        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+        basePadding = 18.dp,
+    )
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
@@ -998,13 +1013,13 @@ internal fun SearchResultsList(
             .testTag("search-results-list")
             .fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 18.dp,
+            start = listSidePadding,
             top = if (agendaDateHierarchy) {
                 agendaDateStackHeight + 16.dp + agendaHeaderTopSpacing
             } else {
                 20.dp
             },
-            end = 18.dp,
+            end = listSidePadding,
             bottom = 20.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1052,21 +1067,7 @@ internal fun SearchResultsList(
                 var futureDividerInserted = false
                 groupedResults.forEach { (group, groupItems) ->
                     stickyHeader(key = "search-year-$group") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .zIndex(1_000f)
-                                .background(stickyHeaderBackground.copy(alpha = 0.97f))
-                                .padding(start = 62.dp, top = 7.dp, bottom = 7.dp),
-                        ) {
-                            Text(
-                                group,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 15.sp,
-                                lineHeight = 19.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
+                        SearchGroupHeader(group, stickyHeaderBackground)
                     }
                     var lastDateKey: String? = null
                     groupItems.forEach { item ->
@@ -1107,7 +1108,9 @@ internal fun SearchResultsList(
             firstDayOfWeek = firstDayOfWeek,
             background = stickyHeaderBackground,
             topSpacing = agendaHeaderTopSpacing,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
         )
     }
     }
@@ -1210,6 +1213,8 @@ internal fun CalendarSearchResultRow(
     taskHierarchy: TaskHierarchyPresentation,
     onEventClick: (EventEntity) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
+    taskStatusToggleEnabled: Boolean = true,
+    mutePastEvents: Boolean = true,
 ) {
     when (item) {
         is CalendarSearchResult.Event -> SearchResultCard(
@@ -1220,6 +1225,7 @@ internal fun CalendarSearchResultRow(
             agendaDateHierarchy = agendaDateHierarchy,
             showCalendarWeeks = showCalendarWeeks,
             firstDayOfWeek = firstDayOfWeek,
+            mutePast = mutePastEvents,
             onClick = { onEventClick(item.event) },
         )
         is CalendarSearchResult.TaskItem -> SearchTaskResultCard(
@@ -1236,6 +1242,7 @@ internal fun CalendarSearchResultRow(
             hasSubtasks = false,
             subtasksExpanded = false,
             onToggleSubtasks = {},
+            statusToggleEnabled = taskStatusToggleEnabled,
             onClick = { onTaskClick(item.task) },
         )
         is CalendarSearchResult.TaskGroup -> Column(
@@ -1259,6 +1266,7 @@ internal fun CalendarSearchResultRow(
                         hasSubtasks = entry.hasChildren,
                         subtasksExpanded = entry.expanded,
                         onToggleSubtasks = { taskHierarchy.toggle(entry.task) },
+                        statusToggleEnabled = taskStatusToggleEnabled,
                         onClick = { onTaskClick(entry.task) },
                     )
                 }
@@ -1539,6 +1547,26 @@ internal fun AgendaBoundaryMarker(
     }
 }
 
+/** The sticky header of a group of search results, e.g. a year; also used by "Recently deleted". */
+@Composable
+internal fun SearchGroupHeader(text: String, background: Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(1_000f)
+            .background(background.copy(alpha = 0.97f))
+            .padding(start = 62.dp, top = 7.dp, bottom = 7.dp),
+    ) {
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 15.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 @Composable
 internal fun SearchPastFutureDivider() {
     Column(
@@ -1577,8 +1605,9 @@ private fun SearchResultCard(
     agendaDateHierarchy: Boolean = false,
     showCalendarWeeks: Boolean = false,
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
+    mutePast: Boolean = true,
 ) {
-    val isPast = event.endsAtMillis < System.currentTimeMillis()
+    val isPast = mutePast && event.endsAtMillis < System.currentTimeMillis()
     val isSpan = spanEndDate.isAfter(displayDate)
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val rowHeight = when {
@@ -1604,7 +1633,7 @@ private fun SearchResultCard(
         )
         val eventTextStyle = tentativeReadableTextStyle(event.isTentative() && !isPast)
         val shape = RoundedCornerShape(13.dp)
-        val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+        val pendingAlpha = pendingDeleteAlpha(event)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -1653,7 +1682,7 @@ private fun SearchResultCard(
                 muted = isPast,
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
@@ -1675,6 +1704,7 @@ private fun SearchTaskResultCard(
     hasSubtasks: Boolean = false,
     subtasksExpanded: Boolean = true,
     onToggleSubtasks: (() -> Unit)? = null,
+    statusToggleEnabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val taskDate = (task.startAtMillis ?: task.dueAtMillis)?.toDate()
@@ -1715,6 +1745,7 @@ private fun SearchTaskResultCard(
             outerVerticalPadding = 3.dp,
             connectorStemInset = TaskHierarchyStemInset,
             priorityMotionEnabled = !isMuted,
+            statusToggleEnabled = statusToggleEnabled,
             onClick = onClick,
         )
     }
@@ -1748,62 +1779,46 @@ private fun SearchDateColumn(
             .then(if (height != null) Modifier.height(height) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (visible) {
-            if (date == null) {
+        // An undated (inbox) task leaves the column empty, like the agenda-style date column.
+        if (visible && date != null) {
+            Text(
+                date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
+                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                date.dayOfMonth.toString(),
+                color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (endDate != null) {
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(WarmInk.copy(alpha = if (muted) 0.22f else 0.42f)),
+                )
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    appString(R.string.none),
+                    endDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
                     color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
                     fontSize = 10.sp,
                     lineHeight = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    appString(R.string.date),
+                    endDate.dayOfMonth.toString(),
                     color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 17.sp,
+                    lineHeight = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
-            } else {
-                Text(
-                    date.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    date.dayOfMonth.toString(),
-                    color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                    fontSize = 20.sp,
-                    lineHeight = 23.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (endDate != null) {
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .weight(1f)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(WarmInk.copy(alpha = if (muted) 0.22f else 0.42f)),
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        endDate.format(DateTimeFormatter.ofPattern("MMM", LocalAppLocale.current)).replace(".", ""),
-                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        endDate.dayOfMonth.toString(),
-                        color = WarmInk.copy(alpha = if (muted) 0.58f else 1f),
-                        fontSize = 17.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
             }
         }
     }

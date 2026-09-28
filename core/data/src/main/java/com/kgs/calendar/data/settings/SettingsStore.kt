@@ -2,6 +2,7 @@ package com.kgs.calendar.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -14,10 +15,14 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -159,6 +164,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_AUTO_LOAD_MAP_PREVIEWS] ?: false
     }
 
+    /** Subtle haptic cues for drags and task toggles; the system touch-feedback setting still applies. */
+    val hapticFeedbackEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_HAPTIC_FEEDBACK_ENABLED] ?: DEFAULT_HAPTIC_FEEDBACK_ENABLED
+    }
+
     val maxVisibleAllDayItems: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
     }
@@ -170,6 +180,18 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val landscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_LANDSCAPE_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on an upright large screen (tablet, unfolded foldable); separate from the phone value. */
+    val largePortraitMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on a rotated large screen; separate from the phone value. */
+    val largeLandscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT)
             .coerceMultiDayCount()
     }
 
@@ -261,6 +283,15 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
             .toSet()
     }
+
+    /** Whole hidden calendars plus the calendars that hide only their events or only their tasks. */
+    val collectionVisibility: Flow<CollectionVisibility> = dataStore.data.map { prefs ->
+        CollectionVisibility(
+            hiddenCollectionHrefs = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            eventsHiddenIn = prefs[KEY_EVENTS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            tasksHiddenIn = prefs[KEY_TASKS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+        )
+    }.distinctUntilChanged()
 
     suspend fun setSelectedView(viewMode: CalendarViewMode) {
         dataStore.edit { it[KEY_VIEW] = viewMode.name }
@@ -400,6 +431,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_AUTO_LOAD_MAP_PREVIEWS] = enabled }
     }
 
+    suspend fun setHapticFeedbackEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_HAPTIC_FEEDBACK_ENABLED] = enabled }
+    }
+
     suspend fun setMaxVisibleAllDayItems(maxItems: Int) {
         dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
     }
@@ -410,6 +445,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setLandscapeMultiDayCount(count: Int) {
         dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLargePortraitMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLargeLandscapeMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
     }
 
     suspend fun setPortraitTimelineHourHeightDp(hourHeightDp: Float) {
@@ -489,11 +532,47 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun setCollectionHiddenInViews(href: String, hidden: Boolean) {
+        setHrefInSet(KEY_HIDDEN_COLLECTION_HREFS, href, hidden)
+    }
+
+    /** Hides only the events of a calendar; its tasks stay visible unless hidden separately. */
+    suspend fun setCollectionEventsHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_EVENTS_HIDDEN_COLLECTION_HREFS, KEY_TASKS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /** Hides only the tasks of a calendar; its events stay visible unless hidden separately. */
+    suspend fun setCollectionTasksHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_TASKS_HIDDEN_COLLECTION_HREFS, KEY_EVENTS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /**
+     * Hiding the last visible item type hides the whole calendar instead, so the sidebar checkbox
+     * always tells whether anything of a calendar is shown.
+     */
+    private suspend fun setCollectionTypeHidden(
+        href: String,
+        hidden: Boolean,
+        typeKey: Preferences.Key<Set<String>>,
+        otherTypeKey: Preferences.Key<Set<String>>,
+    ) {
         dataStore.edit { prefs ->
-            val current = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
-            val next = if (hidden) current + href else current - href
-            if (next.isEmpty()) prefs.remove(KEY_HIDDEN_COLLECTION_HREFS) else prefs[KEY_HIDDEN_COLLECTION_HREFS] = next
+            if (hidden && href in prefs[otherTypeKey].orEmpty()) {
+                prefs.setHref(otherTypeKey, href, included = false)
+                prefs.setHref(KEY_HIDDEN_COLLECTION_HREFS, href, included = true)
+            } else {
+                prefs.setHref(typeKey, href, included = hidden)
+            }
         }
+    }
+
+    private suspend fun setHrefInSet(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        dataStore.edit { prefs -> prefs.setHref(key, href, included) }
+    }
+
+    private fun MutablePreferences.setHref(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        val current = this[key].orEmpty()
+        val next = if (included) current + href else current - href
+        if (next.isEmpty()) remove(key) else this[key] = next
     }
 
     val parserReparseVersion: Flow<Int> = dataStore.data.map { prefs ->
@@ -572,10 +651,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED = booleanPreferencesKey("overdue_summary_priority_animation_enabled")
         private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
+        private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
         private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")
         private val KEY_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("landscape_multi_day_count")
+        private val KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("large_portrait_multi_day_count")
+        private val KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("large_landscape_multi_day_count")
         private val KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP =
             floatPreferencesKey("portrait_timeline_hour_height_dp")
         private val KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP =
@@ -597,6 +679,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
         private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
         private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
+        private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
+        private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
         private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")
         private val KEY_EXACT_ALARM_PROMPT_SHOWN = booleanPreferencesKey("exact_alarm_prompt_shown")
         private val KEY_DEFAULT_EVENT_COLLECTION = stringPreferencesKey("default_event_collection_href")
@@ -614,6 +698,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_WEEK_VIEW_ENABLED = false
         const val DEFAULT_FULL_WEEK_SWIPE_ENABLED = true
         const val DEFAULT_SHOW_CALENDAR_WEEKS = false
+        const val DEFAULT_HAPTIC_FEEDBACK_ENABLED = true
         const val DEFAULT_TIMELINE_HOUR_HEIGHT_DP = 46f
         const val MIN_TIMELINE_HOUR_HEIGHT_DP = 18f
         const val MAX_TIMELINE_HOUR_HEIGHT_DP = 92f

@@ -85,6 +85,7 @@
     <string name="search_load_earlier">Earlier</string>
     <string name="search_load_later">Later</string>
     <string name="create">Create</string>
+    <string name="share_create_event">Create event</string>
     <string name="new_event">New event</string>
     <string name="edit_event">Edit event</string>
     <string name="duplicate_event">Duplicate event</string>
@@ -116,6 +117,8 @@
     <string name="show_map_preview">Show map preview</string>
     <string name="auto_map_previews">Always show map previews</string>
     <string name="auto_map_previews_help">Automatically loads map previews in event and task details when the location looks like a real place. Off by default to avoid map tile requests unless you choose them.</string>
+    <string name="haptic_feedback">Haptic feedback</string>
+    <string name="haptic_feedback_help">A light vibration when you drag events and tasks and when you tick off tasks. The system touch feedback setting still applies.</string>
     <string name="osm_attribution">&#169; OpenStreetMap contributors</string>
     <string name="map_preview_content_description">Map preview</string>
     <string name="location_search_unavailable">Location search is currently unavailable.</string>
@@ -324,7 +327,7 @@
     <string name="sources">Sources</string>
     <string name="task_lists">Task lists</string>
     <string name="active">Active</string>
-    <string name="calendar_sidebar_help">The sidebar checkbox only hides items from views. The Active switch controls whether a calendar syncs and participates in the app.</string>
+    <string name="calendar_sidebar_help">The sidebar checkbox hides items from views and mutes their reminders. The Active switch controls whether a calendar syncs and participates in the app.</string>
     <string name="readonly_urls">Read-only URLs</string>
     <string name="readonly_urls_help">Subscribed ICS/CalDAV URLs appear as separate sources and cannot be edited.</string>
     <string name="calendar_order_help">Drag calendars into your preferred order. The order affects the sidebar, editors, and detail menus.</string>
@@ -375,6 +378,10 @@
     <string name="calendar_inactive">Inactive</string>
     <string name="calendar_visible">Visible</string>
     <string name="calendar_hidden">Hidden</string>
+    <string name="calendar_show_events">Show events</string>
+    <string name="calendar_show_events_help">Hidden events disappear from all views and widgets and send no reminders.</string>
+    <string name="calendar_show_tasks">Show tasks</string>
+    <string name="calendar_show_tasks_help">Hidden tasks disappear from all views and widgets and send no reminders.</string>
     <string name="calendar_supported">Supported</string>
     <string name="calendar_unsupported">Unsupported</string>
     <string name="calendar_unknown">Unknown</string>
@@ -427,6 +434,8 @@
     <string name="multi_day_count_portrait_help">Number of days shown while the phone is upright.</string>
     <string name="multi_day_count_landscape">Landscape days</string>
     <string name="multi_day_count_landscape_help">Number of days shown while the phone is rotated.</string>
+    <string name="multi_day_count_large_portrait_help">Number of days shown while the tablet or unfolded phone is upright.</string>
+    <string name="multi_day_count_large_landscape_help">Number of days shown while the tablet or unfolded phone is rotated.</string>
     <string name="use_week_view">Use week view</string>
     <string name="use_week_view_help">Shows seven days aligned to your first day of week.</string>
     <string name="swipe_full_weeks">Swipe full weeks</string>
@@ -459,7 +468,6 @@
     <string name="truly_delete">Really delete?</string>
     <string name="only_this_deleted">Only this event will be deleted. This action cannot be undone.</string>
     <string name="this_and_following_deleted">This and all following events will be deleted. This action cannot be undone.</string>
-    <string name="all_series_deleted">All events in this series will be deleted. This action cannot be undone.</string>
     <string name="event_belongs_to_series_delete">This event belongs to a series. What do you want to delete?</string>
     <string name="edit_series_body">%1$s belongs to a series. Which occurrences should be changed?</string>
     <string name="source_remove">Remove source</string>
@@ -574,4 +582,53 @@
     <string name="follow_os">Follow OS</string>
     <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
     <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
+    <string name="recently_deleted">Recently deleted</string>
+    <string name="recently_deleted_empty_title">Nothing here</string>
+    <string name="recently_deleted_empty_body">Deleted events and tasks stay here for %1$d days, or as long as your Nextcloud server keeps them.</string>
+    <string name="recently_deleted_help">Items are removed for good after %1$d days, or when the retention of your Nextcloud server runs out. Single deleted occurrences of a series are not kept.</string>
+    <string name="trash_deleted_on">Deleted %1$s</string>
+    <string name="restore">Restore</string>
+    <string name="delete_permanently">Delete permanently</string>
+    <string name="delete_permanently_question">Delete “%1$s” permanently?</string>
+    <string name="empty_trash">Empty trash</string>
+    <string name="empty_trash_question">Empty trash?</string>
+    <plurals name="empty_trash_body">
+        <item quantity="one">%1$d item will be deleted permanently. This action cannot be undone.</item>
+        <item quantity="other">%1$d items will be deleted permanently. This action cannot be undone.</item>
+    </plurals>
+    <string name="restored_elsewhere_title">Restored to another calendar</string>
+    <string name="restored_elsewhere_body">The original calendar of “%1$s” no longer exists or is read-only, so it was restored to “%2$s”.</string>
+    <string name="restore_failed_title">Can’t restore</string>
+    <string name="restore_failed_no_calendar">There is no writable calendar left for “%1$s”. Add or show a calendar and try again.</string>
+    <string name="restore_failed_exists">“%1$s” is already back in its calendar, for example after a sync.</string>
+    <string name="restore_failed_unreadable">The saved copy of “%1$s” can’t be read.</string>
+    <string name="restore_failed_generic">“%1$s” could not be restored: %2$s</string>
+    <string name="restore_failed_gone_from_server">“%1$s” is no longer in the Nextcloud trash bin. Its time there may have run out, or it was deleted on another device.</string>
+    <string name="restore_failed_server_refused">The server refused to restore “%1$s” (HTTP %2$d). Its calendar may already contain an item with the same name, be shared read-only, or no longer exist.</string>
+    <string name="delete_recoverable">You can restore it from Recently deleted in the sidebar while it is kept there.</string>
+    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar while it is kept there.</string>
+    <plurals name="delete_recoverable_days">
+        <item quantity="one">You can restore it from Recently deleted in the sidebar for %1$d day.</item>
+        <item quantity="other">You can restore it from Recently deleted in the sidebar for %1$d days.</item>
+    </plurals>
+    <plurals name="all_series_deleted_recoverable_days">
+        <item quantity="one">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d day.</item>
+        <item quantity="other">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d days.</item>
+    </plurals>
+    <string name="trash_deleted_today">Deleted today</string>
+    <string name="trash_deleted_yesterday">Deleted yesterday</string>
+    <string name="trash_in_recently_deleted">In Recently deleted</string>
+    <plurals name="trash_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <string name="trash_expires_today">Removed for good today</string>
+    <string name="trash_in_nextcloud_trash_bin">Nextcloud trash bin</string>
+    <string name="trash_from_calendar">From %1$s</string>
+    <string name="delete_permanently_failed_title">Can’t delete permanently</string>
+    <string name="delete_permanently_failed_server_refused">The server refused to delete “%1$s” permanently (HTTP %2$d). Its calendar may be shared with you read-only. It stays in Recently deleted.</string>
+    <string name="delete_permanently_failed_generic">“%1$s” could not be deleted permanently: %2$s</string>
+    <string name="empty_trash_failed_title">Trash not fully emptied</string>
+    <string name="empty_trash_failed_server_refused">The server refused to delete some items permanently (HTTP %1$d), for example ones in calendars shared with you read-only. They are still listed.</string>
+    <string name="empty_trash_failed_generic">Some items could not be deleted permanently and are still listed: %1$s</string>
 </resources>

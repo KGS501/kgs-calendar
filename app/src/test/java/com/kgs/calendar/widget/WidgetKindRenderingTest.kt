@@ -10,14 +10,20 @@ import android.widget.RemoteViewsService
 import android.widget.TextView
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.kgs.calendar.R
+import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.taskPayload
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.reminder.TaskNotificationReconciler
 import com.kgs.calendar.widget.model.WidgetListRowType
 import com.kgs.calendar.widget.render.KgsWidgetCollectionFactory
 import com.kgs.calendar.widget.render.KgsWidgetDayCollectionFactory
+import com.kgs.calendar.widget.update.WidgetTaskToggle
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
@@ -30,6 +36,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -174,6 +181,97 @@ class WidgetKindRenderingTest {
 
         val items = collectionItems(KgsWidgetDayCollectionFactory(widgets, appWidgetId))
         assertEquals(grid.rows.size, items.size)
+    }
+
+    @Test
+    fun tasksWidgetListsTheCurrentOccurrenceOfARecurringTaskAndItsToggleCompletesOnlyThatOne() = runBlocking {
+        val repository = harness.repository
+        repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        val renderer = widgets.renderer()
+        val row = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows.single { it.title == "Water plants" }
+        assertEquals(today, row.date)
+        val resourceHref = requireNotNull(row.taskResourceHref)
+        val occurrenceMillis = requireNotNull(row.taskOccurrenceMillis)
+
+        val statusWrites = mutableListOf<CalendarOccurrenceId.Task?>()
+        WidgetTaskToggle(
+            taskByResource = repository::taskByResource,
+            currentOccurrence = { null },
+            coordinator = TaskMutationCoordinator(
+                persistStatus = { href, status, occurrenceId ->
+                    statusWrites += occurrenceId
+                    if (occurrenceId == null) {
+                        repository.setTaskStatus(href, status)
+                    } else {
+                        repository.setTaskOccurrenceStatus(href, occurrenceId.recurrenceIdMillis, status)
+                    }
+                },
+                pushPendingChanges = {},
+                notificationReconciler = object : TaskNotificationReconciler {
+                    override suspend fun cancelOccurrence(occurrenceId: CalendarOccurrenceId.Task) = Unit
+                    override suspend fun cancelResource(resourceHref: String) = Unit
+                },
+                rescheduleReminders = {},
+                updateWidgets = {},
+            ),
+        ).toggle(resourceHref, occurrenceMillis)
+
+        assertEquals(listOf(CalendarOccurrenceId.Task(resourceHref, occurrenceMillis)), statusWrites)
+        assertFalse(requireNotNull(harness.task(resourceHref)).isCompleted)
+        val next = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows.single { it.title == "Water plants" }
+        assertEquals(today.plusDays(1), next.date)
+        assertFalse(next.completed)
+    }
+
+    @Test
+    fun tasksWidgetForTodayListsEveryMissedOccurrenceUntilItIsCompleted() = runBlocking {
+        val repository = harness.repository
+        repository.createTask(taskPayload("Water plants", dueDate = today.minusDays(3)).copy(recurrenceRule = "FREQ=DAILY"))
+        repository.createTask(taskPayload("Pay bill", dueDate = today.minusDays(1)))
+        widgets.settingsStore.setTasksWidgetDisplayMode(WidgetTaskDisplayMode.Today)
+        val renderer = widgets.renderer()
+
+        val rows = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        val waterRows = rows.filter { it.title == "Water plants" }
+        assertEquals(listOf(3L, 2L, 1L, 0L).map { today.minusDays(it) }, waterRows.map { it.date })
+        assertEquals(rows.size, rows.map { it.stableId }.toSet().size)
+        assertEquals(today.minusDays(1), rows.single { it.title == "Pay bill" }.date)
+
+        val missed = waterRows[1]
+        repository.setTaskOccurrenceStatus(
+            requireNotNull(missed.taskResourceHref),
+            requireNotNull(missed.taskOccurrenceMillis),
+            "COMPLETED",
+        )
+        val afterCompletion = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        assertEquals(
+            listOf(3L, 1L, 0L).map { today.minusDays(it) },
+            afterCompletion.filter { it.title == "Water plants" }.map { it.date },
+        )
+
+        widgets.settingsStore.setTasksWidgetIncludeOverdue(false)
+        val withoutOverdue = requireNotNull(renderer.collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+        assertEquals(listOf(today), withoutOverdue.filter { it.title == "Water plants" }.map { it.date })
+        assertTrue(withoutOverdue.none { it.title == "Pay bill" })
+    }
+
+    @Test
+    fun tasksWidgetLeavesOutCompletedSubtasksAndTheExpanderOfParentsWithOnlyCompletedOnes() = runBlocking {
+        val repository = harness.repository
+        repository.createTask(taskPayload("Trip", dueDate = today))
+        repository.createTask(taskPayload("Party", dueDate = today))
+        val tasks = harness.tasksIn(LOCAL_COLLECTION)
+        val trip = tasks.single { it.title == "Trip" }
+        val party = tasks.single { it.title == "Party" }
+        repository.createTask(taskPayload("Pack", parentUid = trip.uid))
+        repository.createTask(taskPayload("Book hotel", parentUid = trip.uid, isCompleted = true))
+        repository.createTask(taskPayload("Invite", parentUid = party.uid, isCompleted = true))
+
+        val rows = requireNotNull(widgets.renderer().collectionSnapshot(KgsWidgetKind.Tasks, appWidgetId)).rows
+
+        assertEquals(listOf("Party", "Trip", "Pack", "Write report"), rows.map { it.title })
+        assertEquals(1, rows.single { it.title == "Trip" }.childCount)
+        assertEquals(0, rows.single { it.title == "Party" }.childCount)
     }
 
     private fun widgetImageFiles(): List<File> =

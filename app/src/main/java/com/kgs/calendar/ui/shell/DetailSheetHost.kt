@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.kgs.calendar.domain.task.isRecurring
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.model.taskDate
+import com.kgs.calendar.ui.layout.FoldPosture
+import com.kgs.calendar.ui.layout.LocalFoldPosture
 import com.kgs.calendar.ui.shell.CalendarShellUiState
 import com.kgs.calendar.ui.shell.editorSchedule
 import com.kgs.calendar.ui.shell.newSubtaskSchedule
@@ -36,31 +38,41 @@ internal fun DetailSheetHost(
     today: LocalDate,
 ) {
     shell.detailSheet?.let { detail ->
-        val currentDetail = when (detail) {
-            is DetailSheet.Event -> {
+        val currentDetail = when {
+            // A "Recently deleted" item shows its snapshot; it has no live copy to follow.
+            detail.trashedItem != null -> detail
+            detail is DetailSheet.Event -> {
                 val sameResource = renderState.events.filter { it.resourceHref == detail.event.resourceHref }
                 val occurrenceStart = detail.event.occurrenceStartForEdit()
                 val refreshed = sameResource.firstOrNull { it.occurrenceStartForEdit() == occurrenceStart }
                     ?: sameResource.firstOrNull()
                 refreshed?.let { DetailSheet.Event(it) } ?: detail
             }
-            is DetailSheet.Task -> {
+            detail is DetailSheet.Task -> {
                 val occurrenceStart = detail.task.occurrenceStartForEdit()
                 val refreshed = renderState.datedTasks.firstOrNull {
                     it.resourceHref == detail.task.resourceHref && it.occurrenceStartForEdit() == occurrenceStart
-                } ?: renderState.allTasks.firstOrNull {
+                } ?: (renderState.allTasks + renderState.missedTaskOccurrences).firstOrNull {
                     it.resourceHref == detail.task.resourceHref &&
                         (!detail.task.isRecurring || it.occurrenceStartForEdit() == occurrenceStart)
                 }
                 refreshed?.let { DetailSheet.Task(it) } ?: detail
             }
+            else -> detail
         }
+        // In a fold panel (the tabletop top panel or a book pane), back on a top-level detail slides the panel
+        // away like the other closes.
+        val foldPanel = LocalFoldPosture.current != FoldPosture.Normal
+        val backReturnsToParentTask = currentDetail is DetailSheet.Task && shell.detailTaskBackStack.isNotEmpty()
         KgsModalBottomSheet(
             onDismissRequest = shell::closeDetail,
             initialSnap = currentDetail.preferredInitialSnap(),
             initialContentHeight = currentDetail.estimatedPopoverHeight(),
-            onBackRequest = shell::navigateDetailBack,
+            onBackRequest = if (foldPanel && !backReturnsToParentTask) null else shell::navigateDetailBack,
+            followFoldPosture = true,
+            bookPane = shell.detailBookPane,
         ) {
+            val closeAnimated = LocalSheetCloseAnimator.current
             SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this) {
                     AnimatedContent(
@@ -90,7 +102,7 @@ internal fun DetailSheetHost(
                                 DetailSheetContent(
                                     detail = animatedDetail,
                                     collections = state.collections,
-                                    hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+                                    collectionVisibility = state.collectionVisibility,
                                     accounts = state.accounts,
                                     problemResources = state.problemResources,
                                     taskColorMode = state.taskColorMode,
@@ -99,6 +111,7 @@ internal fun DetailSheetHost(
                                     autoLoadMapPreviews = state.autoLoadMapPreviews,
                                     accountEmails = (state.accounts.map { it.username } + listOfNotNull(state.account?.username)).distinct(),
                                     allTasks = renderState.allTasks,
+                                    showCompletedTasks = state.showCompletedTasksInCalendar,
                                     taskMorphGeneration = shell.detailTaskMorphGeneration,
                                     taskMorphSourceHref = shell.detailTaskMorphSourceHref,
                                     onTaskStatusChanged = viewModel.edits::setTaskStatus,
@@ -109,7 +122,7 @@ internal fun DetailSheetHost(
                                     onDuplicateEvent = { shell.duplicateEvent(it, it.editorSchedule()) },
                                     onCopyEventTo = { event, collectionHref ->
                                         viewModel.edits.copyEventTo(event.resourceHref, collectionHref)
-                                        shell.closeDetail()
+                                        closeAnimated(shell::closeDetail)
                                     },
                                     onDeleteEvent = { uid, scope, occurrenceStartMillis ->
                                         when (scope) {
@@ -117,24 +130,32 @@ internal fun DetailSheetHost(
                                             EventDeleteScope.ThisAndFollowing -> viewModel.edits.deleteEventFollowing(uid, occurrenceStartMillis)
                                             EventDeleteScope.All -> viewModel.edits.deleteEvent(uid)
                                         }
-                                        shell.closeDetail()
+                                        closeAnimated(shell::closeDetail)
                                     },
                                     onEditTask = { shell.editTask(it, it.editorSchedule(today)) },
                                     onDuplicateTask = { shell.duplicateTask(it, it.editorSchedule(today)) },
                                     onCopyTaskTo = { task, collectionHref ->
                                         viewModel.edits.copyTaskTo(task.resourceHref, collectionHref)
-                                        shell.closeDetail()
+                                        closeAnimated(shell::closeDetail)
                                     },
                                     onDeleteTask = {
                                         viewModel.edits.deleteTask(it)
-                                        shell.closeDetail()
+                                        closeAnimated(shell::closeDetail)
                                     },
                                     onOpenSubtask = shell::openSubtask,
                                     onOpenParentTask = shell::openParentTask,
                                     onAddSubtask = { parent ->
                                         shell.addSubtask(parent, newSubtaskSchedule(parent.taskDate() ?: state.selectedDate, LocalTime.now()))
                                     },
-                                    onClose = shell::closeDetail,
+                                    onClose = { closeAnimated(shell::closeDetail) },
+                                    onRestoreTrashed = {
+                                        viewModel.trash.restore(it)
+                                        closeAnimated(shell::closeDetail)
+                                    },
+                                    onDeleteTrashedPermanently = {
+                                        viewModel.trash.deletePermanently(it)
+                                        closeAnimated(shell::closeDetail)
+                                    },
                                 )
                             }
                         }

@@ -5,6 +5,7 @@ import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import com.kgs.calendar.domain.trash.TrashOrigin
 
 /** Stores the typed domain values as the same TEXT values the schema has always used. */
 class KgsTypeConverters {
@@ -31,4 +32,10 @@ class KgsTypeConverters {
 
     @TypeConverter
     fun syncStateFromValue(value: String?): SyncState = SyncState.fromValue(value)
+
+    @TypeConverter
+    fun trashOriginToValue(origin: TrashOrigin): String = origin.value
+
+    @TypeConverter
+    fun trashOriginFromValue(value: String?): TrashOrigin = TrashOrigin.fromValue(value)
 }

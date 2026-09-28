@@ -10,6 +10,7 @@ import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.domain.task.statusSortRank
 import com.kgs.calendar.widget.WIDGET_DAY_HOUR_ROW_HEIGHT_DP
 import java.time.DayOfWeek
@@ -18,7 +19,7 @@ import java.util.Locale
 internal data class WidgetRenderSettings(
     val locale: Locale = Locale.getDefault(),
     val firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
-    val hiddenCollectionHrefs: Set<String> = emptySet(),
+    val collectionVisibility: CollectionVisibility = CollectionVisibility(),
     val showCompletedTasks: Boolean = true,
     val themeMode: AppThemeMode = AppThemeMode.KgsBlue,
     val colorMode: AppColorMode = AppColorMode.Auto,

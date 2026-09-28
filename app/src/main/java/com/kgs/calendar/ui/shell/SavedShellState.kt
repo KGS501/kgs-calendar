@@ -4,6 +4,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
 import com.kgs.calendar.ui.CreationSheet
@@ -15,7 +16,7 @@ import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.editor.SavedDraft
-import com.kgs.calendar.ui.model.occurrenceIdOrNull
+import com.kgs.calendar.ui.layout.BookPane
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -44,7 +45,7 @@ internal fun CalendarUiState.findEvent(ref: SavedItemRef.Event): EventEntity? =
         .firstOrNull { it.resourceHref == ref.resourceHref && it.occurrenceStartForEdit() == ref.occurrenceStart }
 
 internal fun CalendarUiState.findTask(ref: SavedItemRef.Task): TaskEntity? =
-    (datedTasks.asSequence() + allTasks.asSequence()).firstOrNull {
+    (datedTasks.asSequence() + allTasks.asSequence() + missedTaskOccurrences.asSequence()).firstOrNull {
         it.resourceHref == ref.resourceHref && (ref.occurrence == null || it.occurrenceIdOrNull() == ref.occurrence)
     }
 
@@ -134,9 +135,12 @@ internal data class SavedShellState(
     val settingsOpen: Boolean = false,
     val settingsStartDestination: SettingsDestination = SettingsDestination.Main,
     val problemsOpen: Boolean = false,
+    val trashOpen: Boolean = false,
     val editingCollectionHref: String? = null,
     val creationSheet: SavedCreationSheet? = null,
     val detailSheet: SavedItemRef? = null,
+    /** The id of the "Recently deleted" item whose detail was open. */
+    val trashedDetailId: Long? = null,
     val detailTaskBackStack: List<SavedItemRef.Task> = emptyList(),
     val editorSchedule: EditorScheduleState,
     val draftWireframeColor: Int,
@@ -146,6 +150,9 @@ internal data class SavedShellState(
     val conversionSource: SavedItemRef? = null,
     val hiddenSaveNotice: HiddenSaveNotice? = null,
     val viewHistory: List<CalendarViewMode> = emptyList(),
+    /** The book-posture panes of the detail and the editor, so they reopen on the same side. */
+    val detailBookPane: BookPane = BookPane.Right,
+    val creationBookPane: BookPane = BookPane.Right,
 ) {
     /** Whether every item the saved sheets refer to is part of [state]. */
     fun canResolveAll(state: CalendarUiState): Boolean =
@@ -167,9 +174,11 @@ internal data class SavedShellState(
         "settingsOpen" to settingsOpen,
         "settingsStartDestination" to settingsStartDestination.name,
         "problemsOpen" to problemsOpen,
+        "trashOpen" to trashOpen,
         "editingCollectionHref" to editingCollectionHref,
         "creationSheet" to creationSheet?.let { arrayListOf(it.kind.name, it.item?.toSaveable()) },
         "detailSheet" to detailSheet?.toSaveable(),
+        "trashedDetailId" to trashedDetailId,
         "detailTaskBackStack" to ArrayList(detailTaskBackStack.map { it.toSaveable() }),
         "editorSchedule" to editorSchedule.toSaveable(),
         "draftWireframeColor" to draftWireframeColor,
@@ -179,6 +188,8 @@ internal data class SavedShellState(
         "conversionSource" to conversionSource?.toSaveable(),
         "hiddenSaveNotice" to hiddenSaveNotice?.let { arrayListOf(it.collectionHref, it.kind.name) },
         "viewHistory" to ArrayList(viewHistory.map { it.name }),
+        "detailBookPane" to detailBookPane.name,
+        "creationBookPane" to creationBookPane.name,
     )
 
     companion object {
@@ -197,6 +208,7 @@ internal data class SavedShellState(
                 settingsStartDestination = enumValueOrNull<SettingsDestination>(map["settingsStartDestination"])
                     ?: SettingsDestination.Main,
                 problemsOpen = map["problemsOpen"] == true,
+                trashOpen = map["trashOpen"] == true,
                 editingCollectionHref = map["editingCollectionHref"] as? String,
                 creationSheet = (map["creationSheet"] as? List<*>)?.let { saved ->
                     enumValueOrNull<SavedCreationSheet.Kind>(saved.getOrNull(0))?.let { kind ->
@@ -204,6 +216,7 @@ internal data class SavedShellState(
                     }
                 },
                 detailSheet = itemRefFromSaveable(map["detailSheet"]),
+                trashedDetailId = (map["trashedDetailId"] as? Number)?.toLong(),
                 detailTaskBackStack = (map["detailTaskBackStack"] as? List<*>).orEmpty()
                     .mapNotNull { itemRefFromSaveable(it) as? SavedItemRef.Task },
                 editorSchedule = editorSchedule,
@@ -219,6 +232,8 @@ internal data class SavedShellState(
                 },
                 viewHistory = (map["viewHistory"] as? List<*>).orEmpty()
                     .mapNotNull { enumValueOrNull<CalendarViewMode>(it) },
+                detailBookPane = enumValueOrNull<BookPane>(map["detailBookPane"]) ?: BookPane.Right,
+                creationBookPane = enumValueOrNull<BookPane>(map["creationBookPane"]) ?: BookPane.Right,
             )
         }
     }

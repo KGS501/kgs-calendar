@@ -5,25 +5,29 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kgs.calendar.AppGraph
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.AgendaWindowPolicy
+import com.kgs.calendar.domain.model.CalendarWindowLayout
+import com.kgs.calendar.domain.model.MultiDayCounts
 import com.kgs.calendar.domain.model.calendarViewModeForOrientation
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
-import com.kgs.calendar.domain.model.multiDayCountForOrientation
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineEntryDate
 import com.kgs.calendar.domain.model.timelineRestoreDate
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.reminder.TaskMutationCoordinator
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
+import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.ui.editor.EditorDraftFiles
 import com.kgs.calendar.ui.editor.EditorDraftStore
@@ -73,6 +77,12 @@ private data class LoadedCalendarItems<T>(
     val items: List<T>,
 )
 
+/** Dated open tasks for the task list ([open]) and the missed recurring occurrences for the overdue list. */
+private data class ScheduledOpenTasks(
+    val open: List<TaskEntity>,
+    val missed: List<TaskEntity>,
+)
+
 /**
  * Calendar navigation (date, view, visible/data ranges), the combined [uiState] and launch
  * handling. Settings, search, item edits and source management live in [settings], [search],
@@ -93,6 +103,7 @@ class CalendarViewModel(
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
+    initialSharedEvent: SharedEventDraft? = null,
     // False when the activity is restored from saved state: the launch was already handled then,
     // so only its date/view selection is reapplied.
     deliverInitialLaunchEvents: Boolean = true,
@@ -110,7 +121,11 @@ class CalendarViewModel(
     val uiEvents: Flow<CalendarUiEvent> = uiEventChannel.receiveAsFlow()
     private var pendingOpenEventJob: Job? = null
     private var pendingOpenTaskJob: Job? = null
-    private val isLandscape = MutableStateFlow(false)
+    private var pendingSharedEventJob: Job? = null
+
+    /** True while the user connects calendars right after the welcome screen; a share waits for that. */
+    private val sharedEventHeld = MutableStateFlow(false)
+    private val windowLayout = MutableStateFlow(CalendarWindowLayout.PhonePortrait)
     private val useLandscapeEntryView = MutableStateFlow(false)
     private val selectedViewOverride = MutableStateFlow<CalendarViewMode?>(
         initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode,
@@ -154,6 +169,14 @@ class CalendarViewModel(
         reminderRescheduler = reminderRescheduler,
         message = message,
         currentState = { uiState.value },
+    )
+
+    val trash = CalendarTrashActions(
+        scope = viewModelScope,
+        repository = repository,
+        widgetRefresher = widgetRefresher,
+        reminderRescheduler = reminderRescheduler,
+        message = message,
     )
 
     init {
@@ -211,7 +234,7 @@ class CalendarViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedView)
     private val selectedView = combine(
         requestedSelectedView,
-        isLandscape,
+        windowLayout.map { it.isLandscape }.distinctUntilChanged(),
         useLandscapeEntryView,
     ) { requestedView, landscape, applyLandscapeEntry ->
         if (applyLandscapeEntry) {
@@ -235,18 +258,18 @@ class CalendarViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, initialSelectedDate)
     private val agendaDataRange = MutableStateFlow(AgendaWindowPolicy.around(initialSelectedDate))
-    private val hiddenCollectionHrefs = settingsStore.hiddenCollectionHrefs
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
-    private val portraitMultiDayCount = settingsStore.portraitMultiDayCount
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
-    private val landscapeMultiDayCount = settingsStore.landscapeMultiDayCount
-        .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
-    private val multiDayCount = combine(
-        portraitMultiDayCount,
-        landscapeMultiDayCount,
-        isLandscape,
-    ) { portrait, landscape, landscapeOrientation ->
-        multiDayCountForOrientation(landscapeOrientation, portrait, landscape)
+    private val collectionVisibility = settingsStore.collectionVisibility
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CollectionVisibility())
+    private val multiDayCounts = combine(
+        settingsStore.portraitMultiDayCount,
+        settingsStore.landscapeMultiDayCount,
+        settingsStore.largePortraitMultiDayCount,
+        settingsStore.largeLandscapeMultiDayCount,
+        ::MultiDayCounts,
+    )
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MultiDayCounts())
+    private val multiDayCount = combine(multiDayCounts, windowLayout) { counts, layout ->
+        counts.countFor(layout.multiDayCountBucket)
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_MULTI_DAY_COUNT)
     private val firstDayOfWeek = settingsStore.firstDayOfWeek
@@ -316,11 +339,11 @@ class CalendarViewModel(
     private val loadedEvents = dataRange.flatMapLatest { range ->
         combine(
             repository.observeEvents(range.startMillis(zoneId), range.endMillis(zoneId)),
-            hiddenCollectionHrefs,
-        ) { events, hidden ->
+            collectionVisibility,
+        ) { events, visibility ->
             LoadedCalendarItems(
                 range = range,
-                items = events.filterNot { it.collectionHref in hidden },
+                items = visibility.visibleEvents(events),
             )
         }
     }.stateIn(
@@ -331,11 +354,11 @@ class CalendarViewModel(
     private val loadedDatedTasks = dataRange.flatMapLatest { range ->
         combine(
             repository.observeDatedTasks(range.startMillis(zoneId), range.endMillis(zoneId)),
-            hiddenCollectionHrefs,
-        ) { tasks, hidden ->
+            collectionVisibility,
+        ) { tasks, visibility ->
             LoadedCalendarItems(
                 range = range,
-                items = tasks.filterNot { it.collectionHref in hidden },
+                items = visibility.visibleTasks(tasks),
             )
         }
     }.stateIn(
@@ -348,17 +371,24 @@ class CalendarViewModel(
     private val loadedDataRange = combine(loadedEvents, loadedDatedTasks) { eventWindow, taskWindow ->
         eventWindow.range.takeIf { it == taskWindow.range }
     }
-    private val inboxTasks = combine(repository.observeInboxTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    private val inboxTasks = combine(repository.observeInboxTasks(), collectionVisibility) { tasks, visibility ->
+        visibility.visibleTasks(tasks)
     }
-    private val scheduledOpenTasks = combine(repository.observeScheduledOpenTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    /** The local day task lists are relative to; recurring tasks appear as their occurrence due on or after it. */
+    private val currentDay = MutableStateFlow(LocalDate.now(zoneId))
+    private val currentDayStartMillis = currentDay.map { it.atStartOfDay(zoneId).toInstant().toEpochMilli() }
+    private val scheduledOpenTasks = combine(
+        repository.observeScheduledOpenTasks(currentDayStartMillis),
+        repository.observeMissedTaskOccurrences(currentDayStartMillis),
+        collectionVisibility,
+    ) { tasks, missed, visibility ->
+        ScheduledOpenTasks(open = visibility.visibleTasks(tasks), missed = visibility.visibleTasks(missed))
     }
-    private val completedTasks = combine(repository.observeCompletedTasks(), hiddenCollectionHrefs) { tasks, hidden ->
-        tasks.filterNot { it.collectionHref in hidden }
+    private val completedTasks = combine(repository.observeCompletedTasks(), collectionVisibility) { tasks, visibility ->
+        visibility.visibleTasks(tasks)
     }
 
-    val search = SearchStateHolder(repository, hiddenCollectionHrefs, zoneId)
+    val search = SearchStateHolder(repository, collectionVisibility, zoneId)
 
     val settings = SettingsActions(
         scope = viewModelScope,
@@ -367,14 +397,23 @@ class CalendarViewModel(
         reminderRescheduler = reminderRescheduler,
         message = message,
         currentState = { uiState.value },
-        isLandscape = { isLandscape.value },
+        windowLayout = { windowLayout.value },
         publishedFirstDayOfWeek = firstDayOfWeek,
         selectDate = ::selectDate,
     )
 
     private val dataState = calendarDataState(
         repository = repository,
-        items = combine(events, datedTasks, inboxTasks, scheduledOpenTasks, completedTasks, ::CalendarItemData),
+        items = combine(events, datedTasks, inboxTasks, scheduledOpenTasks, completedTasks) { events, dated, inbox, scheduled, completed ->
+            CalendarItemData(
+                events = events,
+                datedTasks = dated,
+                inboxTasks = inbox,
+                scheduledOpenTasks = scheduled.open,
+                completedTasks = completed,
+                missedTaskOccurrences = scheduled.missed,
+            )
+        },
         loadedDataRange = loadedDataRange,
         requestedDataRange = dataRange,
     )
@@ -389,12 +428,11 @@ class CalendarViewModel(
     private val settingsState = combine(
         generalSettings(
             settingsStore = settingsStore,
-            hiddenCollectionHrefs = hiddenCollectionHrefs,
+            collectionVisibility = collectionVisibility,
             firstDayOfWeek = firstDayOfWeek,
             weekViewEnabled = weekViewEnabled,
             fullWeekSwipeEnabled = fullWeekSwipeEnabled,
-            portraitMultiDayCount = portraitMultiDayCount,
-            landscapeMultiDayCount = landscapeMultiDayCount,
+            multiDayCounts = multiDayCounts,
         ),
         settingsStore.editorDefaults(),
         settingsStore.widgetSettings(),
@@ -442,6 +480,9 @@ class CalendarViewModel(
                 openTaskUid = initialWidgetLaunchTarget.openTaskUid,
             )
         }
+        if (initialSharedEvent != null && deliverInitialLaunchEvents) {
+            openFromShare(initialSharedEvent)
+        }
     }
 
     fun selectView(viewMode: CalendarViewMode) {
@@ -482,6 +523,27 @@ class CalendarViewModel(
         dateNavigationSerial.update { it + 1 }
         sendWidgetLaunchEvents(date, createEvent, createTaskScheduled, openEventUid, openTaskUid)
         persistWidgetSelection(date, viewMode)
+    }
+
+    /**
+     * Text shared to the app opens a prefilled new event. It waits until the calendar data is
+     * loaded, the welcome screen is done and a calendar connection started from it has finished
+     * (see [holdSharedEvent]); a newer share replaces one that still waits. The draft stays in
+     * memory only, never in saved state.
+     */
+    fun openFromShare(draft: SharedEventDraft) {
+        pendingSharedEventJob?.cancel()
+        pendingSharedEventJob = viewModelScope.launch {
+            combine(uiState, sharedEventHeld) { state, held ->
+                state.initialDataLoaded && state.welcomeCompleted && !held
+            }.first { it }
+            uiEventChannel.send(CalendarUiEvent.CreateSharedEvent(draft))
+        }
+    }
+
+    /** Held while calendars are being connected from the welcome screen, released when settings close. */
+    fun holdSharedEvent(held: Boolean) {
+        sharedEventHeld.value = held
     }
 
     fun openFromCalendarLaunch(target: CalendarLaunchTarget) {
@@ -588,9 +650,20 @@ class CalendarViewModel(
         explicitLaunchSuppressionUntilMillis = System.currentTimeMillis() + EXPLICIT_LAUNCH_SUPPRESSION_MILLIS
     }
 
-    fun setDeviceOrientation(landscape: Boolean) {
-        isLandscape.value = landscape
-        useLandscapeEntryView.value = landscape
+    /** Called when the local date changes while the app is open, so task lists move on to the new day. */
+    fun setCurrentDay(date: LocalDate) {
+        currentDay.value = date
+    }
+
+    /**
+     * Reports the app window's size class. [applyOrientationEntryView] is true when the window is first
+     * shown or its orientation flips; only then does entering landscape swap Day for the multi-day view.
+     */
+    fun setWindowLayout(layout: CalendarWindowLayout, applyOrientationEntryView: Boolean) {
+        windowLayout.value = layout
+        if (applyOrientationEntryView) {
+            useLandscapeEntryView.value = layout.isLandscape
+        }
     }
 
     fun today() {
@@ -647,6 +720,7 @@ class CalendarViewModelFactory(
     private val graph: AppGraph,
     private val initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     private val initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
+    private val initialSharedEvent: SharedEventDraft? = null,
     private val deliverInitialLaunchEvents: Boolean = true,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -663,6 +737,7 @@ class CalendarViewModelFactory(
             uiStrings = graph.uiStrings,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
+            initialSharedEvent = initialSharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
             editorDrafts = EditorDraftStore(
                 EditorDraftFiles(File(graph.appContext.noBackupFilesDir, EDITOR_DRAFT_DIRECTORY)),

@@ -20,6 +20,8 @@ import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.MultiDayCounts
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -41,6 +43,7 @@ internal data class CalendarItemData(
     val inboxTasks: List<TaskEntity>,
     val scheduledOpenTasks: List<TaskEntity>,
     val completedTasks: List<TaskEntity>,
+    val missedTaskOccurrences: List<TaskEntity> = emptyList(),
 )
 
 internal data class SyncStatusData(
@@ -88,12 +91,11 @@ internal data class AppBehaviourSettings(
     val maxVisibleAllDayItems: Int,
     val welcomeCompleted: Boolean,
     val showDisabledAndroidProviderCalendars: Boolean,
-    val hiddenCollectionHrefs: Set<String>,
+    val collectionVisibility: CollectionVisibility,
 )
 
 internal data class TimelineZoomSettings(
-    val portraitMultiDayCount: Int,
-    val landscapeMultiDayCount: Int,
+    val multiDayCounts: MultiDayCounts,
     val portraitTimelineHourHeightDp: Float,
     val landscapeTimelineHourHeightDp: Float,
 )
@@ -111,6 +113,7 @@ internal data class GeneralSettings(
     val display: DisplaySettings,
     val behaviour: AppBehaviourSettings,
     val timeline: TimelineSettings,
+    val hapticFeedbackEnabled: Boolean,
 )
 
 internal data class NewItemDefaults(
@@ -205,12 +208,11 @@ internal fun calendarDataState(
  */
 internal fun generalSettings(
     settingsStore: SettingsStore,
-    hiddenCollectionHrefs: Flow<Set<String>>,
+    collectionVisibility: Flow<CollectionVisibility>,
     firstDayOfWeek: Flow<DayOfWeek>,
     weekViewEnabled: Flow<Boolean>,
     fullWeekSwipeEnabled: Flow<Boolean>,
-    portraitMultiDayCount: Flow<Int>,
-    landscapeMultiDayCount: Flow<Int>,
+    multiDayCounts: Flow<MultiDayCounts>,
 ): Flow<GeneralSettings> = combine(
     combine(
         settingsStore.themeMode,
@@ -233,7 +235,7 @@ internal fun generalSettings(
         settingsStore.maxVisibleAllDayItems,
         settingsStore.welcomeCompleted,
         settingsStore.showDisabledAndroidProviderCalendars,
-        hiddenCollectionHrefs,
+        collectionVisibility,
         ::AppBehaviourSettings,
     ),
     combine(
@@ -242,14 +244,14 @@ internal fun generalSettings(
         fullWeekSwipeEnabled,
         settingsStore.multiDaySidebarControlsEnabled,
         combine(
-            portraitMultiDayCount,
-            landscapeMultiDayCount,
+            multiDayCounts,
             settingsStore.portraitTimelineHourHeightDp,
             settingsStore.landscapeTimelineHourHeightDp,
             ::TimelineZoomSettings,
         ),
         ::TimelineSettings,
     ),
+    settingsStore.hapticFeedbackEnabled,
     ::GeneralSettings,
 )
 
@@ -383,6 +385,7 @@ internal fun calendarUiState(
         datedTasks = data.items.datedTasks,
         inboxTasks = data.items.inboxTasks,
         scheduledOpenTasks = data.items.scheduledOpenTasks,
+        missedTaskOccurrences = data.items.missedTaskOccurrences,
         pendingMutations = data.syncStatus.pendingMutations,
         pendingMutationItems = data.syncStatus.pendingMutationItems,
         problemResources = data.syncStatus.problemResources,
@@ -404,10 +407,13 @@ internal fun calendarUiState(
         overdueSummaryPriorityAnimationEnabled = display.overdueSummaryPriorityAnimationEnabled,
         subtasksExpandedByDefault = display.subtasksExpandedByDefault,
         autoLoadMapPreviews = display.autoLoadMapPreviews,
+        hapticFeedbackEnabled = settings.general.hapticFeedbackEnabled,
         maxVisibleAllDayItems = behaviour.maxVisibleAllDayItems,
         multiDayCount = navigation.multiDayCount,
-        portraitMultiDayCount = timeline.zoom.portraitMultiDayCount,
-        landscapeMultiDayCount = timeline.zoom.landscapeMultiDayCount,
+        portraitMultiDayCount = timeline.zoom.multiDayCounts.portrait,
+        landscapeMultiDayCount = timeline.zoom.multiDayCounts.landscape,
+        largePortraitMultiDayCount = timeline.zoom.multiDayCounts.largePortrait,
+        largeLandscapeMultiDayCount = timeline.zoom.multiDayCounts.largeLandscape,
         portraitTimelineHourHeightDp = timeline.zoom.portraitTimelineHourHeightDp,
         landscapeTimelineHourHeightDp = timeline.zoom.landscapeTimelineHourHeightDp,
         weekViewEnabled = timeline.weekViewEnabled,
@@ -437,6 +443,6 @@ internal fun calendarUiState(
         hiddenAndroidProviderCalendarNames = transient.hiddenAndroidProviderCalendarNames,
         welcomeCompleted = behaviour.welcomeCompleted,
         showDisabledAndroidProviderCalendars = behaviour.showDisabledAndroidProviderCalendars,
-        hiddenCollectionHrefs = behaviour.hiddenCollectionHrefs,
+        collectionVisibility = behaviour.collectionVisibility,
     )
 }

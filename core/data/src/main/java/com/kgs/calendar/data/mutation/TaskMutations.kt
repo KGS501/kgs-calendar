@@ -11,13 +11,16 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.newResourceHref
 import com.kgs.calendar.data.newUid
+import com.kgs.calendar.data.recurrence.occurrenceAt
 import com.kgs.calendar.data.toMinutesList
+import com.kgs.calendar.data.trash.TrashSnapshots
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
 import java.time.Instant
 import java.time.LocalDate
@@ -30,6 +33,7 @@ class TaskMutations internal constructor(
     private val database: KgsDatabase,
     private val localWrites: LocalWriteSupport,
     private val icalCodec: IcalCodec,
+    private val trashSnapshots: TrashSnapshots,
     private val zoneId: ZoneId,
 ) {
     suspend fun createTask(payload: TaskEditPayload): Unit = localWrites.writeTransaction {
@@ -171,7 +175,7 @@ class TaskMutations internal constructor(
             ).withValidIcalSchedule()
             val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
             localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-            localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+            localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
             database.taskDao().upsert(updatedMaster)
             createTask(payload.copy(recurrenceRule = null))
             return@writeTransaction
@@ -217,7 +221,7 @@ class TaskMutations internal constructor(
         ).withValidIcalSchedule()
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         database.taskDao().upsert(updatedMaster)
     }
 
@@ -255,7 +259,7 @@ class TaskMutations internal constructor(
         ).withValidIcalSchedule()
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.following(occurrenceStartMillis))
         database.taskDao().upsert(updatedMaster)
         createTask(payload)
     }
@@ -299,16 +303,8 @@ class TaskMutations internal constructor(
         }
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
 
-        val recurrenceAnchor = existing.startAtMillis ?: existing.dueAtMillis ?: return@writeTransaction
-        val shift = occurrenceStartMillis - recurrenceAnchor
-        val generatedOccurrence = existing.copy(
-            startAtMillis = existing.startAtMillis?.plus(shift),
-            dueAtMillis = existing.dueAtMillis?.plus(shift),
-        )
-        val occurrence = RecurrenceOverrideCodec.decodeTasks(existing.recurrenceOverridesJson)
-            .firstOrNull { it.recurrenceIdMillis == occurrenceStartMillis }
-            ?.applyTo(generatedOccurrence)
-            ?: generatedOccurrence
+        if (existing.startAtMillis == null && existing.dueAtMillis == null) return@writeTransaction
+        val occurrence = existing.occurrenceAt(occurrenceStartMillis)
         val completed = status.equals("COMPLETED", ignoreCase = true)
         val updatedOccurrence = occurrence.copy(
             isCompleted = completed,
@@ -334,7 +330,7 @@ class TaskMutations internal constructor(
         val raw = icalCodec.serializeTask(updatedMaster, resource?.rawIcs)
         localWrites.upsertLocalResource(updatedMaster.collectionHref, updatedMaster.resourceHref, resource?.etag, ComponentType.Task, updatedMaster.uid, raw)
         database.taskDao().upsert(updatedMaster)
-        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag)
+        localWrites.enqueuePut(updatedMaster.collectionHref, updatedMaster.resourceHref, ComponentType.Task, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
     }
 
     suspend fun setTaskPriority(uid: String, priority: Int): Unit = localWrites.writeTransaction {
@@ -458,12 +454,17 @@ class TaskMutations internal constructor(
         localWrites.enqueuePut(task.collectionHref, task.resourceHref, ComponentType.Task, raw, null)
     }
 
-    suspend fun deleteTask(uid: String): Unit = localWrites.writeTransaction {
+    /**
+     * Deletes the whole task; its subtasks move up to its parent. With [moveToTrash] (every user
+     * delete) a snapshot of this task alone goes to "Recently deleted"; conversions pass false.
+     */
+    suspend fun deleteTask(uid: String, moveToTrash: Boolean = true): Unit = localWrites.writeTransaction {
         val task = database.taskDao().get(uid) ?: return@writeTransaction
         val collection = database.collectionDao().get(task.collectionHref) ?: return@writeTransaction
         if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return@writeTransaction
         reparentTaskChildren(task)
         val resource = database.resourceDao().get(task.resourceHref)
+        if (moveToTrash) trashSnapshots.recordTask(task, collection, resource?.rawIcs)
         if (task.collectionHref.isLocalCollectionHref()) {
             database.taskDao().deleteByResource(task.resourceHref)
             database.resourceDao().delete(task.resourceHref)

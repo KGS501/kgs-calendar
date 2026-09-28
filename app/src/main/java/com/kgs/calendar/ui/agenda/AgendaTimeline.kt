@@ -56,6 +56,11 @@ import com.kgs.calendar.ui.rememberTaskHierarchyPresentation
 import com.kgs.calendar.ui.resolvedAgendaDateStackHeight
 import com.kgs.calendar.ui.resolvedAgendaDatePushDistance
 import com.kgs.calendar.ui.stableKey
+import com.kgs.calendar.ui.layout.ListContentMaxWidth
+import com.kgs.calendar.ui.layout.centeredContentPadding
+import com.kgs.calendar.ui.layout.centeredMaxWidth
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.model.agendaSortMillis
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -256,6 +261,12 @@ internal fun AgendaTimeline(
     }
     val taskHierarchy = rememberTaskHierarchyPresentation(emptyList(), expandedByDefault = false)
 
+    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    val listSidePadding = centeredContentPadding(
+        availableWidth = currentCalendarWindowLayout().widthDp.dp,
+        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+        basePadding = 18.dp,
+    )
     Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -263,9 +274,9 @@ internal fun AgendaTimeline(
                 .fillMaxSize()
                 .testTag("agenda-timeline-list"),
             contentPadding = PaddingValues(
-                start = 18.dp,
+                start = listSidePadding,
                 top = agendaDateStackHeight + 16.dp + headerTopSpacing,
-                end = 18.dp,
+                end = listSidePadding,
                 bottom = 20.dp,
             ),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
@@ -326,7 +337,9 @@ internal fun AgendaTimeline(
             firstDayOfWeek = firstDayOfWeek,
             background = stickyHeaderBackground,
             topSpacing = headerTopSpacing,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
         )
     }
 }

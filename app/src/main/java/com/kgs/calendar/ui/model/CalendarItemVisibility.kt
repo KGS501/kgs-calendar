@@ -6,8 +6,7 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.event.isAllDayTopItemOn
 import com.kgs.calendar.domain.event.isTimedMultiDay
-import com.kgs.calendar.domain.model.CalendarOccurrenceId
-import com.kgs.calendar.domain.task.isRecurring
+import com.kgs.calendar.domain.task.occurrenceRecurrenceIdMillis
 import com.kgs.calendar.domain.time.toDate
 import java.time.Instant
 import java.time.LocalDate
@@ -133,16 +132,7 @@ internal fun TaskEntity.agendaSortMillis(): Long? =
     startAtMillis ?: dueAtMillis
 
 internal fun TaskEntity.occurrenceStartForEdit(): Long =
-    RecurrenceOverrideCodec.decodeTasks(recurrenceOverridesJson)
-        .firstOrNull { it.matchesOccurrence(this) }
-        ?.recurrenceIdMillis
-        ?: startAtMillis
-        ?: dueAtMillis
-        ?: System.currentTimeMillis()
-
-/** The occurrence of a recurring task, or null for a single task, which has no stable start. */
-internal fun TaskEntity.occurrenceIdOrNull(): CalendarOccurrenceId.Task? =
-    if (isRecurring) CalendarOccurrenceId.Task(resourceHref, occurrenceStartForEdit()) else null
+    occurrenceRecurrenceIdMillis() ?: System.currentTimeMillis()
 
 internal fun EventEntity.occurrenceStartForEdit(): Long =
     RecurrenceOverrideCodec.decodeEvents(recurrenceOverridesJson)

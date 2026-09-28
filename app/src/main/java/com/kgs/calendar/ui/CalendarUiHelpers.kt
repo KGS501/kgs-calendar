@@ -338,7 +338,9 @@ import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.model.timelineDayCount
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.sync.pendingMutationFor
 import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.task.occurrenceRecurrenceIdMillis
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.domain.time.toTimeText
 import com.kgs.calendar.ui.calendar.DayEndHour
@@ -966,17 +968,44 @@ internal fun <T> rememberSmoothRemoval(
     )
 }
 
+/** The pending change that applies to this occurrence of [event], if any. */
+internal fun List<PendingMutationEntity>.pendingMutationForEvent(event: EventEntity): PendingMutationEntity? =
+    pendingMutationFor(event.resourceHref) { event.occurrenceStartForEdit() }
+
+/** The pending change that applies to this occurrence of [task], if any. */
+internal fun List<PendingMutationEntity>.pendingMutationForTask(task: TaskEntity): PendingMutationEntity? =
+    pendingMutationFor(task.resourceHref) { task.occurrenceRecurrenceIdMillis() }
+
 @Composable
-internal fun pendingMutationFor(resourceHref: String): PendingMutationEntity? {
+internal fun pendingMutationFor(event: EventEntity): PendingMutationEntity? {
     val mutations = LocalPendingMutations.current
-    return remember(mutations, resourceHref) {
-        mutations.lastOrNull { it.resourceHref == resourceHref }
-    }
+    return remember(mutations, event) { mutations.pendingMutationForEvent(event) }
 }
 
 @Composable
-internal fun pendingDeleteAlpha(resourceHref: String): Float {
-    val pending = pendingMutationFor(resourceHref)
+internal fun pendingMutationFor(task: TaskEntity): PendingMutationEntity? {
+    val mutations = LocalPendingMutations.current
+    return remember(mutations, task) { mutations.pendingMutationForTask(task) }
+}
+
+@Composable
+internal fun pendingDeleteAlpha(event: EventEntity): Float =
+    pendingDeleteAlpha(event.resourceHref, pendingMutationFor(event))
+
+@Composable
+internal fun pendingDeleteAlpha(task: TaskEntity): Float =
+    pendingDeleteAlpha(task.resourceHref, pendingMutationFor(task))
+
+/** [pendingDeleteAlpha] of whichever of [event] and [task] is set; fully opaque for neither. */
+@Composable
+internal fun pendingDeleteAlpha(event: EventEntity?, task: TaskEntity?): Float = when {
+    event != null -> pendingDeleteAlpha(event)
+    task != null -> pendingDeleteAlpha(task)
+    else -> 1f
+}
+
+@Composable
+private fun pendingDeleteAlpha(resourceHref: String, pending: PendingMutationEntity?): Float {
     val exiting = resourceHref in LocalExitingResourceHrefs.current
     val target = when {
         exiting -> 0f
@@ -993,10 +1022,38 @@ internal fun pendingDeleteAlpha(resourceHref: String): Float {
 
 @Composable
 internal fun PendingMutationBadge(
-    resourceHref: String,
+    event: EventEntity,
     modifier: Modifier = Modifier,
 ) {
-    val pending = pendingMutationFor(resourceHref)
+    PendingMutationBadge(pendingMutationFor(event), modifier)
+}
+
+@Composable
+internal fun PendingMutationBadge(
+    task: TaskEntity,
+    modifier: Modifier = Modifier,
+) {
+    PendingMutationBadge(pendingMutationFor(task), modifier)
+}
+
+/** [PendingMutationBadge] of whichever of [event] and [task] is set; nothing for neither. */
+@Composable
+internal fun PendingMutationBadge(
+    event: EventEntity?,
+    task: TaskEntity?,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        event != null -> PendingMutationBadge(event, modifier)
+        task != null -> PendingMutationBadge(task, modifier)
+    }
+}
+
+@Composable
+private fun PendingMutationBadge(
+    pending: PendingMutationEntity?,
+    modifier: Modifier,
+) {
     var visible by remember(pending?.id, pending?.createdAtMillis) {
         mutableStateOf(
             pending != null &&

@@ -305,6 +305,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -692,7 +694,7 @@ private fun TimedEventBlock(
     }
     val background = visuals.background
     val textColor = visuals.contentColor
-    val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(event)
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     var dragX by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
     var dragY by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(0f) }
@@ -700,6 +702,7 @@ private fun TimedEventBlock(
     var rootOverlayDrag by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf(false) }
     var cardCoordinates by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
     DisposableEffect(event.resourceHref, event.startsAtMillis, dragReporter) {
         onDispose {
@@ -720,6 +723,8 @@ private fun TimedEventBlock(
         .snapDraftMinute()
         .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
     val snappedDragYPx = with(density) { ((snappedStart - placement.startMinute) / 60f * hourHeightDp).dp.toPx() }
+    // Root-overlay drags tick in TimelineView, which owns their drop target.
+    if (isDragging && !rootOverlayDrag) DragSnapHaptics(slot = snappedDayDelta to snappedStart)
     val animatedDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDayDelta * dayStepPx else 0f,
         animationSpec = tween(110, easing = MotionStandard),
@@ -773,6 +778,7 @@ private fun TimedEventBlock(
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 isDragging = true
                 val coordinates = cardCoordinates
                 rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
@@ -824,6 +830,7 @@ private fun TimedEventBlock(
                 dragY = 0f
             },
             onDragEnd = {
+                haptics.drop()
                 val awaitingRootCommit = rootOverlayDrag
                 if (awaitingRootCommit) {
                     dragReporter.end()
@@ -994,7 +1001,7 @@ private fun TimedEventBlock(
                     ),
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
@@ -1019,7 +1026,7 @@ private fun TimedTaskBlock(
 ) {
     val background = remember(color) { Color(color) }
     val textColor = remember(color) { if (background.isDark()) Color.White else Color(0xFF1C1A18) }
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     var lastCompleted by remember(task.resourceHref) { mutableStateOf(task.isCompleted) }
     var burstKey by remember(task.resourceHref) { mutableStateOf(0) }
     LaunchedEffect(task.isCompleted) {
@@ -1039,6 +1046,7 @@ private fun TimedTaskBlock(
     var rootOverlayDrag by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf(false) }
     var cardCoordinates by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
     DisposableEffect(task.resourceHref, task.startAtMillis, task.dueAtMillis, dragReporter) {
         onDispose {
@@ -1059,6 +1067,8 @@ private fun TimedTaskBlock(
         .snapDraftMinute()
         .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
     val snappedDragYPx = with(density) { ((snappedStart - placement.startMinute) / 60f * hourHeightDp).dp.toPx() }
+    // Root-overlay drags tick in TimelineView, which owns their drop target.
+    if (isDragging && !rootOverlayDrag) DragSnapHaptics(slot = snappedDayDelta to snappedStart)
     val animatedDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDayDelta * dayStepPx else 0f,
         animationSpec = tween(110, easing = MotionStandard),
@@ -1097,6 +1107,7 @@ private fun TimedTaskBlock(
         val dayStep = dayWidthPx + with(density) { DayColumnSpacing.toPx() }
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 isDragging = true
                 val coordinates = cardCoordinates
                 rootOverlayDrag = dragReporter.usesRootOverlay && coordinates != null
@@ -1148,6 +1159,7 @@ private fun TimedTaskBlock(
                 dragY = 0f
             },
             onDragEnd = {
+                haptics.drop()
                 val awaitingRootCommit = rootOverlayDrag
                 if (awaitingRootCommit) {
                     dragReporter.end()
@@ -1268,7 +1280,7 @@ private fun TimedTaskBlock(
                 }
             }
             PendingMutationBadge(
-                resourceHref = task.resourceHref,
+                task = task,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }

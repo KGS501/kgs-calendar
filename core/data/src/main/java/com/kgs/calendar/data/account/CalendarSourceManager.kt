@@ -23,6 +23,7 @@ import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.source.isAndroidProviderAccount
+import com.kgs.calendar.domain.trash.TrashOrigin
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import kotlinx.coroutines.NonCancellable
@@ -206,6 +207,8 @@ class CalendarSourceManager internal constructor(
     suspend fun deleteAccount(accountId: String) {
         credentialsStore.clear(accountId)
         database.accountDao().delete(accountId)
+        // Its server trash bin can't be reached any more; local snapshots of its items stay.
+        database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
     }
 
     suspend fun setCollectionEnabled(href: String, enabled: Boolean) {

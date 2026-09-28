@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.model
 
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.task.isOpen
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,7 +20,11 @@ internal fun TaskEntity.isOverdueTask(
     return effectiveDate.isBefore(today)
 }
 
-/** Returns active overdue tasks in deterministic popover order. */
+/**
+ * Returns active overdue tasks in deterministic popover order. [tasks] may hold the same missed
+ * occurrence of a recurring task twice (an ended series is also listed as that occurrence); each
+ * entry appears once.
+ */
 internal fun orderedOverdueTasks(
     tasks: Iterable<TaskEntity>,
     today: LocalDate,
@@ -27,7 +32,15 @@ internal fun orderedOverdueTasks(
 ): List<TaskEntity> =
     tasks
         .filter { it.isOverdueTask(today, zoneId) }
+        .distinctBy { it.overdueEntryKey() }
         .sortedWith(overdueTaskComparator)
+
+/**
+ * Identifies an entry of the overdue list: a single task by its resource, an occurrence of a
+ * recurring task by its resource and RECURRENCE-ID, since several missed occurrences are listed.
+ */
+internal fun TaskEntity.overdueEntryKey(): String =
+    occurrenceIdOrNull()?.let { "${it.resourceHref}@${it.recurrenceIdMillis}" } ?: resourceHref
 
 private val overdueTaskComparator =
     compareBy<TaskEntity> { it.effectiveOverdueAtMillis() ?: Long.MAX_VALUE }

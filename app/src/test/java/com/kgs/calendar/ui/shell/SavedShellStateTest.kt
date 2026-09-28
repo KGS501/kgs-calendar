@@ -14,10 +14,14 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.SavedDraft
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.DefaultColor
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.collection
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.event
 import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.task
+import com.kgs.calendar.ui.shell.CalendarShellUiStateTest.Companion.trashedTask
+import com.kgs.calendar.ui.toDetailSheet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,9 +61,11 @@ class SavedShellStateTest {
             settingsOpen = true,
             settingsStartDestination = SettingsDestination.AddSource,
             problemsOpen = true,
+            trashOpen = true,
             editingCollectionHref = "work",
             creationSheet = SavedCreationSheet(SavedCreationSheet.Kind.EditTask, taskRef("daily.ics", occurrenceStart)),
             detailSheet = SavedItemRef.Event("meeting.ics", occurrenceStart),
+            trashedDetailId = 12L,
             detailTaskBackStack = listOf(SavedItemRef.Task("inbox.ics", null), taskRef("daily.ics", occurrenceStart)),
             editorSchedule = newTaskSchedule(today, LocalTime.of(9, 10), false, true, true, true, 30),
             draftWireframeColor = DefaultColor,
@@ -77,6 +83,8 @@ class SavedShellStateTest {
             conversionSource = SavedItemRef.Event("lunch.ics", occurrenceStart),
             hiddenSaveNotice = HiddenSaveNotice("work", HiddenSaveKind.Task),
             viewHistory = listOf(CalendarViewMode.Month, CalendarViewMode.Day),
+            detailBookPane = BookPane.Left,
+            creationBookPane = BookPane.Left,
         )
 
         val saveable = saved.toSaveable()
@@ -103,6 +111,17 @@ class SavedShellStateTest {
     }
 
     @Test
+    fun aTaskOpenedFromTheTaskPaneReopensInTheLeftPane() {
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
+        original.openTaskDetail(task("inbox"), SheetOrigin.TaskPane)
+
+        val restored = saveAndRestore(original, loadedState)
+
+        assertEquals(DetailSheet.Task(task("inbox")), restored.detailSheet)
+        assertEquals(BookPane.Left, restored.detailBookPane)
+    }
+
+    @Test
     fun detailSheetAndTaskBackStackResolveAgainstTheLoadedData() {
         val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
         val parent = task("parent")
@@ -119,6 +138,29 @@ class SavedShellStateTest {
         assertTrue(restored.settingsOpen)
         assertEquals(SettingsDestination.Widgets, restored.settingsStartDestination)
         assertEquals(collection("work"), restored.editingCollection)
+    }
+
+    @Test
+    fun theTrashAndItsOpenItemComeBackOnceTheTrashListIsThere() {
+        val original = CalendarShellUiState(initialEditorSchedule(today), DefaultColor, drafts)
+        val trashed = trashedTask("gone", id = 7)
+        original.openTrash()
+        original.openTrashedDetail(trashed)
+
+        val restored = saveAndRestore(original, loadedState)
+
+        assertTrue(restored.trashOpen)
+        // The trashed item isn't part of the calendar data; the trash list brings it back.
+        assertNull(restored.detailSheet)
+        restored.resolvePendingTrashedDetail(emptyList())
+        assertNull(restored.detailSheet)
+        restored.resolvePendingTrashedDetail(listOf(trashedTask("other", id = 3), trashed))
+        assertEquals(trashed.toDetailSheet(), restored.detailSheet)
+
+        // Once resolved it doesn't reopen after being closed.
+        restored.closeDetail()
+        restored.resolvePendingTrashedDetail(listOf(trashed))
+        assertNull(restored.detailSheet)
     }
 
     @Test

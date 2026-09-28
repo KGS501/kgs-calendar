@@ -7,14 +7,20 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.mutation.EventMutations
 import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.data.trash.TrashBin
+import com.kgs.calendar.data.trash.TrashRestoreResult
+import com.kgs.calendar.data.trash.TrashedItemPreview
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
+import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.LocalTime
@@ -30,6 +36,7 @@ class CalendarRepository(
     private val sources: CalendarSourceManager,
     private val syncOrchestrator: SyncOrchestrator,
     private val repairs: SyncRepairs,
+    private val trash: TrashBin,
 ) {
     fun observeAccount(): Flow<AccountEntity?> = queries.observeAccount()
 
@@ -65,13 +72,25 @@ class CalendarRepository(
 
     fun observeInboxTasks(): Flow<List<TaskEntity>> = queries.observeInboxTasks()
 
-    fun observeScheduledOpenTasks(): Flow<List<TaskEntity>> = queries.observeScheduledOpenTasks()
+    fun observeScheduledOpenTasks(todayStartMillis: Flow<Long>): Flow<List<TaskEntity>> =
+        queries.observeScheduledOpenTasks(todayStartMillis)
+
+    fun observeMissedTaskOccurrences(todayStartMillis: Flow<Long>): Flow<List<TaskEntity>> =
+        queries.observeMissedTaskOccurrences(todayStartMillis)
+
+    suspend fun missedTaskOccurrencesSnapshot(todayStartMillis: Long): List<TaskEntity> =
+        queries.missedTaskOccurrencesSnapshot(todayStartMillis)
 
     suspend fun inboxTasksSnapshot(): List<TaskEntity> = queries.inboxTasksSnapshot()
 
     suspend fun scheduledOpenTasksSnapshot(): List<TaskEntity> = queries.scheduledOpenTasksSnapshot()
 
     suspend fun allTasksSnapshot(): List<TaskEntity> = queries.allTasksSnapshot()
+
+    suspend fun taskListSnapshot(todayStartMillis: Long): List<TaskEntity> = queries.taskListSnapshot(todayStartMillis)
+
+    fun currentOpenTaskOccurrence(master: TaskEntity, todayStartMillis: Long): TaskEntity? =
+        queries.currentOpenTaskOccurrence(master, todayStartMillis)
 
     fun observeCompletedTasks(): Flow<List<TaskEntity>> = queries.observeCompletedTasks()
 
@@ -193,9 +212,28 @@ class CalendarRepository(
 
     suspend fun copyTaskTo(uid: String, collectionHref: String) = taskMutations.copyTaskTo(uid, collectionHref)
 
-    suspend fun deleteTask(uid: String) = taskMutations.deleteTask(uid)
+    suspend fun deleteTask(uid: String, moveToTrash: Boolean = true) = taskMutations.deleteTask(uid, moveToTrash)
 
-    suspend fun deleteEvent(uid: String) = eventMutations.deleteEvent(uid)
+    suspend fun deleteEvent(uid: String, moveToTrash: Boolean = true) = eventMutations.deleteEvent(uid, moveToTrash)
+
+    /** "Recently deleted": local snapshots and Nextcloud trash bin items in one list, newest delete first. */
+    fun observeTrashedItems(): Flow<List<TrashedItemEntity>> = trash.observeItems()
+
+    /** The same list with each item's event or task read back for display with the usual cards. */
+    fun observeTrashedItemPreviews(): Flow<List<TrashedItemPreview>> = trash.observePreviews()
+
+    suspend fun trashedItem(id: Long): TrashedItemEntity? = trash.item(id)
+
+    /** Re-reads the Nextcloud trash bins, e.g. when the trash is opened; false if a server couldn't be reached. */
+    suspend fun refreshTrash(): Boolean = trash.refresh()
+
+    suspend fun restoreTrashedItem(id: Long): TrashRestoreResult = trash.restore(id)
+
+    suspend fun deleteTrashedItemPermanently(id: Long) = trash.deletePermanently(id)
+
+    suspend fun emptyTrash() = trash.empty()
+
+    suspend fun purgeExpiredTrash() = trash.purgeExpired()
 
     suspend fun deleteEventOccurrence(uid: String, occurrenceStartMillis: Long) =
         eventMutations.deleteEventOccurrence(uid, occurrenceStartMillis)
@@ -222,7 +260,12 @@ class CalendarRepository(
 
     suspend fun deleteCalDavCalendar(href: String) = sources.deleteCalDavCalendar(href)
 
-    suspend fun reminderCandidates(): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates()
+    suspend fun reminderCandidates(
+        visibility: CollectionVisibility = CollectionVisibility(),
+    ): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates(visibility)
+
+    suspend fun isReminderStillVisible(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean? =
+        queries.isReminderStillVisible(occurrenceId, visibility)
 
     suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> =
         queries.notificationCandidates(nowMillis, windowEndMillis)

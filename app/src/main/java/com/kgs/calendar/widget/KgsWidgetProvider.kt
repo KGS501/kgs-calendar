@@ -334,5 +334,8 @@ abstract class KgsWidgetProvider(
         const val ACTION_TASKS_SORT_NEXT = "com.kgs.calendar.widget.TASKS_SORT_NEXT"
         const val ACTION_COLLECTION_CLICK = "com.kgs.calendar.widget.COLLECTION_CLICK"
         const val EXTRA_TASK_RESOURCE_HREF = "com.kgs.calendar.widget.TASK_RESOURCE_HREF"
+
+        /** RECURRENCE-ID of the tapped occurrence of a recurring task; absent for single tasks. */
+        const val EXTRA_TASK_OCCURRENCE_MILLIS = "com.kgs.calendar.widget.TASK_OCCURRENCE_MILLIS"
     }
 }

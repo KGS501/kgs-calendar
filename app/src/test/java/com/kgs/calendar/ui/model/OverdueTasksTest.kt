@@ -128,6 +128,35 @@ class OverdueTasksTest {
         )
     }
 
+    @Test
+    fun everyMissedOccurrenceOfARecurringTaskIsItsOwnEntryWhileSingleTasksAppearOnce() {
+        val series = task(resourceHref = "daily.ics", title = "Water plants").copy(recurrenceRule = "FREQ=DAILY")
+        val missed = (3L downTo 1L).map { days ->
+            series.copy(dueAtMillis = millis(today.minusDays(days), LocalTime.of(9, 0)))
+        }
+        val next = series.copy(dueAtMillis = millis(today, LocalTime.of(9, 0)))
+        val single = task(resourceHref = "single.ics", title = "Single", dueAtMillis = millis(today.minusDays(2)))
+
+        // The task list's entry of an ended series is its earliest missed occurrence, so it arrives twice.
+        val result = orderedOverdueTasks(
+            tasks = listOf(single, next, missed.first()) + missed,
+            today = today,
+            zoneId = zoneId,
+        )
+
+        assertEquals(
+            listOf(
+                "daily.ics" to today.minusDays(3),
+                "single.ics" to today.minusDays(2),
+                "daily.ics" to today.minusDays(2),
+                "daily.ics" to today.minusDays(1),
+            ),
+            result.map { it.resourceHref to Instant.ofEpochMilli(it.dueAtMillis!!).atZone(zoneId).toLocalDate() },
+        )
+        assertEquals(result.size, result.map { it.overdueEntryKey() }.toSet().size)
+        assertEquals("single.ics", single.overdueEntryKey())
+    }
+
     private fun millis(
         date: LocalDate,
         time: LocalTime = LocalTime.MIDNIGHT,

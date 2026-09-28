@@ -53,4 +53,7 @@ interface AccountDao {
         calendarHomeUrl: String,
         capabilitiesJson: String,
     )
+
+    @Query("UPDATE accounts SET capabilitiesJson = :capabilitiesJson WHERE id = :id")
+    suspend fun updateCapabilitiesJson(id: String, capabilitiesJson: String)
 }

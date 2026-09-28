@@ -439,6 +439,8 @@ internal fun CalendarDrawer(
     onCollectionVisibleInViews: (String, Boolean) -> Unit,
     onCollectionSettings: (CollectionEntity) -> Unit,
     onAppSettings: () -> Unit,
+    trashCount: Int,
+    onRecentlyDeleted: () -> Unit,
     problems: List<ProblemItem>,
     onProblems: () -> Unit,
 ) {
@@ -559,6 +561,12 @@ internal fun CalendarDrawer(
                 }
                 HorizontalDivider(color = WarmLine, modifier = Modifier.padding(top = 12.dp))
                 DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
+                DrawerActionRow(
+                    stringResource(R.string.recently_deleted),
+                    Icons.Default.Delete,
+                    onRecentlyDeleted,
+                    count = trashCount.takeIf { it > 0 },
+                )
                 if (problems.isNotEmpty()) {
                     DrawerProblemRow(
                         count = problems.size,
@@ -692,7 +700,7 @@ private fun DrawerViewItem(
 }
 
 @Composable
-private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Unit, count: Int? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -702,7 +710,10 @@ private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Uni
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         Icon(icon, contentDescription = null, tint = WarmInk, modifier = Modifier.size(23.dp))
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp)
+        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        if (count != null) {
+            Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
+        }
     }
 }
 
@@ -935,7 +946,6 @@ internal fun TaskDrawer(
             dragOffsetPx = 0f
         }
     }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(Modifier.fillMaxSize()) {
         if (effectiveProgress > 0.01f) {
@@ -980,46 +990,106 @@ internal fun TaskDrawer(
             color = MaterialTheme.colorScheme.background,
             shadowElevation = 0.dp,
         ) {
-            Column(
+            TaskSidebarContent(
+                state = state,
+                onTaskStatusChanged = onTaskStatusChanged,
+                onTaskClick = onTaskClick,
+                onShowCompleted = onShowCompleted,
+                onCreateTask = onCreateTask,
+            )
+        }
+    }
+}
+
+/**
+ * The task sidebar in the book posture: the task drawer's content as a permanent pane right of the hinge.
+ * A hairline on its hinge side separates it from the calendar like the drawers' dividers.
+ */
+@Composable
+internal fun TaskPane(
+    state: CalendarUiState,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onTaskClick: (TaskEntity) -> Unit,
+    onShowCompleted: () -> Unit,
+    onCreateTask: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxHeight()
+            .testTag(TaskPaneTag),
+        color = MaterialTheme.colorScheme.background,
+        shadowElevation = 0.dp,
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            TaskSidebarContent(
+                state = state,
+                onTaskStatusChanged = onTaskStatusChanged,
+                onTaskClick = onTaskClick,
+                onShowCompleted = onShowCompleted,
+                onCreateTask = onCreateTask,
+            )
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = statusTop + 18.dp),
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .width(1.dp)
+                    .background(WarmLine),
+            )
+        }
+    }
+}
+
+internal const val TaskPaneTag = "task-pane"
+
+/** The task sidebar's header with its "new task" button, above the task inbox. */
+@Composable
+private fun TaskSidebarContent(
+    state: CalendarUiState,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onTaskClick: (TaskEntity) -> Unit,
+    onShowCompleted: () -> Unit,
+    onCreateTask: () -> Unit,
+) {
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = statusTop + 18.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+            }
+            IconButton(
+                onClick = onCreateTask,
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(accentContainerColor()),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 28.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    IconButton(
-                        onClick = onCreateTask,
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(accentContainerColor()),
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = stringResource(R.string.new_task),
-                            tint = accentContainerContentColor(),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-                TaskInbox(
-                    state = state,
-                    onTaskStatusChanged = onTaskStatusChanged,
-                    onDetail = { detail ->
-                        if (detail is DetailSheet.Task) onTaskClick(detail.task)
-                    },
-                    onShowCompleted = onShowCompleted,
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = stringResource(R.string.new_task),
+                    tint = accentContainerContentColor(),
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
+        TaskInbox(
+            state = state,
+            onTaskStatusChanged = onTaskStatusChanged,
+            onDetail = { detail ->
+                if (detail is DetailSheet.Task) onTaskClick(detail.task)
+            },
+            onShowCompleted = onShowCompleted,
+        )
     }
 }

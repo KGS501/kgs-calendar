@@ -305,6 +305,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -372,6 +373,7 @@ import com.kgs.calendar.ui.timeline.fallbackPagerSnapPageLimit
 import com.kgs.calendar.ui.timeline.FullWeekPagerFlingBehavior
 import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
 import com.kgs.calendar.ui.timeline.pagePosition
+import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
@@ -680,6 +682,7 @@ internal fun TimelineView(
     var handledWidgetDateNavigationSerial by remember { mutableStateOf(0) }
     val latestMorphContext by rememberUpdatedState(morphContext)
     val latestSelectedDate by rememberUpdatedState(state.selectedDate)
+    val latestSelectedPage by rememberUpdatedState(selectedPage)
 
     LaunchedEffect(selectedPage, fullWeekPagingEnabled, fullWeekGestureState) {
         if (fullWeekPagingEnabled) fullWeekGestureState.resetAnchor(selectedPage)
@@ -782,9 +785,9 @@ internal fun TimelineView(
     val visibleStartDate = actualVisiblePages.minOrNull()?.toDayDate() ?: state.selectedDate
     val visibleEndDate = actualVisiblePages.maxOrNull()?.toDayDate() ?: visibleStartDate.plusDays((clampedDayCount - 1).toLong())
     val pagerVisibleDays = actualVisiblePages.map { it.toDayDate() }
-    val overdueTasks = remember(state.scheduledOpenTasks, calendarTime.today, calendarTime.revision) {
+    val overdueTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, calendarTime.today, calendarTime.revision) {
         orderedOverdueTasks(
-            tasks = state.scheduledOpenTasks,
+            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences,
             today = calendarTime.today,
             zoneId = ZoneId.systemDefault(),
         )
@@ -1009,10 +1012,15 @@ internal fun TimelineView(
                     if (page == target) programmaticTargetPage = null
                     return@collect
                 }
-                val date = page.toDayDate()
-                if (date != latestSelectedDate) {
-                    onDateSelected(date)
-                }
+                // The programmatic move above clears its target as soon as its animation returns,
+                // which can be before this collector sees the new settled page. Comparing with the
+                // current selection's anchor page keeps that late echo from selecting the week's
+                // first day instead of the chosen date.
+                timelineSettledPageSelection(
+                    settledPage = page,
+                    selectedAnchorPage = latestSelectedPage,
+                    selectedDate = latestSelectedDate,
+                )?.let(onDateSelected)
             }
     }
 
@@ -1262,6 +1270,8 @@ internal fun TimelineView(
             override fun cancel() = currentDragCancel.value()
         }
     }
+    // One light tick each time a dragged event or task snaps to another slot, day or all-day lane.
+    activeTimedDrag?.takeUnless { it.awaitingCommit }?.let { DragSnapHaptics(slot = it.session.target) }
 
     Box(
         Modifier

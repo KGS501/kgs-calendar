@@ -9,17 +9,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
+import com.kgs.calendar.ui.haptics.rememberKgsHaptics
+import com.kgs.calendar.ui.layout.FoldPosture
+import com.kgs.calendar.ui.layout.LocalFoldPosture
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
+import com.kgs.calendar.ui.layout.forBookCalendarPane
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
@@ -43,10 +52,22 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
     }
     val baseContext = LocalContext.current
     val configuration = LocalConfiguration.current
-    LaunchedEffect(configuration.orientation) {
-        viewModel.setDeviceOrientation(
-            configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
-        )
+    LaunchedEffect(calendarTime.today) {
+        viewModel.setCurrentDay(calendarTime.today)
+    }
+    // In the book posture the calendar only has the left pane, so its size class follows that pane.
+    val bookPosture = LocalFoldPosture.current as? FoldPosture.Book
+    val density = LocalDensity.current
+    val windowLayout = currentCalendarWindowLayout().let { layout ->
+        bookPosture?.let { layout.forBookCalendarPane(with(density) { it.hingeLeftPx.toDp().value }) } ?: layout
+    }
+    // Forgotten when the Activity is recreated, so a new window re-applies the landscape entry view
+    // exactly like an orientation change; plain resizes (split screen, freeform) only update the size class.
+    var reportedWindowOrientation by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(windowLayout) {
+        val orientationChanged = reportedWindowOrientation != windowLayout.isLandscape
+        reportedWindowOrientation = windowLayout.isLandscape
+        viewModel.setWindowLayout(windowLayout, applyOrientationEntryView = orientationChanged)
     }
     val appLocale = remember(state.languageMode, configuration) {
         state.languageMode.resolveLocale(baseContext)
@@ -68,6 +89,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LocalConfiguration provides localizedConfiguration,
         LocalAppLocale provides appLocale,
         LocalCalendarTimeSnapshot provides calendarTime,
+        LocalKgsHaptics provides rememberKgsHaptics(state.hapticFeedbackEnabled),
     ) {
         KgsCalendarTheme(
             themeMode = state.themeMode,

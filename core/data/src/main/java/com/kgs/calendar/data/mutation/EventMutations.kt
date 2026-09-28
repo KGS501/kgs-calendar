@@ -14,6 +14,7 @@ import com.kgs.calendar.data.newUid
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
 import com.kgs.calendar.data.toMinutesList
+import com.kgs.calendar.data.trash.TrashSnapshots
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.model.ComponentType
@@ -23,6 +24,7 @@ import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isAndroidProviderCollection
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
 import java.time.LocalDate
 import java.time.LocalTime
@@ -36,6 +38,7 @@ class EventMutations internal constructor(
     private val androidCalendarProviderClient: AndroidCalendarProviderClient,
     private val icalCodec: IcalCodec,
     private val androidWriteShield: AndroidProviderWriteShield,
+    private val trashSnapshots: TrashSnapshots,
     private val zoneId: ZoneId,
 ) {
     private suspend fun writableEventCollectionOrNull(requestedHref: String?): CollectionEntity? =
@@ -90,17 +93,7 @@ class EventMutations internal constructor(
             manualColor = payload.manualColor,
         ).sanitizedFor(collection)
         if (collection.isAndroidProviderCollection()) {
-            val calendarId = collection.androidCalendarId()
-            val eventId = androidCalendarProviderClient.insertEvent(calendarId, event)
-            val androidEvent = event.copy(
-                uid = "android-event-$eventId",
-                resourceHref = androidCalendarProviderClient.eventHref(eventId),
-            )
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(collection.href, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidEvent)
-            }
-            androidWriteShield.markLocalWrite(androidEvent.resourceHref)
+            insertAndroidEvent(collection, event)
             return
         }
         val raw = icalCodec.serializeEvent(event)
@@ -303,7 +296,7 @@ class EventMutations internal constructor(
         localWrites.writeTransaction {
             localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
             database.eventDao().upsert(updated)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         }
     }
 
@@ -419,16 +412,7 @@ class EventMutations internal constructor(
             syncError = null,
         ).sanitizedFor(targetCollection)
         if (targetCollection.isAndroidProviderCollection()) {
-            val eventId = androidCalendarProviderClient.insertEvent(targetCollection.androidCalendarId(), event)
-            val androidEvent = event.copy(
-                uid = "android-event-$eventId",
-                resourceHref = androidCalendarProviderClient.eventHref(eventId),
-            )
-            localWrites.writeTransaction {
-                localWrites.upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
-                database.eventDao().upsert(androidEvent)
-            }
-            androidWriteShield.markLocalWrite(androidEvent.resourceHref)
+            insertAndroidEvent(targetCollection, event)
             return
         }
         val raw = icalCodec.serializeEvent(event)
@@ -439,18 +423,34 @@ class EventMutations internal constructor(
         }
     }
 
-    suspend fun deleteEvent(uid: String) {
+    /**
+     * Deletes the whole event. With [moveToTrash] (every user delete) a snapshot goes to "Recently
+     * deleted" together with the local delete; conversions to a task pass false.
+     */
+    suspend fun deleteEvent(uid: String, moveToTrash: Boolean = true) {
         val collectionHref = database.eventDao().get(uid)?.collectionHref ?: return
-        localWrites.localWriteUnit(collectionHref) { deleteEventUnit(uid) }
+        localWrites.localWriteUnit(collectionHref) { deleteEventUnit(uid, moveToTrash) }
     }
 
-    private suspend fun deleteEventUnit(uid: String) {
+    private suspend fun deleteEventUnit(uid: String, moveToTrash: Boolean) {
         val event = database.eventDao().get(uid) ?: return
         val collection = database.collectionDao().get(event.collectionHref) ?: return
         if (collection.isReadOnlyCollection() || !collection.canDeleteResources()) return
         if (localWrites.isAndroidProviderCollectionHref(event.collectionHref)) {
             val eventId = androidCalendarProviderClient.eventIdFromHref(event.resourceHref) ?: return
-            androidCalendarProviderClient.deleteEvent(eventId)
+            // The snapshot is stored before the provider call, which can't join a transaction,
+            // and is dropped again if the provider refuses the delete.
+            val trashId = if (moveToTrash) {
+                localWrites.writeTransaction { trashSnapshots.recordEvent(event, collection, rawIcs = null, providerEventId = eventId) }
+            } else {
+                null
+            }
+            try {
+                androidCalendarProviderClient.deleteEvent(eventId)
+            } catch (error: Throwable) {
+                trashId?.let { database.trashDao().delete(it) }
+                throw error
+            }
             localWrites.writeTransaction {
                 database.eventDao().deleteByResource(event.resourceHref)
                 database.resourceDao().delete(event.resourceHref)
@@ -459,6 +459,7 @@ class EventMutations internal constructor(
             return
         }
         val resource = database.resourceDao().get(event.resourceHref)
+        if (moveToTrash) trashSnapshots.recordEvent(event, collection, resource?.rawIcs)
         if (event.collectionHref.isLocalCollectionHref()) {
             database.eventDao().deleteByResource(event.resourceHref)
             database.resourceDao().delete(event.resourceHref)
@@ -501,7 +502,7 @@ class EventMutations internal constructor(
         }
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.single(occurrenceStartMillis))
         database.eventDao().upsert(updated)
     }
 
@@ -549,8 +550,32 @@ class EventMutations internal constructor(
         }
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
-        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
+        localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag, PendingOccurrenceScope.following(occurrenceStartMillis))
         database.eventDao().upsert(updated)
+    }
+
+    /**
+     * Inserts [event] into the device calendar [collection] and stores the local rows for the new
+     * provider event. [inLocalTransaction] runs in the same transaction as those rows.
+     */
+    internal suspend fun insertAndroidEvent(
+        collection: CollectionEntity,
+        event: EventEntity,
+        inLocalTransaction: suspend () -> Unit = {},
+    ) {
+        val sanitized = event.copy(collectionHref = collection.href, color = collection.color).sanitizedFor(collection)
+        val eventId = androidCalendarProviderClient.insertEvent(collection.androidCalendarId(), sanitized)
+        val androidEvent = sanitized.copy(
+            uid = "android-event-$eventId",
+            resourceHref = androidCalendarProviderClient.eventHref(eventId),
+            syncError = null,
+        )
+        localWrites.writeTransaction {
+            localWrites.upsertLocalResource(collection.href, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
+            database.eventDao().upsert(androidEvent)
+            inLocalTransaction()
+        }
+        androidWriteShield.markLocalWrite(androidEvent.resourceHref)
     }
 
     private fun CollectionEntity.androidCalendarId(): Long =

@@ -13,6 +13,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
@@ -71,7 +73,12 @@ internal fun HiddenSaveNoticeDialog(
             ),
             onDismiss = shell::dismissHiddenSaveNotice,
             onUnhide = {
-                viewModel.settings.setCollectionVisibleInViews(currentHiddenSaveCollection.href, true)
+                val href = currentHiddenSaveCollection.href
+                viewModel.settings.setCollectionVisibleInViews(href, true)
+                when (currentHiddenSaveNotice.kind) {
+                    HiddenSaveKind.Event -> viewModel.settings.setCollectionEventsVisible(href, true)
+                    HiddenSaveKind.Task -> viewModel.settings.setCollectionTasksVisible(href, true)
+                }
                 shell.dismissHiddenSaveNotice()
             },
         )
@@ -94,8 +101,32 @@ internal fun CompletedTasksOverlay(
             taskColorMode = renderState.taskColorMode,
             subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
             onTaskStatusChanged = viewModel.edits::setTaskStatus,
-            onTaskClick = shell::openTaskDetail,
+            onTaskClick = { shell.openTaskDetail(it) },
             onClose = shell::closeCompletedTasks,
+        )
+    }
+}
+
+// Composed before the detail sheet as well: tapping an item opens its detail over the trash list.
+@Composable
+internal fun RecentlyDeletedOverlay(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    shell: CalendarShellUiState,
+) {
+    if (shell.trashOpen) {
+        val trash by viewModel.trash.state.collectAsStateWithLifecycle()
+        LaunchedEffect(trash.entries) {
+            shell.resolvePendingTrashedDetail(trash.entries)
+        }
+        RecentlyDeletedPage(
+            trash = trash,
+            taskColorMode = state.taskColorMode,
+            onItemClick = shell::openTrashedDetail,
+            onEmptyTrash = viewModel.trash::emptyTrash,
+            onDismissNotice = viewModel.trash::dismissNotice,
+            onOpened = viewModel.trash::refresh,
+            onClose = shell::closeTrash,
         )
     }
 }
@@ -137,10 +168,10 @@ internal fun SettingsOverlay(
             onOverdueSummaryPriorityAnimationChanged = viewModel.settings::setOverdueSummaryPriorityAnimationEnabled,
             onSubtasksExpandedByDefaultChanged = viewModel.settings::setSubtasksExpandedByDefault,
             onAutoLoadMapPreviewsChanged = viewModel.settings::setAutoLoadMapPreviews,
+            onHapticFeedbackChanged = viewModel.settings::setHapticFeedbackEnabled,
             onMaxVisibleAllDayItemsChanged = viewModel.settings::setMaxVisibleAllDayItems,
             onMultiDaySidebarControlsChanged = viewModel.settings::setMultiDaySidebarControlsEnabled,
-            onPortraitMultiDayCountChanged = viewModel.settings::setPortraitMultiDayCount,
-            onLandscapeMultiDayCountChanged = viewModel.settings::setLandscapeMultiDayCount,
+            onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
             onWeekViewEnabledChanged = viewModel.settings::setWeekViewEnabled,
             onFullWeekSwipeEnabledChanged = viewModel.settings::setFullWeekSwipeEnabled,
             onFocusTitleOnCreateChanged = viewModel.settings::setFocusTitleOnCreate,
@@ -216,6 +247,8 @@ internal fun CollectionSettingsHost(
             CollectionSettingsSheet(
                 collection = collection,
                 visibleInViews = collection.href !in state.hiddenCollectionHrefs,
+                eventsVisible = collection.href !in state.collectionVisibility.eventsHiddenIn,
+                tasksVisible = collection.href !in state.collectionVisibility.tasksHiddenIn,
                 onSave = { name, color ->
                     viewModel.sources.updateCollectionAppearance(collection.href, name, color)
                     shell.closeCollectionEditor()
@@ -226,6 +259,12 @@ internal fun CollectionSettingsHost(
                 },
                 onVisibleInViewsChanged = { visible ->
                     viewModel.settings.setCollectionVisibleInViews(collection.href, visible)
+                },
+                onEventsVisibleChanged = { visible ->
+                    viewModel.settings.setCollectionEventsVisible(collection.href, visible)
+                },
+                onTasksVisibleChanged = { visible ->
+                    viewModel.settings.setCollectionTasksVisible(collection.href, visible)
                 },
                 onDelete = if (collection.canDeleteFromServerForUi()) {
                     {

@@ -2,6 +2,8 @@ package com.kgs.calendar.ui
 
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 
@@ -59,7 +61,18 @@ internal sealed interface RecurringSaveRequest {
     data class Task(val task: TaskEntity, val payload: TaskEditPayload) : RecurringSaveRequest
 }
 
+/**
+ * The detail sheet's item. [trashedItem] is set for an item opened from "Recently deleted": the
+ * sheet is then read-only and leads with restore and permanent delete.
+ */
 internal sealed interface DetailSheet {
-    data class Event(val event: EventEntity) : DetailSheet
-    data class Task(val task: TaskEntity) : DetailSheet
+    val trashedItem: TrashedItemEntity?
+
+    data class Event(val event: EventEntity, override val trashedItem: TrashedItemEntity? = null) : DetailSheet
+    data class Task(val task: TaskEntity, override val trashedItem: TrashedItemEntity? = null) : DetailSheet
 }
+
+/** The detail sheet of a "Recently deleted" item. */
+internal fun TrashedItemPreview.toDetailSheet(): DetailSheet =
+    task?.let { DetailSheet.Task(it, trashedItem = item) }
+        ?: DetailSheet.Event(requireNotNull(event), trashedItem = item)

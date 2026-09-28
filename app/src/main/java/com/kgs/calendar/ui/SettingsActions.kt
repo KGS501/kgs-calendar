@@ -12,6 +12,8 @@ import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.CalendarWindowLayout
+import com.kgs.calendar.domain.model.MultiDayCountBucket
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.startOfWeek
 import com.kgs.calendar.widget.KgsWidgetKind
@@ -30,7 +32,7 @@ class SettingsActions internal constructor(
     private val reminderRescheduler: ReminderRescheduler,
     private val message: MutableStateFlow<String?>,
     private val currentState: () -> CalendarUiState,
-    private val isLandscape: () -> Boolean,
+    private val windowLayout: () -> CalendarWindowLayout,
     private val publishedFirstDayOfWeek: Flow<DayOfWeek>,
     private val selectDate: (LocalDate) -> Unit,
 ) {
@@ -200,15 +202,27 @@ class SettingsActions internal constructor(
         scope.launch { settingsStore.setAutoLoadMapPreviews(enabled) }
     }
 
+    fun setHapticFeedbackEnabled(enabled: Boolean) {
+        scope.launch { settingsStore.setHapticFeedbackEnabled(enabled) }
+    }
+
     fun setMaxVisibleAllDayItems(maxItems: Int) {
         scope.launch { settingsStore.setMaxVisibleAllDayItems(maxItems) }
     }
 
+    /** Changes the Multiple days count of the current window's size class and orientation. */
     fun setMultiDayCount(count: Int) {
-        if (isLandscape()) {
-            setLandscapeMultiDayCount(count)
-        } else {
-            setPortraitMultiDayCount(count)
+        setMultiDayCount(windowLayout().multiDayCountBucket, count)
+    }
+
+    fun setMultiDayCount(bucket: MultiDayCountBucket, count: Int) {
+        when (bucket) {
+            MultiDayCountBucket.Portrait -> setPortraitMultiDayCount(count)
+            MultiDayCountBucket.Landscape -> setLandscapeMultiDayCount(count)
+            MultiDayCountBucket.LargePortrait ->
+                scope.launch { settingsStore.setLargePortraitMultiDayCount(count.coerceMultiDayCount()) }
+            MultiDayCountBucket.LargeLandscape ->
+                scope.launch { settingsStore.setLargeLandscapeMultiDayCount(count.coerceMultiDayCount()) }
         }
     }
 
@@ -303,8 +317,22 @@ class SettingsActions internal constructor(
     }
 
     fun setCollectionVisibleInViews(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionHiddenInViews(href, hidden = !visible) }
+    }
+
+    fun setCollectionEventsVisible(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionEventsHidden(href, hidden = !visible) }
+    }
+
+    fun setCollectionTasksVisible(href: String, visible: Boolean) {
+        updateCollectionVisibility { settingsStore.setCollectionTasksHidden(href, hidden = !visible) }
+    }
+
+    /** Hidden items never notify, so every visibility change replaces the planned reminders at once. */
+    private fun updateCollectionVisibility(block: suspend () -> Unit) {
         scope.launch {
-            settingsStore.setCollectionHiddenInViews(href, hidden = !visible)
+            block()
+            runCatching { reminderRescheduler.reschedule() }
         }
     }
 

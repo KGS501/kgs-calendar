@@ -16,14 +16,18 @@ import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
 import com.kgs.calendar.data.sync.CalDavSyncEngine
 import com.kgs.calendar.data.sync.PendingMutationUploader
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
+import com.kgs.calendar.data.sync.RemoteSyncLock
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.data.trash.ServerTrashBin
+import com.kgs.calendar.data.trash.TrashBin
+import com.kgs.calendar.data.trash.TrashSnapshots
 import okhttp3.OkHttpClient
 import java.time.ZoneId
 
 /**
  * Wires the calendar data components. The shared in-memory state (the Android provider write
- * shield and the sync locks) exists once here and is handed to the components that need it.
+ * shield and the remote sync lock) exists once here and is handed to the components that need it.
  */
 class CalendarDataComponents(
     database: KgsDatabase,
@@ -38,10 +42,12 @@ class CalendarDataComponents(
 ) {
     private val localWrites = LocalWriteSupport(database, icalCodec)
     private val androidWriteShield = AndroidProviderWriteShield()
+    private val trashSnapshots = TrashSnapshots(database, icalCodec)
+    private val remoteSyncLock = RemoteSyncLock()
 
     val queries = CalendarQueries(database, recurrenceExpander, zoneId)
-    val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, zoneId)
-    val taskMutations = TaskMutations(database, localWrites, icalCodec, zoneId)
+    val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, trashSnapshots, zoneId)
+    val taskMutations = TaskMutations(database, localWrites, icalCodec, trashSnapshots, zoneId)
 
     val repairs = SyncRepairs(database, localWrites, icalCodec)
     val uploader = PendingMutationUploader(database, credentialsStore, calDavClient, localWrites)
@@ -49,12 +55,17 @@ class CalendarDataComponents(
     val readOnlyUrlSyncEngine = ReadOnlyUrlSyncEngine(database, localWrites, icalCodec, readOnlyHttpClient)
     val androidProviderSyncEngine = AndroidProviderSyncEngine(database, localWrites, androidCalendarProviderClient, androidWriteShield)
 
+    private val serverTrash = ServerTrashBin(database, localWrites, credentialsStore, calDavClient, icalCodec, calDavSyncEngine, remoteSyncLock)
+    val trash = TrashBin(database, localWrites, icalCodec, eventMutations, serverTrash, remoteSyncLock)
+
     // CalDAV claims every account the others don't, so it has to stay last.
     val syncOrchestrator = SyncOrchestrator(
         database = database,
         repairs = repairs,
         uploader = uploader,
         engines = listOf(androidProviderSyncEngine, readOnlyUrlSyncEngine, calDavSyncEngine),
+        trash = trash,
+        remoteSyncLock = remoteSyncLock,
     )
 
     val sources = CalendarSourceManager(

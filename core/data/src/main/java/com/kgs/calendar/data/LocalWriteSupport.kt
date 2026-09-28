@@ -13,6 +13,7 @@ import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.source.isAndroidProviderCollection
 import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import org.json.JSONObject
 
 /**
@@ -52,15 +53,25 @@ internal class LocalWriteSupport(
         )
     }
 
+    /**
+     * Queues [rawIcs] for upload, replacing any PUT still queued for [resourceHref].
+     * [occurrenceScope] records which occurrences the change covers for the pending-sync
+     * indicators only ([PendingOccurrenceScope]; null = the whole resource). A replaced PUT's
+     * scope is merged in because the new payload carries its changes too.
+     */
     suspend fun enqueuePut(
         collectionHref: String,
         resourceHref: String,
         componentType: ComponentType,
         rawIcs: String,
         baseEtag: String?,
+        occurrenceScope: String? = null,
     ) {
         if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
         writeTransaction {
+            val replacedScopes = database.pendingMutationDao().forResource(resourceHref)
+                .filter { it.action == MutationAction.Put }
+                .map { it.occurrenceScope }
             database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
             database.pendingMutationDao().insert(
                 PendingMutationEntity(
@@ -72,6 +83,7 @@ internal class LocalWriteSupport(
                     payloadIcs = rawIcs,
                     baseEtag = baseEtag,
                     createdAtMillis = System.currentTimeMillis(),
+                    occurrenceScope = PendingOccurrenceScope.merge(replacedScopes, occurrenceScope),
                 ),
             )
         }

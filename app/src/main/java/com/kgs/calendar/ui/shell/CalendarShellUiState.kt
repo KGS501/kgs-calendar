@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.ConversionSource
@@ -26,9 +27,13 @@ import com.kgs.calendar.ui.HiddenSaveNotice
 import com.kgs.calendar.ui.RecurringSaveRequest
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.ui.SheetSnap
+import com.kgs.calendar.ui.toDetailSheet
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.layout.BookPane
+import com.kgs.calendar.ui.layout.SheetOrigin
+import com.kgs.calendar.ui.layout.bookPaneFor
 import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -63,6 +68,14 @@ internal class CalendarShellUiState(
         private set
     var detailSheet by mutableStateOf<DetailSheet?>(null)
         private set
+
+    /** The pane the detail sheet uses in the book posture; it follows where the detail was opened from. */
+    var detailBookPane by mutableStateOf(BookPane.Right)
+        private set
+
+    /** The pane the editor uses in the book posture; an editor opened from a detail keeps the detail's pane. */
+    var creationBookPane by mutableStateOf(BookPane.Right)
+        private set
     private val detailTaskStack = mutableStateListOf<TaskEntity>()
     val detailTaskBackStack: List<TaskEntity> get() = detailTaskStack
     var detailTaskMorphGeneration by mutableStateOf(0)
@@ -83,6 +96,11 @@ internal class CalendarShellUiState(
         private set
     var problemsOpen by mutableStateOf(false)
         private set
+    var trashOpen by mutableStateOf(false)
+        private set
+
+    /** The "Recently deleted" item whose detail was open before a recreation, until the trash list is back. */
+    private var pendingTrashedDetailId by mutableStateOf<Long?>(null)
     var editingCollection by mutableStateOf<CollectionEntity?>(null)
         private set
     var editorSchedule by mutableStateOf(initialEditorSchedule)
@@ -120,7 +138,7 @@ internal class CalendarShellUiState(
 
     val anyOverlayOpen: Boolean
         get() = createMenuOpen || searchOpen || drawerOpen || taskDrawerOpen ||
-            completedTasksOpen || settingsOpen || problemsOpen || editingCollection != null ||
+            completedTasksOpen || settingsOpen || problemsOpen || trashOpen || editingCollection != null ||
             detailSheet != null || creationSheet != null
 
     val canNavigateBack: Boolean
@@ -149,6 +167,7 @@ internal class CalendarShellUiState(
             drawerOpen -> drawerOpen = false
             completedTasksOpen -> completedTasksOpen = false
             problemsOpen -> problemsOpen = false
+            trashOpen -> trashOpen = false
             settingsOpen -> settingsOpen = false
             viewHistory.isNotEmpty() -> selectView(viewHistory.removeAt(viewHistory.lastIndex))
         }
@@ -219,6 +238,40 @@ internal class CalendarShellUiState(
         problemsOpen = false
     }
 
+    fun openTrash() {
+        drawerOpen = false
+        trashOpen = true
+    }
+
+    fun closeTrash() {
+        trashOpen = false
+        pendingTrashedDetailId = null
+        if (detailSheet?.trashedItem != null) closeDetail()
+    }
+
+    /** Opens a "Recently deleted" item in the detail sheet, read-only with restore and delete. */
+    fun openTrashedDetail(preview: TrashedItemPreview) {
+        pendingTrashedDetailId = null
+        detailTaskStack.clear()
+        detailTaskMorphGeneration = 0
+        detailTaskMorphSourceHref = null
+        detailSheet = preview.toDetailSheet()
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
+    }
+
+    /**
+     * Reopens the trashed item's detail that was open before a recreation once [entries], the
+     * trash list, holds it again; an item that has left the trash meanwhile stays closed.
+     */
+    fun resolvePendingTrashedDetail(entries: List<TrashedItemPreview>) {
+        val id = pendingTrashedDetailId ?: return
+        if (!trashOpen || detailSheet != null) {
+            pendingTrashedDetailId = null
+            return
+        }
+        entries.firstOrNull { it.item.id == id }?.let(::openTrashedDetail)
+    }
+
     fun openSettings(destination: SettingsDestination) {
         drawerOpen = false
         settingsStartDestination = destination
@@ -251,15 +304,26 @@ internal class CalendarShellUiState(
         editingCollection = null
     }
 
-    fun openEventCreation(schedule: EditorScheduleState, wireframeColor: Int) {
+    /** [prefill] starts the editor with typed values, e.g. of text shared to the app. */
+    fun openEventCreation(schedule: EditorScheduleState, wireframeColor: Int, prefill: EditorTransferDraft? = null) {
+        // A prefilled editor always starts a fresh draft, even over an editor that is already open.
+        if (prefill != null) creationSheet = null
         openCreation(CreationSheet.EventFull, schedule, wireframeColor)
+        // Set once the sheet (and with it the draft that stores the prefill) exists.
+        if (prefill != null) editorTransferDraft = prefill
     }
 
-    fun openTaskCreation(schedule: EditorScheduleState, wireframeColor: Int) {
-        openCreation(CreationSheet.Task, schedule, wireframeColor)
+    /** [origin] is where "new task" was tapped: the create button or the task sidebar. */
+    fun openTaskCreation(schedule: EditorScheduleState, wireframeColor: Int, origin: SheetOrigin = SheetOrigin.Calendar) {
+        openCreation(CreationSheet.Task, schedule, wireframeColor, origin)
     }
 
-    private fun openCreation(sheet: CreationSheet, schedule: EditorScheduleState, wireframeColor: Int) {
+    private fun openCreation(
+        sheet: CreationSheet,
+        schedule: EditorScheduleState,
+        wireframeColor: Int,
+        origin: SheetOrigin = SheetOrigin.Calendar,
+    ) {
         editorSchedule = schedule
         draftWireframeColor = wireframeColor
         editorTransferDraft = null
@@ -270,20 +334,26 @@ internal class CalendarShellUiState(
         taskDrawerOpen = false
         settingsOpen = false
         problemsOpen = false
+        trashOpen = false
         editingCollection = null
         detailSheet = null
         detailTaskStack.clear()
         creationSheet = sheet
+        creationBookPane = bookPaneFor(origin)
     }
 
     /** A tap on an empty timeline or all-day slot: start (or move) the low event draft there. */
     fun selectDraftSlot(preview: EditorSchedulePreview, wireframeColor: Int) {
+        // Only reachable with a detail open in the tabletop posture, where the calendar below stays usable.
+        detailSheet = null
+        detailTaskStack.clear()
         editorWireframeMode = true
         if (creationSheet != null) creationCollapseRequest++
         editorSchedule = editorSchedule.applyTimelineChange(preview)
         draftWireframeColor = wireframeColor
         editorTransferDraft = null
         creationSheet = CreationSheet.EventLow
+        creationBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun moveDraft(preview: EditorSchedulePreview) {
@@ -371,7 +441,11 @@ internal class CalendarShellUiState(
             HiddenSaveKind.Event -> state.defaultEventCollectionHref
             HiddenSaveKind.Task -> state.defaultTaskCollectionHref
         }
-        if (resolvedHref != null && resolvedHref in state.hiddenCollectionHrefs) {
+        val visible = when (kind) {
+            HiddenSaveKind.Event -> state.collectionVisibility.showsEventsOf(resolvedHref)
+            HiddenSaveKind.Task -> state.collectionVisibility.showsTasksOf(resolvedHref)
+        }
+        if (resolvedHref != null && !visible) {
             hiddenSaveNotice = HiddenSaveNotice(resolvedHref, kind)
         }
     }
@@ -380,21 +454,25 @@ internal class CalendarShellUiState(
         hiddenSaveNotice = null
     }
 
+    /** A detail opened from the calendar or search. */
     fun openDetail(detail: DetailSheet) {
         detailSheet = detail
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
-    /** Opens a task detail without a subtask morph. */
-    fun openTaskDetail(task: TaskEntity) {
+    /** Opens a task detail without a subtask morph; [origin] is where the task was tapped. */
+    fun openTaskDetail(task: TaskEntity, origin: SheetOrigin = SheetOrigin.Calendar) {
         detailTaskMorphGeneration = 0
         detailTaskMorphSourceHref = null
         detailSheet = DetailSheet.Task(task)
+        detailBookPane = bookPaneFor(origin)
     }
 
     fun openProblemEventDetail(event: EventEntity) {
         problemsOpen = false
         detailTaskStack.clear()
         detailSheet = DetailSheet.Event(event)
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun openProblemTaskDetail(task: TaskEntity) {
@@ -411,12 +489,14 @@ internal class CalendarShellUiState(
         taskDrawerOpen = false
         settingsOpen = false
         problemsOpen = false
+        trashOpen = false
         editingCollection = null
         creationSheet = null
         detailTaskStack.clear()
         detailTaskMorphGeneration = 0
         detailTaskMorphSourceHref = null
         detailSheet = detail
+        detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun closeDetail() {
@@ -466,30 +546,35 @@ internal class CalendarShellUiState(
     }
 
     fun editEvent(event: EventEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.EditEvent(event)
         detailSheet = null
     }
 
     fun duplicateEvent(event: EventEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.DuplicateEvent(event)
         detailSheet = null
     }
 
     fun editTask(task: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.EditTask(task)
         closeDetail()
     }
 
     fun duplicateTask(task: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         creationSheet = CreationSheet.DuplicateTask(task)
         closeDetail()
     }
 
     fun addSubtask(parent: TaskEntity, schedule: EditorScheduleState) {
+        creationBookPane = detailBookPane
         editorSchedule = schedule
         closeDetail()
         creationSheet = CreationSheet.TaskForParent(parent)
@@ -505,9 +590,12 @@ internal class CalendarShellUiState(
         settingsOpen = settingsOpen,
         settingsStartDestination = settingsStartDestination,
         problemsOpen = problemsOpen,
+        trashOpen = trashOpen,
         editingCollectionHref = editingCollection?.href,
         creationSheet = creationSheet?.toSaved(),
-        detailSheet = detailSheet?.savedRef(),
+        // A trashed item's detail isn't part of the calendar data; the trash list brings it back.
+        detailSheet = detailSheet?.takeIf { it.trashedItem == null }?.savedRef(),
+        trashedDetailId = detailSheet?.trashedItem?.id ?: pendingTrashedDetailId,
         detailTaskBackStack = detailTaskStack.map { it.savedRef() },
         editorSchedule = editorSchedule,
         draftWireframeColor = draftWireframeColor,
@@ -517,6 +605,8 @@ internal class CalendarShellUiState(
         conversionSource = conversionSource?.savedRef(),
         hiddenSaveNotice = hiddenSaveNotice,
         viewHistory = viewHistory.toList(),
+        detailBookPane = detailBookPane,
+        creationBookPane = creationBookPane,
     )
 
     /**
@@ -540,6 +630,8 @@ internal class CalendarShellUiState(
         settingsOpen = saved.settingsOpen
         settingsStartDestination = saved.settingsStartDestination
         problemsOpen = saved.problemsOpen
+        trashOpen = saved.trashOpen
+        pendingTrashedDetailId = saved.trashedDetailId?.takeIf { saved.trashOpen && saved.detailSheet == null }
         editingCollection = saved.editingCollectionHref?.let { href ->
             state.collections.firstOrNull { it.href == href }
         }
@@ -571,6 +663,8 @@ internal class CalendarShellUiState(
             detailTaskStack.addAll(saved.detailTaskBackStack.mapNotNull(state::findTask))
         }
         hiddenSaveNotice = saved.hiddenSaveNotice
+        detailBookPane = saved.detailBookPane
+        creationBookPane = saved.creationBookPane
         viewHistory.clear()
         viewHistory.addAll(saved.viewHistory)
     }

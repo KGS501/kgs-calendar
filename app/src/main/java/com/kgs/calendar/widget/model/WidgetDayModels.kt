@@ -41,6 +41,8 @@ internal data class WidgetDayItem(
     val taskResourceHref: String? = null,
     val statusGlyph: String = "",
     val priority: Int? = null,
+    /** RECURRENCE-ID of the task occurrence this item shows; null for single tasks and events. */
+    val taskOccurrenceMillis: Long? = null,
 )
 
 internal data class WidgetDayTimedItem(

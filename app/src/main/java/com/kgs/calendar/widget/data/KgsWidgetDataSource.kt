@@ -22,6 +22,7 @@ import com.kgs.calendar.domain.task.TaskParentLookup
 import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.task.effectiveStatus
 import com.kgs.calendar.domain.task.isOpen
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import com.kgs.calendar.domain.task.taskStatus
 import com.kgs.calendar.domain.task.treeParents
 import com.kgs.calendar.domain.time.toDate
@@ -87,7 +88,7 @@ internal class KgsWidgetDataSource(
         }
         val languageMode = async { settingsStore.languageMode.first() }
         val firstDayOfWeek = async { settingsStore.firstDayOfWeek.first() }
-        val hiddenCollectionHrefs = async { settingsStore.hiddenCollectionHrefs.first() }
+        val collectionVisibility = async { settingsStore.collectionVisibility.first() }
         val showCompletedTasks = async { settingsStore.showCompletedTasksInCalendar.first() }
         val taskColorMode = async { settingsStore.taskColorMode.first() }
         val priorityAnimationsEnabled = async { settingsStore.priorityAnimationsEnabled.first() }
@@ -106,7 +107,7 @@ internal class KgsWidgetDataSource(
         WidgetRenderSettings(
             locale = languageMode.await().toLocale(context),
             firstDayOfWeek = firstDayOfWeek.await(),
-            hiddenCollectionHrefs = hiddenCollectionHrefs.await(),
+            collectionVisibility = collectionVisibility.await(),
             showCompletedTasks = showCompletedTasks.await(),
             themeMode = widgetThemeMode.await().resolve(appThemeMode.await()),
             colorMode = widgetColorMode.await().resolve(appColorMode.await()),
@@ -132,10 +133,10 @@ internal class KgsWidgetDataSource(
         val start = day.atStartOfDay(zoneId).toInstant().toEpochMilli()
         val end = day.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
         val events = queries.eventsSnapshot(start, end)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleEvents)
             .filterNot { it.isCancelled() }
         val tasks = queries.datedTasksSnapshot(start, end)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val allDayItems = buildList {
@@ -173,6 +174,7 @@ internal class KgsWidgetDataSource(
                             taskResourceHref = task.resourceHref,
                             statusGlyph = task.widgetStatusGlyph(),
                             priority = task.priority,
+                            taskOccurrenceMillis = task.occurrenceIdOrNull()?.recurrenceIdMillis,
                         ),
                     )
                 }
@@ -207,6 +209,7 @@ internal class KgsWidgetDataSource(
                         taskResourceHref = task.resourceHref,
                         statusGlyph = task.widgetStatusGlyph(),
                         priority = task.priority,
+                        taskOccurrenceMillis = task.occurrenceIdOrNull()?.recurrenceIdMillis,
                     )
                     add(WidgetDayTimedItem(item, placement.first, placement.second))
                 }
@@ -221,7 +224,7 @@ internal class KgsWidgetDataSource(
                 append(WIDGET_DAY_RENDER_SIGNATURE_VERSION)
                 append('|').append(day.toEpochDay())
                 append('|').append(settings.locale.toLanguageTag())
-                append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+                append('|').append(settings.collectionVisibility.signature())
                 append('|').append(settings.showCompletedTasks)
                 append('|').append(settings.themeMode.name)
                 append('|').append(settings.colorMode.name)
@@ -271,7 +274,7 @@ internal class KgsWidgetDataSource(
             append(kind.name)
             append('|').append(LocalDate.now(zoneId).toEpochDay())
             append('|').append(settings.locale.toLanguageTag())
-            append('|').append(settings.hiddenCollectionHrefs.sorted().joinToString(","))
+            append('|').append(settings.collectionVisibility.signature())
             append('|').append(settings.showCompletedTasks)
             append('|').append(settings.themeMode.name)
             append('|').append(settings.colorMode.name)
@@ -321,10 +324,10 @@ internal class KgsWidgetDataSource(
         val startDate = Instant.ofEpochMilli(startMillis).atZone(zoneId).toLocalDate()
         val endDateExclusive = Instant.ofEpochMilli(endMillis).atZone(zoneId).toLocalDate()
         val eventSnapshot = queries.eventsSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleEvents)
             .filterNot { it.isCancelled() }
         val taskSnapshot = queries.datedTasksSnapshot(startMillis, endMillis)
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
             .filterNot { it.taskStatus == TaskStatus.Cancelled }
             .filter { settings.showCompletedTasks || !it.isCompleted }
         val events = if (launchKind == KgsWidgetKind.Agenda) {
@@ -367,9 +370,10 @@ internal class KgsWidgetDataSource(
 
     private suspend fun loadTaskItems(settings: WidgetRenderSettings, appWidgetId: Int): List<WidgetListRow> {
         val today = LocalDate.now(zoneId)
-        val allTasks = queries.allTasksSnapshot()
+        val todayStart = todayStartMillis()
+        val allTasks = queries.taskListSnapshot(todayStart)
             .distinctBy { it.resourceHref }
-            .filterNot { it.collectionHref in settings.hiddenCollectionHrefs }
+            .let(settings.collectionVisibility::visibleTasks)
         val activeTasks = allTasks.filter { it.isOpen() }
         val selectedTasks = when (settings.tasksWidgetDisplayMode) {
             WidgetTaskDisplayMode.Planned -> activeTasks.filter { it.widgetTaskDate(zoneId) != null }
@@ -381,7 +385,19 @@ internal class KgsWidgetDataSource(
         }
         val visibleActiveTasks = includeDescendantTasks(selectedTasks, allTasks)
         val visibleTasks = includeAncestorTasks(visibleActiveTasks, allTasks)
-        return visibleTasks.toTaskHierarchy(settings, appWidgetId)
+        // Like the app's overdue list, every missed occurrence of a recurring task is its own row
+        // until it is completed; the series itself is listed as its next occurrence.
+        val missedOccurrences = if (
+            settings.tasksWidgetDisplayMode == WidgetTaskDisplayMode.Today && settings.tasksWidgetIncludeOverdue
+        ) {
+            val listedOccurrences = selectedTasks.mapNotNullTo(mutableSetOf()) { it.occurrenceIdOrNull() }
+            queries.missedTaskOccurrencesSnapshot(todayStart)
+                .let(settings.collectionVisibility::visibleTasks)
+                .filterNot { it.occurrenceIdOrNull() in listedOccurrences }
+        } else {
+            emptyList()
+        }
+        return visibleTasks.toTaskHierarchy(settings, appWidgetId, missedOccurrences)
     }
 
     private fun includeDescendantTasks(selectedTasks: List<TaskEntity>, allTasks: List<TaskEntity>): List<TaskEntity> {
@@ -417,8 +433,16 @@ internal class KgsWidgetDataSource(
         return included.values.toList()
     }
 
-    private fun List<TaskEntity>.toTaskHierarchy(settings: WidgetRenderSettings, appWidgetId: Int): List<WidgetListRow> {
-        if (isEmpty()) return emptyList()
+    /**
+     * Rows for these tasks, children below their parents. [missedOccurrences] are extra top-level
+     * rows without subtasks, one per missed occurrence of a recurring task.
+     */
+    private fun List<TaskEntity>.toTaskHierarchy(
+        settings: WidgetRenderSettings,
+        appWidgetId: Int,
+        missedOccurrences: List<TaskEntity> = emptyList(),
+    ): List<WidgetListRow> {
+        if (isEmpty() && missedOccurrences.isEmpty()) return emptyList()
         val distinctTasks = distinctBy { it.resourceHref }
         val comparator = settings.taskComparator()
         val parentByResource = distinctTasks.treeParents { it.resourceHref }
@@ -459,8 +483,25 @@ internal class KgsWidgetDataSource(
                     append(child, boundedDepth + 1, childContinuationLevels, childLast)
                 }
             }
-            roots.forEachIndexed { index, root ->
-                append(root, 0, emptySet(), index == roots.lastIndex)
+            val orderedRoots = (roots.map { it to false } + missedOccurrences.map { it to true })
+                .sortedWith(compareBy(comparator) { it.first })
+            orderedRoots.forEachIndexed { index, (root, missed) ->
+                val lastSibling = index == orderedRoots.lastIndex
+                if (missed) {
+                    add(
+                        root.toTaskRow(
+                            settings = settings,
+                            depth = 0,
+                            childCount = 0,
+                            continuationLevels = emptySet(),
+                            lastSibling = lastSibling,
+                            subtasksExpanded = false,
+                            missedOccurrence = true,
+                        ),
+                    )
+                } else {
+                    append(root, 0, emptySet(), lastSibling)
+                }
             }
             distinctTasks
                 .filterNot { it.resourceHref in emitted }
@@ -652,6 +693,7 @@ internal class KgsWidgetDataSource(
             launchKind = launchKind,
             stableKey = "task:$resourceHref",
             taskResourceHref = resourceHref,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
         )
     }
 
@@ -680,6 +722,7 @@ internal class KgsWidgetDataSource(
             priority = priority,
             priorityMotionEnabled = settings.priorityAnimationsEnabled,
             launchKind = KgsWidgetKind.Agenda,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
         )
     }
 
@@ -712,6 +755,7 @@ internal class KgsWidgetDataSource(
         continuationLevels: Set<Int>,
         lastSibling: Boolean,
         subtasksExpanded: Boolean,
+        missedOccurrence: Boolean = false,
     ): WidgetListRow {
         val labels = textContext(settings)
         val millis = startAtMillis ?: dueAtMillis
@@ -746,6 +790,8 @@ internal class KgsWidgetDataSource(
             subtasksExpanded = subtasksExpanded,
             priority = priority,
             priorityMotionEnabled = settings.priorityAnimationsEnabled,
+            taskOccurrenceMillis = occurrenceIdOrNull()?.recurrenceIdMillis,
+            distinctOccurrence = missedOccurrence,
         )
     }
 

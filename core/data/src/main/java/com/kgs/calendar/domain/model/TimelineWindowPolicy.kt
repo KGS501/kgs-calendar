@@ -15,16 +15,6 @@ fun calendarViewModeForOrientation(
     selectedView
 }
 
-fun multiDayCountForOrientation(
-    isLandscape: Boolean,
-    portraitCount: Int,
-    landscapeCount: Int,
-): Int = if (isLandscape) {
-    landscapeCount.coerceMultiDayCount()
-} else {
-    portraitCount.coerceMultiDayCount()
-}
-
 fun LocalDate.startOfWeek(firstDayOfWeek: DayOfWeek): LocalDate =
     with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
 

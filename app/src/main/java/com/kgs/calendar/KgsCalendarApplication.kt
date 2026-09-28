@@ -115,7 +115,7 @@ class KgsCalendarApplication : Application() {
         appGraph.database.invalidationTracker.addObserver(widgetInvalidationObserver)
         scope.launch {
             combine(
-                appGraph.settingsStore.hiddenCollectionHrefs,
+                appGraph.settingsStore.collectionVisibility,
                 appGraph.settingsStore.firstDayOfWeek,
                 appGraph.settingsStore.showCompletedTasksInCalendar,
                 appGraph.settingsStore.themeMode,

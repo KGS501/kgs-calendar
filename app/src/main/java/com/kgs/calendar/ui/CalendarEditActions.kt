@@ -5,8 +5,8 @@ import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
+import com.kgs.calendar.domain.task.occurrenceIdOrNull
 import com.kgs.calendar.reminder.TaskMutationCoordinator
-import com.kgs.calendar.ui.model.occurrenceIdOrNull
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import java.time.LocalDate
 import java.time.LocalTime
@@ -90,14 +90,14 @@ class CalendarEditActions internal constructor(
     fun convertEventToTask(eventUid: String, payload: TaskEditPayload) {
         runEdit(rescheduleReminders = true) {
             repository.createTask(payload)
-            repository.deleteEvent(eventUid)
+            repository.deleteEvent(eventUid, moveToTrash = false)
         }
     }
 
     fun convertTaskToEvent(taskUid: String, payload: EventEditPayload) {
         runEdit(rescheduleReminders = true) {
             repository.createEvent(payload)
-            repository.deleteTask(taskUid)
+            repository.deleteTask(taskUid, moveToTrash = false)
         }
     }
 

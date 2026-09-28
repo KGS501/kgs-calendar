@@ -3,9 +3,9 @@ package com.kgs.calendar.data.sync
 import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
+import com.kgs.calendar.data.trash.TrashBin
 import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
 
 /**
@@ -17,17 +17,18 @@ class SyncOrchestrator(
     private val repairs: SyncRepairs,
     private val uploader: PendingMutationUploader,
     private val engines: List<CalendarSourceSyncEngine>,
+    private val trash: TrashBin? = null,
+    private val remoteSyncLock: RemoteSyncLock = RemoteSyncLock(),
 ) {
-    private val remoteSyncMutex = Mutex()
-
     suspend fun syncNow(
         includeDisabledProviderCalendars: Boolean = false,
         forceFullCalDavRefresh: Boolean = false,
-    ) = remoteSyncMutex.withLock {
+    ) = remoteSyncLock.withLock {
         syncNowLocked(SourceSyncOptions(includeDisabledProviderCalendars, forceFullCalDavRefresh))
     }
 
     private suspend fun syncNowLocked(options: SourceSyncOptions) {
+        trash?.purgeExpired()
         repairs.repairInvalidTaskSchedules()
         repairs.repairPendingTaskMutations()
         repairs.repairDuplicateCalDavResources()
@@ -38,7 +39,11 @@ class SyncOrchestrator(
             try {
                 if (account.id == LOCAL_ACCOUNT_ID) return@forEach
                 val engine = engines.firstOrNull { it.handles(account) } ?: return@forEach
-                if (engine.sync(account, options)) successfulAccounts++
+                if (engine.sync(account, options)) {
+                    successfulAccounts++
+                    // The server trash bin is extra: failing to read it does not fail the sync.
+                    if (account.sourceType == SourceType.CalDav) trash?.refreshAccountLocked(account.id)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -51,7 +56,7 @@ class SyncOrchestrator(
     }
 
     suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long) {
-        remoteSyncMutex.withLock {
+        remoteSyncLock.withLock {
             val threshold = startedAtMillis - TARGETED_SYNC_CLOCK_SKEW_MILLIS
             val pendingMutations = database.pendingMutationDao().createdSince(threshold)
             repairs.repairPendingTaskMutations(pendingMutations)

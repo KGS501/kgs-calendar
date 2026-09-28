@@ -308,6 +308,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
+import com.kgs.calendar.ui.haptics.LocalKgsHaptics
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -404,6 +406,7 @@ import com.kgs.calendar.ui.model.allDayTopStartDate
 import com.kgs.calendar.ui.model.continuesAllDayTopItemAfter
 import com.kgs.calendar.ui.model.isFullDayTaskOn
 import com.kgs.calendar.ui.model.highestOverduePriority
+import com.kgs.calendar.ui.model.overdueEntryKey
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.model.taskDate
 import com.kgs.calendar.ui.model.toTime
@@ -1287,8 +1290,7 @@ private fun AllDayViewportChip(
     val color = eventVisuals?.background ?: Color(item.color)
     val textColor = eventVisuals?.contentColor ?: if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val eventTextStyle = tentativeReadableTextStyle(item.event?.isTentative() == true)
-    val resourceHref = item.event?.resourceHref ?: item.task?.resourceHref
-    val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = pendingDeleteAlpha(item.event, item.task)
     val density = LocalDensity.current
     val leadingRadius = 8.dp * allDayLeadingCornerRadiusFraction(leadingCornerProgress)
     val trailingRadius = 8.dp * allDayLeadingCornerRadiusFraction(trailingCornerProgress)
@@ -1311,6 +1313,7 @@ private fun AllDayViewportChip(
         if (item.completed && !lastCompleted) burstKey++
         lastCompleted = item.completed
     }
+    val haptics = LocalKgsHaptics.current
     var dragX by remember(item.id) { mutableFloatStateOf(0f) }
     var dragY by remember(item.id) { mutableFloatStateOf(0f) }
     var isDragging by remember(item.id) { mutableStateOf(false) }
@@ -1349,6 +1352,8 @@ private fun AllDayViewportChip(
         (laneTopPx + lane * laneStridePx).coerceIn(0f, (allDayHeightPxForDrag - with(density) { 24.dp.toPx() }).coerceAtLeast(0f)) -
             chipTopPxForDrag
     }
+    // One light tick each time the dragged chip visibly snaps to another day, lane or time slot.
+    if (isDragging) DragSnapHaptics(slot = snappedDragX.roundToInt() to snappedDragY.roundToInt())
     val displayDragX by animateFloatAsState(
         targetValue = if (isDragging) snappedDragX else 0f,
         animationSpec = tween(90, easing = MotionStandard),
@@ -1378,6 +1383,7 @@ private fun AllDayViewportChip(
         val hourHeightPx = hourHeightDp.dp.toPx()
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
+                haptics.dragStart()
                 dragPointerOffset = offset
                 isDragging = true
                 onDragStateChanged(true)
@@ -1394,6 +1400,7 @@ private fun AllDayViewportChip(
                 onDragStateChanged(false)
             },
             onDragEnd = {
+                haptics.drop()
                 val fingerX = chipLeftPx + dragPointerOffset.x + dragX
                 val fingerY = chipTopPx + dragPointerOffset.y + dragY
                 val pageDelta = if (dayStepPx > 0f) floor((fingerX - anchorOffsetPx) / dayStepPx).toInt() else 0
@@ -1510,8 +1517,8 @@ private fun AllDayViewportChip(
                 )
             }
         }
-        resourceHref?.takeIf { showPrimaryContent }?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        if (showPrimaryContent) {
+            PendingMutationBadge(item.event, item.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }
@@ -1601,7 +1608,7 @@ private fun AllDayArea(
                 continuesFromPrevious = singleTask?.isFullDayTaskOn(day.minusDays(1)) == true && day > visibleStartDate,
                 continuesToNext = singleTask?.isFullDayTaskOn(day.plusDays(1)) == true && day < visibleEndDate,
                 status = singleTask?.effectiveStatus(),
-                resourceHref = singleTask?.resourceHref,
+                task = singleTask,
                 onStatusChange = if (singleTask != null) {
                     { status -> onTaskStatusChanged(singleTask, status) }
                 } else {
@@ -1816,7 +1823,7 @@ internal fun OverdueTasksBand(
                         verticalArrangement = Arrangement.spacedBy(OverdueTaskChipSpacing),
                     ) {
                         tasks.forEach { task ->
-                            key(task.resourceHref) {
+                            key(task.overdueEntryKey()) {
                                 OverdueTaskChip(
                                     task = task,
                                     color = Color(task.displayColor(taskColorMode)),
@@ -1955,19 +1962,21 @@ private fun OverdueTaskChip(
     val textColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
     val shape = RoundedCornerShape(10.dp)
     val dragReporter = LocalTimedDragReporter.current
+    val haptics = LocalKgsHaptics.current
     var coordinates by remember(task.resourceHref) { mutableStateOf<LayoutCoordinates?>(null) }
     var rootOverlayDrag by remember(task.resourceHref) { mutableStateOf(false) }
     val durationMinutes = (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt()
     val displayLocation = remember(task.location, task.locationMapVerified) {
         task.location?.cardLocationText(task.locationMapVerified).orEmpty()
     }
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     val dragModifier = Modifier.pointerInput(task.resourceHref, sourceDate, startMinute, dragReporter) {
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
                 val cardCoordinates = coordinates ?: return@detectDragGesturesAfterLongPress
                 rootOverlayDrag = dragReporter.usesRootOverlay
                 if (rootOverlayDrag) {
+                    haptics.dragStart()
                     val pointer = cardCoordinates.localToRoot(offset)
                     val topLeft = cardCoordinates.positionInRoot()
                     dragReporter.start(
@@ -2012,7 +2021,10 @@ private fun OverdueTaskChip(
                 onDragFinished()
             },
             onDragEnd = {
-                if (rootOverlayDrag) dragReporter.end()
+                if (rootOverlayDrag) {
+                    haptics.drop()
+                    dragReporter.end()
+                }
                 rootOverlayDrag = false
                 onDragFinished()
             },
@@ -2059,7 +2071,7 @@ private fun OverdueTaskChip(
             )
         }
         PendingMutationBadge(
-            task.resourceHref,
+            task,
             Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
         )
     }
@@ -2088,7 +2100,7 @@ private fun AllDayChip(
         label = "allDayChipLeadingContinuationFade",
     )
     val eventTextStyle = tentativeReadableTextStyle(event?.isTentative() == true)
-    val pendingAlpha = event?.resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = event?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -2143,8 +2155,8 @@ private fun AllDayChip(
                 .padding(horizontal = 6.dp, vertical = 3.dp)
                 .wrapContentWidth(unbounded = true),
         )
-        event?.resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        event?.let {
+            PendingMutationBadge(it, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }
@@ -2158,7 +2170,7 @@ private fun AllDayTaskChip(
     continuesFromPrevious: Boolean,
     continuesToNext: Boolean,
     status: String?,
-    resourceHref: String?,
+    task: TaskEntity?,
     onStatusChange: ((String) -> Unit)?,
     onClick: () -> Unit,
     morphUid: String? = null,
@@ -2180,7 +2192,7 @@ private fun AllDayTaskChip(
         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
         label = "allDayTaskLeadingContinuationFade",
     )
-    val pendingAlpha = resourceHref?.let { pendingDeleteAlpha(it) } ?: 1f
+    val pendingAlpha = task?.let { pendingDeleteAlpha(it) } ?: 1f
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -2253,8 +2265,8 @@ private fun AllDayTaskChip(
                 modifier = Modifier.wrapContentWidth(unbounded = true),
             )
         }
-        resourceHref?.let { href ->
-            PendingMutationBadge(href, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
+        task?.let {
+            PendingMutationBadge(it, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
         }
     }
 }

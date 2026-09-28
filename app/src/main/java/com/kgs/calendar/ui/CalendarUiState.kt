@@ -10,6 +10,8 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
@@ -20,6 +22,7 @@ import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.source.CollectionVisibility
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -62,6 +65,11 @@ data class CalendarUiState(
     val datedTasks: List<TaskEntity> = emptyList(),
     val inboxTasks: List<TaskEntity> = emptyList(),
     val scheduledOpenTasks: List<TaskEntity> = emptyList(),
+    /**
+     * Missed occurrences of open recurring series (open, due before today), one entry each, for the
+     * overdue list only; the task list shows the series as its next occurrence in [scheduledOpenTasks].
+     */
+    val missedTaskOccurrences: List<TaskEntity> = emptyList(),
     val pendingMutations: Int = 0,
     val pendingMutationItems: List<PendingMutationEntity> = emptyList(),
     val problemResources: List<CalendarResourceEntity> = emptyList(),
@@ -83,10 +91,13 @@ data class CalendarUiState(
     val overdueSummaryPriorityAnimationEnabled: Boolean = true,
     val subtasksExpandedByDefault: Boolean = true,
     val autoLoadMapPreviews: Boolean = false,
+    val hapticFeedbackEnabled: Boolean = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_ENABLED,
     val maxVisibleAllDayItems: Int = 3,
     val multiDayCount: Int = 3,
     val portraitMultiDayCount: Int = 3,
     val landscapeMultiDayCount: Int = 3,
+    val largePortraitMultiDayCount: Int = DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT,
+    val largeLandscapeMultiDayCount: Int = DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT,
     val portraitTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val landscapeTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val weekViewEnabled: Boolean = SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,
@@ -116,9 +127,13 @@ data class CalendarUiState(
     val hiddenAndroidProviderCalendarNames: List<String> = emptyList(),
     val welcomeCompleted: Boolean = true,
     val showDisabledAndroidProviderCalendars: Boolean = false,
-    val hiddenCollectionHrefs: Set<String> = emptySet(),
+    val collectionVisibility: CollectionVisibility = CollectionVisibility(),
 ) {
     val hasAccount: Boolean = accounts.isNotEmpty() || account != null
+
+    /** Calendars hidden as a whole (the sidebar checkbox). */
+    val hiddenCollectionHrefs: Set<String>
+        get() = collectionVisibility.hiddenCollectionHrefs
     val taskHierarchyTasks: List<TaskEntity>
         get() = (inboxTasks + scheduledOpenTasks + completedTasks + datedTasks)
             .distinctBy { it.resourceHref }

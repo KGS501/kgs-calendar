@@ -340,6 +340,7 @@ import com.kgs.calendar.domain.task.displayColor
 import com.kgs.calendar.domain.task.effectiveStatus
 import com.kgs.calendar.domain.task.isInactive
 import com.kgs.calendar.domain.task.statusSortRank
+import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayPagerPageCount
@@ -636,7 +637,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val eventTextStyle = tentativeReadableTextStyle(event.isTentative())
     val shape = RoundedCornerShape(12.dp)
-    val pendingAlpha = pendingDeleteAlpha(event.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(event)
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = visuals.background),
@@ -700,7 +701,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
                 maxVisible = 4,
             )
             PendingMutationBadge(
-                resourceHref = event.resourceHref,
+                event = event,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
             )
         }
@@ -716,8 +717,9 @@ internal fun TaskInbox(
 ) {
     var plannedSort by rememberSaveable { mutableStateOf(PlannedTaskSort.Date) }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val activeRootTasks = remember(state.taskHierarchyTasks) {
+    val activeRootTasks = remember(state.taskHierarchyTasks, state.showCompletedTasksInCalendar) {
         state.taskHierarchyTasks.partitionByRootActivity().activeRootTasks
+            .withoutHiddenClosedSubtasks(state.showCompletedTasksInCalendar)
     }
     val activeSections = remember(activeRootTasks) { activeRootTasks.partitionByRootSchedule() }
     val openInboxTasks = activeSections.first
@@ -1229,6 +1231,7 @@ internal fun TaskRow(
     priorityMotionEnabled: Boolean = true,
     detailMorphKey: String? = null,
     detailMorphFromHeader: Boolean = false,
+    statusToggleEnabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val hierarchyLineColor = TaskHierarchyLine
@@ -1263,7 +1266,7 @@ internal fun TaskRow(
     )
     val baseContentColor = if (renderedCardColor.isDark()) Color.White else Color(0xFF1C1A18)
     val contentColor = baseContentColor.copy(alpha = taskAlpha)
-    val pendingAlpha = pendingDeleteAlpha(task.resourceHref)
+    val pendingAlpha = pendingDeleteAlpha(task)
     val motionPadding = outerHorizontalPadding ?: if (prominent) 16.dp else 0.dp
     val verticalMotionPadding = outerVerticalPadding ?: if (prominent) 5.dp else 0.dp
     val hierarchyExitProgress = LocalTaskHierarchyExitProgress.current.coerceIn(0f, 1f)
@@ -1385,6 +1388,7 @@ internal fun TaskRow(
                         onStatusChange = { onTaskStatusChanged(task, it) },
                         boxSize = checkboxBoxSize,
                         iconSize = checkboxIconSize,
+                        enabled = statusToggleEnabled,
                     )
                     Spacer(Modifier.width(checkboxTextSpacing))
                     Column(
@@ -1523,7 +1527,7 @@ internal fun TaskRow(
                     }
                 }
                 PendingMutationBadge(
-                    resourceHref = task.resourceHref,
+                    task = task,
                     modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp),
                 )
             }
