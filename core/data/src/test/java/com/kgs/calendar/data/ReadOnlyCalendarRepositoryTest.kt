@@ -77,6 +77,33 @@ class ReadOnlyCalendarRepositoryTest {
     }
 
     @Test
+    fun webcalSubscriptionLoadsFromHttpAndKeepsItsSchemeAcrossEdits() = runTest {
+        server.setFeed(feedPath, feed("unity-day" to "Unity Day"))
+        val webcalUrl = server.url(feedPath).replace("http://", "webcal://")
+        val account = repository.addReadOnlyCalendar(webcalUrl, "Holidays")
+        assertEquals(webcalUrl, harness.account(account.id)!!.serverUrl)
+        assertEquals("Unity Day", harness.eventsIn("readonly-${account.id}").single().title)
+
+        val editedPath = "/feeds/edited.ics"
+        server.setFeed(editedPath, feed("unity-day" to "Edited feed"))
+        val editedUrl = server.url(editedPath).replace("http://", "WEBCAL://")
+        repository.updateAccount(account.id, "Holidays", " $editedUrl ", account.username, null)
+        repository.syncNow()
+        assertEquals(editedUrl.replace("WEBCAL", "webcal"), harness.account(account.id)!!.serverUrl)
+        assertEquals("Edited feed", harness.eventsIn("readonly-${account.id}").single().title)
+    }
+
+    @Test
+    fun invalidSubscriptionEditLeavesWorkingAccountUntouched() = runTest {
+        val collectionHref = subscribe()
+        val account = harness.account(collectionHref.removePrefix("readonly-"))!!
+        expectFailure<IllegalArgumentException> {
+            repository.updateAccount(account.id, "Broken", "ftp://example.com/feed", account.username, null)
+        }
+        assertEquals(account.serverUrl, harness.account(account.id)!!.serverUrl)
+    }
+
+    @Test
     fun writesToReadOnlyCalendarAreRefusedOrIgnored() = runTest {
         val collectionHref = subscribe()
         val event = harness.eventsIn(collectionHref).single { it.uid == "unity-day" }

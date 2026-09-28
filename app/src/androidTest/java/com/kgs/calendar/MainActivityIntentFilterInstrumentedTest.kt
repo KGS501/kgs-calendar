@@ -2,6 +2,9 @@ package com.kgs.calendar
 
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
+import android.provider.CalendarContract
+import android.content.pm.PackageManager
 import android.view.WindowManager
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,6 +28,24 @@ class MainActivityIntentFilterInstrumentedTest {
             context.packageManager.queryIntentActivities(intent, 0)
                 .any { it.activityInfo.packageName == mainActivity.packageName && it.activityInfo.name == mainActivity.className },
         )
+    }
+
+    @Test
+    fun exportedCalendarIntentsResolveToMainActivity() {
+        val intents = listOf(
+            Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI),
+            Intent(Intent.ACTION_INSERT).setType("vnd.android.cursor.dir/event"),
+            Intent(Intent.ACTION_INSERT).setType("vnd.android.cursor.item/event"),
+            Intent(Intent.ACTION_INSERT_OR_EDIT).setType("vnd.android.cursor.item/event"),
+            Intent(Intent.ACTION_INSERT).setDataAndType(CalendarContract.Events.CONTENT_URI, "vnd.android.cursor.dir/event"),
+            Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/1791806400000")),
+            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://com.android.calendar/time/1791806400000"), "time/epoch"),
+        )
+        intents.forEach { intent ->
+            intent.setPackage(context.packageName)
+            assertTrue("No calendar handler for $intent", context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                .any { it.activityInfo.name == mainActivity.className })
+        }
     }
 
     @Test

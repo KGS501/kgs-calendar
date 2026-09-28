@@ -185,7 +185,7 @@ class CalendarSourceManager internal constructor(
             database.accountDao().upsert(existing.copy(displayName = displayName.trim().ifBlank { existing.displayName ?: "Android device calendars" }))
             return
         }
-        val normalizedServer = if (existing.username == READ_ONLY_USERNAME) serverUrl.trim() else normalizeServer(serverUrl)
+        val normalizedServer = if (existing.username == READ_ONLY_USERNAME) normalizeReadOnlyCalendarUrl(serverUrl) else normalizeServer(serverUrl)
         val normalizedUsername = username.trim().ifBlank { existing.username }
         val normalizedDisplayName = displayName.trim().ifBlank { existing.displayName ?: existing.username }
         val password = appPassword?.takeIf { it.isNotBlank() } ?: credentialsStore.get(accountId)?.appPassword

@@ -9,6 +9,7 @@ import com.kgs.calendar.data.isTransientReadOnlySyncFailure
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.data.readOnlyCalendarTransportUrl
 import com.kgs.calendar.data.looksLikeHtmlResponse
 import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.SourceType
@@ -43,7 +44,7 @@ class ReadOnlyUrlSyncEngine internal constructor(
             var contentType: String? = null
             val response = readOnlyHttpClient.newCall(
                 Request.Builder()
-                    .url(account.serverUrl)
+                    .url(readOnlyCalendarTransportUrl(account.serverUrl))
                     .header("Accept", READ_ONLY_CALENDAR_ACCEPT)
                     .get()
                     .build(),

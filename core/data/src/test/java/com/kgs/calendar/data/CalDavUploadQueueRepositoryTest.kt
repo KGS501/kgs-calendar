@@ -127,23 +127,35 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun preconditionFailureRetriesOnceWithCurrentServerEtag() = runTest {
+    fun conflictKeepsBothVersionsAndRemainsVisibleAcrossSyncs() = runTest {
         val originalEtag = harness.resource(eventHref)!!.etag!!
         repository.updateEvent("remote-event", eventPayload("Local edit", day))
         server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Remote edit", sequence = 1))
         val remoteEtag = server.stored(eventHref)!!.etag
 
-        repository.syncNow()
+        repeat(2) {
+            expectFailure<IllegalStateException> { repository.syncNow() }
+            assertEquals(originalEtag, harness.pendingMutations().single().baseEtag)
+            assertEquals(remoteEtag, server.stored(eventHref)!!.etag)
+            assertTrue(server.stored(eventHref)!!.ics.unfoldedIcs().contains("SUMMARY:Remote edit"))
+            assertEquals("Local edit", harness.event(eventHref)!!.title)
+            assertTrue(harness.resource(eventHref)!!.syncError!!.contains("Sync conflict"))
+            assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+        }
+        assertEquals(listOf(originalEtag, originalEtag), puts().map { it.header("If-Match") })
+    }
 
-        assertEquals(listOf(originalEtag, remoteEtag), puts().map { it.header("If-Match") })
-        assertTrue(server.requests("PROPFIND").any { it.path == eventHref && it.header("Depth") == "0" })
-        assertTrue(harness.pendingMutations().isEmpty())
-        val stored = server.stored(eventHref)!!
-        assertEquals(stored.etag, harness.resource(eventHref)!!.etag)
-        // NOTE: current behaviour - the conflict retry overwrites the concurrent remote edit (last writer wins).
-        assertTrue(stored.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
-        assertEquals("Local edit", harness.event(eventHref)!!.title)
-        assertEquals(SyncState.Idle, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+    @Test
+    fun taskConflictKeepsLocalCompletionAndRemoteEdit() = runTest {
+        repository.setTaskCompleted(taskHref, true)
+        server.putRemote(server.tasksHref, "todo.ics", SampleIcs.task("remote-task", "Remote task edit"))
+
+        expectFailure<IllegalStateException> { repository.syncNow() }
+
+        assertTrue(server.stored(taskHref)!!.ics.unfoldedIcs().contains("SUMMARY:Remote task edit"))
+        assertEquals(1, harness.pendingMutations().size)
+        assertTrue(harness.resource(taskHref)!!.syncError!!.contains("Sync conflict"))
+        assertEquals(1, puts().size)
     }
 
     @Test
@@ -448,18 +460,18 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun localEditQueuedAfterUploadWithoutEtagWinsOverRemoteChange() = runTest {
+    fun localEditQueuedAfterUploadWithoutEtagDoesNotOverwriteRemoteChange() = runTest {
         val href = createEventUploadedWithoutEtag()
         val uid = harness.event(href)!!.uid
         server.putRemote(server.eventsHref, href.removePrefix(server.eventsHref), SampleIcs.event(uid, "Other client edit", sequence = 5))
         repository.updateEvent(uid, eventPayload("Local edit", day))
 
-        repository.syncNow()
+        expectFailure<IllegalStateException> { repository.syncNow() }
 
         assertEquals("Local edit", harness.event(href)!!.title)
-        assertTrue(server.stored(href)!!.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
-        assertEquals(server.stored(href)!!.etag, harness.resource(href)!!.etag)
-        assertTrue(harness.pendingMutations().isEmpty())
+        assertTrue(server.stored(href)!!.ics.unfoldedIcs().contains("SUMMARY:Other client edit"))
+        assertNull(harness.resource(href)!!.etag)
+        assertEquals(1, harness.pendingMutations().size)
     }
 
     @Test

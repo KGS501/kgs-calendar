@@ -1,13 +1,21 @@
 package com.kgs.calendar.navigation
 
 import android.content.Intent
+import android.provider.CalendarContract
 
 /**
  * A new event prefilled from text shared to the app, e.g. an email: the subject becomes the title
  * and the text the description. Only the text extras of a share are read; streams, URIs and
  * everything else in the share are ignored.
  */
-data class SharedEventDraft(val title: String, val notes: String) {
+data class SharedEventDraft(
+    val title: String,
+    val notes: String,
+    val location: String = "",
+    val beginTimeMillis: Long? = null,
+    val endTimeMillis: Long? = null,
+    val allDay: Boolean = false,
+) {
     /** Hands the draft from [ShareToCalendarActivity][com.kgs.calendar.ShareToCalendarActivity] to the main activity. */
     fun writeTo(intent: Intent): Intent = intent
         .setAction(ACTION_CREATE_SHARED_EVENT)
@@ -31,6 +39,28 @@ data class SharedEventDraft(val title: String, val notes: String) {
                 htmlText = runCatching { intent.getStringExtra(Intent.EXTRA_HTML_TEXT) }.getOrNull(),
             )
         }
+
+        /** Android's calendar insert contract opens a draft for review, never saves directly. */
+        fun fromCalendarInsertIntent(intent: Intent): SharedEventDraft? {
+            val eventType = intent.type in setOf("vnd.android.cursor.dir/event", "vnd.android.cursor.item/event")
+            val eventsUri = intent.data?.let {
+                it.scheme == "content" && it.authority in setOf("com.android.calendar", "calendar") &&
+                    it.path?.trimEnd('/') == "/events"
+            } == true
+            val insert = intent.action == Intent.ACTION_INSERT || intent.action == Intent.ACTION_INSERT_OR_EDIT
+            if (!insert || !(eventsUri || eventType)) return null
+            return SharedEventDraft(
+                title = sharedTitle(intent.getStringExtra(CalendarContract.Events.TITLE).orEmpty()),
+                notes = limitNotes(intent.getStringExtra(CalendarContract.Events.DESCRIPTION).orEmpty()),
+                location = intent.getStringExtra(CalendarContract.Events.EVENT_LOCATION).orEmpty().take(2_000),
+                beginTimeMillis = intent.optionalTime(CalendarContract.EXTRA_EVENT_BEGIN_TIME),
+                endTimeMillis = intent.optionalTime(CalendarContract.EXTRA_EVENT_END_TIME),
+                allDay = intent.getBooleanExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, false),
+            )
+        }
+
+        private fun Intent.optionalTime(key: String): Long? =
+            getLongExtra(key, Long.MIN_VALUE).takeUnless { it == Long.MIN_VALUE }
 
         /** The draft handed over by [writeTo]; the limits apply again because the main activity is exported. */
         fun readFrom(intent: Intent): SharedEventDraft? {
