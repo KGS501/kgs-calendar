@@ -37,7 +37,6 @@ class SyncReliabilityRepositoryTest {
         repository.addReadOnlyCalendar(server.url("/healthy.ics"), "Healthy")
         server.putRemote(server.eventsHref, "event.ics", SampleIcs.event("event", "After"))
         server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(503) }
-        server.respondNext("GET", event) { MockResponse().setResponseCode(503) }
         expectFailure<IllegalStateException> { repository.syncNow() }
         assertEquals(SyncState.Error, harness.account("primary")!!.syncState)
         repository.syncNow()
@@ -249,7 +248,7 @@ class SyncReliabilityRepositoryTest {
         assertEquals("Authoritative title", harness.event(href)!!.title)
         server.clearRequests()
         repository.syncNow()
-        assertTrue(server.requests("GET").isEmpty())
+        assertTrue("Unexpected GET paths: ${server.requests("GET").map { it.path }}", server.requests("GET").isEmpty())
         assertTrue(server.requests("REPORT").none { "calendar-multiget" in it.body || "calendar-query" in it.body })
     }
 

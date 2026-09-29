@@ -68,17 +68,19 @@ class InMemoryCredentialsStore : CredentialsStore {
  * read the database directly so the tests only depend on the persisted state, not on how the
  * repository is split internally.
  */
-class RepositoryHarness(val zone: ZoneId = TEST_ZONE) : Closeable {
+class RepositoryHarness(
+    val zone: ZoneId = TEST_ZONE,
+    val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build(),
+) : Closeable {
     val context: Context = ApplicationProvider.getApplicationContext()
     val database: KgsDatabase = Room.inMemoryDatabaseBuilder(context, KgsDatabase::class.java)
         .allowMainThreadQueries()
         .build()
     val credentials = InMemoryCredentialsStore()
-    val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
     val components = CalendarDataComponents(
         database = database,
         credentialsStore = credentials,

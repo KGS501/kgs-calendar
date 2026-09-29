@@ -19,6 +19,8 @@ import com.kgs.calendar.data.remote.RemoteCollection
 import com.kgs.calendar.data.remote.RemoteResource
 import com.kgs.calendar.data.remote.RemoteResourceData
 import com.kgs.calendar.data.remote.isTransientFailure
+import com.kgs.calendar.data.remote.isConnectionFailure
+import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
@@ -54,6 +56,7 @@ class CalDavSyncEngine internal constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
+            if (error.isConnectionFailure()) throw error
             PendingUploadException(error)
         }
         try {
@@ -178,6 +181,7 @@ class CalDavSyncEngine internal constructor(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
+                    if (error.isConnectionFailure()) throw error
                     if (firstCollectionError == null) firstCollectionError = error else firstCollectionError!!.addSuppressed(error)
                 }
             }
@@ -253,6 +257,7 @@ class CalDavSyncEngine internal constructor(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
+                if (error.preventsBatchFallback()) throw error
                 emptyList()
             }
         } else {
@@ -282,7 +287,7 @@ class CalDavSyncEngine internal constructor(
             .filterNot { it.href.davHrefKey() in queriedByHref }
             .chunked(RESOURCE_MULTIGET_BATCH_SIZE)
             .flatMap { batch ->
-                // Resources missing from a failed batch are fetched one by one below.
+                // Unsupported batch reports may fall back to GET; outages must not fan out.
                 try {
                     calDavClient.multigetResources(
                         serverUrl = credentials.serverUrl,
@@ -294,6 +299,7 @@ class CalDavSyncEngine internal constructor(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
+                    if (error.preventsBatchFallback()) throw error
                     emptyList()
                 }
             }
@@ -358,6 +364,7 @@ class CalDavSyncEngine internal constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
+            if (error.isConnectionFailure()) throw error
             return DownloadOutcome.Failed(error, retryable = error.isRetryableFetchFailure())
         }
         return parsedDownload(response.calendarData, collection, localHref, response.etag)
@@ -377,6 +384,9 @@ class CalDavSyncEngine internal constructor(
         val localHref = download.localHref
         // A local edit queued while this batch was downloading wins; the push path reconciles it with the server.
         if (database.pendingMutationDao().forResource(localHref).isNotEmpty()) return
+        // A temporary fetch failure says nothing about the cached item's validity. Keep both its
+        // body and matching ETag intact; the held collection cursor and account error trigger retry.
+        if ((download.outcome as? DownloadOutcome.Failed)?.retryable == true) return
         try {
             val (raw, parsed) = when (val outcome = download.outcome) {
                 is DownloadOutcome.Parsed -> outcome.raw to outcome.parsed
@@ -439,14 +449,19 @@ class CalDavSyncEngine internal constructor(
                     .forEach { resource ->
                         // A remote ETag cannot become the base of an unsent local edit.
                         if (database.pendingMutationDao().forResource(resource.href).isNotEmpty()) return@forEach
-                        val fetched = runCatching {
+                        val fetched = try {
                             calDavClient.getResourceWithEtag(
                                 serverUrl = credentials.serverUrl,
                                 href = resource.href,
                                 username = credentials.username,
                                 appPassword = credentials.appPassword,
                             )
-                        }.getOrNull() ?: return@forEach
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Throwable) {
+                            if (error.isTransientFailure()) throw error
+                            return@forEach
+                        }
                         val etag = fetched.etag ?: return@forEach
                         val holdsFetchedContent = fetched.calendarData.normalizedIcsText() == resource.rawIcs.normalizedIcsText()
                         if (holdsFetchedContent) {
@@ -569,3 +584,7 @@ internal fun shouldApplyRemoteCalDavState(
     resourceKey: String,
     pendingPutResourceKeys: Set<String>,
 ): Boolean = resourceKey !in pendingPutResourceKeys
+
+/** 501 means the server does not implement this REPORT; normal GET/listing remains usable. */
+private fun Throwable.preventsBatchFallback(): Boolean =
+    isTransientFailure() && (this as? HttpStatusException)?.statusCode != 501

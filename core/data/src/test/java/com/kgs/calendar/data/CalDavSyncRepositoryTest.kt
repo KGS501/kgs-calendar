@@ -236,7 +236,7 @@ class CalDavSyncRepositoryTest {
             SampleIcs.event("remote-event", "Kickoff (moved)", start = "20261005T120000Z", end = "20261005T130000Z", sequence = 1),
         )
         val reviewHref = server.putRemote(server.eventsHref, "review.ics", SampleIcs.event("remote-review", "Review"))
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         server.respondNext("GET", eventHref) { MockResponse().setResponseCode(503) }
 
         expectFailure<IllegalStateException> { repository.syncNow() }
@@ -245,7 +245,7 @@ class CalDavSyncRepositoryTest {
         assertEquals(before.syncToken, held.syncToken)
         assertEquals(before.ctag, held.ctag)
         assertEquals("Kickoff", harness.event(eventHref)!!.title)
-        assertNotNull(harness.resource(eventHref)!!.syncError)
+        assertNull(harness.resource(eventHref)!!.syncError)
         assertEquals("Review", harness.event(reviewHref)!!.title)
         assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
         server.clearRequests()
@@ -264,7 +264,7 @@ class CalDavSyncRepositoryTest {
     @Test
     fun transientDownloadFailureKeepsNullMarkersOfAFirstSync() = runTest {
         val (eventHref, _) = seedRemote()
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         server.respondNext("GET", eventHref) { MockResponse().setResponseCode(429) }
 
         expectFailure<IllegalStateException> { harness.addSyncedCalDavAccount() }
@@ -287,7 +287,7 @@ class CalDavSyncRepositoryTest {
         harness.addSyncedCalDavAccount()
         val before = harness.collection(server.eventsHref)!!
         server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         // OkHttp repeats a request answered with 408 once on its own.
         server.respondNext("GET", eventHref, times = 2) { MockResponse().setResponseCode(408) }
 
@@ -297,7 +297,7 @@ class CalDavSyncRepositoryTest {
         assertEquals(before.syncToken, held.syncToken)
         assertEquals(before.ctag, held.ctag)
         assertEquals("Kickoff", harness.event(eventHref)!!.title)
-        assertNotNull(harness.resource(eventHref)!!.syncError)
+        assertNull(harness.resource(eventHref)!!.syncError)
 
         repository.syncNow()
 
@@ -326,7 +326,7 @@ class CalDavSyncRepositoryTest {
         harness.addSyncedCalDavAccount()
         val before = harness.collection(server.eventsHref)!!
         val goneHref = server.putRemote(server.eventsHref, "gone.ics", SampleIcs.event("gone", "Gone"))
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         server.respondNext("GET", goneHref) { MockResponse().setResponseCode(404) }
 
         repository.syncNow()
@@ -341,7 +341,7 @@ class CalDavSyncRepositoryTest {
         harness.addSyncedCalDavAccount()
         val before = harness.collection(server.eventsHref)!!
         server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         server.clearRequests()
 
         repository.syncNow()
@@ -360,7 +360,7 @@ class CalDavSyncRepositoryTest {
         harness.addSyncedCalDavAccount()
         val before = harness.collection(server.eventsHref)!!
         server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Kickoff v2", sequence = 1))
-        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
+        server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(405) }
         val sync = CompletableDeferred<Job>()
         server.beforeResponse = { request ->
             if (request.method == "GET" && request.path == eventHref) runBlocking { sync.await().cancel() }
