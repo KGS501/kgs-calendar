@@ -15,9 +15,14 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
+import com.kgs.calendar.domain.source.isLocalAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -28,6 +33,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
+@OptIn(FlowPreview::class)
 class KgsCalendarApplication : Application() {
     lateinit var appGraph: AppGraph
         private set
@@ -38,15 +44,27 @@ class KgsCalendarApplication : Application() {
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             _processForegroundedAt.tryEmit(System.currentTimeMillis())
+            foregroundSyncJob?.cancel()
+            foregroundSyncJob = scope.launch {
+                while (isActive) {
+                    if (appGraph.database.accountDao().getAll().any { !it.isLocalAccount() }) {
+                        SyncWorker.enqueueForegroundRefreshIfStale(this@KgsCalendarApplication)
+                    }
+                    delay(SyncWorker.FOREGROUND_SYNC_THROTTLE_MILLIS)
+                }
+            }
         }
 
         override fun onStop(owner: LifecycleOwner) {
+            foregroundSyncJob?.cancel()
+            foregroundSyncJob = null
             val backgroundedAt = System.currentTimeMillis()
             scope.launch {
                 appGraph.settingsStore.setLastBackgroundedAtMillis(backgroundedAt)
             }
         }
     }
+    private var foregroundSyncJob: Job? = null
     private var androidCalendarRefreshJob: Job? = null
     private var androidCalendarObserver: ContentObserver? = null
     private var widgetRefreshJob: Job? = null
@@ -70,7 +88,22 @@ class KgsCalendarApplication : Application() {
         ReminderScheduler.ensureChannel(this)
         registerWidgetRefreshHooks()
         registerAndroidCalendarObserverIfPermitted()
-        SyncWorker.schedulePeriodic(this)
+        scope.launch {
+            appGraph.settingsStore.syncIntervalMinutes.distinctUntilChanged().collect {
+                SyncWorker.schedulePeriodic(this@KgsCalendarApplication, it)
+            }
+        }
+        scope.launch {
+            // Observe committed outbox rows, covering edits from UI, widgets, reminders and
+            // imports. Initial emission also recovers work left behind by process death.
+            appGraph.database.pendingMutationDao().observeAll()
+                .map { rows -> rows.map { it.id } }
+                .distinctUntilChanged()
+                .debounce(500)
+                .collect { ids ->
+                    if (ids.isNotEmpty()) SyncWorker.enqueueImmediate(this@KgsCalendarApplication)
+                }
+        }
         scope.launch {
             runCatching { ReminderScheduler.reschedule(this@KgsCalendarApplication) }
         }

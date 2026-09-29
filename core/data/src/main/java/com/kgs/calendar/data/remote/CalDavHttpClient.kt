@@ -156,7 +156,13 @@ class CalDavHttpClient(
         )
             .filterNot { it.href.isSameDavHref(collectionHref) }
             .filterNot { it.href.endsWith("/") }
-            .filter { it.successfulPropertyStatus }
+            .onEach {
+                // A denied/failed member is not evidence that the cached resource was deleted.
+                if (it.responseStatus != null && it.responseStatus !in 200..299 && it.responseStatus != 404) {
+                    throw HttpStatusException(it.responseStatus, "Cannot list calendar member ${it.href}")
+                }
+            }
+            .filterNot { it.responseStatus == 404 }
             .map { RemoteResource(stableHref(absoluteUrl(serverUrl, collectionHref), it.href), it.etag) }
     }
 
@@ -197,12 +203,14 @@ class CalDavHttpClient(
             val xml = response.body?.string().orEmpty()
             val token = parseDocumentFirstText(xml, "sync-token") ?: return@withContext null
             val davResponses = parseDavResponses(xml)
+            davResponses.firstOrNull { it.responseStatus != null && it.responseStatus !in 200..299 && it.responseStatus != 404 }
+                ?.let { throw HttpStatusException(it.responseStatus!!, "Incomplete sync response for ${it.href}") }
             val deleted = davResponses
-                .filter { it.statusCodes.any { code -> code == 404 } }
+                .filter { it.responseStatus == 404 }
                 .map { stableHref(absoluteUrl(serverUrl, collectionHref), it.href) }
                 .toSet()
             val changed = davResponses
-                .filterNot { it.href in deleted }
+                .filterNot { stableHref(absoluteUrl(serverUrl, collectionHref), it.href) in deleted }
                 .filterNot { it.href.isSameDavHref(collectionHref) }
                 .filterNot { it.href.endsWith("/") }
                 .map {
@@ -448,7 +456,8 @@ class CalDavHttpClient(
     /**
      * Looks for Nextcloud's CalDAV trash bin (Nextcloud 22+) at `{calendar home}/trashbin/`. Returns
      * null when the server has none: it answers the PROPFIND with a client error, or the collection
-     * isn't a `{http://nextcloud.com/ns}trash-bin`. Network trouble and server errors are thrown.
+     * exposes neither a trash-bin type nor Nextcloud's retention property on a DAV collection.
+     * Network trouble and server errors are thrown.
      */
     suspend fun findTrashBin(
         calendarHomeUrl: String,
@@ -462,7 +471,13 @@ class CalDavHttpClient(
             if (error.statusCode in TRASH_BIN_ABSENT_STATUSES) return@withContext null
             throw error
         }
-        val trashBin = responses.firstOrNull { "trash-bin" in it.resourceTypes } ?: return@withContext null
+        // Nextcloud 34's actual PROPFIND response only contains DAV:collection: Sabre replaces
+        // the custom resource type. The successful Nextcloud retention property still identifies
+        // its trash bin. Do not mistake an arbitrary DAV collection for a supported trash bin.
+        val trashBin = responses.firstOrNull {
+            "trash-bin" in it.resourceTypes ||
+                ("collection" in it.resourceTypes && it.trashBinRetentionSeconds != null)
+        } ?: return@withContext null
         RemoteTrashBin(url = url, retentionSeconds = trashBin.trashBinRetentionSeconds)
     }
 
@@ -632,8 +647,9 @@ class CalDavHttpClient(
             .header("Authorization", Credentials.basic(username, appPassword))
 
     private fun parseDavResponses(xml: String): List<DavResponse> {
-        if (xml.isBlank()) return emptyList()
+        require(xml.isNotBlank()) { "Empty DAV response; refusing to treat it as an empty calendar." }
         val document = parseXml(xml)
+        require(document.documentElement.localName == "multistatus") { "Expected a DAV multistatus response." }
         val responses = document.getElementsByTagNameNS("*", "response")
         return (0 until responses.length).mapNotNull { index ->
             val response = responses.item(index) as? Element ?: return@mapNotNull null
@@ -658,6 +674,8 @@ class CalDavHttpClient(
                 maxResourceSize = response.firstText("max-resource-size")?.toLongOrNull(),
                 maxAttendeesPerInstance = response.firstText("max-attendees-per-instance")?.toIntOrNull(),
                 statusCodes = response.statusCodes(),
+                responseStatus = response.directElementChildren().firstOrNull { it.localName == "status" }
+                    ?.textContent?.trim()?.split(Regex("\\s+"))?.getOrNull(1)?.toIntOrNull(),
                 deletedAt = response.firstText("deleted-at"),
                 calendarUri = response.firstText("calendar-uri"),
                 trashBinRetentionSeconds = response.firstText("trash-bin-retention-duration")?.toLongOrNull(),
@@ -848,6 +866,7 @@ class CalDavHttpClient(
         val maxResourceSize: Long? = null,
         val maxAttendeesPerInstance: Int? = null,
         val statusCodes: Set<Int> = emptySet(),
+        val responseStatus: Int? = null,
         val deletedAt: String? = null,
         val calendarUri: String? = null,
         val trashBinRetentionSeconds: Long? = null,

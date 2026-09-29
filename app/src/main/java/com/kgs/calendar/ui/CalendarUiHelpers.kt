@@ -1430,16 +1430,19 @@ internal fun List<LocalDate>.allDayAreaHeight(
     maxVisibleItems: Int,
     expanded: Boolean,
     draftDate: LocalDate?,
+    priorityPageCount: Int = size,
 ): Dp {
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return 22.dp
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
-    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage)
+    val priorityEndPage = min(visibleEndPage, visibleStartPage + priorityPageCount.coerceAtLeast(1) - 1)
+    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage,
+        priorityStartPage = visibleStartPage, priorityEndPage = priorityEndPage)
     val scene = buildAllDayScene(
         overlayItems = overlayItems,
         visibleStartPage = visibleStartPage,
         visibleEndPage = visibleEndPage,
         priorityStartPage = visibleStartPage,
-        priorityEndPage = visibleEndPage,
+        priorityEndPage = priorityEndPage,
         maxVisibleItems = maxVisibleItems,
     )
     val displayedRows = if (expanded) scene.metrics.expandedRowCount else scene.metrics.collapsedRowCount
@@ -1479,16 +1482,19 @@ internal fun List<LocalDate>.hasAllDayOverflow(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     maxVisibleItems: Int,
+    priorityPageCount: Int = size,
 ): Boolean {
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return false
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
-    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage)
+    val priorityEndPage = min(visibleEndPage, visibleStartPage + priorityPageCount.coerceAtLeast(1) - 1)
+    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage,
+        priorityStartPage = visibleStartPage, priorityEndPage = priorityEndPage)
     return buildAllDayScene(
         overlayItems = overlayItems,
         visibleStartPage = visibleStartPage,
         visibleEndPage = visibleEndPage,
         priorityStartPage = visibleStartPage,
-        priorityEndPage = visibleEndPage,
+        priorityEndPage = priorityEndPage,
         maxVisibleItems = maxVisibleItems,
     ).metrics.hasCollapsedOverflow
 }
@@ -1700,7 +1706,7 @@ internal fun buildAllDayOverlayItems(
             if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
                 add(
                     Candidate(
-                        id = "event:${event.uid}:${event.startsAtMillis}",
+                        id = "event:${event.resourceHref}:${event.occurrenceStartForEdit()}",
                         title = event.title,
                         color = event.displayColor(),
                         startPage = startPage,
@@ -1715,13 +1721,15 @@ internal fun buildAllDayOverlayItems(
         tasks.filter { it.startAtMillis != null || it.dueAtMillis != null }
             .filterNot { it.startHasTime || it.dueHasTime }
             .forEach { task ->
-                val dates = task.visibleDates()
-                val startPage = dates.firstOrNull()?.toDayPage() ?: return@forEach
-                val endPage = dates.lastOrNull()?.toDayPage() ?: startPage
+                // Bounds suffice here: enumerating dates wastes work and used to truncate
+                // long all-day tasks at the day-index helper's 370-day guard.
+                val startPage = (task.startAtMillis ?: task.dueAtMillis)?.toDate()?.toDayPage() ?: return@forEach
+                val endPage = ((task.dueAtMillis ?: task.startAtMillis)?.toDate()?.toDayPage() ?: startPage)
+                    .coerceAtLeast(startPage)
                 if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
                     add(
                         Candidate(
-                            id = "task:${task.uid}",
+                            id = "task:${task.resourceHref}:${task.occurrenceRecurrenceIdMillis()}",
                             title = task.title,
                             color = task.displayColor(taskColorMode),
                             startPage = startPage,
@@ -1735,9 +1743,10 @@ internal fun buildAllDayOverlayItems(
             }
     }.sortedWith(
         compareBy<Candidate> { allDayViewportPriorityTier(it.startPage, it.endPage, priorityStartPage, priorityEndPage) }
-            .thenByDescending { it.endPage - it.startPage }
+            .thenByDescending { it.endPage }
             .thenBy { it.startPage }
-            .thenBy { it.title },
+            .thenBy { it.title }
+            .thenBy { it.id },
     )
 
     val laneCandidates = mutableListOf<MutableList<Candidate>>()

@@ -699,7 +699,10 @@ internal fun <T> SettingsChoiceDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 options.forEach { option ->
                     SettingsRadioRow(
                         selected = option == selected,

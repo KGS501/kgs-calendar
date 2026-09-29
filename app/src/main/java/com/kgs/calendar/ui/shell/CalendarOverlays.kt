@@ -203,6 +203,7 @@ internal fun SettingsOverlay(
             onDeleteAccount = viewModel.sources::deleteAccount,
             onCreateCalDavCalendar = viewModel.sources::createCalDavCalendar,
             onSync = viewModel.sources::syncNow,
+            onSyncIntervalChanged = viewModel.settings::setSyncIntervalMinutes,
             onCollectionSettings = shell::editCollection,
             onLocalCalendarEnabledChanged = { enabled ->
                 state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->

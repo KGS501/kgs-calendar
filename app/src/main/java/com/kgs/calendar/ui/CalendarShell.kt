@@ -141,6 +141,7 @@ internal fun CalendarShell(
     onViewSelected: (CalendarViewMode) -> Unit,
     onMultiDayCountChanged: (Int) -> Unit,
     onTimelineHourHeightChanged: (Boolean, Float) -> Unit = { _, _ -> },
+    onLandscapeTimelineCompactChanged: (Boolean) -> Unit = {},
     onToday: () -> Unit,
     onSearch: () -> Unit,
     onTasks: () -> Unit,
@@ -218,7 +219,10 @@ internal fun CalendarShell(
     }
     var monthJumpRequest by remember { mutableStateOf<YearMonth?>(null) }
     var handledForegroundRecenterSerial by rememberSaveable { mutableStateOf(0) }
-    var landscapeTimelineCompactRequested by rememberSaveable { mutableStateOf(false) }
+    var landscapeTimelineCompactRequested by rememberSaveable { mutableStateOf(state.landscapeTimelineCompact) }
+    LaunchedEffect(state.landscapeTimelineCompact) {
+        landscapeTimelineCompactRequested = state.landscapeTimelineCompact
+    }
     var portraitHourHeightDp by rememberSaveable {
         mutableFloatStateOf(state.portraitTimelineHourHeightDp)
     }
@@ -484,6 +488,7 @@ internal fun CalendarShell(
             timelineCompact = landscapeTimelineCompactRequested,
             onTimelineCompactToggle = {
                 landscapeTimelineCompactRequested = !landscapeTimelineCompactRequested
+                onLandscapeTimelineCompactChanged(landscapeTimelineCompactRequested)
             },
             onMonthClick = {
                 if (overdueTasksExpanded) {

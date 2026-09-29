@@ -631,4 +631,9 @@
     <string name="empty_trash_failed_title">Trash not fully emptied</string>
     <string name="empty_trash_failed_server_refused">The server refused to delete some items permanently (HTTP %1$d), for example ones in calendars shared with you read-only. They are still listed.</string>
     <string name="empty_trash_failed_generic">Some items could not be deleted permanently and are still listed: %1$s</string>
+
+    <string name="sync_interval">Background sync interval</string>
+    <string name="sync_interval_minutes">Every %1$d minutes</string>
+    <string name="sync_interval_help">Local changes upload immediately when online. While the app is open, server changes are checked about once a minute. Android may delay background sync to save battery. Device calendars use their account provider’s sync settings.</string>
+    <string name="hidden_all_day_items">%1$d hidden all-day items: %2$s. Expand all-day section.</string>
 </resources>

@@ -502,6 +502,7 @@ internal fun SettingsPage(
     onDeleteAccount: (String) -> Unit,
     onCreateCalDavCalendar: (String, String, Boolean, Boolean) -> Unit,
     onSync: () -> Unit,
+    onSyncIntervalChanged: (Int) -> Unit = {},
     onCollectionSettings: (CollectionEntity) -> Unit,
     onLocalCalendarEnabledChanged: (Boolean) -> Unit,
     onClose: () -> Unit,
@@ -530,6 +531,7 @@ internal fun SettingsPage(
     var tasksWidgetDisplayDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetCreateDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetSubtaskDefaultDialogOpen by remember { mutableStateOf(false) }
+    var syncIntervalDialogOpen by remember { mutableStateOf(false) }
     var languageDialogOpen by remember { mutableStateOf(false) }
     var defaultEventCollectionDialogOpen by remember { mutableStateOf(false) }
     var defaultTaskCollectionDialogOpen by remember { mutableStateOf(false) }
@@ -758,6 +760,12 @@ internal fun SettingsPage(
                                         subtitle = stringResource(R.string.show_local_calendar_help),
                                     )
                                 }
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.sync_interval),
+                                    value = stringResource(R.string.sync_interval_minutes, state.syncIntervalMinutes),
+                                    onClick = { syncIntervalDialogOpen = true },
+                                )
+                                SettingsHelpText(stringResource(R.string.sync_interval_help))
                                 Button(
                                     onClick = onSync,
                                     enabled = externalAccounts.isNotEmpty() && !state.isBusy,
@@ -1703,6 +1711,19 @@ internal fun SettingsPage(
                 tasksWidgetSubtaskDefaultDialogOpen = false
             },
             onDismiss = { tasksWidgetSubtaskDefaultDialogOpen = false },
+        )
+    }
+    if (syncIntervalDialogOpen) {
+        SettingsChoiceDialog(
+            title = appString(R.string.sync_interval),
+            options = com.kgs.calendar.data.settings.SettingsStore.SYNC_INTERVAL_MINUTES,
+            selected = state.syncIntervalMinutes,
+            label = { stringResource(R.string.sync_interval_minutes, it) },
+            onSelected = {
+                onSyncIntervalChanged(it)
+                syncIntervalDialogOpen = false
+            },
+            onDismiss = { syncIntervalDialogOpen = false },
         )
     }
     if (languageDialogOpen) {

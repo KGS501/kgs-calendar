@@ -5,7 +5,6 @@ import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.READ_ONLY_PREFIX
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.ical.IcalCodec
-import com.kgs.calendar.data.isTransientReadOnlySyncFailure
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -17,6 +16,7 @@ import com.kgs.calendar.domain.model.SyncState
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.math.abs
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Downloads read-only iCalendar URL subscriptions into a single read-only collection each. */
 class ReadOnlyUrlSyncEngine internal constructor(
@@ -46,16 +46,31 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 Request.Builder()
                     .url(readOnlyCalendarTransportUrl(account.serverUrl))
                     .header("Accept", READ_ONLY_CALENDAR_ACCEPT)
+                    .apply {
+                        if (existing?.externalId == account.serverUrl) {
+                            existing.ctag?.let { header("If-None-Match", it) }
+                            existing.syncToken?.let { header("If-Modified-Since", it) }
+                        }
+                    }
                     .get()
                     .build(),
             ).execute()
+            val feedEtag = response.header("ETag")
+            val feedLastModified = response.header("Last-Modified")
             val raw = response.use { body ->
+                if (body.code == 304 && existing?.externalId == account.serverUrl) {
+                    database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
+                    return
+                }
                 if (!body.isSuccessful) throw HttpStatusException(body.code, "URL returned HTTP ${body.code}")
                 contentType = body.header("Content-Type")
                 body.body?.string() ?: error("Empty calendar response.")
             }
             if (raw.looksLikeHtmlResponse(contentType)) {
                 error("URL returned a web page instead of an iCalendar feed.")
+            }
+            require(raw.contains("BEGIN:VCALENDAR", ignoreCase = true) && raw.contains("END:VCALENDAR", ignoreCase = true)) {
+                "URL returned an invalid iCalendar feed."
             }
             val fallbackColor = DEFAULT_COLORS[abs(account.id.hashCode()) % DEFAULT_COLORS.size]
             val automaticColor = existing?.automaticColor
@@ -75,8 +90,9 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 color = color,
                 supportsEvents = parsed.any { it.event != null },
                 supportsTasks = parsed.any { it.task != null },
-                syncToken = null,
-                ctag = null,
+                // Read-only feeds use the existing cursor fields for HTTP cache validators.
+                syncToken = feedLastModified,
+                ctag = feedEtag,
                 isEnabled = existing?.isEnabled ?: true,
                 sortOrder = existing?.sortOrder ?: 0,
                 readOnly = true,
@@ -123,11 +139,9 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 }
                 database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            if (existing != null && error.isTransientReadOnlySyncFailure()) {
-                database.accountDao().updateSyncState(SyncState.Idle, null, account.lastSyncAtMillis, account.id)
-                return
-            }
             val syncError = account.describeSyncError(error)
             database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
             throw IllegalStateException(syncError, error)

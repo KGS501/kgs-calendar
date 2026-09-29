@@ -100,6 +100,8 @@ data class CalendarUiState(
     val largeLandscapeMultiDayCount: Int = DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT,
     val portraitTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
     val landscapeTimelineHourHeightDp: Float = SettingsStore.DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+    val syncIntervalMinutes: Int = 15,
+    val landscapeTimelineCompact: Boolean = false,
     val weekViewEnabled: Boolean = SettingsStore.DEFAULT_WEEK_VIEW_ENABLED,
     val fullWeekSwipeEnabled: Boolean = SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
     val multiDaySidebarControlsEnabled: Boolean = true,

@@ -59,12 +59,12 @@ class SyncOrchestratorTest {
     }
 
     @Test
-    fun failingAccountIsMarkedButSyncSucceedsWhenAnotherAccountSucceeds() = runTest {
+    fun failingAccountIsReportedEvenWhenAnotherAccountSucceeds() = runTest {
         addAccount("a", "Alpha", lastSyncAtMillis = 42L)
         addAccount("b", "Beta")
         val engine = FakeEngine(setOf("a", "b"), failures = mapOf("a" to IllegalStateException("boom")))
 
-        orchestrator(engine).syncNow()
+        expectFailure<IllegalStateException> { orchestrator(engine).syncNow() }
 
         assertEquals(listOf("a", "b"), engine.synced.map { it.first })
         val failed = harness.account("a")!!

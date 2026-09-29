@@ -41,6 +41,9 @@ interface CollectionDao {
     @Query("UPDATE collections SET syncToken = :syncToken, ctag = :ctag WHERE href = :href")
     suspend fun updateSyncMarkers(href: String, syncToken: String?, ctag: String?)
 
+    @Query("UPDATE collections SET capabilitiesJson = :capabilitiesJson WHERE href = :href")
+    suspend fun updateCapabilitiesJson(href: String, capabilitiesJson: String)
+
     @Query("UPDATE collections SET isEnabled = :enabled WHERE href = :href")
     suspend fun updateEnabled(href: String, enabled: Boolean)
 

@@ -32,15 +32,12 @@ class SyncOrchestrator(
         repairs.repairInvalidTaskSchedules()
         repairs.repairPendingTaskMutations()
         repairs.repairDuplicateCalDavResources()
-        repairs.discardSupersededPendingMutations()
-        var successfulAccounts = 0
         var firstError: Throwable? = null
         database.accountDao().getAll().forEach { account ->
             try {
                 if (account.id == LOCAL_ACCOUNT_ID) return@forEach
                 val engine = engines.firstOrNull { it.handles(account) } ?: return@forEach
                 if (engine.sync(account, options)) {
-                    successfulAccounts++
                     // The server trash bin is extra: failing to read it does not fail the sync.
                     if (account.sourceType == SourceType.CalDav) trash?.refreshAccountLocked(account.id)
                 }
@@ -49,10 +46,17 @@ class SyncOrchestrator(
             } catch (error: Throwable) {
                 val syncError = account.describeSyncError(error)
                 database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
-                firstError = firstError ?: IllegalStateException(syncError, error)
+                val failure = IllegalStateException(syncError, error)
+                if (firstError == null) firstError = failure else firstError!!.addSuppressed(failure)
             }
         }
-        if (successfulAccounts == 0) firstError?.let { throw it }
+        firstError?.let { throw it }
+    }
+
+    /** Durable worker recovery drains the entire outbox, including edits from earlier processes. */
+    suspend fun pushAllPendingChanges() = remoteSyncLock.withLock {
+        repairs.repairPendingTaskMutations()
+        uploader.pushPendingMutations(database.pendingMutationDao().all())
     }
 
     suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long) {

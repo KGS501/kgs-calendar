@@ -208,7 +208,7 @@ class TimelineAllDayDragInstrumentedTest {
         )
 
         val chip = composeRule.onNodeWithText(event.title).onParent()
-        val preview = composeRule.onNodeWithTag("timeline-all-day-item-event:${event.uid}:${event.startsAtMillis}")
+        val preview = composeRule.onNodeWithTag("timeline-all-day-item-event:${event.resourceHref}:${event.startsAtMillis}")
         val dragDistance = with(composeRule.density) { 120.dp.toPx() }
         chip.performTouchInput {
             down(center)
@@ -246,12 +246,12 @@ class TimelineAllDayDragInstrumentedTest {
         )
 
         val singleWidth = composeRule
-            .onNodeWithTag("timeline-all-day-item-event:${single.uid}:${single.startsAtMillis}")
+            .onNodeWithTag("timeline-all-day-item-event:${single.resourceHref}:${single.startsAtMillis}")
             .fetchSemanticsNode()
             .boundsInRoot
             .width
         val multiWidth = composeRule
-            .onNodeWithTag("timeline-all-day-item-event:${multi.uid}:${multi.startsAtMillis}")
+            .onNodeWithTag("timeline-all-day-item-event:${multi.resourceHref}:${multi.startsAtMillis}")
             .fetchSemanticsNode()
             .boundsInRoot
             .width

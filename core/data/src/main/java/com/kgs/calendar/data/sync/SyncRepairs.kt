@@ -7,9 +7,9 @@ import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
-import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import java.net.URI
 
 /** Local repair routines run before every sync, plus re-parsing of the cached iCal payloads. */
 class SyncRepairs internal constructor(
@@ -124,9 +124,9 @@ class SyncRepairs internal constructor(
     /**
      * Some CalDAV servers, including mailbox.org/Open-Xchange, return a canonical
      * percent-encoded object href such as `uid%40kgs-calendar.ics` even when an older
-     * local build had queued the same UID under another filename. Keep the server href
-     * and retarget the newest local edit to it so a stuck create does not stay behind as
-     * an orange sync issue or duplicate task.
+     * local build used an equivalent unescaped path. Merge only these path aliases,
+     * preserving the queued edit's precondition. Distinct paths with the same UID and
+     * pending deletions require explicit resolution; automatic repair must not lose work.
      */
     internal suspend fun repairDuplicateCalDavResources() {
         if (database.resourceDao().duplicateCalDavCandidates().isEmpty()) return
@@ -145,6 +145,9 @@ class SyncRepairs internal constructor(
             .groupBy { Triple(it.collectionHref, it.componentType, it.uid) }
             .values
             .filter { it.size > 1 }
+            // Matching UIDs at different paths are not proof that one resource supersedes another.
+            .filter { duplicates -> duplicates.map { URI(it.href).path }.distinct().size == 1 }
+            .filterNot { duplicates -> duplicates.any { resource -> pendingByResource[resource.href].orEmpty().any { it.action == MutationAction.Delete } } }
             .forEach { duplicates ->
                 val collection = collectionsByHref[duplicates.first().collectionHref] ?: return@forEach
                 val canonical = duplicates.maxWithOrNull(
@@ -172,7 +175,7 @@ class SyncRepairs internal constructor(
                         localWrites.upsertLocalResource(
                             collectionHref = canonical.collectionHref,
                             resourceHref = canonical.href,
-                            etag = canonical.etag,
+                            etag = newestPendingPut.baseEtag,
                             componentType = componentType,
                             uid = canonical.uid,
                             rawIcs = pendingRaw,
@@ -193,7 +196,7 @@ class SyncRepairs internal constructor(
                             resourceHref = canonical.href,
                             componentType = componentType,
                             rawIcs = pendingRaw,
-                            baseEtag = canonical.etag,
+                            baseEtag = newestPendingPut.baseEtag,
                         )
                     }
                 }
@@ -209,44 +212,4 @@ class SyncRepairs internal constructor(
             }
     }
 
-    /**
-     * Early prototype builds could leave PUT mutations behind after a later pull had
-     * already replaced the local resource with the server version. Those mutations
-     * can no longer be applied conditionally because their base ETag is stale, so
-     * they only keep the "pending changes" counter stuck.
-     */
-    internal suspend fun discardSupersededPendingMutations() {
-        if (database.pendingMutationDao().all().none { it.action == MutationAction.Put }) return
-        localWrites.writeTransaction { discardSupersededPendingMutationsInTransaction() }
-    }
-
-    private suspend fun discardSupersededPendingMutationsInTransaction() {
-        val now = System.currentTimeMillis()
-        database.pendingMutationDao().all()
-            .filter { it.action == MutationAction.Put }
-            .forEach { mutation ->
-                val resource = database.resourceDao().get(mutation.resourceHref)
-                val payload = mutation.payloadIcs?.normalizedIcsText()
-                val local = resource?.rawIcs?.normalizedIcsText()
-                val staleMissingLocalCreate = resource == null &&
-                    mutation.baseEtag == null &&
-                    now - mutation.createdAtMillis > 60L * 60L * 1000L
-                val staleMissingEditedResource = resource == null && mutation.baseEtag != null
-                val staleConflict = resource != null &&
-                    mutation.baseEtag != null &&
-                    (
-                        (resource.etag != null && resource.etag != mutation.baseEtag) ||
-                            resource.syncError?.contains("Conflict", ignoreCase = true) == true
-                    ) &&
-                    payload != null &&
-                    local != null &&
-                    payload != local
-                if (staleMissingLocalCreate || staleMissingEditedResource || staleConflict) {
-                    database.pendingMutationDao().delete(mutation)
-                    if (resource?.syncError != null) {
-                        database.resourceDao().markSynced(resource.href, resource.etag)
-                    }
-                }
-            }
-    }
 }

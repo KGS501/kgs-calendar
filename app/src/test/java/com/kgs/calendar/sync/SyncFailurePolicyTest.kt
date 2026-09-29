@@ -2,6 +2,8 @@ package com.kgs.calendar.sync
 
 import com.kgs.calendar.data.remote.HttpStatusException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.io.IOException
 import java.net.MalformedURLException
@@ -64,6 +66,21 @@ class SyncFailurePolicyTest {
         val error = wrapped(http(503))
         assertEquals(SyncFailureOutcome.Retry, classifySyncFailure(error, runAttemptCount = MAX_SYNC_RUN_ATTEMPTS - 1))
         assertEquals(SyncFailureOutcome.Fail, classifySyncFailure(error, runAttemptCount = MAX_SYNC_RUN_ATTEMPTS))
+    }
+
+    @Test
+    fun transientFailureInAnotherAccountOrCollectionIsRetried() {
+        val first = wrapped(http(401))
+        first.addSuppressed(wrapped(http(503)))
+        assertEquals(SyncFailureOutcome.Retry, classify(first))
+    }
+
+    @Test
+    fun foregroundRefreshTracksSuccessAndHandlesClockChanges() {
+        assertTrue(SyncWorker.foregroundRefreshDue(0, 1))
+        assertTrue(SyncWorker.foregroundRefreshDue(100, 99))
+        assertFalse(SyncWorker.foregroundRefreshDue(100, 59_999))
+        assertTrue(SyncWorker.foregroundRefreshDue(100, 60_100))
     }
 
     private fun classify(error: Throwable): SyncFailureOutcome = classifySyncFailure(error, runAttemptCount = 0)

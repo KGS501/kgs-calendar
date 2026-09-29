@@ -9,6 +9,7 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
 import com.kgs.calendar.domain.model.ComponentType
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.kgs.calendar.domain.model.SourceType
@@ -142,6 +143,8 @@ class AndroidProviderSyncEngine internal constructor(
                 }
                 database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
             val syncError = account.describeSyncError(error)
             database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)

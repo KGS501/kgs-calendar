@@ -21,6 +21,7 @@ import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
+import com.kgs.calendar.data.sync.RemoteSyncLock
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.source.isAndroidProviderAccount
 import com.kgs.calendar.domain.trash.TrashOrigin
@@ -42,6 +43,7 @@ class CalendarSourceManager internal constructor(
     private val localWrites: LocalWriteSupport,
     private val readOnlyUrlSyncEngine: ReadOnlyUrlSyncEngine,
     private val androidProviderSyncEngine: AndroidProviderSyncEngine,
+    private val remoteSyncLock: RemoteSyncLock = RemoteSyncLock(),
 ) {
     suspend fun startLoginFlow(serverUrl: String) = loginFlowClient.start(serverUrl)
 
@@ -179,7 +181,10 @@ class CalendarSourceManager internal constructor(
         database.accountDao().updateDisplayName(accountId, displayName.trim().ifBlank { "Calendar source" })
     }
 
-    suspend fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
+    suspend fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) =
+        remoteSyncLock.withLock { updateAccountLocked(accountId, displayName, serverUrl, username, appPassword) }
+
+    private suspend fun updateAccountLocked(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
         val existing = database.accountDao().get(accountId) ?: return
         if (existing.isAndroidProviderAccount()) {
             database.accountDao().upsert(existing.copy(displayName = displayName.trim().ifBlank { existing.displayName ?: "Android device calendars" }))
@@ -189,16 +194,28 @@ class CalendarSourceManager internal constructor(
         val normalizedUsername = username.trim().ifBlank { existing.username }
         val normalizedDisplayName = displayName.trim().ifBlank { existing.displayName ?: existing.username }
         val password = appPassword?.takeIf { it.isNotBlank() } ?: credentialsStore.get(accountId)?.appPassword
-        database.accountDao().upsert(
-            existing.copy(
-                displayName = normalizedDisplayName,
-                serverUrl = normalizedServer,
-                username = normalizedUsername,
-                principalUrl = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.principalUrl else null,
-                calendarHomeUrl = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.calendarHomeUrl else null,
-                capabilitiesJson = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.capabilitiesJson else null,
-            ),
-        )
+        localWrites.writeTransaction {
+            if (existing.sourceType == SourceType.CalDav &&
+                (normalizedServer != existing.serverUrl || normalizedUsername != existing.username)) {
+                check(database.pendingMutationDao().allForAccount(accountId).isEmpty()) {
+                    "Sync or move pending changes before changing the server or login. You can add the new server as a separate account."
+                }
+                // Cached absolute hrefs belong to the old account binding. Never send the new
+                // credentials to them, or treat that server's cursors as valid on the new server.
+                database.collectionDao().forAccount(accountId).forEach { database.collectionDao().delete(it.href) }
+                database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
+            }
+            database.accountDao().upsert(
+                existing.copy(
+                    displayName = normalizedDisplayName,
+                    serverUrl = normalizedServer,
+                    username = normalizedUsername,
+                    principalUrl = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.principalUrl else null,
+                    calendarHomeUrl = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.calendarHomeUrl else null,
+                    capabilitiesJson = if (normalizedServer == existing.serverUrl && normalizedUsername == existing.username) existing.capabilitiesJson else null,
+                ),
+            )
+        }
         if (existing.username != READ_ONLY_USERNAME && password != null) {
             credentialsStore.save(accountId, StoredCredentials(normalizedServer, normalizedUsername, password))
         }

@@ -1,6 +1,7 @@
 package com.kgs.calendar.domain.source
 
 import com.kgs.calendar.data.LOCAL_COLLECTION_PREFIX
+import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.READ_ONLY_PREFIX
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -8,6 +9,8 @@ import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.domain.model.SourceType
 
 fun String.isLocalCollectionHref(): Boolean = startsWith(LOCAL_COLLECTION_PREFIX)
+
+fun AccountEntity.isLocalAccount(): Boolean = id == LOCAL_ACCOUNT_ID
 
 fun String.isReadOnlyCollectionHref(): Boolean = startsWith(READ_ONLY_PREFIX)
 

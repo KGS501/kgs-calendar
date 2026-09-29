@@ -36,11 +36,12 @@ data class CalDavTrashBinSupport(
     val calendarHomeUrl: String,
     val trashBin: RemoteTrashBin?,
     val checkedAtMillis: Long,
+    val probeVersion: Int = CURRENT_PROBE_VERSION,
 ) {
     val supported: Boolean get() = trashBin != null
 
     fun isCurrentFor(calendarHomeUrl: String, nowMillis: Long): Boolean =
-        this.calendarHomeUrl == calendarHomeUrl &&
+        probeVersion == CURRENT_PROBE_VERSION && this.calendarHomeUrl == calendarHomeUrl &&
             // Found trash bins are refreshed together with their listing anyway; missing ones are checked weekly.
             (supported || (nowMillis - checkedAtMillis) in 0 until UNSUPPORTED_RECHECK_MILLIS)
 
@@ -50,6 +51,7 @@ data class CalDavTrashBinSupport(
             .put("calendarHomeUrl", calendarHomeUrl)
             .put("supported", supported)
             .put("checkedAtMillis", checkedAtMillis)
+            .put("probeVersion", probeVersion)
         trashBin?.let {
             entry.put("url", it.url)
             it.retentionSeconds?.let { seconds -> entry.put("retentionSeconds", seconds) }
@@ -59,6 +61,7 @@ data class CalDavTrashBinSupport(
 
     companion object {
         const val KEY = "nextcloudTrashBin"
+        const val CURRENT_PROBE_VERSION = 2
         private const val UNSUPPORTED_RECHECK_MILLIS = 7L * 24 * 60 * 60 * 1000
 
         fun readFrom(capabilitiesJson: String?): CalDavTrashBinSupport? = runCatching {
@@ -70,6 +73,7 @@ data class CalDavTrashBinSupport(
                 calendarHomeUrl = entry.getString("calendarHomeUrl"),
                 trashBin = trashBin,
                 checkedAtMillis = entry.optLong("checkedAtMillis"),
+                probeVersion = entry.optInt("probeVersion", 0),
             )
         }.getOrNull()
 

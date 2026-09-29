@@ -50,7 +50,7 @@ class CalDavUploadQueueRepositoryTest {
         repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
         val href = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }.resourceHref
         server.answerNextPutWithoutEtag(href)
-        server.respondNext("PROPFIND", href) { MockResponse().setResponseCode(500) }
+        server.respondNext("GET", href) { MockResponse().setResponseCode(500) }
         repository.pushPendingChangesCreatedSince(0)
         assertNotNull(server.stored(href))
         assertNull(harness.resource(href)!!.etag)
@@ -184,7 +184,7 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun deletingNeverUploadedEventReplacesPutWithUnconditionalDelete() = runTest {
+    fun deletingNeverUploadedEventConfirmsAbsenceWithoutAnUnconditionalDelete() = runTest {
         repository.createEvent(eventPayload("Scratch", day, collectionHref = server.eventsHref))
         val event = harness.eventsIn(server.eventsHref).single { it.title == "Scratch" }
 
@@ -197,9 +197,8 @@ class CalDavUploadQueueRepositoryTest {
         repository.syncNow()
 
         assertTrue(puts().isEmpty())
-        val delete = server.requests("DELETE").single()
-        assertEquals(event.resourceHref, delete.path)
-        assertNull(delete.header("If-Match"))
+        assertTrue(server.requests("DELETE").isEmpty())
+        assertTrue(server.requests("GET").any { it.path == event.resourceHref })
         assertNull(harness.event(event.resourceHref))
         assertTrue(harness.pendingMutations().isEmpty())
     }
@@ -370,7 +369,7 @@ class CalDavUploadQueueRepositoryTest {
     }
 
     @Test
-    fun rejectedUploadInOneAccountDoesNotFailSyncOrBlockOtherAccount() = runTest {
+    fun rejectedUploadIsReportedWithoutBlockingOtherAccounts() = runTest {
         FakeCalDavServer(username = "bob", password = "hunter2").use { otherServer ->
             otherServer.start()
             val otherEventHref = otherServer.putRemote(otherServer.eventsHref, "standup.ics", SampleIcs.event("bob-event", "Standup"))
@@ -382,7 +381,7 @@ class CalDavUploadQueueRepositoryTest {
             val reviewHref = server.putRemote(server.eventsHref, "review.ics", SampleIcs.event("remote-review", "Review"))
             otherServer.putRemote(otherServer.eventsHref, "standup.ics", SampleIcs.event("bob-event", "Standup moved", sequence = 1))
 
-            repository.syncNow()
+            expectFailure<IllegalStateException> { repository.syncNow() }
 
             assertEquals("Review", harness.event(reviewHref)!!.title)
             assertEquals("Local edit", harness.event(eventHref)!!.title)

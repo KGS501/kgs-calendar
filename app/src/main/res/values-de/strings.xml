@@ -631,4 +631,9 @@
     <string name="empty_trash_failed_title">Papierkorb nicht ganz geleert</string>
     <string name="empty_trash_failed_server_refused">Der Server hat das endgültige Löschen einiger Elemente abgelehnt (HTTP %1$d), zum Beispiel in Kalendern, die nur lesbar mit dir geteilt sind. Sie sind weiterhin aufgeführt.</string>
     <string name="empty_trash_failed_generic">Einige Elemente konnten nicht endgültig gelöscht werden und sind weiterhin aufgeführt: %1$s</string>
+
+    <string name="sync_interval">Intervall für Hintergrundsynchronisierung</string>
+    <string name="sync_interval_minutes">Alle %1$d Minuten</string>
+    <string name="sync_interval_help">Lokale Änderungen werden bei bestehender Verbindung sofort hochgeladen. Solange die App geöffnet ist, werden Serveränderungen etwa jede Minute geprüft. Android kann die Hintergrundsynchronisierung zum Energiesparen verzögern. Gerätekalender verwenden die Synchronisierungseinstellungen ihres Kontoanbieters.</string>
+    <string name="hidden_all_day_items">%1$d ausgeblendete ganztägige Einträge: %2$s. Ganztägigen Bereich öffnen.</string>
 </resources>

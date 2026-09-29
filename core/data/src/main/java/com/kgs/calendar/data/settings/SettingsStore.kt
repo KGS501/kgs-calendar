@@ -53,6 +53,15 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         runCatching { enumValueOf<T>(prefs[key] ?: default.name) }.getOrDefault(default)
     }
 
+    val syncIntervalMinutes: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_SYNC_INTERVAL_MINUTES] ?: 15).takeIf { it in SYNC_INTERVAL_MINUTES } ?: 15
+    }
+
+    suspend fun setSyncIntervalMinutes(minutes: Int) {
+        require(minutes in SYNC_INTERVAL_MINUTES)
+        dataStore.edit { it[KEY_SYNC_INTERVAL_MINUTES] = minutes }
+    }
+
     val selectedView: Flow<CalendarViewMode> = dataStore.data.map { prefs ->
         if (prefs[KEY_VIEW] == "Week") return@map CalendarViewMode.ThreeDay
         runCatching {
@@ -205,6 +214,15 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         normalizeTimelineHourHeightDp(
             prefs[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
         )
+    }
+
+    /** One landscape all-day visibility preference, shared by phone and large-screen layouts. */
+    val landscapeTimelineCompact: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_LANDSCAPE_TIMELINE_COMPACT] ?: false
+    }
+
+    suspend fun setLandscapeTimelineCompact(compact: Boolean) {
+        dataStore.edit { it[KEY_LANDSCAPE_TIMELINE_COMPACT] = compact }
     }
 
     val weekViewEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -617,6 +635,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
 
     companion object {
+        val SYNC_INTERVAL_MINUTES = listOf(15, 30, 60, 120, 360, 720, 1440)
+        private val KEY_SYNC_INTERVAL_MINUTES = intPreferencesKey("sync_interval_minutes")
         private val KEY_VIEW = stringPreferencesKey("selected_view")
         private val KEY_LAST_BACKGROUNDED_AT_MILLIS = longPreferencesKey("last_backgrounded_at_millis")
         private val KEY_DATE = stringPreferencesKey("selected_date")
@@ -700,6 +720,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_SHOW_CALENDAR_WEEKS = false
         const val DEFAULT_HAPTIC_FEEDBACK_ENABLED = true
         const val DEFAULT_TIMELINE_HOUR_HEIGHT_DP = 46f
+        private val KEY_LANDSCAPE_TIMELINE_COMPACT = booleanPreferencesKey("landscape_timeline_compact")
         const val MIN_TIMELINE_HOUR_HEIGHT_DP = 18f
         const val MAX_TIMELINE_HOUR_HEIGHT_DP = 92f
 

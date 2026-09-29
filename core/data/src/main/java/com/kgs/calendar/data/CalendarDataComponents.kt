@@ -77,5 +77,6 @@ class CalendarDataComponents(
         localWrites = localWrites,
         readOnlyUrlSyncEngine = readOnlyUrlSyncEngine,
         androidProviderSyncEngine = androidProviderSyncEngine,
+        remoteSyncLock = remoteSyncLock,
     )
 }

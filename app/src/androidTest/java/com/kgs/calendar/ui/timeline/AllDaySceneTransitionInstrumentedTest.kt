@@ -106,7 +106,7 @@ class AllDaySceneTransitionInstrumentedTest {
     }
 
     private fun primaryTag(event: EventEntity): String =
-        "timeline-all-day-item-event:${event.uid}:${event.startsAtMillis}"
+        "timeline-all-day-item-event:${event.resourceHref}:${event.startsAtMillis}"
 
     private fun julyFixture(): List<EventEntity> = listOf(
         allDayEvent("Schulferien", LocalDate.of(2026, 7, 20), LocalDate.of(2026, 9, 2)),
