@@ -126,14 +126,16 @@ internal class LocalWriteSupport(
             .filterNot { it.href in remoteHrefs }
             .filterNot { it.href.isLocalCollectionHref() || it.href.startsWith(READ_ONLY_PREFIX) }
             .forEach { stale ->
-                database.pendingMutationDao().deleteForCollection(stale.href)
-                database.collectionDao().delete(stale.href)
+                // Losing access to a remote collection must not discard unsent local work.
+                // Keep the collection visible so its upload error can be inspected/recovered.
+                if (database.pendingMutationDao().allForAccount(accountId).none { it.collectionHref == stale.href }) {
+                    database.collectionDao().delete(stale.href)
+                }
             }
     }
 
     suspend fun normalizedPendingTaskPayload(mutation: PendingMutationEntity): String {
         val raw = mutation.payloadIcs ?: error("Missing payload")
-        database.taskDao().byResource(mutation.resourceHref)?.let { return icalCodec.serializeTask(it, raw) }
         val color = database.collectionDao().get(mutation.collectionHref)?.color ?: DEFAULT_COLORS.first()
         val parsedTask = icalCodec.parse(raw, mutation.collectionHref, mutation.resourceHref, color)?.task
         return parsedTask?.let { icalCodec.serializeTask(it, raw) } ?: raw

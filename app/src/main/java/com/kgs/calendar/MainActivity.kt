@@ -23,7 +23,6 @@ import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.navigation.CalendarLaunchTarget
 import com.kgs.calendar.navigation.SharedEventDraft
 import com.kgs.calendar.navigation.externalCalendarLaunchDate
-import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.ui.CalendarWidgetLaunchTarget
 import com.kgs.calendar.ui.CalendarViewModel
 import com.kgs.calendar.ui.CalendarViewModelFactory
@@ -88,7 +87,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        SyncWorker.enqueueForegroundRefreshIfStale(this)
         lifecycleScope.launch(Dispatchers.IO) {
             val includeDisabledProviderCalendars = graph.settingsStore.showDisabledAndroidProviderCalendars.first()
             runCatching {

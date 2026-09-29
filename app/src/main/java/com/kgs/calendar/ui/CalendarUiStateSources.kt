@@ -98,6 +98,7 @@ internal data class TimelineZoomSettings(
     val multiDayCounts: MultiDayCounts,
     val portraitTimelineHourHeightDp: Float,
     val landscapeTimelineHourHeightDp: Float,
+    val landscapeTimelineCompact: Boolean,
 )
 
 internal data class TimelineSettings(
@@ -114,6 +115,7 @@ internal data class GeneralSettings(
     val behaviour: AppBehaviourSettings,
     val timeline: TimelineSettings,
     val hapticFeedbackEnabled: Boolean,
+    val syncIntervalMinutes: Int,
 )
 
 internal data class NewItemDefaults(
@@ -247,13 +249,15 @@ internal fun generalSettings(
             multiDayCounts,
             settingsStore.portraitTimelineHourHeightDp,
             settingsStore.landscapeTimelineHourHeightDp,
+            settingsStore.landscapeTimelineCompact,
             ::TimelineZoomSettings,
         ),
         ::TimelineSettings,
     ),
-    settingsStore.hapticFeedbackEnabled,
-    ::GeneralSettings,
-)
+    combine(settingsStore.hapticFeedbackEnabled, settingsStore.syncIntervalMinutes) { haptics, interval -> haptics to interval },
+) { appearance, display, behaviour, timeline, background ->
+    GeneralSettings(appearance, display, behaviour, timeline, background.first, background.second)
+}
 
 internal fun SettingsStore.editorDefaults(): Flow<EditorDefaults> = combine(
     combine(
@@ -408,6 +412,7 @@ internal fun calendarUiState(
         subtasksExpandedByDefault = display.subtasksExpandedByDefault,
         autoLoadMapPreviews = display.autoLoadMapPreviews,
         hapticFeedbackEnabled = settings.general.hapticFeedbackEnabled,
+        syncIntervalMinutes = settings.general.syncIntervalMinutes,
         maxVisibleAllDayItems = behaviour.maxVisibleAllDayItems,
         multiDayCount = navigation.multiDayCount,
         portraitMultiDayCount = timeline.zoom.multiDayCounts.portrait,
@@ -416,6 +421,7 @@ internal fun calendarUiState(
         largeLandscapeMultiDayCount = timeline.zoom.multiDayCounts.largeLandscape,
         portraitTimelineHourHeightDp = timeline.zoom.portraitTimelineHourHeightDp,
         landscapeTimelineHourHeightDp = timeline.zoom.landscapeTimelineHourHeightDp,
+        landscapeTimelineCompact = timeline.zoom.landscapeTimelineCompact,
         weekViewEnabled = timeline.weekViewEnabled,
         fullWeekSwipeEnabled = timeline.fullWeekSwipeEnabled,
         multiDaySidebarControlsEnabled = timeline.multiDaySidebarControlsEnabled,

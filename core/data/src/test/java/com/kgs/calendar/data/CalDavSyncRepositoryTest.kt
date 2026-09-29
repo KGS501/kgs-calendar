@@ -239,7 +239,7 @@ class CalDavSyncRepositoryTest {
         server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
         server.respondNext("GET", eventHref) { MockResponse().setResponseCode(503) }
 
-        repository.syncNow()
+        expectFailure<IllegalStateException> { repository.syncNow() }
 
         val held = harness.collection(server.eventsHref)!!
         assertEquals(before.syncToken, held.syncToken)
@@ -247,7 +247,7 @@ class CalDavSyncRepositoryTest {
         assertEquals("Kickoff", harness.event(eventHref)!!.title)
         assertNotNull(harness.resource(eventHref)!!.syncError)
         assertEquals("Review", harness.event(reviewHref)!!.title)
-        assertEquals(SyncState.Idle, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+        assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
         server.clearRequests()
 
         repository.syncNow()
@@ -267,7 +267,7 @@ class CalDavSyncRepositoryTest {
         server.respondNext("REPORT", server.eventsHref, bodyContains = "calendar-multiget") { MockResponse().setResponseCode(500) }
         server.respondNext("GET", eventHref) { MockResponse().setResponseCode(429) }
 
-        harness.addSyncedCalDavAccount()
+        expectFailure<IllegalStateException> { harness.addSyncedCalDavAccount() }
 
         val events = harness.collection(server.eventsHref)!!
         assertNull(events.syncToken)
@@ -291,7 +291,7 @@ class CalDavSyncRepositoryTest {
         // OkHttp repeats a request answered with 408 once on its own.
         server.respondNext("GET", eventHref, times = 2) { MockResponse().setResponseCode(408) }
 
-        repository.syncNow()
+        expectFailure<IllegalStateException> { repository.syncNow() }
 
         val held = harness.collection(server.eventsHref)!!
         assertEquals(before.syncToken, held.syncToken)

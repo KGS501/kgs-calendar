@@ -39,8 +39,8 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = 36
-        versionCode = 29
-        versionName = "V.1.4.0-2"
+        versionCode = 30
+        versionName = "V.1.4.0-3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -137,6 +137,7 @@ dependencies {
 
     testImplementation(testFixtures(project(":core:data")))
     testImplementation(libs.mockwebserver)
+    testImplementation(libs.androidx.work.testing)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.datastore.preferences)
@@ -146,6 +147,8 @@ dependencies {
     testImplementation(libs.androidx.test.core)
 
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(testFixtures(project(":core:data")))
+    androidTestImplementation(libs.mockwebserver)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.espresso.core)

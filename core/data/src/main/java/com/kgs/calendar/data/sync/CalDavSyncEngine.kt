@@ -3,7 +3,6 @@ package com.kgs.calendar.data.sync
 import android.database.SQLException
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
-import com.kgs.calendar.data.hasTimedIcalProperty
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.ParsedCalendarComponent
 import com.kgs.calendar.data.isCalDavScheduleInbox
@@ -11,7 +10,6 @@ import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
-import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.data.remote.CalDavCollectionCapabilities
@@ -28,7 +26,6 @@ import com.kgs.calendar.domain.model.MutationAction
 import org.json.JSONObject
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
-import java.time.Instant
 import java.time.ZoneId
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
@@ -47,7 +44,7 @@ class CalDavSyncEngine internal constructor(
     override fun handles(account: AccountEntity): Boolean = true
 
     override suspend fun sync(account: AccountEntity, options: SourceSyncOptions): Boolean {
-        val credentials = credentialsStore.get(account.id) ?: return false
+        val credentials = credentialsStore.get(account.id) ?: error("Missing account credentials. Reconnect this calendar account.")
         database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         repairMissingCalDavEtags(credentials, account.id)
         // A rejected upload stays queued and marked on its resource; it must not keep remote changes away.
@@ -116,12 +113,22 @@ class CalDavSyncEngine internal constructor(
                 into = discovery.toCapabilitiesJson(),
             ),
         )
-        val remoteCollections = calDavClient.discoverCollections(
+        val discoveredCollections = calDavClient.discoverCollections(
             discovery = discovery,
             username = credentials.username,
             appPassword = credentials.appPassword,
         )
         val previousCollectionsByHref = database.collectionDao().forAccount(account.id).associateBy { it.href }
+        val previousByPath = previousCollectionsByHref.values.associateBy { it.href.davHrefKey() }
+        val remoteCollections = discoveredCollections.map { remote ->
+            val owned = previousByPath[remote.href.davHrefKey()]
+            val taken = database.collectionDao().get(remote.href)?.accountId?.let { it != account.id } == true
+            val href = owned?.href ?: if (taken) URI(credentials.serverUrl).resolve(remote.href).toString() else remote.href
+            check(database.collectionDao().get(href)?.accountId?.let { it != account.id } != true) {
+                "This calendar is already connected through another account."
+            }
+            remote.copy(href = href)
+        }
         val collectionEntities = remoteCollections.mapIndexed { index, remote ->
             val existing = previousCollectionsByHref[remote.href]
             val automaticColor = remote.color
@@ -141,7 +148,7 @@ class CalDavSyncEngine internal constructor(
                 ctag = existing?.ctag,
                 isEnabled = existing?.isEnabled ?: true,
                 sortOrder = existing?.sortOrder ?: index,
-                readOnly = remote.readOnly || existing?.readOnly == true,
+                readOnly = remote.readOnly,
                 remoteDisplayName = remote.displayName,
                 customDisplayName = existing?.customDisplayName,
                 automaticColor = automaticColor,
@@ -149,7 +156,8 @@ class CalDavSyncEngine internal constructor(
                 customColor = existing?.customColor,
                 sourceType = SourceType.CalDav,
                 externalId = remote.href,
-                capabilitiesJson = remote.capabilities.toJson(),
+                capabilitiesJson = JSONObject(remote.capabilities.toJson())
+                    .put(RECONCILIATION_VERSION_KEY, existing?.reconciliationVersion() ?: 0).toString(),
             )
         }
         localWrites.writeTransaction {
@@ -160,12 +168,20 @@ class CalDavSyncEngine internal constructor(
             }
             localWrites.removeStaleRemoteCollections(account.id, collectionEntities.map { it.href }.toSet())
         }
+        var firstCollectionError: Throwable? = null
         collectionEntities
             .filter { it.isEnabled }
             .forEach { collection ->
                 val remote = remoteCollections.firstOrNull { it.href.davHrefKey() == collection.href.davHrefKey() }
-                syncCollection(credentials, collection, remote, forceFullRefresh = options.forceFullCalDavRefresh)
+                try {
+                    syncCollection(credentials, collection, remote, forceFullRefresh = options.forceFullCalDavRefresh)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    if (firstCollectionError == null) firstCollectionError = error else firstCollectionError!!.addSuppressed(error)
+                }
             }
+        firstCollectionError?.let { throw it }
     }
 
     private suspend fun syncCollection(
@@ -175,6 +191,8 @@ class CalDavSyncEngine internal constructor(
         forceFullRefresh: Boolean = false,
     ) {
         val localResources = database.resourceDao().forCollection(collection.href)
+        val reconcileFull = forceFullRefresh || (collection.reconciliationVersion() < RECONCILIATION_VERSION &&
+            (collection.syncToken != null || collection.ctag != null || localResources.isNotEmpty()))
         val localByKey = localResources.associateBy { it.href.davHrefKey() }
         val pendingMutations = database.pendingMutationDao().allForAccount(collection.accountId)
             .filter { it.collectionHref == collection.href }
@@ -190,7 +208,7 @@ class CalDavSyncEngine internal constructor(
             .toSet()
 
         val incremental = if (
-            !forceFullRefresh &&
+            !reconcileFull &&
             collection.syncToken != null &&
             discovered?.capabilities?.supportsSyncCollection == true
         ) {
@@ -206,8 +224,10 @@ class CalDavSyncEngine internal constructor(
         }
 
         if (
-            !forceFullRefresh &&
+            !reconcileFull &&
             incremental == null &&
+            // An invalid sync token requires a full listing even if the ctag is unchanged.
+            !(collection.syncToken != null && discovered?.capabilities?.supportsSyncCollection == true) &&
             collection.ctag != null &&
             discovered?.ctag != null &&
             collection.ctag == discovered.ctag &&
@@ -218,7 +238,7 @@ class CalDavSyncEngine internal constructor(
 
         val queriedResources = if (
             incremental == null &&
-            forceFullRefresh &&
+            reconcileFull &&
             (collection.supportsTasks || collection.isCalDavScheduleInbox()) &&
             collection.sourceType == SourceType.CalDav
         ) {
@@ -245,14 +265,17 @@ class CalDavSyncEngine internal constructor(
             appPassword = credentials.appPassword,
         )
         val remoteResources = (listedResources + queriedResources.map { RemoteResource(it.href, it.etag) })
+            .map { remote ->
+                if (URI(collection.href).isAbsolute) remote.copy(href = URI(collection.href).resolve(remote.href).toString()) else remote
+            }
             .distinctBy { it.href.davHrefKey() }
         val remoteByKey = remoteResources.associateBy { it.href.davHrefKey() }
         val changedResources = remoteResources.filter { remote ->
             val key = remote.href.davHrefKey()
             if (key in pendingDeletes || !shouldApplyRemoteCalDavState(key, pendingPuts)) return@filter false
             val local = localByKey[key]
-            // An unchanged ETag means we already hold this version, typically our own upload.
-            local == null || local.syncError != null || (incremental != null && remote.etag == null) || local.etag != remote.etag
+            // After the upgrade reconciliation, unchanged ETags avoid downloading our own uploads.
+            reconcileFull || local == null || local.etag == null || local.syncError != null || remote.etag == null || local.etag != remote.etag
         }
         val queriedByHref = queriedResources.associateBy { it.href.davHrefKey() }
         val multigetByHref = changedResources
@@ -280,7 +303,7 @@ class CalDavSyncEngine internal constructor(
         val downloads = changedResources.mapNotNull { remote ->
             val local = localByKey[remote.href.davHrefKey()]
             val fetched = fetchedByHref[remote.href.davHrefKey()]
-            if (local != null && local.syncError == null && fetched?.etag != null && fetched.etag == local.etag) return@mapNotNull null
+            if (!reconcileFull && local != null && local.syncError == null && fetched?.etag != null && fetched.etag == local.etag) return@mapNotNull null
             val localHref = local?.href ?: remote.href
             val outcome = downloadOutcome(credentials, collection, remote.href, localHref, fetched)
             RemoteCalDavDownload(remote, local, localHref, fetched?.etag ?: remote.etag, outcome)
@@ -303,12 +326,22 @@ class CalDavSyncEngine internal constructor(
             }
             // A resource that could not be downloaded for now is only listed again while the old markers stand.
             if (downloads.none { (it.outcome as? DownloadOutcome.Failed)?.retryable == true }) {
+                database.collectionDao().updateCapabilitiesJson(
+                    collection.href,
+                    JSONObject(collection.capabilitiesJson ?: "{}")
+                        .put(RECONCILIATION_VERSION_KEY, RECONCILIATION_VERSION).toString(),
+                )
                 database.collectionDao().updateSyncMarkers(
                     href = collection.href,
                     syncToken = incremental?.syncToken ?: discovered?.syncToken,
                     ctag = discovered?.ctag,
                 )
             }
+        }
+        val failures = downloads.mapNotNull { (it.outcome as? DownloadOutcome.Failed)?.takeIf { it.retryable }?.error }
+        failures.firstOrNull()?.let { first ->
+            failures.drop(1).filter { it !== first }.forEach(first::addSuppressed)
+            throw first
         }
     }
 
@@ -320,19 +353,19 @@ class CalDavSyncEngine internal constructor(
         localHref: String,
         fetched: RemoteResourceData?,
     ): DownloadOutcome {
-        val raw = fetched?.calendarData ?: try {
-            calDavClient.getResource(credentials.serverUrl, remoteHref, credentials.username, credentials.appPassword)
+        val response = fetched ?: try {
+            calDavClient.getResourceWithEtag(credentials.serverUrl, remoteHref, credentials.username, credentials.appPassword)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             return DownloadOutcome.Failed(error, retryable = error.isRetryableFetchFailure())
         }
-        return parsedDownload(raw, collection, localHref)
+        return parsedDownload(response.calendarData, collection, localHref, response.etag)
     }
 
-    private fun parsedDownload(raw: String, collection: CollectionEntity, localHref: String): DownloadOutcome =
+    private fun parsedDownload(raw: String, collection: CollectionEntity, localHref: String, etag: String? = null): DownloadOutcome =
         try {
-            DownloadOutcome.Parsed(raw, icalCodec.parse(raw, collection.href, localHref, collection.color))
+            DownloadOutcome.Parsed(raw, icalCodec.parse(raw, collection.href, localHref, collection.color), etag)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -349,7 +382,7 @@ class CalDavSyncEngine internal constructor(
                 is DownloadOutcome.Parsed -> outcome.raw to outcome.parsed
                 is DownloadOutcome.Failed -> throw outcome.error
             }
-            val effectiveEtag = download.etag
+            val effectiveEtag = (download.outcome as? DownloadOutcome.Parsed)?.etag
             if (parsed == null) {
                 upsertFailedResource(
                     collectionHref = collection.href,
@@ -368,7 +401,7 @@ class CalDavSyncEngine internal constructor(
                 database.taskDao().deleteByResource(localHref)
             }
             parsed.task?.let {
-                val mergedTask = it.preserveLocalTimedFields(local?.rawIcs, database.taskDao().byResource(localHref))
+                val mergedTask = it.copy(manualColor = database.taskDao().byResource(localHref)?.manualColor)
                     .withValidIcalSchedule()
                 if (mergedTask != it) {
                     localWrites.upsertLocalResource(collection.href, localHref, effectiveEtag, parsed.componentType, parsed.uid, icalCodec.serializeTask(mergedTask))
@@ -414,17 +447,14 @@ class CalDavSyncEngine internal constructor(
                                 appPassword = credentials.appPassword,
                             )
                         }.getOrNull() ?: return@forEach
-                        val etag = fetched.etag ?: runCatching {
-                            calDavClient.getResourceEtag(
-                                serverUrl = credentials.serverUrl,
-                                href = resource.href,
-                                username = credentials.username,
-                                appPassword = credentials.appPassword,
-                            )
-                        }.getOrNull() ?: return@forEach
+                        val etag = fetched.etag ?: return@forEach
                         val holdsFetchedContent = fetched.calendarData.normalizedIcsText() == resource.rawIcs.normalizedIcsText()
                         if (holdsFetchedContent) {
-                            database.resourceDao().markSynced(resource.href, etag)
+                            localWrites.writeTransaction {
+                                if (database.pendingMutationDao().forResource(resource.href).isEmpty()) {
+                                    database.resourceDao().markSynced(resource.href, etag)
+                                }
+                            }
                             return@forEach
                         }
                         val download = RemoteCalDavDownload(
@@ -432,7 +462,7 @@ class CalDavSyncEngine internal constructor(
                             local = resource,
                             localHref = resource.href,
                             etag = etag,
-                            outcome = parsedDownload(fetched.calendarData, collection, resource.href),
+                            outcome = parsedDownload(fetched.calendarData, collection, resource.href, etag),
                         )
                         localWrites.writeTransaction { applyRemoteCalDavDownload(collection, download) }
                     }
@@ -461,28 +491,12 @@ class CalDavSyncEngine internal constructor(
         )
     }
 
-    private fun TaskEntity.preserveLocalTimedFields(localRawIcs: String?, localTask: TaskEntity?): TaskEntity {
-        if (localTask == null || localTask.uid != uid) return this
-        val keepStart = localTask.startHasTime &&
-            localRawIcs.hasTimedIcalProperty("DTSTART") &&
-            (!startHasTime && localTask.startAtMillis.sameLocalDateOrMissing(startAtMillis))
-        val keepDue = localTask.dueHasTime &&
-            localRawIcs.hasTimedIcalProperty("DUE") &&
-            (!dueHasTime && localTask.dueAtMillis.sameLocalDateOrMissing(dueAtMillis))
-        if (!keepStart && !keepDue) return copy(manualColor = localTask.manualColor)
-        return copy(
-            startAtMillis = if (keepStart) localTask.startAtMillis else startAtMillis,
-            startHasTime = if (keepStart) true else startHasTime,
-            dueAtMillis = if (keepDue) localTask.dueAtMillis else dueAtMillis,
-            dueHasTime = if (keepDue) true else dueHasTime,
-            manualColor = localTask.manualColor,
-        )
-    }
-
-    private fun Long?.sameLocalDateOrMissing(other: Long?): Boolean =
-        other == null || (this != null && Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate() == Instant.ofEpochMilli(other).atZone(zoneId).toLocalDate())
+    private fun CollectionEntity.reconciliationVersion(): Int =
+        runCatching { JSONObject(capabilitiesJson ?: "{}").optInt(RECONCILIATION_VERSION_KEY, 0) }.getOrDefault(0)
 
     private companion object {
+        const val RECONCILIATION_VERSION_KEY = "kgsReconciliationVersion"
+        const val RECONCILIATION_VERSION = 1
         const val RESOURCE_MULTIGET_BATCH_SIZE = 50
         const val MAX_SYNC_ERROR_LENGTH = 500
     }
@@ -533,7 +547,7 @@ private class RemoteCalDavDownload(
 
 /** The final result of downloading and parsing one resource. */
 private sealed interface DownloadOutcome {
-    class Parsed(val raw: String, val parsed: ParsedCalendarComponent?) : DownloadOutcome
+    class Parsed(val raw: String, val parsed: ParsedCalendarComponent?, val etag: String?) : DownloadOutcome
 
     /** [retryable] failures may succeed unchanged later; the others (bad data, gone) will not. */
     class Failed(val error: Throwable, val retryable: Boolean) : DownloadOutcome

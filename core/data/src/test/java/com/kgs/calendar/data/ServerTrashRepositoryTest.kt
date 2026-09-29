@@ -46,6 +46,53 @@ class ServerTrashRepositoryTest {
     // --- Detection ------------------------------------------------------------------------------
 
     @Test
+    fun nextcloud34CollectionOnlyResponseSupportsRemoteTrashAndActions() = runTest {
+        server.trashBinEnabled = true
+        val response = checkNotNull(javaClass.getResource("/nextcloud34-trashbin-propfind.xml")).readText()
+            .replace("/remote.php/dav/calendars/kgs-test/trashbin/", server.trashBinHref)
+        server.respondNext("PROPFIND", "/trashbin/") {
+            MockResponse().setResponseCode(207).setBody(response)
+        }
+        val href = server.putRemote(server.eventsHref, "remote.ics", SampleIcs.event("nc34", "Deleted on server"))
+        server.trashRemote(href)
+        harness.addSyncedCalDavAccount()
+        assertTrue(trashSupport()!!.supported)
+        val item = trash().single()
+        assertEquals(TrashOrigin.ServerTrashBin, item.origin)
+        assertTrue(repository.restoreTrashedItem(item.id) is TrashRestoreResult.Restored)
+        assertNotNull(harness.event(href))
+        server.trashRemote(href)
+        assertTrue(repository.refreshTrash())
+        repository.deleteTrashedItemPermanently(trash().single().id)
+        assertTrue(repository.refreshTrash())
+        assertTrue(trash().isEmpty())
+    }
+
+    @Test
+    fun oldIncorrectUnsupportedCacheIsRecheckedImmediately() = runTest {
+        harness.addSyncedCalDavAccount()
+        val account = harness.account(AccountEntity.PRIMARY_ID)!!
+        val oldCache = CalDavTrashBinSupport(account.calendarHomeUrl!!, null,
+            System.currentTimeMillis(), probeVersion = 0)
+        harness.database.accountDao().updateCapabilitiesJson(account.id, oldCache.writeInto(account.capabilitiesJson))
+        server.trashBinEnabled = true
+        server.clearRequests()
+        assertTrue(repository.refreshTrash())
+        assertTrue(trashSupport()!!.supported)
+        assertEquals(1, trashBinProbes().size)
+    }
+
+    @Test
+    fun ordinaryDavCollectionDoesNotAdvertiseTrashSupport() = runTest {
+        server.respondNext("PROPFIND", "/trashbin/") {
+            MockResponse().setResponseCode(207).setBody(CalDavXml.multistatus(
+                CalDavXml.trashBin(server.trashBinHref, null).replace("<nc:trash-bin />", "")))
+        }
+        harness.addSyncedCalDavAccount()
+        assertFalse(trashSupport()!!.supported)
+    }
+
+    @Test
     fun syncDetectsTheTrashBinAndCachesItInTheAccountCapabilities() = runTest {
         server.trashBinEnabled = true
         server.trashBinRetentionSeconds = 14L * 24 * 60 * 60

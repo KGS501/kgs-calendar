@@ -1,6 +1,7 @@
 package com.kgs.calendar.sync
 
 import android.content.Context
+import android.os.Build
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -10,6 +11,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.workDataOf
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.reminder.ReminderScheduler
 import kotlinx.coroutines.flow.first
@@ -21,17 +24,24 @@ class SyncWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
+        val graph = KgsCalendarApplication.graph(applicationContext)
+        if (inputData.getBoolean(KEY_UPLOAD_ONLY, false) && graph.database.pendingMutationDao().all().isEmpty()) {
+            return Result.success()
+        }
         val syncError = syncThenReconcile(
             sync = {
-                val graph = KgsCalendarApplication.graph(applicationContext)
                 val includeDisabledProviderCalendars = graph.settingsStore.showDisabledAndroidProviderCalendars.first()
-                graph.repository.syncNow(includeDisabledProviderCalendars = includeDisabledProviderCalendars)
+                if (inputData.getBoolean(KEY_UPLOAD_ONLY, false)) {
+                    graph.syncOrchestrator.pushAllPendingChanges()
+                } else {
+                    graph.repository.syncNow(includeDisabledProviderCalendars = includeDisabledProviderCalendars)
+                }
             },
             rescheduleReminders = { ReminderScheduler.reschedule(applicationContext) },
             refreshWidgets = { KgsCalendarApplication.graph(applicationContext).widgets.scheduler.updateAllAndAwait() },
         )
         if (syncError == null) {
-            markRecentSyncActivity(applicationContext)
+            if (!inputData.getBoolean(KEY_UPLOAD_ONLY, false)) markRecentSyncActivity(applicationContext)
             return Result.success()
         }
         return when (classifySyncFailure(syncError, runAttemptCount)) {
@@ -46,13 +56,13 @@ class SyncWorker(
         private const val UNIQUE_FOREGROUND_SYNC = "kgs_foreground_sync"
         private const val SYNC_PREFS = "kgs_sync_worker"
         private const val KEY_LAST_SYNC_ACTIVITY_AT = "last_sync_activity_at"
-        private const val FOREGROUND_SYNC_THROTTLE_MILLIS = 10L * 60L * 1000L
-        private const val BACKGROUND_SYNC_INTERVAL_MINUTES = 15L
+        internal const val FOREGROUND_SYNC_THROTTLE_MILLIS = 60L * 1000L
+        private const val KEY_UPLOAD_ONLY = "upload_only"
 
-        fun schedulePeriodic(context: Context) {
+        fun schedulePeriodic(context: Context, intervalMinutes: Int = 15) {
             // WorkManager enforces 15 minutes as the minimum periodic interval. Faster
             // refreshes are handled opportunistically while the app is in the foreground.
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(BACKGROUND_SYNC_INTERVAL_MINUTES, TimeUnit.MINUTES)
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(intervalMinutes.coerceAtLeast(15).toLong(), TimeUnit.MINUTES)
                 .setConstraints(networkConstraints())
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
@@ -63,13 +73,10 @@ class SyncWorker(
         }
 
         fun enqueueImmediate(context: Context) {
-            markRecentSyncActivity(context)
-            val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(networkConstraints())
-                .build()
+            val request = immediateRequest(uploadOnly = true)
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_IMMEDIATE_SYNC,
-                ExistingWorkPolicy.REPLACE,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request,
             )
         }
@@ -79,17 +86,28 @@ class SyncWorker(
             val now = System.currentTimeMillis()
             val prefs = appContext.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE)
             val lastSyncActivityAt = prefs.getLong(KEY_LAST_SYNC_ACTIVITY_AT, 0L)
-            if (now - lastSyncActivityAt < FOREGROUND_SYNC_THROTTLE_MILLIS) return
-            markRecentSyncActivity(appContext, now)
-            val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(networkConstraints())
-                .build()
+            if (!foregroundRefreshDue(lastSyncActivityAt, now)) return
+            val request = immediateRequest(uploadOnly = false)
             WorkManager.getInstance(appContext).enqueueUniqueWork(
                 UNIQUE_FOREGROUND_SYNC,
                 ExistingWorkPolicy.KEEP,
                 request,
             )
         }
+
+        private fun immediateRequest(uploadOnly: Boolean) = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(workDataOf(KEY_UPLOAD_ONLY to uploadOnly))
+            .setConstraints(networkConstraints())
+            .apply {
+                // Android 12+ runs expedited jobs without a foreground service notification.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                }
+            }
+            .build()
+
+        internal fun foregroundRefreshDue(lastSuccess: Long, now: Long): Boolean =
+            lastSuccess <= 0 || now < lastSuccess || now - lastSuccess >= FOREGROUND_SYNC_THROTTLE_MILLIS
 
         private fun networkConstraints(): Constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)

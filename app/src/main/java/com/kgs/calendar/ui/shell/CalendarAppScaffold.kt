@@ -129,6 +129,7 @@ internal fun CalendarAppScaffold(
                     onViewSelected = onViewSelected,
                     onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
                     onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
+                    onLandscapeTimelineCompactChanged = viewModel.settings::setLandscapeTimelineCompact,
                     onToday = viewModel::today,
                     onSearch = shell::openSearch,
                     onTasks = shell::openTaskDrawer,

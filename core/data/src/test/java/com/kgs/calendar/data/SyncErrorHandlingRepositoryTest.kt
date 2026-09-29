@@ -44,13 +44,13 @@ class SyncErrorHandlingRepositoryTest {
     }
 
     @Test
-    fun syncNowDoesNotThrowWhenAnotherAccountSucceeds() = runTest {
+    fun syncNowReportsFailureWhileStillRefreshingHealthyAccounts() = runTest {
         harness.addSyncedCalDavAccount()
         server.setFeed("/feeds/public.ics", SampleIcs.event("public-1", "Public event"))
         val readOnly = repository.addReadOnlyCalendar(server.url("/feeds/public.ics"), "Public")
         server.rejectCredentials = true
 
-        repository.syncNow()
+        expectFailure<IllegalStateException> { repository.syncNow() }
 
         val calDav = harness.account(AccountEntity.PRIMARY_ID)!!
         assertEquals(SyncState.Error, calDav.syncState)

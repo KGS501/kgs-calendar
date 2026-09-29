@@ -4,10 +4,14 @@ import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.CalDavConflictException
+import com.kgs.calendar.data.remote.PutResult
+import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Drains the pending-mutation queue to CalDAV: conditional PUT/DELETE and local bookkeeping; conflicts remain pending. */
 class PendingMutationUploader internal constructor(
@@ -29,17 +33,30 @@ class PendingMutationUploader internal constructor(
     }
 
     suspend fun pushPendingMutations(mutations: List<PendingMutationEntity>) {
+        var failure: Throwable? = null
         mutations
             .groupBy { it.accountId }
             .forEach { (accountId, accountMutations) ->
-                val credentials = credentialsStore.get(accountId) ?: return@forEach
-                pushPendingMutations(credentials, accountMutations)
+                val enabled = database.collectionDao().forAccount(accountId).filter { it.isEnabled }.map { it.href }.toSet()
+                try {
+                    val credentials = credentialsStore.get(accountId) ?: error("Missing account credentials. Reconnect this calendar account.")
+                    pushPendingMutations(credentials, accountMutations.filter { it.collectionHref in enabled })
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    if (failure == null) failure = error else failure!!.addSuppressed(error)
+                }
             }
+        failure?.let { throw it }
     }
 
     suspend fun pushPendingMutations(credentials: StoredCredentials, mutations: List<PendingMutationEntity>) {
         var firstFailure: Throwable? = null
-        mutations.forEach { mutation ->
+        mutations.forEach { snapshot ->
+            // Re-read both existence and preconditions: earlier acknowledgements may have
+            // advanced the base ETag, or a new edit may have replaced this queued mutation.
+            val mutation = database.pendingMutationDao().forResource(snapshot.resourceHref)
+                .firstOrNull { it.id == snapshot.id } ?: return@forEach
             try {
                 when (mutation.action) {
                     MutationAction.Put -> {
@@ -56,59 +73,63 @@ class PendingMutationUploader internal constructor(
                             currentRawIcs = resource?.rawIcs,
                         )
                         // Never refresh a rejected precondition: that would overwrite another client's edit.
-                        val result = calDavClient.putResource(
-                            serverUrl = credentials.serverUrl,
-                            href = mutation.resourceHref,
-                            username = credentials.username,
-                            appPassword = credentials.appPassword,
-                            rawIcs = raw,
-                            baseEtag = effectiveBaseEtag,
-                        )
+                        val result = try {
+                            calDavClient.putResource(
+                                serverUrl = credentials.serverUrl,
+                                href = mutation.resourceHref,
+                                username = credentials.username,
+                                appPassword = credentials.appPassword,
+                                rawIcs = raw,
+                                baseEtag = effectiveBaseEtag,
+                            )
+                        } catch (conflict: CalDavConflictException) {
+                            // The previous request may have reached the server but lost its reply.
+                            // Only exact content equality acknowledges it; a different body stays a conflict.
+                            val confirmedEtag = matchingRemoteEtag(credentials, mutation.resourceHref, raw, propagateFailure = true)
+                                ?: throw conflict
+                            PutResult(mutation.resourceHref, confirmedEtag)
+                        }
                         val uploadedEtag = result.etag
-                            ?: runCatching {
-                                calDavClient.getResourceEtag(
-                                    serverUrl = credentials.serverUrl,
-                                    href = result.href,
-                                    username = credentials.username,
-                                    appPassword = credentials.appPassword,
-                                )
-                            }.getOrNull()
-                            ?: effectiveBaseEtag
+                            ?: matchingRemoteEtag(credentials, result.href, raw)
+                        // Never associate a later PROPFIND's ETag with an unverified older body.
                         // The stored ETag is what later syncs use to recognise this upload as our own write.
                         localWrites.writeTransaction {
                             database.resourceDao().markSynced(mutation.resourceHref, uploadedEtag)
                             if (result.href != mutation.resourceHref) {
                                 database.resourceDao().markSynced(result.href, uploadedEtag)
                             }
-                            database.pendingMutationDao()
-                                .latestForResourceAndAction(mutation.resourceHref, MutationAction.Put)
-                                ?.takeIf { it.id != mutation.id }
-                                ?.let { newerMutation ->
+                            database.pendingMutationDao().forResource(mutation.resourceHref)
+                                .filter { it.id != mutation.id }
+                                .forEach { newerMutation ->
                                     database.pendingMutationDao().updateBaseEtag(newerMutation.id, uploadedEtag)
                                 }
                             database.pendingMutationDao().delete(mutation)
                         }
                     }
                     MutationAction.Delete -> {
-                        calDavClient.deleteResource(
-                            serverUrl = credentials.serverUrl,
-                            href = mutation.resourceHref,
-                            username = credentials.username,
-                            appPassword = credentials.appPassword,
-                            baseEtag = mutation.baseEtag,
-                        )
+                        deleteConditionally(credentials, mutation)
                         localWrites.writeTransaction {
-                            when (mutation.componentType) {
-                                ComponentType.Event -> database.eventDao().deleteByResource(mutation.resourceHref)
-                                ComponentType.Task -> database.taskDao().deleteByResource(mutation.resourceHref)
-                                ComponentType.Unknown -> Unit
+                            val pendingPuts = database.pendingMutationDao().forResource(mutation.resourceHref)
+                                .filter { it.action == MutationAction.Put }
+                            if (pendingPuts.isEmpty()) {
+                                when (mutation.componentType) {
+                                    ComponentType.Event -> database.eventDao().deleteByResource(mutation.resourceHref)
+                                    ComponentType.Task -> database.taskDao().deleteByResource(mutation.resourceHref)
+                                    ComponentType.Unknown -> Unit
+                                }
+                                database.resourceDao().delete(mutation.resourceHref)
+                            } else {
+                                // A restore/edit during DELETE is a new create, not stale local data to erase.
+                                database.resourceDao().markSynced(mutation.resourceHref, null)
+                                pendingPuts.forEach { database.pendingMutationDao().updateBaseEtag(it.id, null) }
                             }
-                            database.resourceDao().delete(mutation.resourceHref)
                             database.pendingMutationDao().delete(mutation)
                         }
                     }
                     MutationAction.Unknown -> Unit
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")
                 val first = firstFailure
@@ -117,6 +138,42 @@ class PendingMutationUploader internal constructor(
         }
         firstFailure?.let { throw it }
     }
+
+    private suspend fun deleteConditionally(credentials: StoredCredentials, mutation: PendingMutationEntity) {
+        val etag = mutation.baseEtag ?: run {
+            val remote = try {
+                calDavClient.getResourceWithEtag(credentials.serverUrl, mutation.resourceHref, credentials.username, credentials.appPassword)
+            } catch (error: HttpStatusException) {
+                if (error.statusCode == 404 || error.statusCode == 410) return
+                throw error
+            }
+            val localRaw = database.resourceDao().get(mutation.resourceHref)?.rawIcs
+            if (localRaw == null || remote.calendarData.normalizedIcsForUploadComparison() != localRaw.normalizedIcsForUploadComparison()) {
+                throw CalDavConflictException("DELETE", mutation.resourceHref)
+            }
+            remote.etag ?: throw IllegalStateException("Cannot safely delete this server item without an ETag.")
+        }
+        calDavClient.deleteResource(credentials.serverUrl, mutation.resourceHref, credentials.username, credentials.appPassword, etag)
+    }
+
+    private suspend fun matchingRemoteEtag(
+        credentials: StoredCredentials,
+        href: String,
+        raw: String,
+        propagateFailure: Boolean = false,
+    ): String? =
+        try {
+            val remote = calDavClient.getResourceWithEtag(
+                credentials.serverUrl, href, credentials.username, credentials.appPassword,
+            )
+            remote.etag.takeIf { remote.calendarData.normalizedIcsForUploadComparison() == raw.normalizedIcsForUploadComparison() }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            if (propagateFailure) throw error
+            null
+        }
+
 }
 
 internal fun resolveCalDavUploadBaseEtag(

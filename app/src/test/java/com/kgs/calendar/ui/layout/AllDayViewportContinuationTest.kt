@@ -287,13 +287,13 @@ class AllDayViewportContinuationTest {
             visibleStartPage = 25,
             visibleEndPage = 26,
             maxVisibleItems = 2,
-            collapsedVisibleItemLimit = 1,
         )
 
         val prioritySegment = layout.segments.single { it.item.id == priorityItem.id }
-        val secondSegment = layout.segments.single { it.item.id == secondItem.id }
+        val secondSegments = layout.segments.filter { it.item.id == secondItem.id }
         assertEquals(0, prioritySegment.lane)
-        assertEquals(1, secondSegment.lane)
+        assertEquals(0, secondSegments.single { it.startPage == 25 }.lane)
+        assertEquals(1, secondSegments.single { it.startPage == 26 }.lane)
     }
 
     @Test

@@ -32,9 +32,18 @@ internal data class AllDayContinuationSegment(
     val toNext: Boolean,
 )
 
+/** A day/row where independently continuing cards must not look like one event. */
+internal data class AllDayOverflowGroup(
+    val page: Int,
+    val lane: Int,
+    val items: List<AllDayOverlayItem>,
+    val collision: Boolean = false,
+)
+
 internal data class AllDayCollapsedLayout(
     val segments: List<AllDayOverlaySegment>,
     val continuations: List<AllDayContinuationSegment>,
+    val collisions: List<AllDayOverflowGroup> = emptyList(),
 )
 
 internal data class AllDayViewportWindow(
@@ -74,6 +83,7 @@ internal data class AllDayScene(
     val collapsedLayout: AllDayCollapsedLayout,
     val visualPieces: List<AllDayVisualPiece>,
     val hiddenPages: Map<Int, List<AllDayOverlayItem>>,
+    val overflowGroups: List<AllDayOverflowGroup>,
     val metrics: AllDaySceneMetrics,
 )
 
@@ -369,7 +379,7 @@ internal fun allDayCollapsedPageItemComparator(
     visibleEndPage: Int,
 ): Comparator<AllDayOverlayItem> =
     compareBy<AllDayOverlayItem> { allDayViewportPriorityTier(it.startPage, it.endPage, visibleStartPage, visibleEndPage) }
-        .thenByDescending { it.endPage - it.startPage }
+        .thenByDescending { it.endPage }
         .thenBy { it.startPage }
         .thenBy { it.title }
         .thenBy { it.id }
@@ -380,7 +390,8 @@ internal fun buildCollapsedAllDayLayout(
     visibleStartPage: Int,
     visibleEndPage: Int,
     maxVisibleItems: Int,
-    collapsedVisibleItemLimit: Int,
+    priorityStartPage: Int = visibleStartPage,
+    priorityEndPage: Int = visibleEndPage,
 ): AllDayCollapsedLayout {
     val overflowVisibleLimit = when {
         maxVisibleItems <= 0 -> 0
@@ -390,19 +401,11 @@ internal fun buildCollapsedAllDayLayout(
     fun pageVisibleLimit(pageItems: List<AllDayOverlayItem>): Int =
         if (pageItems.size > maxVisibleItems) overflowVisibleLimit else maxVisibleItems
 
-    fun itemVisibleOnPage(item: AllDayOverlayItem, page: Int): Boolean {
-        val pageItems = pageItemsByPage[page].orEmpty()
-        if (pageItems.isEmpty()) return false
-        val limit = pageVisibleLimit(pageItems)
-        if (limit <= 0) return false
-        return pageItems.take(limit).any { it.id == item.id }
+    val selectedIdsByPage = pageItemsByPage.mapValues { (_, items) ->
+        items.take(pageVisibleLimit(items)).mapTo(hashSetOf()) { it.id }
     }
-
-    fun itemHiddenOnCollapsedPage(item: AllDayOverlayItem, page: Int): Boolean {
-        val pageItems = pageItemsByPage[page].orEmpty()
-        if (pageItems.size <= maxVisibleItems) return false
-        return pageItems.any { it.id == item.id } && !itemVisibleOnPage(item, page)
-    }
+    fun itemVisibleOnPage(item: AllDayOverlayItem, page: Int): Boolean =
+        item.id in selectedIdsByPage[page].orEmpty()
 
     val rawSegments = overlayItems.flatMap { item ->
         val visiblePages = (max(item.startPage, visibleStartPage)..min(item.endPage, visibleEndPage))
@@ -424,22 +427,70 @@ internal fun buildCollapsedAllDayLayout(
         segments
     }
 
-    val assignedSegments = assignCollapsedAllDaySegmentLanes(
+    val packedSegments = assignCollapsedAllDaySegmentLanes(
         segments = rawSegments,
-        visibleStartPage = visibleStartPage,
-        visibleEndPage = visibleEndPage,
+        visibleStartPage = priorityStartPage,
+        visibleEndPage = priorityEndPage,
+        visibleLimitsByPage = pageItemsByPage.mapValues { pageVisibleLimit(it.value) },
     )
+    // Only adjacent pieces with visible portions on BOTH sides of their real overlap
+    // are a handoff. Off-screen events cannot introduce an abstraction into this row.
+    val collisionsByCell = linkedMapOf<Pair<Int, Int>, MutableMap<String, AllDayOverlayItem>>()
+    val visibleLaneByCell = packedSegments.flatMap { segment ->
+        (segment.startPage..segment.endPage).map { (it to segment.item.id) to segment.lane }
+    }.toMap()
+    val collisionLaneByCell = mutableMapOf<Pair<Int, String>, Int>()
+    packedSegments.groupBy { it.lane }.toSortedMap().forEach { (lane, pieces) ->
+        pieces.sortedBy { it.startPage }.zipWithNext().forEach pair@{ (left, right) ->
+            if (left.item.id == right.item.id) return@pair
+            val overlapStart = max(left.item.startPage, right.item.startPage)
+            val overlapEnd = min(left.item.endPage, right.item.endPage)
+            if (overlapStart > overlapEnd || left.startPage >= overlapStart || right.endPage <= overlapEnd) return@pair
+            (max(overlapStart, visibleStartPage)..min(overlapEnd, visibleEndPage)).forEach day@{ page ->
+                val members = listOf(left.item, right.item)
+                // A fragmented item may already be visible or represented on another row.
+                // It must not also be counted in this row's abstraction.
+                if (members.any { item ->
+                    visibleLaneByCell[page to item.id]?.let { it != lane } == true ||
+                        collisionLaneByCell[page to item.id]?.let { it != lane } == true
+                }) return@day
+                members.forEach { collisionLaneByCell[page to it.id] = lane }
+                collisionsByCell.getOrPut(page to lane) { linkedMapOf() }.apply {
+                    put(left.item.id, left.item)
+                    put(right.item.id, right.item)
+                }
+            }
+        }
+    }
+    val assignedSegments = packedSegments.flatMap { segment ->
+        val result = mutableListOf<AllDayOverlaySegment>()
+        var start = segment.startPage
+        for (page in segment.startPage..segment.endPage) {
+            if (page to segment.lane in collisionsByCell) {
+                if (start < page) result += segment.copy(startPage = start, endPage = page - 1)
+                start = page + 1
+            }
+        }
+        if (start <= segment.endPage) result += segment.copy(startPage = start)
+        result
+    }
+    val visibleIdsByPage = (visibleStartPage..visibleEndPage).associateWith { page ->
+        assignedSegments.filter { page in it.startPage..it.endPage }.mapTo(hashSetOf()) { it.item.id }
+    }
+    fun itemHiddenOnCollapsedPage(item: AllDayOverlayItem, page: Int): Boolean =
+        page in item.startPage..item.endPage && item.id !in visibleIdsByPage[page].orEmpty()
+    val segmentsByItem = assignedSegments.groupBy { it.item.id }
     val continuations = overlayItems.flatMap { item ->
         val firstPage = max(item.startPage, visibleStartPage)
         val lastPage = min(item.endPage, visibleEndPage)
         if (firstPage > lastPage) return@flatMap emptyList()
         (firstPage..lastPage).mapNotNull { page ->
             if (!itemHiddenOnCollapsedPage(item, page)) return@mapNotNull null
-            val previousSegment = assignedSegments
-                .filter { it.item.id == item.id && it.endPage < page }
+            val previousSegment = segmentsByItem[item.id].orEmpty()
+                .filter { it.endPage < page }
                 .maxByOrNull { it.endPage }
-            val nextSegment = assignedSegments
-                .filter { it.item.id == item.id && it.startPage > page }
+            val nextSegment = segmentsByItem[item.id].orEmpty()
+                .filter { it.startPage > page }
                 .minByOrNull { it.startPage }
             val previousPageHidden = page > visibleStartPage && itemHiddenOnCollapsedPage(item, page - 1)
             val nextPageHidden = page < visibleEndPage && itemHiddenOnCollapsedPage(item, page + 1)
@@ -466,6 +517,9 @@ internal fun buildCollapsedAllDayLayout(
     return AllDayCollapsedLayout(
         segments = assignedSegments,
         continuations = continuations,
+        collisions = collisionsByCell.map { (cell, items) ->
+            AllDayOverflowGroup(cell.first, cell.second, items.values.toList(), collision = true)
+        },
     )
 }
 
@@ -473,36 +527,42 @@ private fun assignCollapsedAllDaySegmentLanes(
     segments: List<AllDayOverlaySegment>,
     visibleStartPage: Int,
     visibleEndPage: Int,
+    visibleLimitsByPage: Map<Int, Int>,
 ): List<AllDayOverlaySegment> {
     if (segments.isEmpty()) return emptyList()
-    val laneSegments = mutableListOf<MutableList<AllDayOverlaySegment>>()
-    return segments
-        .sortedWith(
-            compareBy<AllDayOverlaySegment> {
-                allDayViewportPriorityTier(
-                    startPage = it.item.startPage,
-                    endPage = it.item.endPage,
-                    visibleStartPage = visibleStartPage,
-                    visibleEndPage = visibleEndPage,
-                )
-            }
-                .thenByDescending { it.item.endPage - it.item.startPage }
-                .thenBy { it.item.startPage }
-                .thenBy { it.item.title }
-                .thenBy { it.item.id }
-                .thenBy { it.startPage },
-        )
-        .map { segment ->
-            val lane = laneSegments.indexOfFirst { assigned ->
-                assigned.none { existing ->
-                    segment.startPage <= existing.endPage && existing.startPage <= segment.endPage
+    val occupied = mutableSetOf<Pair<Int, Int>>()
+    val comparator = allDayCollapsedPageItemComparator(visibleStartPage, visibleEndPage)
+    fun free(page: Int, lane: Int) = lane < (visibleLimitsByPage[page] ?: 0) && page to lane !in occupied
+    val result = mutableListOf<AllDayOverlaySegment>()
+    fun assign(segment: AllDayOverlaySegment, start: Int, end: Int, lane: Int) {
+        result += segment.copy(startPage = start, endPage = end, lane = lane)
+        (start..end).forEach { occupied += it to lane }
+    }
+    segments.sortedWith(Comparator { a, b ->
+        comparator.compare(a.item, b.item).takeIf { it != 0 } ?: a.startPage.compareTo(b.startPage)
+    }).forEach { segment ->
+        val pages = segment.startPage..segment.endPage
+        val limit = pages.minOf { visibleLimitsByPage[it] ?: 0 }
+        val continuousLane = (0 until limit).firstOrNull { lane -> pages.all { free(it, lane) } }
+        if (continuousLane != null) {
+            assign(segment, segment.startPage, segment.endPage, continuousLane)
+        } else {
+            // Fragmented intervals can defeat greedy whole-card packing even when
+            // each day fits. Reuse a free row per day instead of exceeding the budget
+            // or painting a card over that day's reserved overflow control.
+            var start = segment.startPage
+            var lane = (0 until (visibleLimitsByPage[start] ?: 0)).first { free(start, it) }
+            for (page in segment.startPage + 1..segment.endPage) {
+                if (!free(page, lane)) {
+                    assign(segment, start, page - 1, lane)
+                    start = page
+                    lane = (0 until (visibleLimitsByPage[page] ?: 0)).first { free(page, it) }
                 }
-            }.let { index ->
-                if (index >= 0) index else laneSegments.size.also { laneSegments.add(mutableListOf()) }
             }
-            laneSegments[lane] += segment
-            segment.copy(lane = lane)
+            assign(segment, start, segment.endPage, lane)
         }
+    }
+    return result
 }
 
 internal fun buildAllDayScene(
@@ -513,10 +573,9 @@ internal fun buildAllDayScene(
     priorityEndPage: Int,
     maxVisibleItems: Int,
 ): AllDayScene {
+    val orderedItems = overlayItems.sortedWith(allDayCollapsedPageItemComparator(priorityStartPage, priorityEndPage))
     val pageItemsByPage = (visibleStartPage..visibleEndPage).associateWith { page ->
-        overlayItems
-            .filter { page in it.startPage..it.endPage }
-            .sortedWith(allDayCollapsedPageItemComparator(priorityStartPage, priorityEndPage))
+        orderedItems.filter { page in it.startPage..it.endPage }
     }
     val expandedRowCount = overlayItems.maxOfOrNull { it.lane + 1 } ?: 0
     val hasCollapsedOverflow = (visibleStartPage..visibleEndPage).any { page ->
@@ -535,7 +594,8 @@ internal fun buildAllDayScene(
         visibleStartPage = visibleStartPage,
         visibleEndPage = visibleEndPage,
         maxVisibleItems = maxVisibleItems,
-        collapsedVisibleItemLimit = collapsedVisibleItemLimit,
+        priorityStartPage = priorityStartPage,
+        priorityEndPage = priorityEndPage,
     )
     val segmentsByItem = collapsedLayout.segments.groupBy { it.item.id }
     val visualPieces = overlayItems.flatMap { item ->
@@ -566,31 +626,35 @@ internal fun buildAllDayScene(
             }
         }
     }
-    val hiddenPages = if (!hasCollapsedOverflow) {
-        emptyMap()
-    } else {
-        (visibleStartPage..visibleEndPage).mapNotNull { page ->
-            val pageItems = pageItemsByPage[page].orEmpty()
-            if (pageItems.size <= maxVisibleItems) return@mapNotNull null
-            val hiddenItems = pageItems.drop(collapsedVisibleItemLimit)
-            if (hiddenItems.isEmpty()) null else page to hiddenItems
-        }.toMap()
+    val hiddenPages = pageItemsByPage.mapValues { (page, items) ->
+        val visibleIds = collapsedLayout.segments.asSequence()
+            .filter { page in it.startPage..it.endPage }.map { it.item.id }.toSet()
+        items.filterNot { it.id in visibleIds }
+    }.filterValues { it.isNotEmpty() }
+    val overflowGroups = buildList {
+        addAll(collapsedLayout.collisions)
+        hiddenPages.forEach { (page, hiddenItems) ->
+            val representedIds = collapsedLayout.collisions.asSequence().filter { it.page == page }
+                .flatMap { it.items.asSequence() }.map { it.id }.toSet()
+            val remaining = hiddenItems.filterNot { it.id in representedIds }
+            if (remaining.isNotEmpty()) add(AllDayOverflowGroup(page, overflowLane, remaining))
+        }
+    }.groupBy { it.page to it.lane }.map { (_, groups) ->
+        groups.first().copy(items = groups.flatMap { it.items }.distinctBy { it.id }, collision = groups.any { it.collision })
     }
     val visibleCollapsedRows = collapsedLayout.segments.maxOfOrNull { it.lane + 1 } ?: 0
-    val collapsedRowCount = max(
-        visibleCollapsedRows,
-        if (hasCollapsedOverflow) overflowLane + 1 else 0,
-    )
+    val collapsedRowCount = max(visibleCollapsedRows, overflowGroups.maxOfOrNull { it.lane + 1 } ?: 0)
     return AllDayScene(
         overlayItems = overlayItems,
         pageItemsByPage = pageItemsByPage,
         collapsedLayout = collapsedLayout,
-        visualPieces = visualPieces,
+        visualPieces = visualPieces.sortedBy { it.primary },
         hiddenPages = hiddenPages,
+        overflowGroups = overflowGroups,
         metrics = AllDaySceneMetrics(
             expandedRowCount = expandedRowCount,
             collapsedRowCount = collapsedRowCount,
-            hasCollapsedOverflow = hasCollapsedOverflow,
+            hasCollapsedOverflow = hiddenPages.isNotEmpty(),
             collapsedVisibleItemLimit = collapsedVisibleItemLimit,
             overflowLane = overflowLane,
         ),

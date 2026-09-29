@@ -3,6 +3,8 @@ package com.kgs.calendar.ui
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.platform.LocalConfiguration
@@ -43,6 +45,27 @@ import org.junit.Test
 class LandscapeCalendarShellInstrumentedTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun savedCompactPreferenceIsUsedAndBothToggleStatesArePersisted() {
+        val compact = mutableStateOf(true)
+        val orientation = mutableIntStateOf(Configuration.ORIENTATION_LANDSCAPE)
+        val restoration = StateRestorationTester(composeRule)
+        setShell(orientationState = orientation, stateRestorationTester = restoration,
+            screenWidthDp = 1280, screenHeightDp = 800, compactPreference = compact)
+        composeRule.onNodeWithText("Show all-day section").assertIsDisplayed()
+        composeRule.onNodeWithTag("landscapeTimelineCompactToggle").performClick()
+        composeRule.runOnIdle { assertEquals(false, compact.value) }
+        restoration.emulateSavedInstanceStateRestore()
+        composeRule.onNodeWithText("Hide all-day section").assertIsDisplayed()
+        composeRule.onNodeWithTag("landscapeTimelineCompactToggle").performClick()
+        composeRule.runOnIdle { assertEquals(true, compact.value) }
+        composeRule.runOnIdle { orientation.intValue = Configuration.ORIENTATION_PORTRAIT }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { orientation.intValue = Configuration.ORIENTATION_LANDSCAPE }
+        restoration.emulateSavedInstanceStateRestore()
+        composeRule.onNodeWithText("Show all-day section").assertIsDisplayed()
+    }
 
     @Test
     fun compactActionIsTextualPillAndDayCountIconsKeepTheirHeight() {
@@ -278,6 +301,7 @@ class LandscapeCalendarShellInstrumentedTest {
         stateRestorationTester: StateRestorationTester? = null,
         portraitHourHeightDp: Float = 46f,
         landscapeHourHeightDp: Float = 46f,
+        compactPreference: MutableState<Boolean>? = null,
     ) {
         val date = LocalDate.of(2026, 8, 21)
         val content: @Composable () -> Unit = {
@@ -318,8 +342,10 @@ class LandscapeCalendarShellInstrumentedTest {
                             priorityAnimationsEnabled = false,
                             portraitTimelineHourHeightDp = portraitHourHeightDp,
                             landscapeTimelineHourHeightDp = landscapeHourHeightDp,
+                            landscapeTimelineCompact = compactPreference?.value ?: false,
                             inboxTasks = if (hasOpenTask) listOf(openTask()) else emptyList(),
                         ),
+                        onLandscapeTimelineCompactChanged = { compactPreference?.value = it },
                         onMenu = {},
                         onDateSelected = {},
                         onViewSelected = {},

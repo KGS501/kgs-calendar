@@ -262,6 +262,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -504,6 +505,8 @@ internal val TimelineHourHeightDpSemanticsKey =
     SemanticsPropertyKey<Float>("TimelineHourHeightDp")
 internal val TimelineScrollPxSemanticsKey =
     SemanticsPropertyKey<Int>("TimelineScrollPx")
+internal val TimelineSelectedDayOffsetPxSemanticsKey =
+    SemanticsPropertyKey<Int>("TimelineSelectedDayOffsetPx")
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -584,7 +587,7 @@ internal fun TimelineView(
         currentOnTimeScrollChanged.value(timeScroll.value)
         -consumed
     }
-    val daySpacingPx = with(density) { DayColumnSpacing.toPx() }
+    val daySpacingPx = with(density) { DayColumnSpacing.roundToPx().toFloat() }
     // The tapped day that is currently expanding into / collapsing out of the 1-day view, plus
     // the 3-day window it morphs within. Non-null only while a header-tap morph is playing; it
     // drives the in-place "zoom around the tapped column" overlay below. Cleared when the
@@ -798,13 +801,14 @@ internal fun TimelineView(
     }
     val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
     var allDayExpanded by remember { mutableStateOf(false) }
-    val baseAllDayHeight = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent) {
+    val baseAllDayHeight = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent, clampedDayCount) {
         pagerVisibleDays.allDayAreaHeight(
             events = state.events,
             tasks = calendarTasks,
             maxVisibleItems = state.maxVisibleAllDayItems,
             expanded = allDayExpanded,
             draftDate = draftEvent?.takeIf { it.allDay }?.date,
+            priorityPageCount = clampedDayCount,
         )
     }
     val visibleReservation = activeTimedDrag?.session?.reservation
@@ -815,12 +819,13 @@ internal fun TimelineView(
         ?: baseAllDayHeight
     val requestedAllDayHeight = if (headerPresentation.showAllDaySection) visibleAllDayHeight else 0.dp
     val allDayHasOverflow = headerPresentation.showAllDaySection && remember(
+        clampedDayCount,
         pagerVisibleDays,
         state.events,
         calendarTasks,
         state.maxVisibleAllDayItems,
     ) {
-        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems)
+        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems, clampedDayCount)
     }
     val allDayArrowRotation by animateFloatAsState(
         targetValue = if (allDayExpanded) 180f else 0f,
@@ -858,7 +863,7 @@ internal fun TimelineView(
         if (hourHeightDp < minHourHeightDp) onHourHeightChange(minHourHeightDp)
     }
 
-    LaunchedEffect(selectedPage, morphContext, state.dateNavigationSerial) {
+    LaunchedEffect(selectedPage, morphContext, state.dateNavigationSerial, dayViewportWidthPx, timelineMode) {
         // A header-tap morph owns the visible timeline until its final handoff. Moving the pager
         // while that animation is starting makes a middle/right tapped column jump left before it
         // expands. The handoff effect below settles the still-hidden pager immediately before the
@@ -1284,6 +1289,9 @@ internal fun TimelineView(
             .semantics {
                 this[TimelineHourHeightDpSemanticsKey] = hourHeightDp
                 this[TimelineScrollPxSemanticsKey] = timeScroll.value
+                this[TimelineSelectedDayOffsetPxSemanticsKey] =
+                    pagerState.layoutInfo.visiblePagesInfo.firstOrNull { it.index == selectedPage }?.offset
+                        ?: Int.MIN_VALUE
             }
             .testTag("timeline-gesture-surface")
             // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
@@ -1342,7 +1350,17 @@ internal fun TimelineView(
             ) {
             HorizontalPager(
                 state = pagerState,
-                pageSize = PageSize.Fixed(dayWidthDp),
+                // Calculate from this measure pass, not the previous onSizeChanged callback.
+                // On first entry the callback still reports zero (and month morphs resize this
+                // viewport). Measuring tiny placeholder pages first lets Pager preserve an
+                // obsolete scroll offset when the real one-day width arrives.
+                pageSize = remember(animatedDayCount) {
+                    object : PageSize {
+                        override fun Density.calculateMainAxisPageSize(availableSpace: Int, pageSpacing: Int): Int =
+                            (availableSpace / animatedDayCount - pageSpacing).roundToInt()
+                                .coerceAtLeast(32.dp.roundToPx())
+                    }
+                },
                 pageSpacing = DayColumnSpacing,
                 flingBehavior = if (fullWeekPagingEnabled) {
                     fullWeekFlingBehavior

@@ -89,38 +89,38 @@ class PendingMutationUploaderTest {
     }
 
     @Test
-    fun putAnsweredWithoutEtagStoresEtagLookedUpAfterwards() = runTest {
+    fun putAnsweredWithoutEtagVerifiesBodyAndEtagTogether() = runTest {
         val href = createEvent("Planning")
         server.answerNextPutWithoutEtag(href)
 
         uploader.pushPendingMutations(harness.pendingMutations())
 
-        assertTrue(server.requests("PROPFIND").any { it.path == href && it.header("Depth") == "0" })
+        assertTrue(server.requests("GET").any { it.path == href })
         assertEquals(server.stored(href)!!.etag, harness.resource(href)!!.etag)
         assertTrue(harness.pendingMutations().isEmpty())
     }
 
     @Test
-    fun withoutAnyServerEtagTheSubmittedBaseEtagIsStored() = runTest {
+    fun withoutAnAcknowledgedEtagTheResourceRemainsUnversioned() = runTest {
         val originalEtag = harness.resource(eventHref)!!.etag
         repository.updateEvent("remote-event", eventPayload("Local edit", day))
         server.answerNextPutWithoutEtag(eventHref)
-        server.respondNext("PROPFIND", eventHref) { MockResponse().setResponseCode(500) }
+        server.respondNext("GET", eventHref) { MockResponse().setResponseCode(500) }
 
         uploader.pushPendingMutations(harness.pendingMutations())
 
         assertEquals(originalEtag, server.requests("PUT").single().header("If-Match"))
-        // NOTE: current behaviour - the pre-upload ETag is kept, so the next pull re-downloads our own upload.
-        assertEquals(originalEtag, harness.resource(eventHref)!!.etag)
+        // An old ETag cannot certify the body written by a later request.
+        assertNull(harness.resource(eventHref)!!.etag)
         assertTrue(harness.pendingMutations().isEmpty())
     }
 
     @Test
-    fun mutationsOfAccountsWithoutCredentialsAreSkipped() = runTest {
+    fun missingCredentialsAreReportedAndMutationsRemainQueued() = runTest {
         val href = createEvent("Planning")
         harness.credentials.clear(AccountEntity.PRIMARY_ID)
 
-        uploader.pushPendingMutations(harness.pendingMutations())
+        expectFailure<IllegalStateException> { uploader.pushPendingMutations(harness.pendingMutations()) }
 
         assertTrue(server.requests("PUT").isEmpty())
         assertEquals(href, harness.pendingMutations().single().resourceHref)

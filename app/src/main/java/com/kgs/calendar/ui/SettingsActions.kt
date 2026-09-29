@@ -244,6 +244,14 @@ class SettingsActions internal constructor(
         }
     }
 
+    fun setSyncIntervalMinutes(minutes: Int) {
+        scope.launch { settingsStore.setSyncIntervalMinutes(minutes) }
+    }
+
+    fun setLandscapeTimelineCompact(compact: Boolean) {
+        scope.launch { settingsStore.setLandscapeTimelineCompact(compact) }
+    }
+
     fun setWeekViewEnabled(enabled: Boolean) {
         val state = currentState()
         if (enabled && state.selectedView == CalendarViewMode.ThreeDay) {
