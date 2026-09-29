@@ -46,6 +46,50 @@ internal data class AllDayCollapsedLayout(
     val collisions: List<AllDayOverflowGroup> = emptyList(),
 )
 
+/** Geometry follows the visible portions of both independent continuations, never a clock. */
+internal data class AllDayCollisionFrame(
+    val leftX: Float,
+    val rightX: Float,
+    val intervalLeftX: Float,
+    val intervalRightX: Float,
+    val progress: Float,
+)
+
+internal fun allDayCollisionFrame(
+    group: AllDayOverflowGroup,
+    segments: List<AllDayOverlaySegment>,
+    anchorPage: Int,
+    anchorOffsetPx: Float,
+    dayWidthPx: Float,
+    dayStepPx: Float,
+    viewportWidthPx: Float,
+): AllDayCollisionFrame? {
+    val members = group.items.mapTo(hashSetOf()) { it.id }
+    val sources = segments.filter { it.lane == group.lane && it.item.id in members }
+    val before = sources.filter { it.endPage < group.page }.maxByOrNull { it.endPage } ?: return null
+    val after = sources.filter { it.startPage > group.page }.minByOrNull { it.startPage } ?: return null
+    fun left(page: Int) = allDayPageLeftX(page, anchorPage, anchorOffsetPx, dayStepPx)
+    fun visibility(segment: AllDayOverlaySegment): Float =
+        ((min(left(segment.endPage) + dayWidthPx, viewportWidthPx) - max(left(segment.startPage), 0f)) /
+            dayWidthPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
+    val beforeProgress = visibility(before)
+    val afterProgress = visibility(after)
+    val start = left(before.endPage + 1)
+    val end = left(after.startPage - 1) + dayWidthPx
+    // The hidden interval squashes toward the continuing card whose counterpart is leaving.
+    // Treat consecutive collision days as one interval, then clip each abstraction to its day.
+    val intervalLeft = start + (end - start) * beforeProgress * (1f - afterProgress)
+    val intervalRight = start + (end - start) * beforeProgress
+    val dayLeft = left(group.page)
+    return AllDayCollisionFrame(
+        leftX = intervalLeft.coerceIn(dayLeft, dayLeft + dayWidthPx),
+        rightX = intervalRight.coerceIn(dayLeft, dayLeft + dayWidthPx),
+        intervalLeftX = intervalLeft,
+        intervalRightX = intervalRight,
+        progress = beforeProgress * afterProgress,
+    )
+}
+
 internal data class AllDayViewportWindow(
     val layoutPages: List<Int>,
     val renderPages: List<Int>,

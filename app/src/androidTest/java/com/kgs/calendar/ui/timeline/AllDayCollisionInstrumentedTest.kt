@@ -49,9 +49,12 @@ class AllDayCollisionInstrumentedTest {
         val marker = rule.onNodeWithTag(collisionTag).fetchSemanticsNode().boundsInRoot
         val left = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot
         val right = rule.onNodeWithTag(tag("4")).fetchSemanticsNode().boundsInRoot
-        assertTrue(left.right < marker.left)
-        assertTrue(marker.right < right.left)
+        assertTrue(left.right <= marker.left + 1f)
+        assertTrue(marker.right <= right.left + 1f)
         assertTrue(abs(left.top - right.top) <= 1f)
+        val regular = rule.onNodeWithTag("timeline-all-day-overflow:${october1.toDayPage()}:3")
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(regular.width, marker.width, 1f)
         capture("collapsed")
         rule.onNodeWithTag(collisionTag).performClick()
         rule.waitForIdle()
@@ -64,25 +67,35 @@ class AllDayCollisionInstrumentedTest {
         capture("expanded")
     }
 
-    @Test fun enteringAndReversingTheCollisionAnimatesCardRetraction() {
+    @Test fun collisionSquashAndEventRetractionFollowScrollAndStopWithTheFinger() {
         val day = show()
-        capture("before-entry")
         rule.onNodeWithTag(collisionTag).assertDoesNotExist()
         rule.mainClock.autoAdvance = false
-        rule.runOnIdle { offset.floatValue = -day }
-        rule.mainClock.advanceTimeByFrame()
-        val initialWidth = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.width
-        rule.mainClock.advanceTimeBy(100)
-        val midWidth = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.width
-        capture("mid-retraction")
+        fun move(days: Float) {
+            rule.runOnIdle { offset.floatValue = -day * days }
+            rule.mainClock.advanceTimeByFrame()
+        }
+        fun width() = rule.onNodeWithTag(collisionTag).fetchSemanticsNode().boundsInRoot.width
+        move(0.25f)
+        val quarterWidth = width()
+        val quarterEvent = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot
+        assertEquals(day * 0.25f, quarterWidth, 2f)
         rule.mainClock.advanceTimeBy(600)
-        val finalWidth = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.width
-        assertTrue("Retraction must have intermediate geometry", initialWidth > midWidth && midWidth > finalWidth)
-        rule.onNodeWithTag(collisionTag).assertHasClickAction()
-        rule.runOnIdle { offset.floatValue = 0f }
-        rule.mainClock.advanceTimeBy(1_000)
+        assertEquals("Holding the finger must hold the card", quarterWidth, width(), 1f)
+        assertEquals(quarterEvent.right, rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.right, 1f)
+        capture("quarter-entry")
+        move(0.5f)
+        assertEquals(day * 0.5f, width(), 2f)
+        capture("half-entry")
+        move(1f)
+        assertEquals(day, width(), 2f)
+        move(1.5f)
+        assertEquals(day * 0.5f, width(), 2f)
+        capture("half-exit")
+        move(0.25f)
+        assertEquals("Reversing the gesture must reverse the geometry", quarterWidth, width(), 1f)
+        move(0f)
         rule.onNodeWithTag(collisionTag).assertDoesNotExist()
-        assertTrue(rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.width > finalWidth * 2f)
     }
 
     @Test fun outgoingDayRetainsCollisionUntilItsLastVisiblePixel() {

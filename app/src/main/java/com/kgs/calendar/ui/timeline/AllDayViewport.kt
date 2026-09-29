@@ -379,6 +379,7 @@ import com.kgs.calendar.ui.labels.recurrencePart
 import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
+import com.kgs.calendar.ui.layout.allDayCollisionFrame
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
@@ -621,7 +622,12 @@ internal fun AllDayViewportOverlay(
             onTaskMovedAllDay(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date)
         }
     }
-    val overflowByCell = remember(scene) { scene.overflowGroups.associateBy { it.page to it.lane } }
+    val collisionFrames = scene.collapsedLayout.collisions.associate { group ->
+        (group.page to group.lane) to allDayCollisionFrame(
+            group, scene.collapsedLayout.segments, anchorPage, anchorOffsetPx,
+            dayWidthPx, dayStepPx, layoutViewportWidthPx,
+        )
+    }
     Box(
         modifier = Modifier
             .offset(y = topOffset)
@@ -661,6 +667,9 @@ internal fun AllDayViewportOverlay(
             }
 
             continuationSegments.forEach { segment ->
+                // Collision continuations fade on the moving event edge itself; drawing a
+                // second connector here would bleed through the full-width abstraction.
+                if (collisionFrames[segment.page to segment.lane] != null) return@forEach
                 val left = allDayPageLeftX(segment.page, anchorPage, anchorOffsetPx, dayStepPx)
                 val spacing = (dayStepPx - dayWidthPx).coerceAtLeast(0f)
                 val overlap = with(density) { 9.dp.toPx() }
@@ -765,26 +774,14 @@ internal fun AllDayViewportOverlay(
                     val segment = piece.collapsedSegment
                     val collapsedStartTarget = (segment?.startPage?.takeIf { it > layoutStartPage } ?: item.startPage).toFloat()
                     val collapsedEndTarget = (segment?.endPage?.takeIf { it < layoutEndPage } ?: item.endPage).toFloat()
-                    val collapsedStartPage by animateFloatAsState(
-                        targetValue = collapsedStartTarget,
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "allDayCollapsedStart",
-                    )
-                    val collapsedEndPage by animateFloatAsState(
-                        targetValue = collapsedEndTarget,
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "allDayCollapsedEnd",
-                    )
-                    val leadingAbstractionFade by animateFloatAsState(
-                        targetValue = if (segment != null && segment.startPage > item.startPage && segment.startPage > layoutStartPage) 1f else 0f,
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized), label = "allDayLeadingAbstractionFade",
-                    )
-                    val trailingAbstractionFade by animateFloatAsState(
-                        targetValue = if (segment != null && segment.endPage < item.endPage && segment.endPage < layoutEndPage) 1f else 0f,
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized), label = "allDayTrailingAbstractionFade",
-                    )
-                    val collapsedStartX = anchorOffsetPx + (collapsedStartPage - anchorPage) * dayStepPx
-                    val collapsedEndX = anchorOffsetPx + (collapsedEndPage - anchorPage) * dayStepPx + dayWidthPx
+                    val leadingCollision = segment?.let { collisionFrames[(it.startPage - 1) to it.lane] }
+                    val trailingCollision = segment?.let { collisionFrames[(it.endPage + 1) to it.lane] }
+                    val collapsedStartX = leadingCollision?.let {
+                        max(itemStartX, it.intervalRightX + daySpacingPx)
+                    } ?: (anchorOffsetPx + (collapsedStartTarget - anchorPage) * dayStepPx)
+                    val collapsedEndX = trailingCollision?.let {
+                        min(itemEndX, it.intervalLeftX - daySpacingPx)
+                    } ?: (anchorOffsetPx + (collapsedEndTarget - anchorPage) * dayStepPx + dayWidthPx)
                     val collapsedContinuesPastViewport = segment?.let {
                         allDaySegmentContinuesPastViewport(
                             itemStartPage = item.startPage,
@@ -903,11 +900,8 @@ internal fun AllDayViewportOverlay(
                                 }
                                 .width(with(density) { frame.widthPx.toDp() })
                                 .allDayAbstractionEdgeFade(
-                                    // The static continuation already fades into the abstraction.
-                                    // Mask only moving edges; stacking both at rest creates bright seams
-                                    // and washes out the next card's title.
-                                    leading = leadingAbstractionFade * abs(collapsedStartPage - collapsedStartTarget).coerceIn(0f, 1f) * (1f - expansionProgress),
-                                    trailing = trailingAbstractionFade * abs(collapsedEndPage - collapsedEndTarget).coerceIn(0f, 1f) * (1f - expansionProgress),
+                                    leading = (leadingCollision?.progress ?: 0f) * (1f - expansionProgress),
+                                    trailing = (trailingCollision?.progress ?: 0f) * (1f - expansionProgress),
                                 ),
                             onTaskStatusChanged = onTaskStatusChanged,
                             onDetail = onDetail,
@@ -918,39 +912,26 @@ internal fun AllDayViewportOverlay(
                     }
                 }
             }
-        // Retain each visible day/row slot through an exit animation. An ordinary
-        // conditional list would dispose collision cards immediately on a reverse swipe.
-        viewportWindow.layoutPages.forEach { page ->
-            val left = allDayPageLeftX(page, anchorPage, anchorOffsetPx, dayStepPx)
+        scene.overflowGroups.forEach { group ->
+            val collision = collisionFrames[group.page to group.lane]
+            val left = collision?.leftX ?: allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx)
+            val right = collision?.rightX ?: (left + dayWidthPx)
             val visibleLeft = left.coerceAtLeast(0f)
-            val visibleRight = (left + dayWidthPx).coerceAtMost(viewportWidthPx)
-            if (visibleRight - visibleLeft <= 1f) return@forEach
-            repeat(maxVisibleItems.coerceAtLeast(1)) { lane ->
-                key("all-day-overflow:$page:$lane") {
-                    val group = overflowByCell[page to lane]
-                    var retainedGroup by remember { mutableStateOf(group) }
-                    SideEffect { if (group != null) retainedGroup = group }
-                    AnimatedVisibility(
-                        visible = group != null && !expanded,
-                        enter = fadeIn(tween(MotionMedium, easing = MotionEmphasized)) +
-                            scaleIn(tween(MotionMedium, easing = MotionEmphasized), initialScale = 0.94f),
-                        exit = fadeOut(tween(MotionMedium, easing = MotionEmphasized)),
-                        modifier = Modifier.offset {
-                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (lane * 29).dp).roundToPx() })
-                        },
-                    ) {
-                        val displayed = group ?: retainedGroup
-                        if (displayed != null) AllDayOverflowChip(
-                            modifier = Modifier
-                                .width(with(density) { (visibleRight - visibleLeft).toDp() })
-                                .padding(horizontal = if (displayed.collision) 8.dp else 0.dp)
-                                .height(22.dp)
-                                .testTag("timeline-all-day-overflow:$page:$lane"),
-                            hiddenItems = displayed.items,
-                            onClick = { if (!expanded && group != null) onExpandedChange(true) },
-                        )
-                    }
-                }
+            val visibleRight = right.coerceAtMost(viewportWidthPx)
+            if (visibleRight - visibleLeft <= 1f || !renderCollapsedItems) return@forEach
+            key("all-day-overflow:${group.page}:${group.lane}") {
+                AllDayOverflowChip(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (group.lane * 29).dp).roundToPx() })
+                        }
+                        .width(with(density) { (visibleRight - visibleLeft).toDp() })
+                        .height(22.dp)
+                        .graphicsLayer { alpha = collapsedConnectorAlpha }
+                        .testTag("timeline-all-day-overflow:${group.page}:${group.lane}"),
+                    hiddenItems = group.items,
+                    onClick = { if (!expanded) onExpandedChange(true) },
+                )
             }
         }
         reservation?.let { reserved ->

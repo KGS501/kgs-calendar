@@ -14,6 +14,21 @@ class AllDayCollisionLayoutTest {
     private val october1 = LocalDate.of(2026, 10, 1)
     private val collisionPage = october1.toDayPage()
 
+    @Test fun collisionGeometryIsContinuousReversibleAndFullWidthAtRest() {
+        val scene = scene(-1, 1)
+        val group = scene.collapsedLayout.collisions.single()
+        fun frame(offset: Float) = requireNotNull(allDayCollisionFrame(
+            group, scene.collapsedLayout.segments, collisionPage - 2, offset, 100f, 100f, 300f,
+        ))
+        val widths = (0..8).map { step ->
+            val frame = frame(-25f * step)
+            frame.rightX - frame.leftX
+        }
+        assertEquals(listOf(0f, 25f, 50f, 75f, 100f, 75f, 50f, 25f, 0f), widths)
+        assertEquals(100f, frame(-100f).leftX, 0.001f)
+        assertEquals(200f, frame(-100f).rightX, 0.001f)
+    }
+
     @Test fun overlappingHandoffDoesNotLeaveAnEventBarOnTheCollisionDay() {
         val scene = scene(-1, 1)
         assertFalse("Event 3 must retract into the overlap card on October 1", scene.collapsedLayout.segments.any {
@@ -84,7 +99,15 @@ class AllDayCollisionLayoutTest {
             return buildAllDayScene(items, collisionPage - 1, collisionPage + 2,
                 collisionPage - 1, collisionPage + 2, 4)
         }
-        assertEquals(setOf(collisionPage, collisionPage + 1), make(1).collapsedLayout.collisions.map { it.page }.toSet())
+        val multiDay = make(1)
+        assertEquals(setOf(collisionPage, collisionPage + 1), multiDay.collapsedLayout.collisions.map { it.page }.toSet())
+        val frames = multiDay.collapsedLayout.collisions.map { group ->
+            requireNotNull(allDayCollisionFrame(group, multiDay.collapsedLayout.segments,
+                collisionPage - 1, -50f, 100f, 108f, 424f))
+        }
+        assertEquals(frames.first().intervalLeftX, frames.last().intervalLeftX, 0.001f)
+        assertEquals(frames.first().intervalRightX, frames.last().intervalRightX, 0.001f)
+        frames.forEach { assertTrue(it.rightX >= it.leftX) }
         assertTrue(make(-1).collapsedLayout.collisions.isEmpty())
     }
 

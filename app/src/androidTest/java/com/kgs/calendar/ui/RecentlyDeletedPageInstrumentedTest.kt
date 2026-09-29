@@ -16,6 +16,12 @@ import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.onNodeWithTag
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -64,7 +70,10 @@ class RecentlyDeletedPageInstrumentedTest {
         val trash = TrashUiState(
             entries = listOf(
                 TrashedItemPreview(trashedItem(1, ComponentType.Task, task.title, null, deletedAt), task = task),
-                TrashedItemPreview(trashedItem(2, ComponentType.Event, event.title, pastStart, deletedAt), event = event),
+                TrashedItemPreview(trashedItem(3, ComponentType.Event, "Later event", pastStart + 86_400_000L, deletedAt),
+                    event = event.copy(resourceHref = "trashed-item:3", title = "Later event",
+                        startsAtMillis = pastStart + 86_400_000L, endsAtMillis = pastStart + 90_000_000L)),
+                TrashedItemPreview(trashedItem(2, ComponentType.Event, event.title, pastStart, deletedAt - 86_400_000L), event = event),
             ),
         )
 
@@ -91,11 +100,32 @@ class RecentlyDeletedPageInstrumentedTest {
         }
         composeRule.waitForIdle()
 
+        composeRule.onAllNodesWithText("Deleted today").assertCountEquals(0)
         composeRule.onNodeWithText("Buy groceries").assertExists()
         composeRule.onAllNodesWithText("None").assertCountEquals(0)
         composeRule.onAllNodesWithText("Date").assertCountEquals(0)
         composeRule.onNodeWithText("Team brunch").assertExists()
-        composeRule.onNodeWithText("Cafe Central").assertExists()
+        composeRule.onAllNodesWithText("Cafe Central").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Deleted yesterday").assertCountEquals(0)
+        val earlier = composeRule.onNodeWithTag("trashed_item_2").fetchSemanticsNode().boundsInRoot
+        val later = composeRule.onNodeWithTag("trashed_item_3").fetchSemanticsNode().boundsInRoot
+        assertTrue("Agenda order must follow event date, not deletion date", earlier.top < later.top)
+    }
+
+    @Test
+    fun detailPopupKeepsTheExactDeletionDateAndTime() {
+        val deletedAt = today.atTime(14, 35).atZone(zone).toInstant().toEpochMilli()
+        composeRule.setContent {
+            KgsCalendarTheme(themeMode = AppThemeMode.KgsBlue, darkTheme = false, priorityAnimationsEnabled = false) {
+                TrashedItemDetailBanner(
+                    item = trashedItem(1, ComponentType.Event, "Deleted event", deletedAt, deletedAt),
+                    onRestore = {}, onDeletePermanently = {},
+                )
+            }
+        }
+        val timestamp = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .withLocale(Locale.getDefault()).format(Instant.ofEpochMilli(deletedAt).atZone(zone))
+        composeRule.onNodeWithText(timestamp, substring = true).assertExists()
     }
 
     private fun trashedItem(

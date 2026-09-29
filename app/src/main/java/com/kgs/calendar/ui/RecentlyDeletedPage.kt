@@ -2,7 +2,6 @@ package com.kgs.calendar.ui
 
 import androidx.annotation.PluralsRes
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,7 +57,6 @@ import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.trash.TrashedItemPreview
-import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.domain.trash.TrashOrigin
 import com.kgs.calendar.domain.trash.TrashRetention
 import com.kgs.calendar.ui.layout.ListContentMaxWidth
@@ -66,17 +64,16 @@ import com.kgs.calendar.ui.layout.centeredContentPadding
 import com.kgs.calendar.ui.layout.centeredMaxWidth
 import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.layout.largeScreenMaxWidth
-import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
-import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /**
  * "Recently deleted", opened from the sidebar: the deleted events and tasks as their usual cards
- * (the ones search and the agenda use), grouped by the day they were deleted, newest first. A tap
+ * (the ones search and the agenda use), ordered by event/task date. A tap
  * opens the item's detail sheet, which offers restore and permanent delete.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun RecentlyDeletedPage(
     trash: TrashUiState,
@@ -91,8 +88,11 @@ internal fun RecentlyDeletedPage(
     var emptyTrashConfirmOpen by rememberSaveable { mutableStateOf(false) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val today = LocalCalendarTimeSnapshot.current.today
-    val groups = remember(trash.entries) { trash.entries.groupBy { it.item.deletedAtMillis.toDate() } }
+    val entries = remember(trash.entries) {
+        trash.entries.map { it to it.searchResult() }
+            .sortedWith(compareBy<Pair<TrashedItemPreview, CalendarSearchResult>> { it.second.sortMillis }
+                .thenBy { it.first.item.id })
+    }
     val background = MaterialTheme.colorScheme.background
     // The cards show the snapshot as it was deleted; nothing of the live sync state applies to them.
     CompositionLocalProvider(
@@ -161,33 +161,25 @@ internal fun RecentlyDeletedPage(
                         contentPadding = PaddingValues(start = listSidePadding, top = 8.dp, end = listSidePadding, bottom = navBottom + 20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        groups.forEach { (deletedOn, entries) ->
-                            stickyHeader(key = "deleted-$deletedOn") {
-                                SearchGroupHeader(deletedOnLabel(deletedOn, today), background)
-                            }
-                            var lastDate: LocalDate? = null
-                            entries.forEachIndexed { index, entry ->
-                                val result = entry.searchResult()
-                                val showDate = index == 0 || result.date != lastDate
-                                lastDate = result.date
-                                item(key = "trashed-${entry.item.id}") {
-                                    Box(Modifier.fillMaxWidth().testTag("trashed_item_${entry.item.id}")) {
-                                        CalendarSearchResultRow(
-                                            item = result,
-                                            showDate = showDate,
-                                            taskColorMode = taskColorMode,
-                                            onTaskStatusChanged = { _, _ -> },
-                                            agendaDateHierarchy = false,
-                                            showCalendarWeeks = false,
-                                            firstDayOfWeek = java.time.DayOfWeek.MONDAY,
-                                            taskHierarchy = taskHierarchy,
-                                            onEventClick = { onItemClick(entry) },
-                                            onTaskClick = { onItemClick(entry) },
-                                            taskStatusToggleEnabled = false,
-                                            // Being in the past means nothing here: show the cards in their normal colours.
-                                            mutePastEvents = false,
-                                        )
-                                    }
+                        entries.forEachIndexed { index, (entry, result) ->
+                            val showDate = index == 0 || result.date != entries[index - 1].second.date
+                            item(key = "trashed-${entry.item.id}") {
+                                Box(Modifier.fillMaxWidth().testTag("trashed_item_${entry.item.id}")) {
+                                    CalendarSearchResultRow(
+                                        item = result,
+                                        showDate = showDate,
+                                        taskColorMode = taskColorMode,
+                                        onTaskStatusChanged = { _, _ -> },
+                                        agendaDateHierarchy = false,
+                                        showCalendarWeeks = false,
+                                        firstDayOfWeek = java.time.DayOfWeek.MONDAY,
+                                        taskHierarchy = taskHierarchy,
+                                        onEventClick = { onItemClick(entry) },
+                                        onTaskClick = { onItemClick(entry) },
+                                        taskStatusToggleEnabled = false,
+                                        // Being in the past means nothing here: show the cards in their normal colours.
+                                        mutePastEvents = false,
+                                    )
                                 }
                             }
                         }
@@ -251,17 +243,6 @@ private fun RecentlyDeletedEmptyState(modifier: Modifier = Modifier) {
 private fun TrashedItemPreview.searchResult(): CalendarSearchResult =
     task?.let(CalendarSearchResult::TaskItem) ?: CalendarSearchResult.Event(requireNotNull(event))
 
-@Composable
-private fun deletedOnLabel(deletedOn: LocalDate, today: LocalDate): String = when (deletedOn) {
-    today -> stringResource(R.string.trash_deleted_today)
-    today.minusDays(1) -> stringResource(R.string.trash_deleted_yesterday)
-    else -> stringResource(R.string.trash_deleted_on, deletedOn.format(trashDateFormatter()))
-}
-
-@Composable
-private fun trashDateFormatter(): DateTimeFormatter =
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(LocalAppLocale.current)
-
 /**
  * The prominent top of the detail sheet of a "Recently deleted" item: where it is, when it was
  * deleted and how long it stays, with Restore and Delete permanently (after a confirmation).
@@ -275,14 +256,13 @@ internal fun TrashedItemDetailBanner(
     var deleteConfirmOpen by rememberSaveable(item.id) { mutableStateOf(false) }
     val dark = MaterialTheme.colorScheme.background.isDark()
     val accent = WarmBrown
-    val today = LocalCalendarTimeSnapshot.current.today
-    val deletedOn = item.deletedAtMillis.toDate()
     val daysLeft = TrashRetention.daysLeft(item.expiresAtMillis, System.currentTimeMillis())
-    val deletedLabel = when (deletedOn) {
-        today -> stringResource(R.string.trash_deleted_today)
-        today.minusDays(1) -> stringResource(R.string.trash_deleted_yesterday)
-        else -> stringResource(R.string.trash_deleted_on, deletedOn.format(trashDateFormatter()))
-    }
+    val deletedLabel = stringResource(
+        R.string.trash_deleted_on,
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+            .withLocale(LocalAppLocale.current)
+            .format(Instant.ofEpochMilli(item.deletedAtMillis).atZone(ZoneId.systemDefault())),
+    )
     val remainingLabel = if (daysLeft > 0) {
         appPluralString(R.plurals.trash_days_left, daysLeft, daysLeft)
     } else {
