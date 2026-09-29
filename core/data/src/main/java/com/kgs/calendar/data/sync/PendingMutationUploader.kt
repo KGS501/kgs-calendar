@@ -1,16 +1,19 @@
 package com.kgs.calendar.data.sync
 
 import com.kgs.calendar.data.LocalWriteSupport
+import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.CalDavConflictException
 import com.kgs.calendar.data.remote.PutResult
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.data.remote.isConnectionFailure
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.model.SyncState
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Drains the pending-mutation queue to CalDAV: conditional PUT/DELETE and local bookkeeping; conflicts remain pending. */
@@ -131,6 +134,14 @@ class PendingMutationUploader internal constructor(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
+                if (error.isConnectionFailure()) {
+                    database.accountDao().get(mutation.accountId)?.let { account ->
+                        database.accountDao().updateSyncState(
+                            SyncState.Error, account.describeSyncError(error), account.lastSyncAtMillis, account.id,
+                        )
+                    }
+                    throw error
+                }
                 database.resourceDao().setSyncError(mutation.resourceHref, error.message ?: "Upload failed")
                 val first = firstFailure
                 if (first == null) firstFailure = error else if (first !== error) first.addSuppressed(error)

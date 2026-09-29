@@ -4,6 +4,17 @@ import java.io.IOException
 import java.net.MalformedURLException
 import java.net.URISyntaxException
 
+/** No HTTP response was received. Repeating every item against the same unreachable account is pointless. */
+fun Throwable.isConnectionFailure(): Boolean {
+    val visited = mutableSetOf<Throwable>()
+    var current: Throwable? = this
+    while (current != null && visited.add(current)) {
+        if (current is IOException && current !is MalformedURLException) return true
+        current = current.cause
+    }
+    return false
+}
+
 /** Request timeout, too early, rate limits and server errors can clear up without the request changing. */
 fun Int.isTransientHttpStatus(): Boolean =
     this == 408 || this == 425 || this == 429 || this >= 500
