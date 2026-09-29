@@ -891,6 +891,8 @@ internal fun AllDayViewportOverlay(
                                 1f
                             },
                             showPrimaryContent = piece.primary,
+                            leadingAbstractionFade = (leadingCollision?.progress ?: 0f) * (1f - expansionProgress),
+                            trailingAbstractionFade = (trailingCollision?.progress ?: 0f) * (1f - expansionProgress),
                             modifier = Modifier
                                 .offset {
                                     IntOffset(
@@ -898,11 +900,7 @@ internal fun AllDayViewportOverlay(
                                         y = with(density) { chipTopDp.roundToPx() },
                                     )
                                 }
-                                .width(with(density) { frame.widthPx.toDp() })
-                                .allDayAbstractionEdgeFade(
-                                    leading = (leadingCollision?.progress ?: 0f) * (1f - expansionProgress),
-                                    trailing = (trailingCollision?.progress ?: 0f) * (1f - expansionProgress),
-                                ),
+                                .width(with(density) { frame.widthPx.toDp() }),
                             onTaskStatusChanged = onTaskStatusChanged,
                             onDetail = onDetail,
                             onMoveToTimed = ::moveAllDayItemToTimed,
@@ -927,6 +925,8 @@ internal fun AllDayViewportOverlay(
                         }
                         .width(with(density) { (visibleRight - visibleLeft).toDp() })
                         .height(22.dp)
+                        // Continuation surfaces (including priority tasks) pass underneath the stack.
+                        .zIndex(4f)
                         .graphicsLayer { alpha = collapsedConnectorAlpha }
                         .testTag("timeline-all-day-overflow:${group.page}:${group.lane}"),
                     hiddenItems = group.items,
@@ -1128,27 +1128,32 @@ private fun AllDayOverflowChip(
     }
 }
 
-/** Fade the visible bar into a hidden interval, using the same physical edge width as viewport continuations. */
+private val AllDayAbstractionFadeReach = 24.dp
+private val AllDayAbstractionContinuationExtension = 16.dp
+
+/** Fade actual extended event pixels into the hidden interval, rather than ending a rounded chip at its boundary. */
 private fun Modifier.allDayAbstractionEdgeFade(leading: Float, trailing: Float): Modifier {
     if (leading <= 0.001f && trailing <= 0.001f) return this
     return drawWithContent {
         // Include the existing leading viewport fade outside the card bounds.
         // A bounds-clipped graphicsLayer would cut that fade off at the sidebar.
-        val edge = min(20.dp.toPx(), size.width / 2f).coerceAtLeast(1f)
+        val edge = min(AllDayAbstractionFadeReach.toPx(), size.width / 2f).coerceAtLeast(1f)
+        val leadingExtension = AllDayAbstractionContinuationExtension.toPx() * leading
+        val trailingExtension = AllDayAbstractionContinuationExtension.toPx() * trailing
         val bleed = 20.dp.toPx()
         drawContext.canvas.saveLayer(
-            androidx.compose.ui.geometry.Rect(-bleed, 0f, size.width, size.height),
+            androidx.compose.ui.geometry.Rect(-bleed, 0f, size.width + trailingExtension, size.height),
             androidx.compose.ui.graphics.Paint(),
         )
         drawContent()
         if (leading > 0f) drawRect(
-            Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 1f - leading), Color.Black), 0f, edge),
-            topLeft = Offset(-bleed, 0f), size = androidx.compose.ui.geometry.Size(size.width + bleed, size.height),
+            Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 1f - leading), Color.Black), -leadingExtension, edge * leading),
+            topLeft = Offset(-bleed, 0f), size = androidx.compose.ui.geometry.Size(size.width + bleed + trailingExtension, size.height),
             blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
         )
         if (trailing > 0f) drawRect(
-            Brush.horizontalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - trailing)), size.width - edge, size.width),
-            topLeft = Offset(-bleed, 0f), size = androidx.compose.ui.geometry.Size(size.width + bleed, size.height),
+            Brush.horizontalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - trailing)), size.width - edge * trailing, size.width + trailingExtension),
+            topLeft = Offset(-bleed, 0f), size = androidx.compose.ui.geometry.Size(size.width + bleed + trailingExtension, size.height),
             blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
         )
         drawContext.canvas.restore()
@@ -1204,6 +1209,8 @@ private fun Modifier.allDayCardSurface(
     dashedBorder: Boolean,
     leadingRadius: Dp,
     trailingRadius: Dp,
+    leadingExtension: Dp = 0.dp,
+    trailingExtension: Dp = 0.dp,
 ): Modifier = drawWithContent {
     val leadingRadiusPx = leadingRadius.toPx()
     val trailingRadiusPx = trailingRadius.toPx()
@@ -1218,13 +1225,15 @@ private fun Modifier.allDayCardSurface(
         trailingRadiusPx = trailingRadiusPx,
         borderStrokePx = borderStroke,
     )
+    val surfaceLeft = pathLeft - leadingExtension.toPx()
+    val surfaceRight = size.width + trailingExtension.toPx()
     val backgroundPath = androidx.compose.ui.graphics.Path().apply {
         addRoundRect(
             androidx.compose.ui.geometry.RoundRect(
                 rect = androidx.compose.ui.geometry.Rect(
-                    left = pathLeft,
+                    left = surfaceLeft,
                     top = 0f,
-                    right = size.width,
+                    right = surfaceRight,
                     bottom = size.height,
                 ),
                 topLeft = CornerRadius(leadingRadiusPx, leadingRadiusPx),
@@ -1234,9 +1243,11 @@ private fun Modifier.allDayCardSurface(
             ),
         )
     }
-    clipRect {
+    // Keep the stable rounded path clipped at the layout edge unless it is an
+    // explicit continuation underneath an abstraction.
+    clipRect(left = -leadingExtension.toPx(), right = surfaceRight) {
         drawPath(path = backgroundPath, color = color)
-        this@drawWithContent.drawContent()
+        clipRect { this@drawWithContent.drawContent() }
         if (borderColor != null) {
             val inset = borderStroke / 2f
             val borderLeadingRadius = (leadingRadiusPx - inset).coerceAtLeast(0f)
@@ -1245,9 +1256,9 @@ private fun Modifier.allDayCardSurface(
                 addRoundRect(
                     androidx.compose.ui.geometry.RoundRect(
                         rect = androidx.compose.ui.geometry.Rect(
-                            left = pathLeft + inset,
+                            left = surfaceLeft + inset,
                             top = inset,
-                            right = size.width - inset,
+                            right = surfaceRight - inset,
                             bottom = size.height - inset,
                         ),
                         topLeft = CornerRadius(borderLeadingRadius, borderLeadingRadius),
@@ -1294,6 +1305,8 @@ private fun AllDayViewportChip(
     transitionAlpha: Float = 1f,
     transitionScaleY: Float = 1f,
     showPrimaryContent: Boolean = true,
+    leadingAbstractionFade: Float = 0f,
+    trailingAbstractionFade: Float = 0f,
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onMoveToTimed: (AllDayOverlayItem, LocalDate, LocalTime, LocalTime) -> Unit,
@@ -1309,8 +1322,10 @@ private fun AllDayViewportChip(
     val eventTextStyle = tentativeReadableTextStyle(item.event?.isTentative() == true)
     val pendingAlpha = pendingDeleteAlpha(item.event, item.task)
     val density = LocalDensity.current
-    val leadingRadius = 8.dp * allDayLeadingCornerRadiusFraction(leadingCornerProgress)
-    val trailingRadius = 8.dp * allDayLeadingCornerRadiusFraction(trailingCornerProgress)
+    // Square at a full interruption, then round with the same gesture that retracts
+    // the fade. Viewport continuations still keep their normal corner morph.
+    val leadingRadius = 8.dp * allDayLeadingCornerRadiusFraction(max(leadingCornerProgress, leadingAbstractionFade))
+    val trailingRadius = 8.dp * allDayLeadingCornerRadiusFraction(max(trailingCornerProgress, trailingAbstractionFade))
     val shape = RoundedCornerShape(
         topStart = leadingRadius,
         bottomStart = leadingRadius,
@@ -1463,6 +1478,7 @@ private fun AllDayViewportChip(
                     y = displayDragY.roundToInt(),
                 )
             }
+            .allDayAbstractionEdgeFade(leadingAbstractionFade, trailingAbstractionFade)
             .then(
                 Modifier.leadingContinuationFade(
                     color = color,
@@ -1488,6 +1504,8 @@ private fun AllDayViewportChip(
                 dashedBorder = eventVisuals?.dashedBorder == true,
                 leadingRadius = leadingRadius,
                 trailingRadius = trailingRadius,
+                leadingExtension = AllDayAbstractionContinuationExtension * leadingAbstractionFade,
+                trailingExtension = AllDayAbstractionContinuationExtension * trailingAbstractionFade,
             )
             .then(dragModifier),
     ) {
@@ -1507,7 +1525,12 @@ private fun AllDayViewportChip(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    .padding(
+                        start = 6.dp + AllDayAbstractionFadeReach * leadingAbstractionFade,
+                        end = 6.dp,
+                        top = 3.dp,
+                        bottom = 3.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (item.task != null) {
