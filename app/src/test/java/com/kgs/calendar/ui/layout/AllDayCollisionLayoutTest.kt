@@ -38,8 +38,56 @@ class AllDayCollisionLayoutTest {
         assertEquals(4, scene.metrics.collapsedRowCount)
         val overlap = scene.overflowGroups.single { it.page == collisionPage && it.lane == 2 }
         assertTrue(overlap.collision)
-        assertEquals(setOf("3", "4"), overlap.items.map { it.title }.toSet())
-        assertEquals(listOf("5"), scene.overflowGroups.single { it.lane == 3 }.items.map { it.title })
+        assertEquals(setOf("3", "4", "5"), overlap.items.map { it.title }.toSet())
+        assertEquals(3, overlap.restingLane)
+        assertEquals(1, scene.overflowGroups.count { it.page == collisionPage })
+    }
+
+    @Test fun existingOverflowMovesUpAndBackWithoutSquashingOrDuplicating() {
+        val scene = scene(-1, 1)
+        val group = scene.overflowGroups.single { it.page == collisionPage }
+        fun frame(offset: Float): AllDayOverflowFrame {
+            val collision = allDayCollisionFrame(scene.collapsedLayout.collisions.single(),
+                scene.collapsedLayout.segments, collisionPage - 2, offset, 100f, 100f, 300f)
+            return allDayOverflowFrame(group, collision, 200f + offset, 100f)
+        }
+        val frames = (0..8).map { frame(-25f * it) }
+        assertEquals(listOf(3f, 2.75f, 2.5f, 2.25f, 2f, 2.25f, 2.5f, 2.75f, 3f), frames.map { it.lane })
+        frames.forEach { assertEquals(100f, it.rightX - it.leftX, 0.001f) }
+    }
+
+    @Test fun emptyRestingRowShrinksWithTheCardAndReturnsOnReverseSwipe() {
+        val scene = scene(-1, 1)
+        val rows = (0..8).map { step ->
+            scene.collapsedRowsAtViewport(collisionPage - 2, -25f * step, 100f, 100f, 300f)
+        }
+        assertEquals(listOf(4f, 3.75f, 3.5f, 3.25f, 3f, 3.25f, 3.5f, 3.75f, 4f), rows)
+    }
+
+    @Test fun aDraftInTheRestingRowPreventsThatRowFromShrinking() {
+        val scene = scene(-1, 1)
+        assertEquals(4f, scene.collapsedRowsAtViewport(
+            collisionPage - 2, -100f, 100f, 100f, 300f, minimumRows = 4), 0.001f)
+    }
+
+    @Test fun anotherDaysOverflowKeepsItsRowWhileTheCollisionCardMovesUp() {
+        val scene = scene(-1, 1)
+        val regular = AllDayOverflowGroup(collisionPage + 1, 3, scene.overflowGroups.single().items)
+        val withAnotherOverflow = scene.copy(overflowGroups = scene.overflowGroups + regular)
+        assertEquals(4f, withAnotherOverflow.collapsedRowsAtViewport(
+            collisionPage - 2, -100f, 100f, 100f, 300f), 0.001f)
+    }
+
+    @Test fun collisionWithoutAnExistingOverflowStillSquashesInsideItsRow() {
+        val scene = scene(-1, 1)
+        val group = scene.collapsedLayout.collisions.single()
+        val frames = (0..8).map { step ->
+            val collision = allDayCollisionFrame(group, scene.collapsedLayout.segments,
+                collisionPage - 2, -25f * step, 100f, 100f, 300f)
+            allDayOverflowFrame(group, collision, 200f - 25f * step, 100f)
+        }
+        assertEquals(listOf(0f, 25f, 50f, 75f, 100f, 75f, 50f, 25f, 0f), frames.map { it.rightX - it.leftX })
+        assertTrue(frames.all { it.lane == 2f })
     }
 
     @Test fun edgeWindowsKeepTheirExistingSelection() {
@@ -82,6 +130,7 @@ class AllDayCollisionLayoutTest {
                 for (page in collisionPage - 2..collisionPage + 2) {
                     val bars = scene.collapsedLayout.segments.filter { page in it.startPage..it.endPage }
                     val groups = scene.overflowGroups.filter { it.page == page }
+                    assertTrue("At most one abstraction per day", groups.size <= 1)
                     val represented = bars.map { it.item.id } + groups.flatMap { it.items.map { item -> item.id } }
                     val expected = items.filter { page in it.startPage..it.endPage }.map { it.id }
                     assertEquals("Every item once on $page", expected.sorted(), represented.sorted())

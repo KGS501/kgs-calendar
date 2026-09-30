@@ -38,6 +38,9 @@ internal data class AllDayOverflowGroup(
     val lane: Int,
     val items: List<AllDayOverlayItem>,
     val collision: Boolean = false,
+    // An existing overflow card keeps its full width and travels from this row.
+    val restingLane: Int = lane,
+    val reusesExistingOverflow: Boolean = false,
 )
 
 internal data class AllDayCollapsedLayout(
@@ -88,6 +91,49 @@ internal fun allDayCollisionFrame(
         intervalRightX = intervalRight,
         progress = beforeProgress * afterProgress,
     )
+}
+
+internal data class AllDayOverflowFrame(val leftX: Float, val rightX: Float, val lane: Float)
+
+internal fun allDayOverflowFrame(
+    group: AllDayOverflowGroup,
+    collision: AllDayCollisionFrame?,
+    dayLeftX: Float,
+    dayWidthPx: Float,
+): AllDayOverflowFrame {
+    if (group.reusesExistingOverflow) {
+        val progress = collision?.progress ?: 0f
+        return AllDayOverflowFrame(dayLeftX, dayLeftX + dayWidthPx,
+            group.restingLane + (group.lane - group.restingLane) * progress)
+    }
+    return AllDayOverflowFrame(collision?.leftX ?: dayLeftX,
+        collision?.rightX ?: (dayLeftX + dayWidthPx), group.lane.toFloat())
+}
+
+/** The section follows the same fractional lane as its travelling abstraction. */
+internal fun AllDayScene.collapsedRowsAtViewport(
+    anchorPage: Int,
+    anchorOffsetPx: Float,
+    dayWidthPx: Float,
+    dayStepPx: Float,
+    viewportWidthPx: Float,
+    minimumRows: Int = 0,
+): Float {
+    if (overflowGroups.none { it.reusesExistingOverflow }) {
+        return max(metrics.collapsedRowCount, minimumRows).toFloat()
+    }
+    val collisionFrames = collapsedLayout.collisions.associate { group ->
+        (group.page to group.lane) to allDayCollisionFrame(
+            group, collapsedLayout.segments, anchorPage, anchorOffsetPx,
+            dayWidthPx, dayStepPx, viewportWidthPx,
+        )
+    }
+    val eventRows = collapsedLayout.segments.maxOfOrNull { it.lane + 1f } ?: 0f
+    val overflowRows = overflowGroups.maxOfOrNull { group ->
+        allDayOverflowFrame(group, collisionFrames[group.page to group.lane],
+            allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx), dayWidthPx).lane + 1f
+    } ?: 0f
+    return maxOf(eventRows, overflowRows, minimumRows.toFloat())
 }
 
 internal data class AllDayViewportWindow(
@@ -675,19 +721,22 @@ internal fun buildAllDayScene(
             .filter { page in it.startPage..it.endPage }.map { it.item.id }.toSet()
         items.filterNot { it.id in visibleIds }
     }.filterValues { it.isNotEmpty() }
-    val overflowGroups = buildList {
-        addAll(collapsedLayout.collisions)
-        hiddenPages.forEach { (page, hiddenItems) ->
-            val representedIds = collapsedLayout.collisions.asSequence().filter { it.page == page }
-                .flatMap { it.items.asSequence() }.map { it.id }.toSet()
-            val remaining = hiddenItems.filterNot { it.id in representedIds }
-            if (remaining.isNotEmpty()) add(AllDayOverflowGroup(page, overflowLane, remaining))
-        }
-    }.groupBy { it.page to it.lane }.map { (_, groups) ->
-        groups.first().copy(items = groups.flatMap { it.items }.distinctBy { it.id }, collision = groups.any { it.collision })
+    val collisionsByPage = collapsedLayout.collisions.groupBy { it.page }
+    val overflowGroups = hiddenPages.map { (page, hiddenItems) ->
+        val collisions = collisionsByPage[page].orEmpty()
+        val collisionLane = collisions.minOfOrNull { it.lane }
+        val collisionIds = collisions.flatMap { it.items }.mapTo(hashSetOf()) { it.id }
+        val hasRegularOverflow = hiddenItems.any { it.id !in collisionIds } ||
+            pageItemsByPage.getValue(page).size > maxVisibleItems
+        val lane = collisionLane ?: overflowLane
+        AllDayOverflowGroup(page, lane, hiddenItems, collision = collisionLane != null,
+            restingLane = if (hasRegularOverflow) overflowLane else lane,
+            reusesExistingOverflow = collisionLane != null && hasRegularOverflow)
     }
     val visibleCollapsedRows = collapsedLayout.segments.maxOfOrNull { it.lane + 1 } ?: 0
-    val collapsedRowCount = max(visibleCollapsedRows, overflowGroups.maxOfOrNull { it.lane + 1 } ?: 0)
+    // This is the resting height; the viewport subtracts the space released by
+    // travelling cards using their fractional lanes, directly with the gesture.
+    val collapsedRowCount = max(visibleCollapsedRows, overflowGroups.maxOfOrNull { it.restingLane + 1 } ?: 0)
     return AllDayScene(
         overlayItems = overlayItems,
         pageItemsByPage = pageItemsByPage,

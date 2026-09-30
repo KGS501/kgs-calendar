@@ -380,6 +380,7 @@ import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
 import com.kgs.calendar.ui.layout.allDayCollisionFrame
+import com.kgs.calendar.ui.layout.allDayOverflowFrame
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
@@ -912,16 +913,16 @@ internal fun AllDayViewportOverlay(
             }
         scene.overflowGroups.forEach { group ->
             val collision = collisionFrames[group.page to group.lane]
-            val left = collision?.leftX ?: allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx)
-            val right = collision?.rightX ?: (left + dayWidthPx)
-            val visibleLeft = left.coerceAtLeast(0f)
-            val visibleRight = right.coerceAtMost(viewportWidthPx)
+            val frame = allDayOverflowFrame(group, collision,
+                allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx), dayWidthPx)
+            val visibleLeft = frame.leftX.coerceAtLeast(0f)
+            val visibleRight = frame.rightX.coerceAtMost(viewportWidthPx)
             if (visibleRight - visibleLeft <= 1f || !renderCollapsedItems) return@forEach
-            key("all-day-overflow:${group.page}:${group.lane}") {
+            key("all-day-overflow:${group.page}") {
                 AllDayOverflowChip(
                     modifier = Modifier
                         .offset {
-                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (group.lane * 29).dp).roundToPx() })
+                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (frame.lane * 29).dp).roundToPx() })
                         }
                         .width(with(density) { (visibleRight - visibleLeft).toDp() })
                         .height(22.dp)

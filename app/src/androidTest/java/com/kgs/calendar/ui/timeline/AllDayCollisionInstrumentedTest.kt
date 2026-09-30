@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -52,13 +53,13 @@ class AllDayCollisionInstrumentedTest {
         assertTrue(left.right <= marker.left + 1f)
         assertTrue(marker.right <= right.left + 1f)
         assertTrue(abs(left.top - right.top) <= 1f)
-        val regular = rule.onNodeWithTag("timeline-all-day-overflow:${october1.toDayPage()}:3")
-            .fetchSemanticsNode().boundsInRoot
-        assertEquals(regular.width, marker.width, 1f)
+        rule.onNodeWithTag("timeline-all-day-overflow:${october1.toDayPage()}:3").assertDoesNotExist()
+        rule.onNodeWithTag(collisionTag).assertContentDescriptionContains("5", substring = true)
         capture("collapsed")
         rule.onNodeWithTag(collisionTag).performClick()
         rule.waitForIdle()
         rule.onNodeWithTag(collisionTag).assertDoesNotExist()
+        rule.onNodeWithTag(tag("5")).assertExists()
         val expandedLeft = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot
         val expandedRight = rule.onNodeWithTag(tag("4")).fetchSemanticsNode().boundsInRoot
         assertTrue(abs(expandedLeft.top - expandedRight.top) > 10f)
@@ -67,9 +68,11 @@ class AllDayCollisionInstrumentedTest {
         capture("expanded")
     }
 
-    @Test fun collisionSquashAndEventRetractionFollowScrollAndStopWithTheFinger() {
+    @Test fun existingCardMovesUpAndEventRetractionFollowsScrollAndStopsWithTheFinger() {
         val day = show()
         rule.onNodeWithTag(collisionTag).assertDoesNotExist()
+        val resting = rule.onNodeWithTag("timeline-all-day-overflow:${october1.toDayPage()}:3")
+            .fetchSemanticsNode().boundsInRoot
         rule.mainClock.autoAdvance = false
         fun move(days: Float) {
             rule.runOnIdle { offset.floatValue = -day * days }
@@ -79,23 +82,32 @@ class AllDayCollisionInstrumentedTest {
         move(0.25f)
         val quarterWidth = width()
         val quarterEvent = rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot
-        assertEquals(day * 0.25f, quarterWidth, 2f)
+        assertEquals(day, quarterWidth, 2f)
+        val quarterTop = rule.onNodeWithTag(collisionTag).fetchSemanticsNode().boundsInRoot.top
+        assertEquals(resting.top - with(rule.density) { 29.dp.toPx() } * 0.25f, quarterTop, 2f)
         rule.mainClock.advanceTimeBy(600)
         assertEquals("Holding the finger must hold the card", quarterWidth, width(), 1f)
+        assertEquals(quarterTop, rule.onNodeWithTag(collisionTag).fetchSemanticsNode().boundsInRoot.top, 1f)
         assertEquals(quarterEvent.right, rule.onNodeWithTag(tag("3")).fetchSemanticsNode().boundsInRoot.right, 1f)
         capture("quarter-entry")
         move(0.5f)
-        assertEquals(day * 0.5f, width(), 2f)
+        assertEquals(day, width(), 2f)
         capture("half-entry")
         move(1f)
         assertEquals(day, width(), 2f)
         move(1.5f)
-        assertEquals(day * 0.5f, width(), 2f)
+        assertEquals(day, width(), 2f)
         capture("half-exit")
         move(0.25f)
         assertEquals("Reversing the gesture must reverse the geometry", quarterWidth, width(), 1f)
+        assertEquals(quarterTop, rule.onNodeWithTag(collisionTag).fetchSemanticsNode().boundsInRoot.top, 1f)
         move(0f)
+        // Resume Android drawing before inspecting the new resting-row semantics.
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
         rule.onNodeWithTag(collisionTag).assertDoesNotExist()
+        assertEquals(resting.top, rule.onNodeWithTag("timeline-all-day-overflow:${october1.toDayPage()}:3")
+            .fetchSemanticsNode().boundsInRoot.top, 1f)
     }
 
     @Test fun outgoingDayRetainsCollisionUntilItsLastVisiblePixel() {
