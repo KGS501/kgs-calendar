@@ -376,6 +376,7 @@ import com.kgs.calendar.ui.labels.toRecurrenceUntilValue
 import com.kgs.calendar.ui.labels.toReminderAmountUnit
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
+import com.kgs.calendar.ui.layout.AllDayScene
 import com.kgs.calendar.ui.layout.TimedCalendarItem
 import com.kgs.calendar.ui.layout.TimedPlacement
 import com.kgs.calendar.ui.layout.allDayCollapsedPageItemComparator
@@ -1424,15 +1425,17 @@ internal fun EditorSchedulePreview.withDraggedMinutes(
     return copy(start = startMinute.toDraftLocalTime(), end = endMinute.toDraftLocalTime())
 }
 
-internal fun List<LocalDate>.allDayAreaHeight(
+internal data class AllDayAreaLayout(val height: Dp, val scene: AllDayScene?, val draftRows: Int)
+
+internal fun List<LocalDate>.allDayAreaLayout(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     maxVisibleItems: Int,
     expanded: Boolean,
     draftDate: LocalDate?,
     priorityPageCount: Int = size,
-): Dp {
-    val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return 22.dp
+): AllDayAreaLayout {
+    val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return AllDayAreaLayout(22.dp, null, 0)
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
     val priorityEndPage = min(visibleEndPage, visibleStartPage + priorityPageCount.coerceAtLeast(1) - 1)
     val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage,
@@ -1469,7 +1472,8 @@ internal fun List<LocalDate>.allDayAreaHeight(
         }
     }
     val displayedRowsWithDraft = max(displayedRows, draftRows)
-    return if (displayedRowsWithDraft == 0) 22.dp else (displayedRowsWithDraft * 24 + (displayedRowsWithDraft - 1) * 5 + 15).dp
+    val height = if (displayedRowsWithDraft == 0) 22.dp else (displayedRowsWithDraft * 29 + 10).dp
+    return AllDayAreaLayout(height, scene, draftRows)
 }
 
 internal fun firstFreeLaneIndex(occupiedLanes: Set<Int>): Int {

@@ -376,6 +376,7 @@ import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
 import com.kgs.calendar.ui.timeline.pagePosition
 import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
+import com.kgs.calendar.ui.layout.collapsedRowsAtViewport
 import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.TimedCalendarItem
@@ -801,8 +802,8 @@ internal fun TimelineView(
     }
     val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
     var allDayExpanded by remember { mutableStateOf(false) }
-    val baseAllDayHeight = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent, clampedDayCount) {
-        pagerVisibleDays.allDayAreaHeight(
+    val allDayAreaLayout = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent, clampedDayCount) {
+        pagerVisibleDays.allDayAreaLayout(
             events = state.events,
             tasks = calendarTasks,
             maxVisibleItems = state.maxVisibleAllDayItems,
@@ -811,6 +812,12 @@ internal fun TimelineView(
             priorityPageCount = clampedDayCount,
         )
     }
+    val baseAllDayHeight = allDayAreaLayout.height
+    val collapsedViewportRows = allDayAreaLayout.scene?.collapsedRowsAtViewport(
+        allDayAnchorPage, allDayAnchorOffsetPx, pagerDayWidthPx, pagerDayStepPx, dayGeometryViewportWidthPx,
+        minimumRows = allDayAreaLayout.draftRows,
+    ) ?: 0f
+    val collapsedViewportHeight = if (collapsedViewportRows == 0f) 22.dp else (collapsedViewportRows * 29f + 10f).dp
     val visibleReservation = activeTimedDrag?.session?.reservation
         ?.takeIf { reservation -> reservation.date in pagerVisibleDays }
     val visibleAllDayHeight = visibleReservation
@@ -834,12 +841,27 @@ internal fun TimelineView(
     )
     // The section boundary keeps its normal easing. While it grows, the overlay is temporarily
     // allowed to draw the newly active rows below that boundary so they are never clipped.
-    val animatedAllDayHeight by animateDpAsState(
+    val animatedRestingAllDayHeight by animateDpAsState(
         targetValue = requestedAllDayHeight,
         animationSpec = tween(MorphDurationMs, easing = MorphEasing),
         label = "allDayHeight",
     )
-    val allowAllDayVerticalOverflow = requestedAllDayHeight > animatedAllDayHeight
+    val collapsedHeightWeight by animateFloatAsState(
+        targetValue = if (allDayExpanded) 0f else 1f,
+        animationSpec = tween(MorphDurationMs, easing = MorphEasing),
+        label = "allDayCollapsedHeightWeight",
+    )
+    val reservedViewportHeight = visibleReservation?.minimumViewportHeight()
+        ?.let { maxOf(collapsedViewportHeight, it) } ?: collapsedViewportHeight
+    // Only expansion uses a clock. Releasing an empty row follows the finger exactly,
+    // including holds and reversals, and moves the timed grid with the same boundary.
+    val releasedHeight = if (headerPresentation.showAllDaySection) {
+        val restingRows = allDayAreaLayout.scene?.metrics?.collapsedRowCount ?: 0
+        val restingHeight = if (restingRows == 0) 22.dp else (restingRows * 29 + 10).dp
+        (restingHeight - reservedViewportHeight).coerceAtLeast(0.dp) * collapsedHeightWeight
+    } else 0.dp
+    val animatedAllDayHeight = (animatedRestingAllDayHeight - releasedHeight).coerceAtLeast(0.dp)
+    val allowAllDayVerticalOverflow = requestedAllDayHeight > animatedRestingAllDayHeight
     val timedGridTopOffset = animatedDayHeaderHeight + animatedAllDayHeight
     val overdueExpandedHeight = if (timelineViewportHeightPx > 0) {
         (

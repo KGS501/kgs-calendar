@@ -8,15 +8,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.CalendarRange
@@ -73,8 +79,10 @@ class AllDayContinuationFadeInstrumentedTest {
         }
         rule.waitForIdle()
         val partialWidth = rule.onNodeWithTag(markerTag).fetchSemanticsNode().boundsInRoot.width
-        assertTrue("The held swipe must leave a partially squashed abstraction", partialWidth in 1f..(fullWidth - 1f))
-        assertTitleClearOfFade(partialWidth / fullWidth)
+        assertEquals("An existing abstraction keeps its normal width", fullWidth, partialWidth, 1f)
+        val progress = collisionProgress()
+        assertTrue("The held swipe must leave the abstraction between rows", progress > 0f && progress < 1f)
+        assertTitleClearOfFade(progress)
         capture("july-partial-swipe")
         rule.onNodeWithTag("timeline-gesture-surface").performTouchInput { up() }
     }
@@ -96,13 +104,12 @@ class AllDayContinuationFadeInstrumentedTest {
         val overlay = rule.onNodeWithTag("timeline-all-day-overlay")
         val width = overlay.fetchSemanticsNode().boundsInRoot.width
         val markerTag = "timeline-all-day-overflow:${july26.plusDays(1).toDayPage()}:2"
-        val fullWidth = rule.onNodeWithTag(markerTag).fetchSemanticsNode().boundsInRoot.width
         rule.onNodeWithTag("timeline-gesture-surface").performTouchInput {
             down(center)
             moveBy(Offset(width * 0.31f * (if (leading) -1f else 1f), 0f), delayMillis = 300)
         }
         rule.waitForIdle()
-        val progress = rule.onNodeWithTag(markerTag).fetchSemanticsNode().boundsInRoot.width / fullWidth
+        val progress = collisionProgress()
         assertTrue("The gesture must leave a small, still visible abstraction", progress > 0f && progress < 0.25f)
         val card = rule.onNodeWithTag(tag(if (leading) "Urlaub Familie" else "Rabska Fjera"))
             .fetchSemanticsNode().boundsInRoot
@@ -122,8 +129,7 @@ class AllDayContinuationFadeInstrumentedTest {
     private fun captureCornerSequence(leading: Boolean) {
         val markerTag = "timeline-all-day-overflow:${july26.plusDays(1).toDayPage()}:2"
         val fullWidth = rule.onNodeWithTag(markerTag).fetchSemanticsNode().boundsInRoot.width
-        fun remaining() = (rule.onAllNodesWithTag(markerTag).fetchSemanticsNodes().firstOrNull()
-            ?.boundsInRoot?.width ?: 0f) / fullWidth
+        fun remaining() = collisionProgress()
         val surface = rule.onNodeWithTag("timeline-gesture-surface")
         val direction = if (leading) -1f else 1f
         val side = if (leading) "leading" else "trailing"
@@ -161,6 +167,86 @@ class AllDayContinuationFadeInstrumentedTest {
         File(dir, "july-morph-$side.json").writeText(samples.joinToString(prefix = "[", postfix = "]"))
     }
 
+    private val dayAbstraction = SemanticsMatcher("The single abstraction on July 27") {
+        it.config.getOrNull(SemanticsProperties.TestTag)
+            ?.startsWith("timeline-all-day-overflow:${july26.plusDays(1).toDayPage()}:") == true
+    }
+
+    private fun collisionProgress(): Float {
+        val origin = rule.onNodeWithTag("timeline-all-day-overlay").fetchSemanticsNode().boundsInRoot.top
+        val top = rule.onNode(dayAbstraction).fetchSemanticsNode().boundsInRoot.top
+        return ((origin + 94f * rule.density.density - top) / (29f * rule.density.density)).coerceIn(0f, 1f)
+    }
+
+    @Test fun oneAbstractionTravelsUpAndBackWithTheGesture() {
+        show(dark = false, initialDate = july26.minusDays(1))
+        val surface = rule.onNodeWithTag("timeline-gesture-surface")
+        val fullWidth = rule.onNode(dayAbstraction).fetchSemanticsNode().boundsInRoot.width
+        val initialTop = rule.onNode(dayAbstraction).fetchSemanticsNode().boundsInRoot.top
+        val overlay = rule.onNodeWithTag("timeline-all-day-overlay")
+        val initialHeight = overlay.fetchSemanticsNode().boundsInRoot.height
+        var fingerDown = false
+        for ((direction, percents) in listOf("up" to listOf(0, 25, 50, 75, 100), "down" to listOf(75, 50, 25, 0))) {
+            for (percent in percents) {
+                val target = percent / 100f
+                if (!fingerDown && percent > 0) {
+                    surface.performTouchInput {
+                        down(center)
+                        moveBy(Offset(-fullWidth * target, 0f), delayMillis = 160)
+                    }
+                    fingerDown = true
+                    rule.waitForIdle()
+                }
+                repeat(4) {
+                    val delta = target - collisionProgress()
+                    if (abs(delta) > 0.003f) {
+                        surface.performTouchInput { moveBy(Offset(-fullWidth * delta, 0f), delayMillis = 160) }
+                        rule.waitForIdle()
+                    }
+                }
+                assertEquals("Exactly one abstraction must represent all hidden items", 1,
+                    rule.onAllNodes(dayAbstraction).fetchSemanticsNodes().size)
+                val marker = rule.onNode(dayAbstraction).fetchSemanticsNode().boundsInRoot
+                assertEquals("The travelling abstraction keeps its full width", fullWidth, marker.width, 1f)
+                assertEquals("Vertical movement follows the held swipe", target, collisionProgress(), 0.02f)
+                if (percent == 100) assertEquals(initialTop - 29f * rule.density.density, marker.top, 2f)
+                val section = overlay.fetchSemanticsNode().boundsInRoot
+                assertEquals("The unused row shrinks directly with the held swipe",
+                    initialHeight - 29f * rule.density.density * target, section.height, 2f)
+                assertTrue("The travelling card must remain inside the shrinking section", marker.bottom <= section.bottom)
+                val heldHeight = section.height
+                val heldTop = marker.top
+                rule.mainClock.advanceTimeBy(500)
+                assertEquals("Holding must not play a timed section-height movement", heldHeight,
+                    overlay.fetchSemanticsNode().boundsInRoot.height, 1f)
+                assertEquals("Holding must not play a timed movement", heldTop,
+                    rule.onNode(dayAbstraction).fetchSemanticsNode().boundsInRoot.top, 1f)
+                val name = "july-single-abstraction-$direction-${percent.toString().padStart(3, '0')}"
+                capture(name, focusSection = true)
+                capture("$name-full")
+            }
+        }
+        surface.performTouchInput { up() }
+    }
+
+    @Test fun expandingTheMovedAbstractionRestoresEveryRowAndCollapseRemovesTheEmptyRow() {
+        show(dark = false)
+        val overlay = rule.onNodeWithTag("timeline-all-day-overlay")
+        assertEquals("Fully raised abstraction uses exactly three rows", 97f * rule.density.density,
+            overlay.fetchSemanticsNode().boundsInRoot.height, 2f)
+        rule.onNode(dayAbstraction).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Weiterer Termin", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals("Expanded section must reserve all five rows", 155f * rule.density.density,
+            overlay.fetchSemanticsNode().boundsInRoot.height, 2f)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        rule.onNodeWithContentDescription(context.getString(R.string.collapse_all_day_items)).performClick()
+        rule.waitForIdle()
+        assertEquals("Collapse must remove the empty fourth row again", 97f * rule.density.density,
+            overlay.fetchSemanticsNode().boundsInRoot.height, 2f)
+        assertEquals(1, rule.onAllNodes(dayAbstraction).fetchSemanticsNodes().size)
+    }
+
     private fun assertTitleClearOfFade(progress: Float) {
         val card = rule.onNodeWithTag(tag("Urlaub Familie")).fetchSemanticsNode().boundsInRoot
         val title = rule.onNodeWithText("Urlaub Familie", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -170,9 +256,9 @@ class AllDayContinuationFadeInstrumentedTest {
         assertTrue("The title must start beyond the still fading pixels", title.left > card.left + 24f * progress * dp)
     }
 
-    private fun show(dark: Boolean) {
+    private fun show(dark: Boolean, initialDate: LocalDate = july26) {
         val range = CalendarRange(july26.minusDays(2), july26.plusDays(5))
-        val state = CalendarUiState(initialDataLoaded = true, selectedDate = july26,
+        val state = CalendarUiState(initialDataLoaded = true, selectedDate = initialDate,
             selectedView = CalendarViewMode.ThreeDay, events = events, showCalendarWeeks = true,
             maxVisibleAllDayItems = 4, priorityAnimationsEnabled = false,
             visibleRange = range, loadedDataRange = range, requestedDataRange = range)
