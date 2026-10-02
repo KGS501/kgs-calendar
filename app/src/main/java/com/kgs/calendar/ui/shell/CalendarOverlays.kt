@@ -156,6 +156,7 @@ internal fun SettingsOverlay(
             onMultiWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Multi, it) },
             onMultiWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Multi, it) },
             onMultiWidgetMonthPercentChanged = viewModel.settings::setMultiWidgetMonthPercent,
+            onMultiWidgetWeeksSelected = viewModel.settings::setMultiWidgetWeeks,
             onTasksWidgetDisplayModeSelected = viewModel.settings::setTasksWidgetDisplayMode,
             onTasksWidgetIncludeOverdueChanged = viewModel.settings::setTasksWidgetIncludeOverdue,
             onTasksWidgetCreateModeSelected = viewModel.settings::setTasksWidgetCreateMode,

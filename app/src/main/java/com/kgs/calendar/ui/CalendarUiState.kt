@@ -40,6 +40,7 @@ data class WidgetSettingsUiState(
     val multiWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
     val multiWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
     val multiWidgetMonthPercent: Int = SettingsStore.DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
+    val multiWidgetWeeks: WidgetMonthWeeks = WidgetMonthWeeks.FullMonth,
     val tasksWidgetDisplayMode: WidgetTaskDisplayMode = WidgetTaskDisplayMode.Planned,
     val tasksWidgetIncludeOverdue: Boolean = true,
     val tasksWidgetSortMode: WidgetTaskSortMode = WidgetTaskSortMode.Date,

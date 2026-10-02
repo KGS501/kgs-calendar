@@ -105,7 +105,11 @@ internal class KgsWidgetDataSource(
         val dayWidgetStartAtCurrentHour = async { settingsStore.dayWidgetStartAtCurrentHour.first() }
         val multiWidgetMonthPercent = async { settingsStore.multiWidgetMonthPercent.first() }
         val monthWidgetWeeks = async {
-            if (kind == KgsWidgetKind.Month) settingsStore.monthWidgetWeeks.first() else WidgetMonthWeeks.FullMonth
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.monthWidgetWeeks.first()
+                KgsWidgetKind.Multi -> settingsStore.multiWidgetWeeks.first()
+                else -> WidgetMonthWeeks.FullMonth
+            }
         }
         val systemNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         WidgetRenderSettings(

@@ -458,6 +458,7 @@ internal fun SettingsPage(
     onMultiWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMultiWidgetColorModeSelected: (WidgetColorMode) -> Unit,
     onMultiWidgetMonthPercentChanged: (Int) -> Unit,
+    onMultiWidgetWeeksSelected: (WidgetMonthWeeks) -> Unit,
     onTasksWidgetDisplayModeSelected: (WidgetTaskDisplayMode) -> Unit,
     onTasksWidgetIncludeOverdueChanged: (Boolean) -> Unit,
     onTasksWidgetCreateModeSelected: (WidgetTaskCreateMode) -> Unit,
@@ -530,7 +531,7 @@ internal fun SettingsPage(
     var colorModeDialogOpen by remember { mutableStateOf(false) }
     var widgetThemeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
     var widgetColorModeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
-    var monthWidgetWeeksDialogOpen by remember { mutableStateOf(false) }
+    var widgetWeeksDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
     var tasksWidgetDisplayDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetCreateDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetSubtaskDefaultDialogOpen by remember { mutableStateOf(false) }
@@ -1381,7 +1382,7 @@ internal fun SettingsPage(
                                 SettingsButtonRow(
                                     label = stringResource(R.string.widget_month_visible_weeks),
                                     value = state.widgetSettings.monthWidgetWeeks.localizedLabel(),
-                                    onClick = { monthWidgetWeeksDialogOpen = true },
+                                    onClick = { widgetWeeksDialogTarget = SettingsDestination.WidgetMonth },
                                 )
                                 SettingsHelpText(stringResource(R.string.widget_month_settings_help))
                             }
@@ -1482,6 +1483,11 @@ internal fun SettingsPage(
                                     range = SettingsStore.MIN_MULTI_WIDGET_MONTH_PERCENT..SettingsStore.MAX_MULTI_WIDGET_MONTH_PERCENT,
                                     step = 5,
                                     onValueChanged = onMultiWidgetMonthPercentChanged,
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.widget_month_visible_weeks),
+                                    value = state.widgetSettings.multiWidgetWeeks.localizedLabel(),
+                                    onClick = { widgetWeeksDialogTarget = SettingsDestination.WidgetMulti },
                                 )
                             }
                         }
@@ -1678,7 +1684,7 @@ internal fun SettingsPage(
             onDismiss = { widgetThemeDialogTarget = null },
         )
     }
-    if (monthWidgetWeeksDialogOpen) {
+    widgetWeeksDialogTarget?.let { target ->
         SettingsChoiceDialog(
             title = appString(R.string.widget_month_visible_weeks),
             options = listOf(
@@ -1687,13 +1693,19 @@ internal fun SettingsPage(
                 WidgetMonthWeeks.Four,
                 WidgetMonthWeeks.FullMonth,
             ),
-            selected = state.widgetSettings.monthWidgetWeeks,
+            selected = when (target) {
+                SettingsDestination.WidgetMulti -> state.widgetSettings.multiWidgetWeeks
+                else -> state.widgetSettings.monthWidgetWeeks
+            },
             label = { it.localizedLabel() },
             onSelected = {
-                onMonthWidgetWeeksSelected(it)
-                monthWidgetWeeksDialogOpen = false
+                when (target) {
+                    SettingsDestination.WidgetMulti -> onMultiWidgetWeeksSelected(it)
+                    else -> onMonthWidgetWeeksSelected(it)
+                }
+                widgetWeeksDialogTarget = null
             },
-            onDismiss = { monthWidgetWeeksDialogOpen = false },
+            onDismiss = { widgetWeeksDialogTarget = null },
         )
     }
     if (tasksWidgetDisplayDialogOpen) {

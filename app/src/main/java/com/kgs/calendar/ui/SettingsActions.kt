@@ -91,6 +91,13 @@ class SettingsActions internal constructor(
         }
     }
 
+    fun setMultiWidgetWeeks(weeks: WidgetMonthWeeks) {
+        scope.launch {
+            settingsStore.setMultiWidgetWeeks(weeks)
+            widgetRefresher.update(KgsWidgetKind.Multi)
+        }
+    }
+
     fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
         scope.launch {
             settingsStore.setTasksWidgetDisplayMode(mode)
