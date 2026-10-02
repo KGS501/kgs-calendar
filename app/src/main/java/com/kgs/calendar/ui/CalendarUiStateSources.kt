@@ -336,10 +336,12 @@ internal fun SettingsStore.widgetSettings(): Flow<WidgetSettingsUiState> = combi
         ::DayWidgetBehaviour,
     ),
     multiWidgetMonthPercent,
-) { appearances, tasks, day, multiMonthPercent ->
+    monthWidgetWeeks,
+) { appearances, tasks, day, multiMonthPercent, monthWeeks ->
     WidgetSettingsUiState(
         monthWidgetColorMode = appearances.month.colorMode,
         monthWidgetThemeMode = appearances.month.themeMode,
+        monthWidgetWeeks = monthWeeks,
         agendaWidgetColorMode = appearances.agenda.colorMode,
         agendaWidgetThemeMode = appearances.agenda.themeMode,
         tasksWidgetColorMode = appearances.tasks.colorMode,

@@ -83,6 +83,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val monthWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MONTH_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
+    val monthWidgetWeeks: Flow<WidgetMonthWeeks> = enumFlow(KEY_MONTH_WIDGET_WEEKS, WidgetMonthWeeks.FullMonth)
+
     val agendaWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_AGENDA_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
     val agendaWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_AGENDA_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
@@ -333,6 +335,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setMonthWidgetColorMode(mode: WidgetColorMode) {
         dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMonthWidgetWeeks(weeks: WidgetMonthWeeks) {
+        dataStore.edit { it[KEY_MONTH_WIDGET_WEEKS] = weeks.name }
     }
 
     suspend fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
@@ -644,6 +650,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_COLOR_MODE = stringPreferencesKey("color_mode")
         private val KEY_MONTH_WIDGET_THEME = stringPreferencesKey("month_widget_theme_mode")
         private val KEY_MONTH_WIDGET_COLOR_MODE = stringPreferencesKey("month_widget_color_mode")
+        private val KEY_MONTH_WIDGET_WEEKS = stringPreferencesKey("month_widget_weeks")
         private val KEY_AGENDA_WIDGET_THEME = stringPreferencesKey("agenda_widget_theme_mode")
         private val KEY_AGENDA_WIDGET_COLOR_MODE = stringPreferencesKey("agenda_widget_color_mode")
         private val KEY_TASKS_WIDGET_THEME = stringPreferencesKey("tasks_widget_theme_mode")

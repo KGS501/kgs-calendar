@@ -166,6 +166,68 @@ class WidgetMonthModelTest {
     }
 
     @Test
+    fun limitedWeeksStartWithCurrentWeekAndStayInsideMonthGrid() {
+        val range = WidgetMonthModel.visibleRange(
+            month = YearMonth.of(2026, 10),
+            firstDayOfWeek = DayOfWeek.MONDAY,
+            requestedWeeks = 2,
+            today = LocalDate.of(2026, 10, 20),
+        )
+
+        assertEquals(LocalDate.of(2026, 10, 19), range.start)
+        assertEquals(2, range.rowCount)
+    }
+
+    @Test
+    fun limitedWeeksBackfillAtEndOfMonthGrid() {
+        val range = WidgetMonthModel.visibleRange(
+            month = YearMonth.of(2026, 8),
+            firstDayOfWeek = DayOfWeek.MONDAY,
+            requestedWeeks = 3,
+            today = LocalDate.of(2026, 8, 31),
+        )
+
+        assertEquals(LocalDate.of(2026, 8, 17), range.start)
+        assertEquals(3, range.rowCount)
+    }
+
+    @Test
+    fun limitedWeeksStartAtFirstRowForOtherMonths() {
+        val range = WidgetMonthModel.visibleRange(
+            month = YearMonth.of(2026, 11),
+            firstDayOfWeek = DayOfWeek.MONDAY,
+            requestedWeeks = 4,
+            today = LocalDate.of(2026, 10, 20),
+        )
+
+        assertEquals(LocalDate.of(2026, 10, 26), range.start)
+        assertEquals(4, range.rowCount)
+    }
+
+    @Test
+    fun fullMonthKeepsNaturalRowCount() {
+        val range = WidgetMonthModel.visibleRange(
+            month = YearMonth.of(2026, 8),
+            firstDayOfWeek = DayOfWeek.MONDAY,
+            requestedWeeks = null,
+            today = LocalDate.of(2026, 8, 31),
+        )
+
+        assertEquals(LocalDate.of(2026, 7, 27), range.start)
+        assertEquals(6, range.rowCount)
+    }
+
+    @Test
+    fun fewerVisibleWeeksIncreaseAvailableWeekHeight() {
+        val fullMonth = WidgetMonthRenderSpec.from(WidgetSize(320, 320), rowCount = 6)
+        val twoWeeks = WidgetMonthRenderSpec.from(WidgetSize(320, 320), rowCount = 2)
+
+        assertEquals(42, fullMonth.weekCellHeightDp)
+        assertEquals(126, twoWeeks.weekCellHeightDp)
+        assertTrue(twoWeeks.weekCellHeightDp > fullMonth.weekCellHeightDp)
+    }
+
+    @Test
     fun monthPageMarksLeadingDaysOutsideCurrentMonth() {
         val month = YearMonth.of(2026, 8)
         val start = WidgetMonthModel.gridStart(month, DayOfWeek.MONDAY)

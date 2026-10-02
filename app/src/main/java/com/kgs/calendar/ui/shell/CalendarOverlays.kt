@@ -146,6 +146,7 @@ internal fun SettingsOverlay(
             onColorModeSelected = viewModel.settings::setColorMode,
             onMonthWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Month, it) },
             onMonthWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Month, it) },
+            onMonthWidgetWeeksSelected = viewModel.settings::setMonthWidgetWeeks,
             onAgendaWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Agenda, it) },
             onAgendaWidgetColorModeSelected = { viewModel.settings.setWidgetColorMode(KgsWidgetKind.Agenda, it) },
             onTasksWidgetThemeSelected = { viewModel.settings.setWidgetThemeMode(KgsWidgetKind.Tasks, it) },
