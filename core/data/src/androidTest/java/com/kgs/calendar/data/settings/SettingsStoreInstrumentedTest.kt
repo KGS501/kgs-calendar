@@ -42,6 +42,38 @@ class SettingsStoreInstrumentedTest {
     }
 
     @Test
+    fun monthWidgetWeeksRoundTrip() = runBlocking {
+        val store = SettingsStore(context)
+        val original = store.monthWidgetWeeks.first()
+        try {
+            store.setMonthWidgetWeeks(WidgetMonthWeeks.Two)
+            assertEquals(WidgetMonthWeeks.Two, store.monthWidgetWeeks.first())
+
+            store.setMonthWidgetWeeks(WidgetMonthWeeks.FullMonth)
+            assertEquals(WidgetMonthWeeks.FullMonth, store.monthWidgetWeeks.first())
+        } finally {
+            store.setMonthWidgetWeeks(original)
+        }
+    }
+
+    @Test
+    fun multiWidgetWeeksRoundTripWithoutChangingMonthWidget() = runBlocking {
+        val store = SettingsStore(context)
+        val originalMonth = store.monthWidgetWeeks.first()
+        val originalMulti = store.multiWidgetWeeks.first()
+        try {
+            store.setMonthWidgetWeeks(WidgetMonthWeeks.Four)
+            store.setMultiWidgetWeeks(WidgetMonthWeeks.Two)
+
+            assertEquals(WidgetMonthWeeks.Four, store.monthWidgetWeeks.first())
+            assertEquals(WidgetMonthWeeks.Two, store.multiWidgetWeeks.first())
+        } finally {
+            store.setMonthWidgetWeeks(originalMonth)
+            store.setMultiWidgetWeeks(originalMulti)
+        }
+    }
+
+    @Test
     fun portraitAndLandscapeTimelineZoomRoundTripWithoutChangingEachOther() = runBlocking {
         val store = SettingsStore(context)
         val originalPortrait = store.portraitTimelineHourHeightDp.first()

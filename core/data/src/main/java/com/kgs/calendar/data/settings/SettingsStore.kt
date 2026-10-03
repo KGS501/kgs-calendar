@@ -83,6 +83,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     val monthWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MONTH_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
 
+    val monthWidgetWeeks: Flow<WidgetMonthWeeks> = enumFlow(KEY_MONTH_WIDGET_WEEKS, WidgetMonthWeeks.FullMonth)
+
     val agendaWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_AGENDA_WIDGET_THEME, WidgetThemeMode.FollowApp)
 
     val agendaWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_AGENDA_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
@@ -104,6 +106,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             prefs[KEY_MULTI_WIDGET_MONTH_PERCENT] ?: DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
         )
     }
+
+    val multiWidgetWeeks: Flow<WidgetMonthWeeks> = enumFlow(KEY_MULTI_WIDGET_WEEKS, WidgetMonthWeeks.FullMonth)
 
     val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> =
         enumFlow(KEY_TASKS_WIDGET_DISPLAY_MODE, WidgetTaskDisplayMode.Planned)
@@ -335,6 +339,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
     }
 
+    suspend fun setMonthWidgetWeeks(weeks: WidgetMonthWeeks) {
+        dataStore.edit { it[KEY_MONTH_WIDGET_WEEKS] = weeks.name }
+    }
+
     suspend fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
         dataStore.edit { it[KEY_AGENDA_WIDGET_THEME] = mode.name }
     }
@@ -371,6 +379,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit {
             it[KEY_MULTI_WIDGET_MONTH_PERCENT] = normalizeMultiWidgetMonthPercent(monthPercent)
         }
+    }
+
+    suspend fun setMultiWidgetWeeks(weeks: WidgetMonthWeeks) {
+        dataStore.edit { it[KEY_MULTI_WIDGET_WEEKS] = weeks.name }
     }
 
     suspend fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
@@ -644,6 +656,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_COLOR_MODE = stringPreferencesKey("color_mode")
         private val KEY_MONTH_WIDGET_THEME = stringPreferencesKey("month_widget_theme_mode")
         private val KEY_MONTH_WIDGET_COLOR_MODE = stringPreferencesKey("month_widget_color_mode")
+        private val KEY_MONTH_WIDGET_WEEKS = stringPreferencesKey("month_widget_weeks")
         private val KEY_AGENDA_WIDGET_THEME = stringPreferencesKey("agenda_widget_theme_mode")
         private val KEY_AGENDA_WIDGET_COLOR_MODE = stringPreferencesKey("agenda_widget_color_mode")
         private val KEY_TASKS_WIDGET_THEME = stringPreferencesKey("tasks_widget_theme_mode")
@@ -653,6 +666,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_MULTI_WIDGET_THEME = stringPreferencesKey("multi_widget_theme_mode")
         private val KEY_MULTI_WIDGET_COLOR_MODE = stringPreferencesKey("multi_widget_color_mode")
         private val KEY_MULTI_WIDGET_MONTH_PERCENT = intPreferencesKey("multi_widget_month_percent")
+        private val KEY_MULTI_WIDGET_WEEKS = stringPreferencesKey("multi_widget_weeks")
         private val KEY_TASKS_WIDGET_DISPLAY_MODE = stringPreferencesKey("tasks_widget_display_mode")
         private val KEY_TASKS_WIDGET_INCLUDE_OVERDUE = booleanPreferencesKey("tasks_widget_include_overdue")
         private val KEY_TASKS_WIDGET_SORT_MODE = stringPreferencesKey("tasks_widget_sort_mode")
