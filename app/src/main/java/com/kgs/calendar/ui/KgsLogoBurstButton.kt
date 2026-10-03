@@ -16,12 +16,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -43,16 +40,6 @@ private data class LogoParticleSpec(
     val colorSlot: Int,
 )
 
-private data class LogoConfettiSpec(
-    val angle: Float,
-    val distance: Float,
-    val width: Float,
-    val height: Float,
-    val delay: Float,
-    val rotation: Float,
-    val colorSlot: Int,
-)
-
 @Composable
 internal fun KgsLogoBurstButton() {
     val scope = rememberCoroutineScope()
@@ -70,20 +57,6 @@ internal fun KgsLogoBurstButton() {
             )
         }
     }
-    val confetti = remember {
-        val random = Random(1501)
-        List(10) { index ->
-            LogoConfettiSpec(
-                angle = ((index / 10f) * 2f * PI + random.nextFloat() * 0.42f).toFloat(),
-                distance = 23f + random.nextFloat() * 20f,
-                width = 2.4f + random.nextFloat() * 1.8f,
-                height = 5f + random.nextFloat() * 2.5f,
-                delay = 0.08f + random.nextFloat() * 0.2f,
-                rotation = random.nextFloat() * 150f - 75f,
-                colorSlot = index % 5,
-            )
-        }
-    }
     val progress = burstProgress.value
     val pop = sin(progress.toDouble() * PI).toFloat().coerceAtLeast(0f)
     val logoScale = 1f + pop * 0.18f
@@ -93,7 +66,6 @@ internal fun KgsLogoBurstButton() {
         WarmPeach,
         Color(0xFFFFD166),
         Color(0xFF7BDFF2),
-        Color(0xFF9BDE7E),
     )
     val ringColor = WarmBrown
 
@@ -138,28 +110,6 @@ internal fun KgsLogoBurstButton() {
                             radius = spec.radius * (1f + 0.45f * (1f - localProgress)),
                             center = Offset(center.x + driftX, center.y + driftY),
                         )
-                    }
-                }
-                confetti.forEach { spec ->
-                    val localProgress = ((progress - spec.delay) / (1f - spec.delay)).coerceIn(0f, 1f)
-                    if (localProgress > 0f) {
-                        val eased = 1f - (1f - localProgress) * (1f - localProgress)
-                        val alpha = (1f - localProgress) * (1f - localProgress)
-                        val position = Offset(
-                            x = center.x + cos(spec.angle.toDouble()).toFloat() * spec.distance * eased,
-                            y = center.y + sin(spec.angle.toDouble()).toFloat() * spec.distance * eased + 8f * localProgress * localProgress,
-                        )
-                        rotate(
-                            degrees = spec.rotation + localProgress * 210f,
-                            pivot = position,
-                        ) {
-                            drawRoundRect(
-                                color = particleColors[spec.colorSlot].copy(alpha = alpha),
-                                topLeft = Offset(position.x - spec.width / 2f, position.y - spec.height / 2f),
-                                size = Size(spec.width, spec.height),
-                                cornerRadius = CornerRadius(0.8f, 0.8f),
-                            )
-                        }
                     }
                 }
             }
