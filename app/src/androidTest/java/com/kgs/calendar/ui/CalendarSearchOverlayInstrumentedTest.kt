@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -16,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.performTextInput
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.search.CalendarSearchMode
@@ -110,6 +115,20 @@ class CalendarSearchOverlayInstrumentedTest {
             .performTextInput("calendar")
         composeRule.onNodeWithTag("search-query-field")
             .assertTextEquals("calendar")
+    }
+
+    @Test
+    fun clearSearchRemovesTextAndFocusWithoutClosingTheSearch() {
+        setSearch(initialQuery = "", mirrorQueryChanges = false)
+        val field = composeRule.onNodeWithTag("search-query-field")
+        field.performTextInput("calendar")
+        composeRule.onNodeWithTag("clear-text-button").performClick()
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        field.assertIsNotFocused()
+        composeRule.mainClock.advanceTimeBy(1_000)
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        field.assertIsNotFocused()
+        composeRule.onAllNodesWithTag("clear-text-button").assertCountEquals(0)
     }
 
     @Test

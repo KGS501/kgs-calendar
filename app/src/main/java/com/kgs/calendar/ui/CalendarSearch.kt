@@ -2,6 +2,9 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.kgs.calendar.ui.components.ClearTextButton
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -548,6 +551,8 @@ private fun SearchOptionsBar(
 
 @Composable
 private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
     var editorValue by remember {
@@ -615,16 +620,16 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
                 }
             },
         )
-        IconButton(
-            modifier = Modifier.size(38.dp),
-            onClick = {
-            if (editorValue.text.isBlank()) {
-                onClose()
-            } else {
-                editorValue = TextFieldValue("")
-            }
-        }) {
-            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = WarmInk, modifier = Modifier.size(25.dp))
+        if (editorValue.text.isNotEmpty()) {
+            ClearTextButton(
+                modifier = Modifier.size(38.dp),
+                onClick = {
+                    editorValue = TextFieldValue("")
+                    onQueryChange("")
+                    focusManager.clearFocus(force = true)
+                    keyboard?.hide()
+                },
+            )
         }
     }
 }

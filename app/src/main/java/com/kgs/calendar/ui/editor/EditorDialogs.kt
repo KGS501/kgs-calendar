@@ -185,7 +185,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -1419,6 +1419,7 @@ internal fun RecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (S
             ) {
                 OutlinedTextField(
                     value = draft.interval.toString(),
+                    clearable = false,
                     onValueChange = { value ->
                         update(draft.copy(interval = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999) ?: 1))
                     },

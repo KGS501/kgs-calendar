@@ -636,4 +636,5 @@
     <string name="sync_interval_minutes">Alle %1$d Minuten</string>
     <string name="sync_interval_help">Lokale Änderungen werden bei bestehender Verbindung sofort hochgeladen. Solange die App geöffnet ist, werden Serveränderungen etwa jede Minute geprüft. Android kann die Hintergrundsynchronisierung zum Energiesparen verzögern. Gerätekalender verwenden die Synchronisierungseinstellungen ihres Kontoanbieters.</string>
     <string name="hidden_all_day_items">%1$d ausgeblendete ganztägige Einträge: %2$s. Ganztägigen Bereich öffnen.</string>
+    <string name="clear_text">Text löschen</string>
 </resources>
