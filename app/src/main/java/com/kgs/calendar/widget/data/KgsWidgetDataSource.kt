@@ -11,6 +11,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.event.displayColor
@@ -103,6 +104,13 @@ internal class KgsWidgetDataSource(
         val dayWidgetStartHour = async { settingsStore.dayWidgetStartHour.first() }
         val dayWidgetStartAtCurrentHour = async { settingsStore.dayWidgetStartAtCurrentHour.first() }
         val multiWidgetMonthPercent = async { settingsStore.multiWidgetMonthPercent.first() }
+        val monthWidgetWeeks = async {
+            when (kind) {
+                KgsWidgetKind.Month -> settingsStore.monthWidgetWeeks.first()
+                KgsWidgetKind.Multi -> settingsStore.multiWidgetWeeks.first()
+                else -> WidgetMonthWeeks.FullMonth
+            }
+        }
         val systemNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         WidgetRenderSettings(
             locale = languageMode.await().toLocale(context),
@@ -125,6 +133,7 @@ internal class KgsWidgetDataSource(
             dayWidgetStartHour = dayWidgetStartHour.await(),
             dayWidgetStartAtCurrentHour = dayWidgetStartAtCurrentHour.await(),
             multiWidgetMonthPercent = multiWidgetMonthPercent.await(),
+            monthWidgetWeeks = monthWidgetWeeks.await(),
         )
     }
 

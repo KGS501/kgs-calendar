@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.first
 private const val WIDGET_MONTH_MAX_LANES = 10
 
 internal object WidgetMonthModel {
+    data class VisibleRange(val start: LocalDate, val rowCount: Int)
+
     fun gridStart(month: YearMonth, firstDayOfWeek: DayOfWeek): LocalDate {
         val first = month.atDay(1)
         val offset = (first.dayOfWeek.value - firstDayOfWeek.value + 7) % 7
@@ -20,6 +22,29 @@ internal object WidgetMonthModel {
     fun rowCount(month: YearMonth, firstDayOfWeek: DayOfWeek): Int {
         val leadingDays = (month.atDay(1).dayOfWeek.value - firstDayOfWeek.value + 7) % 7
         return maxOf(5, (leadingDays + month.lengthOfMonth() + 6) / 7)
+    }
+
+    fun visibleRange(
+        month: YearMonth,
+        firstDayOfWeek: DayOfWeek,
+        requestedWeeks: Int?,
+        today: LocalDate,
+    ): VisibleRange {
+        val fullStart = gridStart(month, firstDayOfWeek)
+        val fullRowCount = rowCount(month, firstDayOfWeek)
+        val visibleRows = requestedWeeks?.coerceIn(2, 4) ?: fullRowCount
+        if (visibleRows >= fullRowCount) return VisibleRange(fullStart, fullRowCount)
+
+        val todayRow = if (YearMonth.from(today) == month) {
+            (ChronoUnit.DAYS.between(fullStart, today) / 7).toInt()
+        } else {
+            0
+        }
+        val firstVisibleRow = todayRow.coerceIn(0, fullRowCount - visibleRows)
+        return VisibleRange(
+            start = fullStart.plusWeeks(firstVisibleRow.toLong()),
+            rowCount = visibleRows,
+        )
     }
 
     fun page(

@@ -13,6 +13,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
@@ -312,6 +313,11 @@ private data class DayWidgetBehaviour(
     val startAtCurrentHour: Boolean,
 )
 
+private data class MultiWidgetBehaviour(
+    val monthPercent: Int,
+    val weeks: WidgetMonthWeeks,
+)
+
 internal fun SettingsStore.widgetSettings(): Flow<WidgetSettingsUiState> = combine(
     combine(
         combine(monthWidgetColorMode, monthWidgetThemeMode, ::WidgetAppearance),
@@ -335,11 +341,13 @@ internal fun SettingsStore.widgetSettings(): Flow<WidgetSettingsUiState> = combi
         dayWidgetStartAtCurrentHour,
         ::DayWidgetBehaviour,
     ),
-    multiWidgetMonthPercent,
-) { appearances, tasks, day, multiMonthPercent ->
+    combine(multiWidgetMonthPercent, multiWidgetWeeks, ::MultiWidgetBehaviour),
+    monthWidgetWeeks,
+) { appearances, tasks, day, multi, monthWeeks ->
     WidgetSettingsUiState(
         monthWidgetColorMode = appearances.month.colorMode,
         monthWidgetThemeMode = appearances.month.themeMode,
+        monthWidgetWeeks = monthWeeks,
         agendaWidgetColorMode = appearances.agenda.colorMode,
         agendaWidgetThemeMode = appearances.agenda.themeMode,
         tasksWidgetColorMode = appearances.tasks.colorMode,
@@ -348,7 +356,8 @@ internal fun SettingsStore.widgetSettings(): Flow<WidgetSettingsUiState> = combi
         dayWidgetThemeMode = appearances.day.themeMode,
         multiWidgetColorMode = appearances.multi.colorMode,
         multiWidgetThemeMode = appearances.multi.themeMode,
-        multiWidgetMonthPercent = multiMonthPercent,
+        multiWidgetMonthPercent = multi.monthPercent,
+        multiWidgetWeeks = multi.weeks,
         tasksWidgetDisplayMode = tasks.displayMode,
         tasksWidgetIncludeOverdue = tasks.includeOverdue,
         tasksWidgetSortMode = tasks.sortMode,

@@ -316,6 +316,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
@@ -497,6 +498,14 @@ internal fun WidgetColorMode.localizedLabel(): String = when (this) {
     WidgetColorMode.FollowOs -> appString(R.string.follow_os)
     WidgetColorMode.Light -> appString(R.string.light)
     WidgetColorMode.Dark -> appString(R.string.dark)
+}
+
+@Composable
+internal fun WidgetMonthWeeks.localizedLabel(): String = when (this) {
+    WidgetMonthWeeks.Two -> appString(R.string.widget_month_weeks_count, 2)
+    WidgetMonthWeeks.Three -> appString(R.string.widget_month_weeks_count, 3)
+    WidgetMonthWeeks.Four -> appString(R.string.widget_month_weeks_count, 4)
+    WidgetMonthWeeks.FullMonth -> appString(R.string.widget_month_weeks_full)
 }
 
 @Composable

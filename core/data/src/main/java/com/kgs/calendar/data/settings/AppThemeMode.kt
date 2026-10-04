@@ -28,6 +28,13 @@ enum class WidgetColorMode(val label: String) {
     Dark("Dark"),
 }
 
+enum class WidgetMonthWeeks(val weekCount: Int?) {
+    Two(2),
+    Three(3),
+    Four(4),
+    FullMonth(null),
+}
+
 enum class WidgetTaskDisplayMode(val label: String) {
     Planned("Planned tasks"),
     Unplanned("Unplanned tasks"),

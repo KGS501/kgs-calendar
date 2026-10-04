@@ -31,8 +31,14 @@ internal class WidgetMonthPageSource(
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
     suspend fun load(month: YearMonth, settings: WidgetRenderSettings): WidgetMonthPage {
-        val start = WidgetMonthModel.gridStart(month, settings.firstDayOfWeek)
-        val rowCount = WidgetMonthModel.rowCount(month, settings.firstDayOfWeek)
+        val visibleRange = WidgetMonthModel.visibleRange(
+            month = month,
+            firstDayOfWeek = settings.firstDayOfWeek,
+            requestedWeeks = settings.monthWidgetWeeks.weekCount,
+            today = LocalDate.now(zoneId),
+        )
+        val start = visibleRange.start
+        val rowCount = visibleRange.rowCount
         val endExclusive = start.plusDays((rowCount * 7).toLong())
         val monthLayout = loadLayout(month, start, rowCount, endExclusive, settings)
         return WidgetMonthModel.page(

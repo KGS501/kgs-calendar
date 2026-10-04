@@ -14,6 +14,7 @@ import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
@@ -29,6 +30,7 @@ import java.time.LocalDate
 data class WidgetSettingsUiState(
     val monthWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
     val monthWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
+    val monthWidgetWeeks: WidgetMonthWeeks = WidgetMonthWeeks.FullMonth,
     val agendaWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
     val agendaWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
     val tasksWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
@@ -38,6 +40,7 @@ data class WidgetSettingsUiState(
     val multiWidgetColorMode: WidgetColorMode = WidgetColorMode.FollowApp,
     val multiWidgetThemeMode: WidgetThemeMode = WidgetThemeMode.FollowApp,
     val multiWidgetMonthPercent: Int = SettingsStore.DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
+    val multiWidgetWeeks: WidgetMonthWeeks = WidgetMonthWeeks.FullMonth,
     val tasksWidgetDisplayMode: WidgetTaskDisplayMode = WidgetTaskDisplayMode.Planned,
     val tasksWidgetIncludeOverdue: Boolean = true,
     val tasksWidgetSortMode: WidgetTaskSortMode = WidgetTaskSortMode.Date,

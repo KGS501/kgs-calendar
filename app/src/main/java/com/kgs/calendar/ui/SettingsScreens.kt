@@ -317,6 +317,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
@@ -447,6 +448,7 @@ internal fun SettingsPage(
     onColorModeSelected: (AppColorMode) -> Unit,
     onMonthWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMonthWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onMonthWidgetWeeksSelected: (WidgetMonthWeeks) -> Unit,
     onAgendaWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onAgendaWidgetColorModeSelected: (WidgetColorMode) -> Unit,
     onTasksWidgetThemeSelected: (WidgetThemeMode) -> Unit,
@@ -456,6 +458,7 @@ internal fun SettingsPage(
     onMultiWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMultiWidgetColorModeSelected: (WidgetColorMode) -> Unit,
     onMultiWidgetMonthPercentChanged: (Int) -> Unit,
+    onMultiWidgetWeeksSelected: (WidgetMonthWeeks) -> Unit,
     onTasksWidgetDisplayModeSelected: (WidgetTaskDisplayMode) -> Unit,
     onTasksWidgetIncludeOverdueChanged: (Boolean) -> Unit,
     onTasksWidgetCreateModeSelected: (WidgetTaskCreateMode) -> Unit,
@@ -528,6 +531,7 @@ internal fun SettingsPage(
     var colorModeDialogOpen by remember { mutableStateOf(false) }
     var widgetThemeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
     var widgetColorModeDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
+    var widgetWeeksDialogTarget by remember { mutableStateOf<SettingsDestination?>(null) }
     var tasksWidgetDisplayDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetCreateDialogOpen by remember { mutableStateOf(false) }
     var tasksWidgetSubtaskDefaultDialogOpen by remember { mutableStateOf(false) }
@@ -1375,6 +1379,11 @@ internal fun SettingsPage(
                                     value = state.widgetSettings.monthWidgetColorMode.localizedLabel(),
                                     onClick = { widgetColorModeDialogTarget = SettingsDestination.WidgetMonth },
                                 )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.widget_month_visible_weeks),
+                                    value = state.widgetSettings.monthWidgetWeeks.localizedLabel(),
+                                    onClick = { widgetWeeksDialogTarget = SettingsDestination.WidgetMonth },
+                                )
                                 SettingsHelpText(stringResource(R.string.widget_month_settings_help))
                             }
                         }
@@ -1474,6 +1483,11 @@ internal fun SettingsPage(
                                     range = SettingsStore.MIN_MULTI_WIDGET_MONTH_PERCENT..SettingsStore.MAX_MULTI_WIDGET_MONTH_PERCENT,
                                     step = 5,
                                     onValueChanged = onMultiWidgetMonthPercentChanged,
+                                )
+                                SettingsButtonRow(
+                                    label = stringResource(R.string.widget_month_visible_weeks),
+                                    value = state.widgetSettings.multiWidgetWeeks.localizedLabel(),
+                                    onClick = { widgetWeeksDialogTarget = SettingsDestination.WidgetMulti },
                                 )
                             }
                         }
@@ -1668,6 +1682,30 @@ internal fun SettingsPage(
                 widgetThemeDialogTarget = null
             },
             onDismiss = { widgetThemeDialogTarget = null },
+        )
+    }
+    widgetWeeksDialogTarget?.let { target ->
+        SettingsChoiceDialog(
+            title = appString(R.string.widget_month_visible_weeks),
+            options = listOf(
+                WidgetMonthWeeks.Two,
+                WidgetMonthWeeks.Three,
+                WidgetMonthWeeks.Four,
+                WidgetMonthWeeks.FullMonth,
+            ),
+            selected = when (target) {
+                SettingsDestination.WidgetMulti -> state.widgetSettings.multiWidgetWeeks
+                else -> state.widgetSettings.monthWidgetWeeks
+            },
+            label = { it.localizedLabel() },
+            onSelected = {
+                when (target) {
+                    SettingsDestination.WidgetMulti -> onMultiWidgetWeeksSelected(it)
+                    else -> onMonthWidgetWeeksSelected(it)
+                }
+                widgetWeeksDialogTarget = null
+            },
+            onDismiss = { widgetWeeksDialogTarget = null },
         )
     }
     if (tasksWidgetDisplayDialogOpen) {
