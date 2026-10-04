@@ -636,4 +636,5 @@
     <string name="sync_interval_minutes">Every %1$d minutes</string>
     <string name="sync_interval_help">Local changes upload immediately when online. While the app is open, server changes are checked about once a minute. Android may delay background sync to save battery. Device calendars use their account provider’s sync settings.</string>
     <string name="hidden_all_day_items">%1$d hidden all-day items: %2$s. Expand all-day section.</string>
+    <string name="clear_text">Clear text</string>
 </resources>
