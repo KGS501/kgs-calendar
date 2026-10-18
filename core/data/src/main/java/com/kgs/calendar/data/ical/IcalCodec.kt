@@ -311,7 +311,7 @@ class IcalCodec(
         val start = parseIcalDate(startLine) ?: return null
         val end = values["DTEND"]?.let { parseIcalDate(it) }
             ?: values["DURATION"]?.value?.let { duration ->
-                parseDurationMillis(duration)?.let { ParsedDate(start.epochMillis + it, start.isDateOnly) }
+                parseDurationMillis(duration)?.let { start.plusDuration(it) }
             }
             ?: start.plusDefaultDuration(startLine.isDateOnly)
         val title = values["SUMMARY"]?.textValue()?.ifBlank { "Untitled event" } ?: "Untitled event"
@@ -611,7 +611,19 @@ class IcalCodec(
     }
 
     private fun ParsedDate.plusDefaultDuration(allDay: Boolean): ParsedDate =
-        ParsedDate(epochMillis + if (allDay) DAY_MILLIS else HOUR_MILLIS, allDay)
+        if (allDay) plusDuration(DAY_MILLIS) else ParsedDate(epochMillis + HOUR_MILLIS, allDay)
+
+    /** Date-only values move by whole calendar days, so a 23h or 25h DST day still ends at midnight. */
+    private fun ParsedDate.plusDuration(durationMillis: Long): ParsedDate {
+        if (!isDateOnly) return ParsedDate(epochMillis + durationMillis, isDateOnly)
+        val days = Math.round(durationMillis.toDouble() / DAY_MILLIS)
+        val endMillis = Instant.ofEpochMilli(epochMillis).atZone(zoneId).toLocalDate()
+            .plusDays(days)
+            .atStartOfDay(zoneId)
+            .toInstant()
+            .toEpochMilli()
+        return ParsedDate(endMillis, isDateOnly)
+    }
 
     private fun StringBuilder.appendDateProperty(
         name: String,

@@ -304,7 +304,7 @@ class TaskMutations internal constructor(
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) return@writeTransaction
 
         if (existing.startAtMillis == null && existing.dueAtMillis == null) return@writeTransaction
-        val occurrence = existing.occurrenceAt(occurrenceStartMillis)
+        val occurrence = existing.occurrenceAt(occurrenceStartMillis, zoneId)
         val completed = status.equals("COMPLETED", ignoreCase = true)
         val updatedOccurrence = occurrence.copy(
             isCompleted = completed,
