@@ -31,11 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.TaskColorMode
@@ -49,7 +47,6 @@ import com.kgs.calendar.ui.CalendarSearchResult
 import com.kgs.calendar.ui.CalendarSearchResultRow
 import com.kgs.calendar.ui.DetailSheet
 import com.kgs.calendar.ui.SearchPastFutureDivider
-import com.kgs.calendar.ui.agendaChronologyPresentation
 import com.kgs.calendar.ui.agendaStickyHeaderViewport
 import com.kgs.calendar.ui.buildAgendaEventResults
 import com.kgs.calendar.ui.rememberTaskHierarchyPresentation
