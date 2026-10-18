@@ -1,6 +1,7 @@
 package com.kgs.calendar.data.remote
 
 import android.graphics.Color
+import com.kgs.calendar.data.normalizeServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -831,15 +832,6 @@ class CalDavHttpClient(
     private fun originOf(url: String): String {
         val uri = URI(normalizeServer(url))
         return "${uri.scheme}://${uri.authority}"
-    }
-
-    private fun normalizeServer(serverUrl: String): String {
-        val trimmed = serverUrl.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            else -> "https://$trimmed"
-        }
     }
 
     private fun ensureTrailingSlash(value: String): String =
