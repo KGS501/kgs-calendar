@@ -100,12 +100,15 @@ class ReminderReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching {
-                val graph = KgsCalendarApplication.graph(appContext)
-                graph.taskMutationCoordinator.setStatus(occurrenceId.resourceHref, "COMPLETED", occurrenceId)
+            try {
+                runCatching {
+                    val graph = KgsCalendarApplication.graph(appContext)
+                    graph.taskMutationCoordinator.setStatus(occurrenceId.resourceHref, "COMPLETED", occurrenceId)
+                }
+                NotificationManagerCompat.from(appContext).cancel(notificationTag, notificationId)
+            } finally {
+                pendingResult.finish()
             }
-            NotificationManagerCompat.from(appContext).cancel(notificationTag, notificationId)
-            pendingResult.finish()
         }
     }
 
