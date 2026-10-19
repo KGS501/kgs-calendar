@@ -17,6 +17,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.location.LocationManager
 import android.net.Uri
+import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
@@ -125,7 +126,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.PI
 import kotlin.math.max
@@ -288,14 +288,23 @@ internal data class LocationSelection(
 
 internal object LocationLookup {
     private const val USER_AGENT = "KGSCalendar/1.0 Android (com.kgs501.kgscalendar)"
+    private const val SEARCH_CACHE_ENTRIES = 64
+    private const val TILE_CACHE_BYTES = 4 * 1024 * 1024
+    private const val MAP_CACHE_BYTES = 8 * 1024 * 1024
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
-    private val searchCache = ConcurrentHashMap<String, List<LocationSuggestion>>()
-    private val byteCache = ConcurrentHashMap<String, ByteArray>()
-    private val mapCache = ConcurrentHashMap<String, Bitmap>()
+    // Bounded: every viewed location adds a ~650 KB preview bitmap, which must not pile up for the
+    // whole process lifetime.
+    private val searchCache = LruCache<String, List<LocationSuggestion>>(SEARCH_CACHE_ENTRIES)
+    private val byteCache = object : LruCache<String, ByteArray>(TILE_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+    private val mapCache = object : LruCache<String, Bitmap>(MAP_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+    }
 
     suspend fun search(query: String, limit: Int = 8, anchor: LocationAnchor? = null, allowAliases: Boolean = true): List<LocationSuggestion> = withContext(Dispatchers.IO) {
         val trimmed = query.trim()
@@ -303,7 +312,7 @@ internal object LocationLookup {
         val country = Locale.getDefault().country.lowercase(Locale.US).takeIf { it.length == 2 }
         val language = Locale.getDefault().toLanguageTag()
         val key = listOf(trimmed.lowercase(Locale.ROOT), country.orEmpty(), language, limit, anchor?.cacheKey.orEmpty(), allowAliases).joinToString("|")
-        searchCache[key]?.let { return@withContext it }
+        searchCache.get(key)?.let { return@withContext it }
         val countryParam = country?.let { "&countrycodes=$it" }.orEmpty()
         val viewboxParam = anchor?.nominatimViewboxParam().orEmpty()
         val encodedQuery = URLEncoder.encode(trimmed, "UTF-8")
@@ -333,12 +342,12 @@ internal object LocationLookup {
                 )
             }
         }.distinctBy { it.displayName }.take(limit)
-        searchCache[key] = parsed
+        searchCache.put(key, parsed)
         parsed
     }
 
     suspend fun bytes(url: String): ByteArray = withContext(Dispatchers.IO) {
-        byteCache[url]?.let { return@withContext it }
+        byteCache.get(url)?.let { return@withContext it }
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", USER_AGENT)
@@ -347,13 +356,13 @@ internal object LocationLookup {
             if (!response.isSuccessful) error("Map request failed: ${response.code}")
             response.body?.bytes() ?: error("Empty map response")
         }
-        byteCache[url] = bytes
+        byteCache.put(url, bytes)
         bytes
     }
 
     suspend fun mapPreviewBitmap(suggestion: LocationSuggestion, width: Int = 640, height: Int = 260, zoom: Int = 15): Bitmap = withContext(Dispatchers.IO) {
         val key = "${suggestion.latitude},${suggestion.longitude},$width,$height,$zoom"
-        mapCache[key]?.let { return@withContext it }
+        mapCache.get(key)?.let { return@withContext it }
         val tileSize = 256
         val tileCount = 1 shl zoom
         val latRad = Math.toRadians(suggestion.latitude)
@@ -397,7 +406,7 @@ internal object LocationLookup {
         canvas.drawCircle(cx, cy, 16f, markerStroke)
         canvas.drawCircle(cx, cy, 12f, markerPaint)
         canvas.drawCircle(cx, cy, 5f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() })
-        mapCache[key] = bitmap
+        mapCache.put(key, bitmap)
         bitmap
     }
 }
