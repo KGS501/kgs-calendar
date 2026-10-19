@@ -3,7 +3,13 @@ package com.kgs.calendar.data
 import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import java.time.LocalDate
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +18,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class ReadOnlyCalendarRepositoryTest {
@@ -145,6 +150,30 @@ class ReadOnlyCalendarRepositoryTest {
         assertEquals(listOf("German Unity Day"), harness.eventsIn(collectionHref).map { it.title })
         assertEquals(null, harness.event("$collectionHref/harvest.ics"))
         assertEquals(null, harness.resource("$collectionHref/harvest.ics"))
+    }
+
+    @Test
+    fun feedDownloadsLeaveTheCallingThread() = runTest {
+        // The UI adds subscriptions from the main thread, where Android forbids network access.
+        val requestThreads = CopyOnWriteArrayList<Thread>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain -> requestThreads += Thread.currentThread(); chain.proceed(chain.request()) }
+            .build()
+        RepositoryHarness(httpClient = client).use { local ->
+            local.server.setFeed(feedPath, feed("unity-day" to "Unity Day"))
+            val caller = Executors.newSingleThreadExecutor { Thread(it, "caller") }
+            try {
+                val callerThread = withContext(caller.asCoroutineDispatcher()) {
+                    local.repository.addReadOnlyCalendar(local.server.url(feedPath), "Holidays")
+                    Thread.currentThread()
+                }
+
+                assertTrue(requestThreads.isNotEmpty())
+                assertTrue(requestThreads.none { it === callerThread })
+            } finally {
+                caller.shutdown()
+            }
+        }
     }
 
     @Test

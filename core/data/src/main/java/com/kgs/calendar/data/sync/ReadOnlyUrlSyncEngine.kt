@@ -13,6 +13,8 @@ import com.kgs.calendar.data.looksLikeHtmlResponse
 import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.math.abs
@@ -32,7 +34,11 @@ class ReadOnlyUrlSyncEngine internal constructor(
         return true
     }
 
-    suspend fun sync(account: AccountEntity) {
+    // OkHttp's execute() blocks: callers include the UI's add flow on the main thread, where Android
+    // refuses network access, so the whole sync runs on the IO dispatcher.
+    suspend fun sync(account: AccountEntity): Unit = withContext(Dispatchers.IO) { syncOnIo(account) }
+
+    private suspend fun syncOnIo(account: AccountEntity) {
         database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
         val collectionHref = "$READ_ONLY_PREFIX${account.id}"
         val existing = database.collectionDao().get(collectionHref)
