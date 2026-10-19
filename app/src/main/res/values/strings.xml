@@ -637,4 +637,16 @@
     <string name="sync_interval_help">Local changes upload immediately when online. While the app is open, server changes are checked about once a minute. Android may delay background sync to save battery. Device calendars use their account provider’s sync settings.</string>
     <string name="hidden_all_day_items">%1$d hidden all-day items: %2$s. Expand all-day section.</string>
     <string name="clear_text">Clear text</string>
+    <string name="ics_import_title">Import calendar file</string>
+    <string name="ics_import_action">Import</string>
+    <string name="ics_importing">Importing…</string>
+    <string name="ics_open_calendar">Open calendar</string>
+    <string name="ics_import_help">Review %1$d event(s), then choose a local or CalDAV calendar. Existing events with the same ID will be skipped.</string>
+    <string name="ics_import_destination">Destination calendar</string>
+    <string name="ics_import_no_calendar">Enable a writable local or CalDAV calendar in KGS Calendar to import these events.</string>
+    <string name="ics_import_recurring">Recurring event, including exceptions</string>
+    <string name="ics_import_result">Imported: %1$d. Already present: %2$d.</string>
+    <string name="ics_import_read_error">Could not read this calendar file. Download the attachment and open it again. Files up to 2 MB are supported.</string>
+    <string name="ics_import_invalid_error">This file could not be imported. It must contain valid calendar events with their IDs and start dates, with at most 500 events. Task-only or incomplete calendar files are not supported.</string>
+    <string name="ics_import_save_error">Could not save these events. Check that the selected calendar is still writable, then try again.</string>
 </resources>

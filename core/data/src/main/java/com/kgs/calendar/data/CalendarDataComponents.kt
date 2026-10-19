@@ -2,8 +2,10 @@ package com.kgs.calendar.data
 
 import com.kgs.calendar.data.account.CalendarSourceManager
 import com.kgs.calendar.data.ical.IcalCodec
+import com.kgs.calendar.data.ical.IcsEventReader
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.mutation.EventMutations
+import com.kgs.calendar.data.mutation.EventImports
 import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
@@ -47,6 +49,7 @@ class CalendarDataComponents(
 
     val queries = CalendarQueries(database, recurrenceExpander, zoneId)
     val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, trashSnapshots, zoneId)
+    val eventImports = EventImports(database, localWrites, IcsEventReader(icalCodec))
     val taskMutations = TaskMutations(database, localWrites, icalCodec, trashSnapshots, zoneId)
 
     val repairs = SyncRepairs(database, localWrites, icalCodec)

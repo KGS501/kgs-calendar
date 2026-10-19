@@ -69,6 +69,7 @@ class AppGraph(context: Context) {
     )
     val calendarQueries: CalendarQueries = calendarData.queries
     val eventMutations: EventMutations = calendarData.eventMutations
+    val eventImports = calendarData.eventImports
     val taskMutations: TaskMutations = calendarData.taskMutations
     val calendarSources: CalendarSourceManager = calendarData.sources
     val syncOrchestrator: SyncOrchestrator = calendarData.syncOrchestrator

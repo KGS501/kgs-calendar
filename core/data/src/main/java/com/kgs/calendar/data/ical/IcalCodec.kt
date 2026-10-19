@@ -349,7 +349,9 @@ class IcalCodec(
             isRecurring = rrule != null || rDateMillis.isNotEmpty(),
             exDatesCsv = exDateMillis.takeIf { it.isNotEmpty() }?.joinToString(","),
             rDatesCsv = rDateMillis.takeIf { it.isNotEmpty() }?.joinToString(","),
-            timezoneId = startLine.params["TZID"]?.unquoteParam()?.takeIf { it.isNotBlank() },
+            timezoneId = if (!startLine.isDateOnly && startLine.value.endsWith("Z")) {
+                "UTC"
+            } else startLine.params["TZID"]?.unquoteParam()?.takeIf { it.isNotBlank() },
             sequence = values["SEQUENCE"]?.value?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
             remindersCsv = block.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
             status = values["STATUS"]?.value?.trim()?.uppercase(Locale.US)?.takeIf { it.isNotBlank() },

@@ -637,4 +637,16 @@
     <string name="sync_interval_help">Lokale Änderungen werden bei bestehender Verbindung sofort hochgeladen. Solange die App geöffnet ist, werden Serveränderungen etwa jede Minute geprüft. Android kann die Hintergrundsynchronisierung zum Energiesparen verzögern. Gerätekalender verwenden die Synchronisierungseinstellungen ihres Kontoanbieters.</string>
     <string name="hidden_all_day_items">%1$d ausgeblendete ganztägige Einträge: %2$s. Ganztägigen Bereich öffnen.</string>
     <string name="clear_text">Text löschen</string>
+    <string name="ics_import_title">Kalenderdatei importieren</string>
+    <string name="ics_import_action">Importieren</string>
+    <string name="ics_importing">Wird importiert…</string>
+    <string name="ics_open_calendar">Kalender öffnen</string>
+    <string name="ics_import_help">Prüfe %1$d Termin(e) und wähle einen lokalen oder CalDAV-Kalender. Bereits vorhandene Termine mit derselben ID werden übersprungen.</string>
+    <string name="ics_import_destination">Zielkalender</string>
+    <string name="ics_import_no_calendar">Aktiviere in KGS Calendar einen beschreibbaren lokalen oder CalDAV-Kalender, um diese Termine zu importieren.</string>
+    <string name="ics_import_recurring">Terminserie einschließlich Ausnahmen</string>
+    <string name="ics_import_result">Importiert: %1$d. Bereits vorhanden: %2$d.</string>
+    <string name="ics_import_read_error">Die Kalenderdatei konnte nicht gelesen werden. Lade den Anhang herunter und öffne ihn erneut. Dateien bis 2 MB werden unterstützt.</string>
+    <string name="ics_import_invalid_error">Diese Datei konnte nicht importiert werden. Sie muss gültige Kalendertermine mit IDs und Startdatum enthalten, höchstens 500 Termine. Reine Aufgabenlisten und unvollständige Kalenderdateien werden nicht unterstützt.</string>
+    <string name="ics_import_save_error">Die Termine konnten nicht gespeichert werden. Prüfe, ob der ausgewählte Kalender noch beschreibbar ist, und versuche es erneut.</string>
 </resources>
