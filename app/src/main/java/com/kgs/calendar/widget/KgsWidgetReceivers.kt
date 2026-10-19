@@ -9,10 +9,13 @@ import android.os.Build
 import android.os.SystemClock
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.MainActivity
+import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.widget.model.loadSubtaskTransitionSnapshots
 import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
+import com.kgs.calendar.widget.update.WidgetDayRollover
 import com.kgs.calendar.widget.update.WidgetTaskToggle
+import com.kgs.calendar.widget.update.WidgetUpdateCause
 import com.kgs.calendar.widget.update.animateTasksSubtaskToggle
 import com.kgs.calendar.widget.update.refreshTasksWidgetRows
 import java.time.LocalDate
@@ -107,10 +110,37 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
     }
 }
 
+/**
+ * Refreshes every widget when the date changes: the day-rollover alarm at midnight, a new time zone
+ * or a changed clock. A clock or zone change also moves the next rollover and the reminder alarms.
+ */
 class KgsWidgetRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_USER_PRESENT) {
-            KgsCalendarApplication.graph(context.applicationContext).widgets.scheduler.updateAll()
+        val action = intent.action ?: return
+        if (action !in REFRESH_ACTIONS) return
+        val appContext = context.applicationContext
+        val widgets = KgsCalendarApplication.graph(appContext).widgets
+        WidgetDayRollover.schedule(appContext)
+        widgets.state.dataGeneration.increment()
+        val rollover = action == WidgetDayRollover.ACTION_DAY_ROLLOVER
+        val pending = goAsync()
+        widgets.scheduler.launch {
+            try {
+                // All-day and floating reminders were planned in local time.
+                if (!rollover) runCatching { ReminderScheduler.reschedule(appContext) }
+                widgets.scheduler.updateAllAndAwait(if (rollover) WidgetUpdateCause.Periodic else WidgetUpdateCause.Configuration)
+            } finally {
+                pending.finish()
+            }
         }
+    }
+
+    private companion object {
+        val REFRESH_ACTIONS = setOf(
+            WidgetDayRollover.ACTION_DAY_ROLLOVER,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_LOCALE_CHANGED,
+        )
     }
 }

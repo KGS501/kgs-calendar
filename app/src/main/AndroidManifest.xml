@@ -103,8 +103,11 @@
         <receiver
             android:name=".widget.KgsWidgetRefreshReceiver"
             android:exported="false">
+            <!-- Exempt from the implicit broadcast limits; the midnight rollover alarm is explicit. -->
             <intent-filter>
-                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
             </intent-filter>
         </receiver>
 

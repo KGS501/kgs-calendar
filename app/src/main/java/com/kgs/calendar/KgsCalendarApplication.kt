@@ -15,6 +15,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
+import com.kgs.calendar.widget.update.WidgetDayRollover
 import com.kgs.calendar.domain.source.isLocalAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +88,7 @@ class KgsCalendarApplication : Application() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         ReminderScheduler.ensureChannel(this)
         registerWidgetRefreshHooks()
+        WidgetDayRollover.schedule(this)
         registerAndroidCalendarObserverIfPermitted()
         scope.launch {
             appGraph.settingsStore.syncIntervalMinutes.distinctUntilChanged().collect {
@@ -165,6 +167,9 @@ class KgsCalendarApplication : Application() {
         scheduleWidgetRefresh()
     }
 
+    // Called from Room's invalidation thread, the main thread and IO collectors: the debounce
+    // job must be swapped under a lock, or two overlapping refreshes can both survive.
+    @Synchronized
     private fun scheduleWidgetRefresh() {
         widgetRefreshJob?.cancel()
         widgetRefreshJob = scope.launch {
@@ -173,6 +178,7 @@ class KgsCalendarApplication : Application() {
         }
     }
 
+    @Synchronized
     private fun scheduleAndroidCalendarRefresh() {
         androidCalendarRefreshJob?.cancel()
         androidCalendarRefreshJob = scope.launch {
