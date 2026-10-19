@@ -48,6 +48,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
@@ -77,6 +78,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import com.kgs.calendar.domain.source.CalendarSourceGroupKind
+import com.kgs.calendar.domain.source.CalendarSourceGroups
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
+import com.kgs.calendar.ui.sources.SourceAvatar
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.image
+import com.kgs.calendar.ui.sources.label
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -204,6 +213,7 @@ internal fun SettingsPage(
     onSyncIntervalChanged: (Int) -> Unit = {},
     onCollectionSettings: (CollectionEntity) -> Unit,
     onLocalCalendarEnabledChanged: (Boolean) -> Unit,
+    onGroupSettings: (String) -> Unit = {},
     onClose: () -> Unit,
 ) {
     val timelineVisibility = timelineSettingsVisibility(
@@ -417,29 +427,69 @@ internal fun SettingsPage(
                             val visibleAccounts = accounts
                             val visibleCollections = state.collections
                             SettingsSection(title = stringResource(R.string.calendar), icon = Icons.Default.CalendarMonth) {
-                                visibleAccounts.forEach { account ->
-                                    key(account.id) {
+                                // Sources in their automatic groups (feeds of one website together), each once.
+                                // Custom groups only rearrange the sidebar.
+                                state.calendarGroups.filter { it.kind != CalendarSourceGroupKind.Custom }.forEach { group ->
+                                    val groupAccounts = visibleAccounts.filter { CalendarSourceGroups.automaticKey(it, visibleAccounts) == group.key }
+                                    if (groupAccounts.isEmpty()) return@forEach
+                                    key(group.key) {
                                         AnimatedVisibility(
-                                            visible = !(account.id == UiLocalAccountId && localCollection?.isEnabled == false),
+                                            visible = !(group.kind == CalendarSourceGroupKind.Local && localCollection?.isEnabled == false),
                                             enter = expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)) + fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)),
                                             exit = shrinkVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)),
                                         ) {
-                                            SettingsMenuRow(
-                                                title = account.displayName ?: account.username,
-                                                value = when {
-                                                    account.id == UiLocalAccountId -> stringResource(R.string.local_source)
-                                                    account.isAndroidProviderAccount() -> stringResource(R.string.android_device_calendars)
-                                                    account.sourceType == SourceType.ReadOnlyUrl || account.username == "Read-only URL" -> stringResource(R.string.read_only_url)
-                                                    else -> account.serverUrl
-                                                },
-                                                warningBadge = account.isAndroidProviderAccount() && state.hiddenAndroidProviderCalendarNames.isNotEmpty(),
-                                            ) {
-                                                selectedAccountId = account.id
-                                                editAccountName = account.displayName ?: account.username
-                                                editAccountServerUrl = account.serverUrl
-                                                editAccountUsername = account.username
-                                                editAccountPassword = ""
-                                                navigateTo(SettingsDestination.AccountDetail)
+                                            val groupName = group.displayName()
+                                            val groupImage = group.image(state.sourceImages)
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                if (groupAccounts.size > 1) {
+                                                    SettingsMenuRow(
+                                                        title = groupName,
+                                                        value = stringResource(R.string.calendar_group_edit),
+                                                        leading = { SourceAvatar(groupName, groupImage, 28.dp) },
+                                                        onClick = { onGroupSettings(group.key) },
+                                                    )
+                                                }
+                                                groupAccounts.forEach { account ->
+                                                    val single = groupAccounts.size == 1
+                                                    // Feeds of one website share their host name, so they are told apart by calendar name.
+                                                    val feedCalendarName = state.collections
+                                                        .takeIf { account.sourceType == SourceType.ReadOnlyUrl }
+                                                        ?.firstOrNull { it.accountId == account.id }
+                                                        ?.displayName
+                                                    val accountName = when {
+                                                        single -> groupName
+                                                        feedCalendarName != null -> feedCalendarName
+                                                        else -> account.displayName ?: account.username
+                                                    }
+                                                    SettingsMenuRow(
+                                                        title = accountName,
+                                                        value = when {
+                                                            account.id == UiLocalAccountId -> stringResource(R.string.local_source)
+                                                            account.isAndroidProviderAccount() -> stringResource(R.string.android_device_calendars)
+                                                            account.sourceType == SourceType.ReadOnlyUrl || account.username == "Read-only URL" ->
+                                                                state.collections.firstOrNull { it.accountId == account.id }
+                                                                    ?.let { readOnlyFeedStatus(account, it) }
+                                                                    ?.label()
+                                                                    ?: if (single) stringResource(R.string.read_only_url) else account.serverUrl
+                                                            else -> account.serverUrl
+                                                        },
+                                                        warningBadge = (account.isAndroidProviderAccount() && state.hiddenAndroidProviderCalendarNames.isNotEmpty()) ||
+                                                            state.collections.any { it.accountId == account.id && readOnlyFeedStatus(account, it).let { status -> status != null && status != ReadOnlyFeedStatus.Empty && status != ReadOnlyFeedStatus.Loading } },
+                                                        modifier = if (single) Modifier else Modifier.padding(start = 20.dp),
+                                                        leading = if (single) {
+                                                            { SourceAvatar(groupName, groupImage, 28.dp) }
+                                                        } else {
+                                                            null
+                                                        },
+                                                    ) {
+                                                        selectedAccountId = account.id
+                                                        editAccountName = account.displayName ?: account.username
+                                                        editAccountServerUrl = account.serverUrl
+                                                        editAccountUsername = account.username
+                                                        editAccountPassword = ""
+                                                        navigateTo(SettingsDestination.AccountDetail)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -663,6 +713,17 @@ internal fun SettingsPage(
                                 val isLocalSource = account.id == UiLocalAccountId || account.serverUrl.startsWith(UiLocalCollectionPrefix)
                                 val isAndroidSource = account.isAndroidProviderAccount()
                                 SettingsSection(title = stringResource(R.string.edit_source), icon = Icons.Default.Settings) {
+                                    val accountGroup = state.calendarGroups.firstOrNull { it.key == CalendarSourceGroups.automaticKey(account, state.accounts) }
+                                    if (accountGroup != null) {
+                                        val accountGroupName = accountGroup.displayName()
+                                        val accountGroupImage = accountGroup.image(state.sourceImages)
+                                        SettingsMenuRow(
+                                            title = stringResource(R.string.calendar_group_edit),
+                                            value = accountGroupName,
+                                            leading = { SourceAvatar(accountGroupName, accountGroupImage, 28.dp) },
+                                            onClick = { onGroupSettings(accountGroup.key) },
+                                        )
+                                    }
                                     OutlinedTextField(editAccountName, { editAccountName = it }, label = { Text(stringResource(R.string.name)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                                     if (!isLocalSource && !isAndroidSource) {
                                         OutlinedTextField(editAccountServerUrl, { editAccountServerUrl = it }, label = { Text(stringResource(R.string.server_url)) }, singleLine = true, keyboardOptions = UrlKeyboardOptions, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
@@ -1820,6 +1881,8 @@ internal fun CollectionSettingsSheet(
     onEventsVisibleChanged: (Boolean) -> Unit = {},
     onTasksVisibleChanged: (Boolean) -> Unit = {},
     onDelete: (() -> Unit)? = null,
+    groupName: String? = null,
+    onChooseGroup: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
     var name by remember(collection.href) { mutableStateOf(collection.displayName) }
@@ -1872,6 +1935,14 @@ internal fun CollectionSettingsSheet(
             TextButton(onClick = { customColor = null }) {
                 Text(stringResource(R.string.remove_custom_color))
             }
+        }
+        if (groupName != null && onChooseGroup != null) {
+            SettingsMenuRow(
+                title = stringResource(R.string.calendar_group_choose),
+                value = groupName,
+                leadingIcon = Icons.Default.Folder,
+                onClick = onChooseGroup,
+            )
         }
         SettingsSwitchRow(
             title = if (visibleInViews) appString(R.string.calendar_visible) else appString(R.string.calendar_hidden),

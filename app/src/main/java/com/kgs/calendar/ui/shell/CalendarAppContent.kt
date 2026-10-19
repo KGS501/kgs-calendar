@@ -311,6 +311,7 @@ internal fun CalendarAppContent(
         },
     )
     CollectionSettingsHost(viewModel = viewModel, state = state, shell = shell)
+    CalendarGroupDialogHost(viewModel = viewModel, state = state, shell = shell)
     RecurringSaveDialogHost(
         viewModel = viewModel,
         shell = shell,

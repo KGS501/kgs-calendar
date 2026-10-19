@@ -9,14 +9,15 @@ import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.recurrence.occurrenceAt
-import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
+import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.CalendarWindowLayout
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.domain.source.CalendarSourceGroupKind
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
@@ -486,6 +487,36 @@ class CalendarViewModelTest {
         withContext(Dispatchers.Default) {
             withTimeout(30_000) { reminderReschedules.first(predicate) }
         }
+
+    @Test
+    fun feedsOfOneWebsiteShareASidebarGroupThatCalendarsCanLeave() = runTest {
+        val viewModel = viewModel()
+        viewModel.awaitState { it.initialDataLoaded }
+        listOf("/school/term.ics", "/school/exams.ics").forEach { path ->
+            harness.server.setFeed(path, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:${path.substringAfterLast('/')}\r\nEND:VCALENDAR\r\n")
+            harness.repository.addReadOnlyCalendar(harness.server.url(path))
+        }
+
+        // Each feed's calendar exists as a placeholder before its download names it.
+        val grouped = viewModel.awaitState { state ->
+            state.calendarGroups.any { group -> group.collections.map { it.displayName }.sorted() == listOf("exams.ics", "term.ics") }
+        }
+        val feedGroup = grouped.calendarGroups.single { it.collections.size == 2 }
+        assertEquals(CalendarSourceGroupKind.ReadOnlyUrl, feedGroup.kind)
+        assertEquals(listOf("exams.ics", "term.ics"), feedGroup.collections.map { it.displayName }.sorted())
+
+        val exams = feedGroup.collections.single { it.displayName == "exams.ics" }
+        viewModel.sources.moveCollectionToNewGroup(exams.href, "Exams")
+        val moved = viewModel.awaitState { state -> state.calendarGroups.any { it.kind == CalendarSourceGroupKind.Custom } }
+        val custom = moved.calendarGroups.single { it.kind == CalendarSourceGroupKind.Custom }
+        assertEquals("Exams", custom.name)
+        assertEquals(listOf(exams.href), custom.collections.map { it.href })
+
+        viewModel.sources.moveCollectionToGroup(exams.href, null)
+        val back = viewModel.awaitState { state -> state.calendarGroups.none { it.kind == CalendarSourceGroupKind.Custom } }
+        assertEquals(2, back.calendarGroups.single { it.key == feedGroup.key }.collections.size)
+        assertTrue(settingsStore.calendarGroupSettings.first().names.isEmpty())
+    }
 
     private fun viewModel(
         widgetTarget: CalendarWidgetLaunchTarget? = null,

@@ -1,9 +1,12 @@
 package com.kgs.calendar.ui
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.kgs.calendar.R
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +43,7 @@ class CalendarSourceActionsTest {
     }
 
     @Test
-    fun failedReadOnlySubscriptionIsReportedAsProblemWithoutLeavingASource() = runTest {
+    fun failedReadOnlySubscriptionStaysAsSourceWithoutDataYet() = runTest {
         val feedPath = "/feeds/login.ics"
         harness.server.setFeed(feedPath, "<!DOCTYPE html><html><body>Login</body></html>", contentType = "text/html")
 
@@ -50,10 +54,12 @@ class CalendarSourceActionsTest {
         val message = withContext(Dispatchers.Default) {
             withTimeout(30_000) { transient.message.first { it != null } }
         }!!
-        assertTrue(message, message.startsWith("Adding the read-only calendar failed. Source \""))
-        assertTrue(message, message.endsWith("URL returned a web page instead of an iCalendar feed."))
-        assertTrue(message.isProblemMessage())
-        assertTrue(harness.database.accountDao().getAll().none { it.sourceType == SourceType.ReadOnlyUrl })
+        // The calendar is added anyway; the notice says it has no data yet and Problems has the reason.
+        assertEquals("string-${R.string.read_only_added_no_data}", message)
+        val account = harness.database.accountDao().getAll().single { it.sourceType == SourceType.ReadOnlyUrl }
+        assertTrue(account.syncError!!.endsWith("URL returned a web page instead of an iCalendar feed."))
+        val collection = harness.database.collectionDao().forAccount(account.id).single()
+        assertEquals(ReadOnlyFeedStatus.NoDataYet, readOnlyFeedStatus(account, collection))
     }
 
     private fun actions(scope: CoroutineScope) = CalendarSourceActions(

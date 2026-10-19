@@ -200,10 +200,13 @@ internal fun SettingsMenuRow(
     leadingIcon: ImageVector? = null,
     helpText: String? = null,
     warningBadge: Boolean = false,
+    modifier: Modifier = Modifier,
+    /** Shown instead of [leadingIcon], e.g. a source picture. */
+    leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(SettingsControlHeight)
             .clip(SettingsControlShape)
@@ -218,16 +221,20 @@ internal fun SettingsMenuRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            leadingIcon?.let {
-                Icon(
-                    imageVector = it,
-                    contentDescription = null,
-                    tint = WarmBrown,
-                    modifier = Modifier.size(21.dp),
-                )
+            if (leading != null) {
+                leading()
+            } else {
+                leadingIcon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        tint = WarmBrown,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             helpText?.let { InlineHelpButton(it) }

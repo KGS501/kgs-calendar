@@ -1,6 +1,8 @@
 package com.kgs.calendar.data
 
 import com.kgs.calendar.data.account.CalendarSourceManager
+import com.kgs.calendar.data.account.SourceImage
+import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -21,7 +23,9 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.source.CollectionVisibility
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -139,6 +143,15 @@ class CalendarRepository(
         sources.updateAccount(accountId, displayName, serverUrl, username, appPassword)
 
     suspend fun deleteAccount(accountId: String) = sources.deleteAccount(accountId)
+
+    /** Images of sources (synced) and sidebar groups (picked by the user), by [SourceImageKeys] key. */
+    fun observeSourceImages(): Flow<Map<String, SourceImage>> = sources.sourceImages.images
+
+    /** Stores [bytes] as the image of [key]; false when they are not an image. */
+    suspend fun saveSourceImage(key: String, bytes: ByteArray): Boolean =
+        withContext(Dispatchers.IO) { sources.sourceImages.save(key, bytes) }
+
+    suspend fun deleteSourceImage(key: String) = withContext(Dispatchers.IO) { sources.sourceImages.delete(key) }
 
     suspend fun reparseLocalResources() = repairs.reparseLocalResources()
 

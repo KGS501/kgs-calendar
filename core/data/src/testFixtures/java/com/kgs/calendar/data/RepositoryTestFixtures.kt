@@ -24,6 +24,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import java.io.Closeable
+import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -75,6 +76,8 @@ class RepositoryHarness(
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build(),
+    /** Where source images are stored; null keeps none, like most tests need. */
+    sourceImageDirectory: File? = null,
 ) : Closeable {
     val context: Context = ApplicationProvider.getApplicationContext()
     val database: KgsDatabase = Room.inMemoryDatabaseBuilder(context, KgsDatabase::class.java)
@@ -90,6 +93,7 @@ class RepositoryHarness(
         icalCodec = IcalCodec(zone),
         readOnlyHttpClient = httpClient,
         zoneId = zone,
+        sourceImageDirectory = sourceImageDirectory,
     )
     val repository = CalendarRepository(
         queries = components.queries,

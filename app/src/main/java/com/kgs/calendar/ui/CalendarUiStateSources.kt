@@ -1,6 +1,7 @@
 package com.kgs.calendar.ui
 
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.account.SourceImage
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -21,10 +22,12 @@ import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MultiDayCounts
+import com.kgs.calendar.domain.source.CalendarGroupSettings
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -35,6 +38,8 @@ internal data class CalendarSourceData(
     val account: AccountEntity?,
     val accounts: List<AccountEntity>,
     val collections: List<CollectionEntity>,
+    val groupSettings: CalendarGroupSettings = CalendarGroupSettings(),
+    val sourceImages: Map<String, SourceImage> = emptyMap(),
 )
 
 internal data class CalendarItemData(
@@ -183,11 +188,14 @@ internal fun calendarDataState(
     items: Flow<CalendarItemData>,
     loadedDataRange: Flow<CalendarRange?>,
     requestedDataRange: Flow<CalendarRange>,
+    groupSettings: Flow<CalendarGroupSettings> = flowOf(CalendarGroupSettings()),
 ): Flow<CalendarDataState> = combine(
     combine(
         repository.observeAccount(),
         repository.observeAccounts(),
         repository.observeCollections(),
+        groupSettings,
+        repository.observeSourceImages(),
         ::CalendarSourceData,
     ),
     items,
@@ -380,6 +388,8 @@ internal fun calendarUiState(
         account = data.sources.account,
         accounts = data.sources.accounts,
         collections = data.sources.collections,
+        calendarGroupSettings = data.sources.groupSettings,
+        sourceImages = data.sources.sourceImages,
         events = data.items.events,
         searchQuery = search.query,
         searchMode = search.mode,

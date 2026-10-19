@@ -76,12 +76,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import com.kgs.calendar.R
-import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarViewMode
-import com.kgs.calendar.domain.model.SourceType
-import com.kgs.calendar.domain.source.isAndroidProviderAccount
+import com.kgs.calendar.data.account.SourceImage
+import com.kgs.calendar.domain.source.CalendarSourceGroup
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
+import com.kgs.calendar.ui.sources.SourceAvatar
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.image
+import com.kgs.calendar.ui.sources.label
+import com.kgs.calendar.ui.sources.subtitle
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -95,6 +101,7 @@ internal fun CalendarDrawer(
     onSync: () -> Unit,
     onCollectionVisibleInViews: (String, Boolean) -> Unit,
     onCollectionSettings: (CollectionEntity) -> Unit,
+    onGroupSettings: (String) -> Unit,
     onAppSettings: () -> Unit,
     trashCount: Int,
     onRecentlyDeleted: () -> Unit,
@@ -199,19 +206,22 @@ internal fun CalendarDrawer(
                 DrawerActionRow(stringResource(R.string.refresh), Icons.Default.Refresh, onSync)
                 HorizontalDivider(color = WarmLine)
                 val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
-                val drawerCollections = state.collections.filter { it.isEnabled }
-                val collectionsByAccount = drawerCollections.groupBy { it.accountId }
-                val visibleAccounts = accounts.filter { account ->
-                    collectionsByAccount[account.id].orEmpty().isNotEmpty()
-                }
-                visibleAccounts.forEachIndexed { index, account ->
+                val visibleGroups = state.calendarGroups
+                    .map { group -> group to group.collections.filter { it.isEnabled } }
+                    .filter { (_, collections) -> collections.isNotEmpty() }
+                visibleGroups.forEachIndexed { index, (group, collections) ->
                     if (index > 0) {
                         HorizontalDivider(color = WarmLine.copy(alpha = 0.62f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp))
                     }
                     DrawerSourceSection(
-                        account = account,
-                        collections = collectionsByAccount[account.id].orEmpty(),
+                        group = group,
+                        image = group.image(state.sourceImages),
+                        collections = collections,
+                        feedStatus = { collection ->
+                            readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
+                        },
                         hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+                        onGroupSettings = { onGroupSettings(group.key) },
                         onCollectionVisibleInViews = onCollectionVisibleInViews,
                         onCollectionSettings = onCollectionSettings,
                     )
@@ -264,31 +274,28 @@ private fun DrawerProblemRow(count: Int, onClick: () -> Unit) {
 
 @Composable
 private fun DrawerSourceSection(
-    account: com.kgs.calendar.data.local.entity.AccountEntity,
+    group: CalendarSourceGroup,
+    image: SourceImage?,
     collections: List<CollectionEntity>,
+    feedStatus: (CollectionEntity) -> ReadOnlyFeedStatus?,
     hiddenCollectionHrefs: Set<String>,
+    onGroupSettings: () -> Unit,
     onCollectionVisibleInViews: (String, Boolean) -> Unit,
     onCollectionSettings: (CollectionEntity) -> Unit,
 ) {
+    val groupName = group.displayName()
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClickLabel = stringResource(R.string.calendar_group_edit), onClick = onGroupSettings)
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        val initial = (account.displayName ?: account.username).take(1).ifBlank { "?" }
-        Box(Modifier.size(30.dp).clip(CircleShape).background(WarmBrown), contentAlignment = Alignment.Center) {
-            Text(initial, color = Color.White, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold)
-        }
+        SourceAvatar(groupName, image, 30.dp)
         Column(Modifier.weight(1f)) {
-            Text(account.displayName ?: account.username, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val subtitle = when {
-                account.id == UiLocalAccountId || account.serverUrl.startsWith(UiLocalCollectionPrefix) -> stringResource(R.string.local_calendar)
-                account.isAndroidProviderAccount() -> stringResource(R.string.android_device_calendars)
-                account.sourceType == SourceType.ReadOnlyUrl || account.username == "Read-only URL" -> stringResource(R.string.read_only_url)
-                else -> stringResource(R.string.nextcloud)
-            }
+            Text(groupName, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val subtitle = group.subtitle()
             Text(
                 subtitle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -309,6 +316,7 @@ private fun DrawerSourceSection(
     sortedCollections.forEach { collection ->
         DrawerCollectionRow(
             collection = collection,
+            feedStatus = feedStatus(collection),
             visibleInViews = collection.href !in hiddenCollectionHrefs,
             onVisibleInViewsChanged = { onCollectionVisibleInViews(collection.href, it) },
             onSettings = { onCollectionSettings(collection) },
@@ -389,6 +397,7 @@ private fun DrawerCollectionGroupHeader(label: String) {
 @Composable
 private fun DrawerCollectionRow(
     collection: CollectionEntity,
+    feedStatus: ReadOnlyFeedStatus?,
     visibleInViews: Boolean,
     onVisibleInViewsChanged: (Boolean) -> Unit,
     onSettings: () -> Unit,
@@ -416,6 +425,17 @@ private fun DrawerCollectionRow(
                 }
                 if (collection.supportsTasks) {
                     CalendarCapabilityChip(stringResource(R.string.tasks), Color(0xFF00A86B))
+                }
+                // A subscription without items says why, instead of looking like an empty calendar.
+                if (feedStatus != null) {
+                    Text(
+                        feedStatus.label(),
+                        color = if (feedStatus == ReadOnlyFeedStatus.Empty) MaterialTheme.colorScheme.onSurfaceVariant else SyncPendingOrange,
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

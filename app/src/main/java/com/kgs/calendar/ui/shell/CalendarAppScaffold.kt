@@ -206,6 +206,7 @@ internal fun CalendarAppScaffold(
                 },
                 onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
                 onCollectionSettings = shell::editCollection,
+                onGroupSettings = shell::editGroup,
                 onAppSettings = { shell.openSettings(SettingsDestination.Main) },
                 trashCount = trash.entries.size,
                 onRecentlyDeleted = shell::openTrash,

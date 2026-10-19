@@ -103,6 +103,10 @@ internal class CalendarShellUiState(
     private var pendingTrashedDetailId by mutableStateOf<Long?>(null)
     var editingCollection by mutableStateOf<CollectionEntity?>(null)
         private set
+
+    /** The sidebar group whose name and picture are being edited. */
+    var editingGroupKey by mutableStateOf<String?>(null)
+        private set
     var editorSchedule by mutableStateOf(initialEditorSchedule)
     var draftWireframeColor by mutableStateOf(initialWireframeColor)
     var editorWireframeMode by mutableStateOf(false)
@@ -298,6 +302,14 @@ internal class CalendarShellUiState(
 
     fun setEditingCollectionEnabled(enabled: Boolean) {
         editingCollection = editingCollection?.copy(isEnabled = enabled)
+    }
+
+    fun editGroup(groupKey: String) {
+        editingGroupKey = groupKey
+    }
+
+    fun closeGroupEditor() {
+        editingGroupKey = null
     }
 
     fun closeCollectionEditor() {

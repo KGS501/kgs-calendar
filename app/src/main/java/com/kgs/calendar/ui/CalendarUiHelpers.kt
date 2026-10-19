@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.key.key
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -545,12 +547,35 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
         (accounts + listOfNotNull(account))
             .distinctBy { it.id }
             .forEach { source ->
+                val sourceName = source.displayName ?: source.username
+                val feedCollection = collections.firstOrNull { it.accountId == source.id }
+                val feedStatus = feedCollection?.let { readOnlyFeedStatus(source, it) }
+                // Feeds of one website share a host name; their calendar names tell them apart.
+                val feedName = feedCollection?.displayName ?: sourceName
                 source.syncError?.takeIf { it.isNotBlank() }?.let { error ->
                     add(
+                        if (feedStatus == ReadOnlyFeedStatus.NoDataYet) {
+                            // A subscription that never loaded: it was added, it just has nothing to show yet.
+                            ProblemItem(
+                                id = "source-${source.id}",
+                                title = stringResource(R.string.problem_feed_no_data_title, feedName),
+                                body = stringResource(R.string.problem_feed_no_data_body, error),
+                            )
+                        } else {
+                            ProblemItem(
+                                id = "source-${source.id}",
+                                title = stringResource(R.string.source_named, sourceName),
+                                body = error,
+                            )
+                        }
+                    )
+                }
+                if (feedStatus == ReadOnlyFeedStatus.Empty) {
+                    add(
                         ProblemItem(
-                            id = "source-${source.id}",
-                            title = stringResource(R.string.source_named, source.displayName ?: source.username),
-                            body = error,
+                            id = "feed-empty-${source.id}",
+                            title = stringResource(R.string.problem_feed_empty_title, feedName),
+                            body = stringResource(R.string.problem_feed_empty_body),
                         ),
                     )
                 }

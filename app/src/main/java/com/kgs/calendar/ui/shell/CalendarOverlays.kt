@@ -14,7 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -27,6 +29,10 @@ import com.kgs.calendar.R
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.CalendarShellUiState
+import com.kgs.calendar.ui.sources.CalendarGroupPickerDialog
+import com.kgs.calendar.ui.sources.CalendarGroupSettingsDialog
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.groupOf
 import com.kgs.calendar.widget.KgsWidgetKind
 
 // The full-screen pages and dialogs of the shell. KgsCalendarApp composes them in a fixed order
@@ -205,6 +211,7 @@ internal fun SettingsOverlay(
             onSync = viewModel.sources::syncNow,
             onSyncIntervalChanged = viewModel.settings::setSyncIntervalMinutes,
             onCollectionSettings = shell::editCollection,
+            onGroupSettings = shell::editGroup,
             onLocalCalendarEnabledChanged = { enabled ->
                 state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->
                     viewModel.sources.setCollectionEnabled(local.href, enabled)
@@ -239,6 +246,7 @@ internal fun CollectionSettingsHost(
     shell: CalendarShellUiState,
 ) {
     shell.editingCollection?.let { collection ->
+        var pickingGroup by remember(collection.href) { mutableStateOf(false) }
         KgsModalBottomSheet(
             onDismissRequest = shell::closeCollectionEditor,
             modifier = Modifier.zIndex(80f),
@@ -275,10 +283,46 @@ internal fun CollectionSettingsHost(
                 } else {
                     null
                 },
+                groupName = state.calendarGroups.groupOf(collection)?.displayName(),
+                onChooseGroup = { pickingGroup = true },
                 onClose = shell::closeCollectionEditor,
             )
         }
+        if (pickingGroup) {
+            CalendarGroupPickerDialog(
+                collection = collection,
+                groups = state.calendarGroups,
+                accounts = state.accounts,
+                images = state.sourceImages,
+                onSelect = { groupKey -> viewModel.sources.moveCollectionToGroup(collection.href, groupKey) },
+                onCreate = { name -> viewModel.sources.moveCollectionToNewGroup(collection.href, name) },
+                onDismiss = { pickingGroup = false },
+            )
+        }
     }
+}
+
+/** Renames a sidebar group and sets its picture (opened from the sidebar or the source list). */
+@Composable
+internal fun CalendarGroupDialogHost(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    shell: CalendarShellUiState,
+) {
+    val groupKey = shell.editingGroupKey ?: return
+    val group = state.calendarGroups.firstOrNull { it.key == groupKey }
+    if (group == null) {
+        LaunchedEffect(groupKey) { shell.closeGroupEditor() }
+        return
+    }
+    CalendarGroupSettingsDialog(
+        group = group,
+        images = state.sourceImages,
+        onRename = { name -> viewModel.sources.renameGroup(group.key, name) },
+        onPickImage = { uri -> viewModel.sources.setGroupImage(group.key, uri) },
+        onRemoveImage = { viewModel.sources.removeGroupImage(group.key) },
+        onDismiss = shell::closeGroupEditor,
+    )
 }
 
 @Composable

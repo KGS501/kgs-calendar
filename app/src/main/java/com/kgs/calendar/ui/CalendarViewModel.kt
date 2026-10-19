@@ -100,6 +100,7 @@ class CalendarViewModel(
     reminderRescheduler: ReminderRescheduler,
     appLifecycleSignals: AppLifecycleSignals,
     uiStrings: UiStrings,
+    pickedContentReader: PickedContentReader = PickedContentReader { null },
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
@@ -159,6 +160,7 @@ class CalendarViewModel(
         appLifecycleSignals = appLifecycleSignals,
         strings = uiStrings,
         transient = transient,
+        pickedContentReader = pickedContentReader,
     )
 
     val edits = CalendarEditActions(
@@ -416,6 +418,7 @@ class CalendarViewModel(
         },
         loadedDataRange = loadedDataRange,
         requestedDataRange = dataRange,
+        groupSettings = settingsStore.calendarGroupSettings,
     )
     private val navigationState = combine(
         selectedDate,
@@ -735,6 +738,7 @@ class CalendarViewModelFactory(
             reminderRescheduler = graph.reminderRescheduler,
             appLifecycleSignals = graph.appLifecycleSignals,
             uiStrings = graph.uiStrings,
+            pickedContentReader = graph.pickedContentReader,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
             initialSharedEvent = initialSharedEvent,

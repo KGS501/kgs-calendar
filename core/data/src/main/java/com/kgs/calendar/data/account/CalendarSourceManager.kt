@@ -27,8 +27,7 @@ import com.kgs.calendar.domain.source.isAndroidProviderAccount
 import com.kgs.calendar.domain.trash.TrashOrigin
 import java.nio.charset.StandardCharsets
 import java.util.UUID
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Calendar sources and their collections: login flow, CalDAV/read-only/Android/local accounts,
@@ -44,6 +43,8 @@ class CalendarSourceManager internal constructor(
     private val readOnlyUrlSyncEngine: ReadOnlyUrlSyncEngine,
     private val androidProviderSyncEngine: AndroidProviderSyncEngine,
     private val remoteSyncLock: RemoteSyncLock = RemoteSyncLock(),
+    /** Images of sources and sidebar groups. */
+    val sourceImages: SourceImageStore = SourceImageStore(null),
 ) {
     suspend fun startLoginFlow(serverUrl: String) = loginFlowClient.start(serverUrl)
 
@@ -65,16 +66,20 @@ class CalendarSourceManager internal constructor(
             lastSyncAtMillis = null,
             sourceType = SourceType.ReadOnlyUrl,
         )
-        val isNewAccount = database.accountDao().get(account.id) == null
-        database.accountDao().upsert(account)
+        val existing = database.accountDao().get(account.id)
+        val stored = existing?.copy(displayName = displayName?.ifBlank { null } ?: existing.displayName) ?: account
+        database.accountDao().upsert(stored)
+        readOnlyUrlSyncEngine.ensureCollection(stored)
+        // Many feeds answer slowly or fail at first. The calendar stays: the sync records the error
+        // on the source, the UI shows that it provides no data yet, and later syncs retry.
         try {
-            readOnlyUrlSyncEngine.sync(account)
-        } catch (error: Throwable) {
-            // A URL that never loaded must not stay behind as an empty source; its collection and items cascade.
-            if (isNewAccount) withContext(NonCancellable) { deleteAccount(account.id) }
+            readOnlyUrlSyncEngine.sync(stored)
+        } catch (error: CancellationException) {
             throw error
+        } catch (error: Throwable) {
+            // Already stored as the source's sync error.
         }
-        return account
+        return database.accountDao().get(stored.id) ?: stored
     }
 
     fun hasAndroidCalendarPermissions(): Boolean =
@@ -222,6 +227,7 @@ class CalendarSourceManager internal constructor(
     }
 
     suspend fun deleteAccount(accountId: String) {
+        sourceImages.delete(SourceImageKeys.account(accountId))
         credentialsStore.clear(accountId)
         database.accountDao().delete(accountId)
         // Its server trash bin can't be reached any more; local snapshots of its items stay.
