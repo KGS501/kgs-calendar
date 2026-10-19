@@ -347,6 +347,30 @@ class TaskRecurrenceExpanderTest {
         assertEquals(listOf(at(today.minusDays(2), 9), at(today.minusDays(1), 9)), missed.map { it.startAtMillis })
     }
 
+    @Test
+    fun allDayDueDateKeepsItsDayAcrossDstStart() {
+        // Weekly Saturday-to-Monday task; the occurrence of 2026-03-28 spans the 23h DST Sunday.
+        val task = dailyTask(firstDay = LocalDate.of(2026, 3, 21), rule = "FREQ=WEEKLY;COUNT=3").copy(
+            startAtMillis = startOfDay(LocalDate.of(2026, 3, 21)),
+            dueAtMillis = startOfDay(LocalDate.of(2026, 3, 23)),
+            startHasTime = false,
+            dueHasTime = false,
+            timezoneId = null,
+        )
+
+        val occurrences = expander.expand(task, startOfDay(LocalDate.of(2026, 3, 20)), startOfDay(LocalDate.of(2026, 4, 12)))
+
+        assertEquals(
+            listOf(
+                startOfDay(LocalDate.of(2026, 3, 23)),
+                startOfDay(LocalDate.of(2026, 3, 30)),
+                startOfDay(LocalDate.of(2026, 4, 6)),
+            ),
+            occurrences.map { it.dueAtMillis },
+        )
+        assertEquals(startOfDay(LocalDate.of(2026, 4, 6)), task.occurrenceAt(startOfDay(LocalDate.of(2026, 4, 4)), zone).dueAtMillis)
+    }
+
     private fun startOfDay(date: LocalDate): Long = date.atStartOfDay(zone).toInstant().toEpochMilli()
 
     private fun at(date: LocalDate, hour: Int): Long = date.atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()

@@ -139,3 +139,6 @@ data class SyncCollectionResult(
     val deletedHrefs: Set<String>,
     val syncToken: String,
 )
+
+/** A Nextcloud user's avatar image; [isCustom] is false for Nextcloud's generated letter avatar. */
+class NextcloudAvatar(val bytes: ByteArray, val isCustom: Boolean)

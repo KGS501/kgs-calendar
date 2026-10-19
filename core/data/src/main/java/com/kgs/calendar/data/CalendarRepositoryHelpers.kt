@@ -15,15 +15,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
-internal fun normalizeServer(serverUrl: String): String {
-    val trimmed = serverUrl.trim().trimEnd('/')
-    return when {
-        trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-        trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-        else -> "https://$trimmed"
-    }
-}
-
 internal fun accountId(serverUrl: String, username: String): String =
     "account-" + UUID.nameUUIDFromBytes("$serverUrl\n$username".toByteArray(StandardCharsets.UTF_8)).toString()
 

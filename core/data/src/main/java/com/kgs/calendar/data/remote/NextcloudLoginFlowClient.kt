@@ -1,11 +1,14 @@
 package com.kgs.calendar.data.remote
 
+import com.kgs.calendar.data.normalizeServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONException
+import org.json.JSONObject
 
 class NextcloudLoginFlowClient(
     private val okHttpClient: OkHttpClient,
@@ -19,11 +22,12 @@ class NextcloudLoginFlowClient(
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Login flow failed: HTTP ${response.code}")
-            val body = response.body?.string().orEmpty()
+            val json = parseJsonObject(response.body?.string().orEmpty())
+            val poll = json.optJSONObject("poll") ?: json
             LoginFlowStart(
-                loginUrl = requireJsonString(body, "login"),
-                pollEndpoint = requireJsonString(body, "endpoint"),
-                token = requireJsonString(body, "token"),
+                loginUrl = json.requireString("login"),
+                pollEndpoint = poll.requireString("endpoint"),
+                token = poll.requireString("token"),
             )
         }
     }
@@ -51,29 +55,26 @@ class NextcloudLoginFlowClient(
         okHttpClient.newCall(request).execute().use { response ->
             if (response.code == 404) return@withContext null
             if (!response.isSuccessful) error("Login polling failed: HTTP ${response.code}")
-            val body = response.body?.string().orEmpty()
+            val json = parseJsonObject(response.body?.string().orEmpty())
             LoginFlowResult(
-                serverUrl = normalizeServer(requireJsonString(body, "server")),
-                loginName = requireJsonString(body, "loginName"),
-                appPassword = requireJsonString(body, "appPassword"),
+                serverUrl = normalizeServer(json.requireString("server")),
+                loginName = json.requireString("loginName"),
+                appPassword = json.requireString("appPassword"),
             )
         }
     }
 
-    private fun requireJsonString(json: String, key: String): String {
-        val regex = Regex(""""$key"\s*:\s*"((?:\\.|[^"])*)"""")
-        val match = regex.find(json) ?: error("Missing '$key' in Nextcloud response.")
-        return match.groupValues[1].replace("\\/", "/").replace("\\\"", "\"")
-    }
-
-    private fun normalizeServer(serverUrl: String): String {
-        val trimmed = serverUrl.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            else -> "https://$trimmed"
+    // A real JSON parser: Nextcloud escapes non-ASCII login names (e.g. "\u00e9") and tags.
+    private fun parseJsonObject(body: String): JSONObject =
+        try {
+            JSONObject(body)
+        } catch (error: JSONException) {
+            throw IllegalStateException("Nextcloud returned an invalid login response.", error)
         }
-    }
+
+    private fun JSONObject.requireString(key: String): String =
+        optString(key).takeIf { has(key) && !isNull(key) && it.isNotEmpty() }
+            ?: error("Missing '$key' in Nextcloud response.")
 
     companion object {
         const val USER_AGENT = "KGS-Calendar-Android/0.1"

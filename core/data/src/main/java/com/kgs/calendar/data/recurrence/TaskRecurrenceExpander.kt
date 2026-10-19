@@ -7,6 +7,11 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarOccurrenceEnvelope
 import com.kgs.calendar.domain.task.isOpen
 import com.kgs.calendar.domain.task.isRecurring
+import com.kgs.calendar.domain.time.toDate
+import java.time.Instant
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /**
  * Reuses the RFC 5545 recurrence-set implementation for VTODO. DTSTART is the
@@ -44,11 +49,7 @@ class TaskRecurrenceExpander(
             .associateBy { it.recurrenceIdMillis }
         return eventExpander.expand(recurrenceEvent, rangeStartMillis, rangeEndMillis).mapNotNull { occurrence ->
             val recurrenceId = occurrence.startsAtMillis
-            val shift = recurrenceId - anchor
-            val expanded = master.copy(
-                startAtMillis = master.startAtMillis?.plus(shift),
-                dueAtMillis = master.dueAtMillis?.plus(shift),
-            )
+            val expanded = master.shiftedToAnchor(recurrenceId, eventExpander.zoneId)
             val override = overrides[recurrenceId]
             when {
                 override != null -> override.applyTo(expanded)
@@ -182,15 +183,33 @@ class TaskRecurrenceExpander(
  * the generated occurrence with its stored override, if any, applied. Masters without a date are
  * returned unchanged.
  */
-fun TaskEntity.occurrenceAt(recurrenceIdMillis: Long): TaskEntity {
-    val anchor = startAtMillis ?: dueAtMillis ?: return this
-    val shift = recurrenceIdMillis - anchor
-    val generated = copy(
-        startAtMillis = startAtMillis?.plus(shift),
-        dueAtMillis = dueAtMillis?.plus(shift),
-    )
+fun TaskEntity.occurrenceAt(recurrenceIdMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): TaskEntity {
+    if (startAtMillis == null && dueAtMillis == null) return this
+    val generated = shiftedToAnchor(recurrenceIdMillis, zoneId)
     return RecurrenceOverrideCodec.decodeTasks(recurrenceOverridesJson)
         .firstOrNull { it.recurrenceIdMillis == recurrenceIdMillis }
         ?.applyTo(generated)
         ?: generated
+}
+
+/**
+ * This master moved so that its anchor (DTSTART, else DUE) lands on [anchorMillis]. Timed values move
+ * by the exact shift; date-only values move by whole days, so a DST switch between the anchor and
+ * DUE cannot pull the due date onto the previous day.
+ */
+private fun TaskEntity.shiftedToAnchor(anchorMillis: Long, zoneId: ZoneId): TaskEntity {
+    val anchor = startAtMillis ?: dueAtMillis ?: return this
+    val shift = anchorMillis - anchor
+    val dayShift = ChronoUnit.DAYS.between(anchor.toDate(zoneId), anchorMillis.toDate(zoneId))
+    fun Long.isLocalMidnight(): Boolean = Instant.ofEpochMilli(this).atZone(zoneId).toLocalTime() == LocalTime.MIDNIGHT
+    fun Long.shifted(hasTime: Boolean): Long =
+        if (hasTime || !isLocalMidnight() || !anchorMillis.isLocalMidnight()) {
+            this + shift
+        } else {
+            toDate(zoneId).plusDays(dayShift).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        }
+    return copy(
+        startAtMillis = startAtMillis?.shifted(startHasTime),
+        dueAtMillis = dueAtMillis?.shifted(dueHasTime),
+    )
 }

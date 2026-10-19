@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import android.net.Uri
 import androidx.annotation.StringRes
 import com.kgs.calendar.widget.KgsWidgetKind
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +23,11 @@ interface AppLifecycleSignals {
     val processForegroundedAt: Flow<Long>
 
     fun registerAndroidCalendarObserverIfPermitted()
+}
+
+/** Reads a document the user picked (e.g. a photo for a group), or null when it can't be read. */
+fun interface PickedContentReader {
+    suspend fun read(uri: Uri): ByteArray?
 }
 
 /** Resolves string resources for messages produced outside of composition. */

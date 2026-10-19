@@ -4,7 +4,10 @@ import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.READ_ONLY_PREFIX
 import com.kgs.calendar.data.describeSyncError
+import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.data.account.SourceImageStore
 import com.kgs.calendar.data.ical.IcalCodec
+import com.kgs.calendar.data.ical.IcsCalendarProperties
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -13,8 +16,11 @@ import com.kgs.calendar.data.looksLikeHtmlResponse
 import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -24,6 +30,7 @@ class ReadOnlyUrlSyncEngine internal constructor(
     private val localWrites: LocalWriteSupport,
     private val icalCodec: IcalCodec,
     private val readOnlyHttpClient: OkHttpClient,
+    private val sourceImages: SourceImageStore = SourceImageStore(null),
 ) : CalendarSourceSyncEngine {
     override fun handles(account: AccountEntity): Boolean = account.id.startsWith(READ_ONLY_PREFIX)
 
@@ -32,9 +39,42 @@ class ReadOnlyUrlSyncEngine internal constructor(
         return true
     }
 
-    suspend fun sync(account: AccountEntity) {
+    /**
+     * Creates the feed's calendar before its first download, so a URL that is slow or failing
+     * still shows up (with its sync state) instead of not appearing anywhere.
+     */
+    suspend fun ensureCollection(account: AccountEntity) {
+        val collectionHref = collectionHref(account)
+        if (database.collectionDao().get(collectionHref) != null) return
+        val color = DEFAULT_COLORS[abs(account.id.hashCode()) % DEFAULT_COLORS.size]
+        database.collectionDao().upsertAll(
+            listOf(
+                CollectionEntity(
+                    href = collectionHref,
+                    accountId = account.id,
+                    displayName = account.displayName ?: "Read-only calendar",
+                    color = color,
+                    supportsEvents = true,
+                    supportsTasks = false,
+                    syncToken = null,
+                    ctag = null,
+                    sortOrder = database.collectionDao().forAccount(account.id).size,
+                    readOnly = true,
+                    automaticColor = color,
+                    sourceType = SourceType.ReadOnlyUrl,
+                    externalId = null,
+                ),
+            ),
+        )
+    }
+
+    // OkHttp's execute() blocks: callers include the UI's add flow on the main thread, where Android
+    // refuses network access, so the whole sync runs on the IO dispatcher.
+    suspend fun sync(account: AccountEntity): Unit = withContext(Dispatchers.IO) { syncOnIo(account) }
+
+    private suspend fun syncOnIo(account: AccountEntity) {
         database.accountDao().updateSyncState(SyncState.Syncing, null, account.lastSyncAtMillis, account.id)
-        val collectionHref = "$READ_ONLY_PREFIX${account.id}"
+        val collectionHref = collectionHref(account)
         val existing = database.collectionDao().get(collectionHref)
         if (existing?.isEnabled == false) {
             database.accountDao().updateSyncState(SyncState.Idle, null, account.lastSyncAtMillis, account.id)
@@ -83,12 +123,14 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 resourceHrefPrefix = collectionHref.trimEnd('/'),
                 collectionColor = color,
             )
+            val feedProperties = IcsCalendarProperties.parse(raw)
             val collection = CollectionEntity(
                 href = collectionHref,
                 accountId = account.id,
-                displayName = existing?.displayName ?: account.displayName ?: "Read-only calendar",
+                displayName = existing?.customDisplayName ?: feedProperties.name ?: account.displayName ?: "Read-only calendar",
                 color = color,
-                supportsEvents = parsed.any { it.event != null },
+                // A feed without items yet is still an (empty) event calendar, not a calendar of nothing.
+                supportsEvents = parsed.any { it.event != null } || parsed.none { it.task != null },
                 supportsTasks = parsed.any { it.task != null },
                 // Read-only feeds use the existing cursor fields for HTTP cache validators.
                 syncToken = feedLastModified,
@@ -96,11 +138,16 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 isEnabled = existing?.isEnabled ?: true,
                 sortOrder = existing?.sortOrder ?: 0,
                 readOnly = true,
+                remoteDisplayName = feedProperties.name,
+                customDisplayName = existing?.customDisplayName,
                 automaticColor = automaticColor,
                 sourceColor = existing?.sourceColor,
                 customColor = existing?.customColor,
                 sourceType = SourceType.ReadOnlyUrl,
                 externalId = account.serverUrl,
+                capabilitiesJson = JSONObject(existing?.capabilitiesJson ?: "{}")
+                    .put(FEED_ITEM_COUNT_KEY, parsed.size)
+                    .toString(),
             )
             val components = parsed.mapNotNull { component ->
                 val resourceHref = component.event?.resourceHref ?: component.task?.resourceHref ?: return@mapNotNull null
@@ -139,6 +186,7 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 }
                 database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
             }
+            refreshFeedImage(account, feedProperties)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -148,7 +196,47 @@ class ReadOnlyUrlSyncEngine internal constructor(
         }
     }
 
-    private companion object {
-        const val READ_ONLY_CALENDAR_ACCEPT = "text/calendar, application/calendar+ics, text/plain, */*"
+    /** The feed's IMAGE as the source image, checked once a day; a missing image never fails the sync. */
+    private fun refreshFeedImage(account: AccountEntity, properties: IcsCalendarProperties) {
+        val key = SourceImageKeys.account(account.id)
+        val now = System.currentTimeMillis()
+        if (!sourceImages.isRefreshDue(key, now, IMAGE_REFRESH_INTERVAL_MILLIS)) return
+        runCatching {
+            val bytes = properties.imageBytes ?: properties.imageUrl?.let(::downloadImage)
+            when {
+                bytes != null -> sourceImages.save(key, bytes)
+                properties.imageUrl == null -> sourceImages.delete(key)
+            }
+            sourceImages.markChecked(key, now)
+        }
+    }
+
+    private fun downloadImage(url: String): ByteArray? =
+        readOnlyHttpClient.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body ?: return null
+            if (body.contentLength() > MAX_IMAGE_BYTES) return null
+            body.byteStream().use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    if (output.size() > MAX_IMAGE_BYTES) return null
+                }
+                output.toByteArray()
+            }
+        }
+
+    internal companion object {
+        private const val READ_ONLY_CALENDAR_ACCEPT = "text/calendar, application/calendar+ics, text/plain, */*"
+        private const val IMAGE_REFRESH_INTERVAL_MILLIS = 24L * 60L * 60L * 1000L
+        private const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
+
+        /** How many events and tasks the feed held at its last successful download (in capabilitiesJson). */
+        const val FEED_ITEM_COUNT_KEY = "feedItemCount"
+
+        fun collectionHref(account: AccountEntity): String = "$READ_ONLY_PREFIX${account.id}"
     }
 }

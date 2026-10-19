@@ -1,9 +1,12 @@
 package com.kgs.calendar.data
 
 import com.kgs.calendar.data.account.CalendarSourceManager
+import com.kgs.calendar.data.account.SourceImageStore
 import com.kgs.calendar.data.ical.IcalCodec
+import com.kgs.calendar.data.ical.IcsEventReader
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.mutation.EventMutations
+import com.kgs.calendar.data.mutation.EventImports
 import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.provider.AndroidProviderWriteShield
@@ -23,6 +26,7 @@ import com.kgs.calendar.data.trash.ServerTrashBin
 import com.kgs.calendar.data.trash.TrashBin
 import com.kgs.calendar.data.trash.TrashSnapshots
 import okhttp3.OkHttpClient
+import java.io.File
 import java.time.ZoneId
 
 /**
@@ -39,7 +43,10 @@ class CalendarDataComponents(
     readOnlyHttpClient: OkHttpClient,
     zoneId: ZoneId = ZoneId.systemDefault(),
     recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
+    /** Where source and group images are kept; null keeps none (tests). */
+    sourceImageDirectory: File? = null,
 ) {
+    val sourceImages = SourceImageStore(sourceImageDirectory)
     private val localWrites = LocalWriteSupport(database, icalCodec)
     private val androidWriteShield = AndroidProviderWriteShield()
     private val trashSnapshots = TrashSnapshots(database, icalCodec)
@@ -47,12 +54,13 @@ class CalendarDataComponents(
 
     val queries = CalendarQueries(database, recurrenceExpander, zoneId)
     val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, trashSnapshots, zoneId)
+    val eventImports = EventImports(database, localWrites, IcsEventReader(icalCodec))
     val taskMutations = TaskMutations(database, localWrites, icalCodec, trashSnapshots, zoneId)
 
     val repairs = SyncRepairs(database, localWrites, icalCodec)
     val uploader = PendingMutationUploader(database, credentialsStore, calDavClient, localWrites)
-    val calDavSyncEngine = CalDavSyncEngine(database, credentialsStore, calDavClient, icalCodec, localWrites, uploader, zoneId)
-    val readOnlyUrlSyncEngine = ReadOnlyUrlSyncEngine(database, localWrites, icalCodec, readOnlyHttpClient)
+    val calDavSyncEngine = CalDavSyncEngine(database, credentialsStore, calDavClient, icalCodec, localWrites, uploader, zoneId, sourceImages)
+    val readOnlyUrlSyncEngine = ReadOnlyUrlSyncEngine(database, localWrites, icalCodec, readOnlyHttpClient, sourceImages)
     val androidProviderSyncEngine = AndroidProviderSyncEngine(database, localWrites, androidCalendarProviderClient, androidWriteShield)
 
     private val serverTrash = ServerTrashBin(database, localWrites, credentialsStore, calDavClient, icalCodec, calDavSyncEngine, remoteSyncLock)
@@ -78,5 +86,6 @@ class CalendarDataComponents(
         readOnlyUrlSyncEngine = readOnlyUrlSyncEngine,
         androidProviderSyncEngine = androidProviderSyncEngine,
         remoteSyncLock = remoteSyncLock,
+        sourceImages = sourceImages,
     )
 }

@@ -35,11 +35,14 @@ import java.util.Locale
  * (e.g. BYSETPOS with complex combinations) falls back to returning just the
  * master event when in range, rather than silently producing wrong dates.
  */
-class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
+class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
     private val timeZoneRegistry = TimeZoneRegistryFactory.getInstance().createRegistry()
 
     fun expand(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> {
         val rule = master.recurrenceRule?.takeIf { it.isNotBlank() }
+        val eventZone = master.timezoneId
+            ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+            ?: zoneId
         if (rule == null) {
             val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)
             val base = masterIfInRange(master, rangeStartMillis, rangeEndMillis)
@@ -48,12 +51,9 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
                 ?.mapNotNull { it.trim().toLongOrNull() }
                 .orEmpty()
                 .filter { it < rangeEndMillis && it + duration > rangeStartMillis }
-                .map { master.copy(startsAtMillis = it, endsAtMillis = it + duration) }
+                .map { master.occurrenceStartingAt(it, duration, eventZone) }
             return applyOverrides(master, base + additions)
         }
-        val eventZone = master.timezoneId
-            ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
-            ?: zoneId
         val parts = parseRrule(rule)
         val freq = parts["FREQ"]?.uppercase(Locale.US) ?: return masterIfInRange(master, rangeStartMillis, rangeEndMillis)
         val interval = parts["INTERVAL"]?.toIntOrNull()?.takeIf { it > 0 } ?: 1
@@ -128,9 +128,7 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
             .orEmpty()
             .filter { it < rangeEndMillis && it + duration > rangeStartMillis }
             .filterNot { it in exDates }
-            .map { start ->
-                master.copy(startsAtMillis = start, endsAtMillis = start + duration)
-            }
+            .map { start -> master.occurrenceStartingAt(start, duration, eventZone) }
         return applyOverrides(master, out + rDates)
     }
 
@@ -204,7 +202,7 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
                 start in exDates || Instant.ofEpochMilli(start).atZone(sourceZone).toLocalDate() in exDatesAsLocalDate
             }
             .take(MAX_ITERATIONS)
-            .map { start -> master.copy(startsAtMillis = start, endsAtMillis = start + duration) }
+            .map { start -> master.occurrenceStartingAt(start, duration, sourceZone) }
             .toList()
     }.getOrNull()
 
@@ -279,11 +277,26 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
         val endMillis = startMillis + state.duration
         val endForRange = if (endMillis > startMillis) endMillis else startMillis + HOUR_MILLIS
         if (endForRange <= state.rangeStart) return true
-        state.out += state.master.copy(
-            startsAtMillis = startMillis,
-            endsAtMillis = endMillis,
-        )
+        state.out += state.master.occurrenceStartingAt(startMillis, state.duration, zone)
         return true
+    }
+
+    /**
+     * The master moved to [startMillis]. Timed occurrences keep the exact duration; all-day ones keep
+     * their number of days, so a day with a DST switch (23 or 25 hours) still ends at midnight.
+     */
+    private fun EventEntity.occurrenceStartingAt(startMillis: Long, durationMillis: Long, zone: ZoneId): EventEntity {
+        val endMillis = if (allDay) {
+            val days = Math.round(durationMillis.toDouble() / DAY_MILLIS)
+            Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
+                .plusDays(days)
+                .atStartOfDay(zone)
+                .toInstant()
+                .toEpochMilli()
+        } else {
+            startMillis + durationMillis
+        }
+        return copy(startsAtMillis = startMillis, endsAtMillis = endMillis)
     }
 
     private fun expandDaily(
@@ -499,6 +512,7 @@ class RecurrenceExpander(private val zoneId: ZoneId = ZoneId.systemDefault()) {
         private val DATE = DateTimeFormatter.BASIC_ISO_DATE
         private val DATE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
         private const val HOUR_MILLIS = 60L * 60L * 1000L
+        private const val DAY_MILLIS = 24L * HOUR_MILLIS
         // Safety cap; far above realistic occurrence counts within any UI window.
         private const val MAX_ITERATIONS = 20000
     }

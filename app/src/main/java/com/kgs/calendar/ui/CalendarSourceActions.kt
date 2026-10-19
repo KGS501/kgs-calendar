@@ -1,8 +1,13 @@
 package com.kgs.calendar.ui
 
+import android.net.Uri
 import com.kgs.calendar.R
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.domain.source.CalendarSourceGroups
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.sync.CalendarStructuralMutation
 import com.kgs.calendar.sync.PostMutationStage
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
@@ -10,6 +15,7 @@ import com.kgs.calendar.sync.StructuralMutationResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /** Accounts, calendar sources and collections, manual sync and Android provider diagnostics. */
 class CalendarSourceActions internal constructor(
@@ -21,6 +27,7 @@ class CalendarSourceActions internal constructor(
     private val appLifecycleSignals: AppLifecycleSignals,
     private val strings: UiStrings,
     private val transient: CalendarTransientState,
+    private val pickedContentReader: PickedContentReader = PickedContentReader { null },
 ) {
     private val busy = transient.busy
     private val manualSyncing = transient.manualSyncing
@@ -100,15 +107,71 @@ class CalendarSourceActions internal constructor(
     }
 
     fun addReadOnlyCalendar(url: String) {
-        runStructuralMutation(
-            CalendarStructuralMutation.AddSource,
-            "Read-only calendar added.",
-            showManualSync = true,
-            // A failed subscription leaves no source behind, so this notice is the only place the error shows up.
-            failureMessage = { "Adding the read-only calendar failed. ${it.message ?: it::class.java.simpleName}" },
-        ) {
-            repository.addReadOnlyCalendar(url)
+        scope.launch {
+            busy.value = true
+            manualSyncing.value = true
+            var addedId: String? = null
+            runCatching {
+                sourceCalendarMutationCoordinator.run(CalendarStructuralMutation.AddSource) {
+                    addedId = repository.addReadOnlyCalendar(url).id
+                }
+            }.onSuccess {
+                // The calendar stays even when its URL gives nothing yet; say so instead of failing.
+                val account = repository.observeAccounts().first().firstOrNull { it.id == addedId }
+                val collection = repository.observeCollections().first()
+                    .firstOrNull { it.accountId == addedId }
+                message.value = when (collection?.let { readOnlyFeedStatus(account, it) }) {
+                    ReadOnlyFeedStatus.NoDataYet, ReadOnlyFeedStatus.Loading, ReadOnlyFeedStatus.UpdateFailed ->
+                        strings.get(R.string.read_only_added_no_data)
+                    ReadOnlyFeedStatus.Empty -> strings.get(R.string.read_only_added_empty)
+                    null -> strings.get(R.string.read_only_added)
+                }
+            }.onFailure {
+                message.value = "Adding the read-only calendar failed. ${it.message ?: it::class.java.simpleName}"
+            }
+            manualSyncing.value = false
+            busy.value = false
         }
+    }
+
+    /** Moves a calendar into the sidebar group [groupKey]; null returns it to its automatic group. */
+    fun moveCollectionToGroup(href: String, groupKey: String?) {
+        scope.launch {
+            val previous = settingsStore.calendarGroupSettings.first().assignments[href]
+            settingsStore.setCalendarGroup(href, groupKey)
+            // A custom group disappears with its last calendar, and its picture with it.
+            if (previous != null && CalendarSourceGroups.isCustomKey(previous) &&
+                previous !in settingsStore.calendarGroupSettings.first().assignments.values
+            ) {
+                repository.deleteSourceImage(SourceImageKeys.group(previous))
+            }
+        }
+    }
+
+    /** Creates the custom sidebar group [name] and moves the calendar [href] into it. */
+    fun moveCollectionToNewGroup(href: String, name: String) {
+        val groupKey = CalendarSourceGroups.CUSTOM_PREFIX + UUID.randomUUID()
+        scope.launch {
+            settingsStore.setCalendarGroupName(groupKey, name)
+            settingsStore.setCalendarGroup(href, groupKey)
+        }
+    }
+
+    fun renameGroup(groupKey: String, name: String?) {
+        scope.launch { settingsStore.setCalendarGroupName(groupKey, name) }
+    }
+
+    fun setGroupImage(groupKey: String, uri: Uri) {
+        scope.launch {
+            val bytes = pickedContentReader.read(uri)
+            if (bytes == null || !repository.saveSourceImage(SourceImageKeys.group(groupKey), bytes)) {
+                message.value = strings.get(R.string.calendar_group_image_failed)
+            }
+        }
+    }
+
+    fun removeGroupImage(groupKey: String) {
+        scope.launch { repository.deleteSourceImage(SourceImageKeys.group(groupKey)) }
     }
 
     fun addAndroidDeviceCalendars() {
@@ -134,7 +197,15 @@ class CalendarSourceActions internal constructor(
 
     fun deleteAccount(accountId: String) {
         runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
+            val accounts = repository.observeAccounts().first()
             repository.deleteAccount(accountId)
+            // The source's own group goes with it, unless other feeds of the same website remain.
+            val removed = accounts.firstOrNull { it.id == accountId } ?: return@runStructuralMutation
+            val groupKey = CalendarSourceGroups.automaticKey(removed, accounts)
+            if (accounts.none { it.id != accountId && CalendarSourceGroups.automaticKey(it, accounts) == groupKey }) {
+                repository.deleteSourceImage(SourceImageKeys.group(groupKey))
+                settingsStore.setCalendarGroupName(groupKey, null)
+            }
         }
     }
 

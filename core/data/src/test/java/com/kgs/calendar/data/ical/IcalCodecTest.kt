@@ -39,6 +39,20 @@ class IcalCodecTest {
     }
 
     @Test
+    fun allDayEventWithoutEndOrWithDayDurationEndsAtNextMidnightOnDstDay() {
+        // 2026-03-29 has 23 hours in Berlin; a fixed 24h end would leak into the next day.
+        val nextMidnight = LocalDate.of(2026, 3, 30).atStartOfDay(zone).toInstant().toEpochMilli()
+        listOf("", "DURATION:P1D\n").forEach { endLine ->
+            val raw = "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:dst-day\n" +
+                "DTSTART;VALUE=DATE:20260329\n${endLine}SUMMARY:DST day\nEND:VEVENT\nEND:VCALENDAR"
+
+            val event = codec.parse(raw, "/cal/", "/cal/dst-day.ics", 0)!!.event!!
+
+            assertEquals("end for '${endLine.trim()}'", nextMidnight, event.endsAtMillis)
+        }
+    }
+
+    @Test
     fun serializesAndParsesCompletedTask() {
         val due = LocalDate.of(2026, 5, 25).atTime(17, 0).atZone(zone).toInstant().toEpochMilli()
         val task = TaskEntity(

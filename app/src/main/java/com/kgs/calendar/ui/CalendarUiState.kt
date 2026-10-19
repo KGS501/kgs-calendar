@@ -22,6 +22,10 @@ import com.kgs.calendar.data.settings.WidgetThemeMode
 import com.kgs.calendar.data.search.CalendarSearchMode
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.data.account.SourceImage
+import com.kgs.calendar.domain.source.CalendarGroupSettings
+import com.kgs.calendar.domain.source.CalendarSourceGroup
+import com.kgs.calendar.domain.source.CalendarSourceGroups
 import com.kgs.calendar.domain.source.CollectionVisibility
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -53,6 +57,9 @@ data class CalendarUiState(
     val account: AccountEntity? = null,
     val accounts: List<AccountEntity> = emptyList(),
     val collections: List<CollectionEntity> = emptyList(),
+    val calendarGroupSettings: CalendarGroupSettings = CalendarGroupSettings(),
+    /** Source and group images by [com.kgs.calendar.data.account.SourceImageKeys] key. */
+    val sourceImages: Map<String, SourceImage> = emptyMap(),
     val events: List<EventEntity> = emptyList(),
     val searchQuery: String = "",
     val searchMode: CalendarSearchMode = CalendarSearchMode.TextAndLabels,
@@ -132,6 +139,15 @@ data class CalendarUiState(
     val collectionVisibility: CollectionVisibility = CollectionVisibility(),
 ) {
     val hasAccount: Boolean = accounts.isNotEmpty() || account != null
+
+    /** The sources' calendars in their sidebar groups, in source order (see [CalendarSourceGroups]). */
+    val calendarGroups: List<CalendarSourceGroup> by lazy {
+        CalendarSourceGroups.group(
+            accounts = accounts.ifEmpty { account?.let(::listOf).orEmpty() },
+            collections = collections,
+            settings = calendarGroupSettings,
+        )
+    }
 
     /** Calendars hidden as a whole (the sidebar checkbox). */
     val hiddenCollectionHrefs: Set<String>

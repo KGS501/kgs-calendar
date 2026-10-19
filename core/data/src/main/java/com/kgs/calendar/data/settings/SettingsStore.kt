@@ -20,6 +20,8 @@ import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.CalendarGroupSettings
+import com.kgs.calendar.domain.source.CalendarSourceGroups
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -310,6 +312,39 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             tasksHiddenIn = prefs[KEY_TASKS_HIDDEN_COLLECTION_HREFS].orEmpty(),
         )
     }.distinctUntilChanged()
+
+    /** How calendars are grouped in the sidebar and the source lists, beyond the automatic grouping. */
+    val calendarGroupSettings: Flow<CalendarGroupSettings> = dataStore.data.map { prefs ->
+        CalendarGroupSettings.decode(prefs[KEY_CALENDAR_GROUPS])
+    }.distinctUntilChanged()
+
+    /** Moves the calendar [href] into [groupKey]; null returns it to its automatic group. */
+    suspend fun setCalendarGroup(href: String, groupKey: String?) {
+        editCalendarGroups { settings ->
+            val assignments = if (groupKey == null) settings.assignments - href else settings.assignments + (href to groupKey)
+            // A custom group lives only as long as a calendar is in it.
+            val usedKeys = assignments.values.toSet()
+            settings.copy(
+                assignments = assignments,
+                names = settings.names.filterKeys { !CalendarSourceGroups.isCustomKey(it) || it in usedKeys },
+            )
+        }
+    }
+
+    /** Renames the group [groupKey]; a blank [name] restores its automatic name. */
+    suspend fun setCalendarGroupName(groupKey: String, name: String?) {
+        editCalendarGroups { settings ->
+            val trimmed = name?.trim().orEmpty()
+            settings.copy(names = if (trimmed.isEmpty()) settings.names - groupKey else settings.names + (groupKey to trimmed))
+        }
+    }
+
+    private suspend fun editCalendarGroups(transform: (CalendarGroupSettings) -> CalendarGroupSettings) {
+        dataStore.edit { prefs ->
+            val next = transform(CalendarGroupSettings.decode(prefs[KEY_CALENDAR_GROUPS]))
+            if (next == CalendarGroupSettings()) prefs.remove(KEY_CALENDAR_GROUPS) else prefs[KEY_CALENDAR_GROUPS] = next.encode()
+        }
+    }
 
     suspend fun setSelectedView(viewMode: CalendarViewMode) {
         dataStore.edit { it[KEY_VIEW] = viewMode.name }
@@ -699,6 +734,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
         private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
         private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
+        private val KEY_CALENDAR_GROUPS = stringPreferencesKey("calendar_groups")
         private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
         private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
         private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")

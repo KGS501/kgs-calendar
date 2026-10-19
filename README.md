@@ -22,6 +22,7 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 - Android device calendar access when permission is granted
 - CalDAV and Nextcloud calendar and task sync
 - Read-only ICS and CalDAV calendar subscriptions
+- Open or share ICS attachments from email and file apps, review the events, and import them into a local or CalDAV calendar
 - Reminders for events and tasks
 - Recurring events and tasks
 - Search across events and tasks

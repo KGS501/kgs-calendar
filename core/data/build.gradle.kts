@@ -24,6 +24,12 @@ android {
         }
     }
 
+    lint {
+        // This check only concerns lint rule authors, and it crashes the analysis of this
+        // module (KtDeclarationModifierList "Bad parent"), which also blocks :app:lintDebug.
+        disable += "UElementAsPsi"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())
         targetCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())

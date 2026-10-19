@@ -3,6 +3,8 @@ package com.kgs.calendar.data.sync
 import android.database.SQLException
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
+import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.data.account.SourceImageStore
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.ParsedCalendarComponent
 import com.kgs.calendar.data.isCalDavScheduleInbox
@@ -41,6 +43,7 @@ class CalDavSyncEngine internal constructor(
     private val localWrites: LocalWriteSupport,
     private val uploader: PendingMutationUploader,
     private val zoneId: ZoneId,
+    private val sourceImages: SourceImageStore = SourceImageStore(null),
 ) : CalendarSourceSyncEngine {
     /** Every account the other engines don't claim is a CalDAV account, so this engine must be asked last. */
     override fun handles(account: AccountEntity): Boolean = true
@@ -67,7 +70,28 @@ class CalDavSyncEngine internal constructor(
         }
         uploadFailure?.let { throw it }
         database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
+        refreshNextcloudAvatar(account, credentials)
         return true
+    }
+
+    /** The Nextcloud user's picture as the source image, checked once a day; failures are ignored. */
+    private suspend fun refreshNextcloudAvatar(account: AccountEntity, credentials: StoredCredentials) {
+        val calendarHome = database.accountDao().get(account.id)?.calendarHomeUrl ?: account.calendarHomeUrl
+        if (calendarHome?.contains(NEXTCLOUD_DAV_PATH) != true) return
+        val key = SourceImageKeys.account(account.id)
+        val now = System.currentTimeMillis()
+        if (!sourceImages.isRefreshDue(key, now, AVATAR_REFRESH_INTERVAL_MILLIS)) return
+        try {
+            val avatar = calDavClient.fetchNextcloudAvatar(credentials.serverUrl, credentials.username, credentials.appPassword)
+                ?: return
+            // The generated letter avatar adds nothing to the initial the app already shows.
+            if (avatar.isCustom) sourceImages.save(key, avatar.bytes) else sourceImages.delete(key)
+            sourceImages.markChecked(key, now)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // The picture is decoration; the next sync tries again.
+        }
     }
 
     /**
@@ -514,6 +538,8 @@ class CalDavSyncEngine internal constructor(
         const val RECONCILIATION_VERSION = 1
         const val RESOURCE_MULTIGET_BATCH_SIZE = 50
         const val MAX_SYNC_ERROR_LENGTH = 500
+        const val NEXTCLOUD_DAV_PATH = "/remote.php/dav/"
+        const val AVATAR_REFRESH_INTERVAL_MILLIS = 24L * 60L * 60L * 1000L
     }
 }
 

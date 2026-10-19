@@ -1,21 +1,16 @@
 package com.kgs.calendar.data.secure
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.IOException
+import java.security.GeneralSecurityException
+import java.security.KeyStore
 
 class EncryptedCredentialsStore(context: Context) : CredentialsStore {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        PREF_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val prefs: SharedPreferences = openOrReset(context.applicationContext)
 
     override fun save(credentials: StoredCredentials) {
         save(PRIMARY_ID, credentials)
@@ -74,5 +69,46 @@ class EncryptedCredentialsStore(context: Context) : CredentialsStore {
 
         private fun accountKey(accountId: String, key: String): String =
             "account.$accountId.$key"
+
+        /**
+         * A Keystore key that can no longer decrypt the stored keyset (seen after OS updates and
+         * restores) makes opening throw on every start, and the app graph with it. The credentials
+         * are lost either way, so start with an empty store and a new key: the accounts then ask
+         * to be reconnected instead of the app crashing at launch.
+         */
+        private fun openOrReset(context: Context): SharedPreferences {
+            var failure: Exception? = null
+            // A second attempt rules out a one-off Keystore hiccup before anything is deleted.
+            repeat(OPEN_ATTEMPTS) {
+                try {
+                    return open(context)
+                } catch (error: GeneralSecurityException) {
+                    failure = error
+                } catch (error: IOException) {
+                    failure = error
+                }
+            }
+            Log.w(TAG, "Stored credentials are unreadable; resetting them.", failure)
+            context.deleteSharedPreferences(PREF_NAME)
+            // This store is the master key's only user; a broken key must be replaced as well.
+            runCatching {
+                KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+                    .deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            }
+            return open(context)
+        }
+
+        private fun open(context: Context): SharedPreferences =
+            EncryptedSharedPreferences.create(
+                context,
+                PREF_NAME,
+                MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+
+        private const val TAG = "KgsCredentials"
+        private const val OPEN_ATTEMPTS = 2
+        private const val ANDROID_KEY_STORE = "AndroidKeyStore"
     }
 }

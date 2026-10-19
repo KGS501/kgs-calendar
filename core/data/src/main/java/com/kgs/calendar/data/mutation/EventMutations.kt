@@ -51,17 +51,7 @@ class EventMutations internal constructor(
             ?: error("No writable event calendar has been synced yet.")
         val uid = newUid()
         val resourceHref = collection.newResourceHref(uid)
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1)).atZone(zoneId).toInstant().toEpochMilli()
-        }
+        val (start, end) = payload.timeSpanMillis()
         val event = EventEntity(
             uid = uid,
             collectionHref = collection.href,
@@ -71,13 +61,7 @@ class EventMutations internal constructor(
             location = payload.location?.ifBlank { null },
             locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
             startsAtMillis = start,
-            endsAtMillis = if (end > start) {
-                end
-            } else if (payload.allDay) {
-                payload.date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            } else {
-                start + 60L * 60L * 1000L
-            },
+            endsAtMillis = end,
             allDay = payload.allDay,
             recurrenceRule = payload.recurrenceRule?.ifBlank { null },
             isRecurring = !payload.recurrenceRule.isNullOrBlank(),
@@ -131,17 +115,7 @@ class EventMutations internal constructor(
             moved -> targetCollection.newResourceHref(existing.uid)
             else -> existing.resourceHref
         }
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1)).atZone(zoneId).toInstant().toEpochMilli()
-        }
+        val (start, end) = payload.timeSpanMillis()
         val updated = existing.copy(
             collectionHref = targetCollection.href,
             resourceHref = resourceHref,
@@ -150,13 +124,7 @@ class EventMutations internal constructor(
             location = payload.location?.ifBlank { null },
             locationMapVerified = payload.location?.takeIf { it.isNotBlank() }?.let { payload.locationMapVerified },
             startsAtMillis = start,
-            endsAtMillis = if (end > start) {
-                end
-            } else if (payload.allDay) {
-                payload.date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            } else {
-                start + 60L * 60L * 1000L
-            },
+            endsAtMillis = end,
             allDay = payload.allDay,
             recurrenceRule = payload.recurrenceRule?.ifBlank { null },
             isRecurring = !payload.recurrenceRule.isNullOrBlank() || !existing.rDatesCsv.isNullOrBlank(),
@@ -249,24 +217,13 @@ class EventMutations internal constructor(
             return
         }
         val resource = database.resourceDao().get(existing.resourceHref)
-        val endDate = payload.endDate ?: payload.date
-        val start = if (payload.allDay) {
-            payload.date.atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            payload.date.atTime(payload.startTime ?: LocalTime.of(9, 0)).atZone(zoneId).toInstant().toEpochMilli()
-        }
-        val end = if (payload.allDay) {
-            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        } else {
-            endDate.atTime(payload.endTime ?: (payload.startTime ?: LocalTime.of(9, 0)).plusHours(1))
-                .atZone(zoneId).toInstant().toEpochMilli()
-        }
+        val (start, end) = payload.timeSpanMillis()
         val replacement = existing.copy(
             title = payload.title.ifBlank { "Untitled event" },
             description = payload.description?.ifBlank { null },
             location = payload.location?.ifBlank { null },
             startsAtMillis = start,
-            endsAtMillis = if (end > start) end else start + HOUR_MILLIS,
+            endsAtMillis = end,
             allDay = payload.allDay,
             recurrenceRule = null,
             isRecurring = false,
@@ -578,6 +535,31 @@ class EventMutations internal constructor(
         androidWriteShield.markLocalWrite(androidEvent.resourceHref)
     }
 
+    /**
+     * Start and end of the edited event. An end that is missing or not after the start becomes one
+     * day for all-day events and one hour for timed ones.
+     */
+    private fun EventEditPayload.timeSpanMillis(): Pair<Long, Long> {
+        val startTime = startTime ?: DEFAULT_START_TIME
+        val start = if (allDay) {
+            date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        } else {
+            date.atTime(startTime).atZone(zoneId).toInstant().toEpochMilli()
+        }
+        val endDate = endDate ?: date
+        val end = if (allDay) {
+            endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        } else {
+            endDate.atTime(endTime ?: startTime.plusHours(1)).atZone(zoneId).toInstant().toEpochMilli()
+        }
+        val validEnd = when {
+            end > start -> end
+            allDay -> date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            else -> start + HOUR_MILLIS
+        }
+        return start to validEnd
+    }
+
     private fun CollectionEntity.androidCalendarId(): Long =
         externalId?.toLongOrNull()
             ?: androidCalendarProviderClient.calendarIdFromHref(href)
@@ -632,5 +614,6 @@ class EventMutations internal constructor(
 
     private companion object {
         const val HOUR_MILLIS = 60L * 60L * 1000L
+        val DEFAULT_START_TIME: LocalTime = LocalTime.of(9, 0)
     }
 }

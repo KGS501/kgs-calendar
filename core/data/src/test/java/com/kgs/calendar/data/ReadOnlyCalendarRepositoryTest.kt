@@ -1,9 +1,16 @@
 package com.kgs.calendar.data
 
-import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
+import java.time.LocalDate
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +19,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class ReadOnlyCalendarRepositoryTest {
@@ -148,27 +154,74 @@ class ReadOnlyCalendarRepositoryTest {
     }
 
     @Test
-    fun htmlResponseFailsSubscriptionAndRemovesNewAccount() = runTest {
-        server.setFeed(feedPath, "<!DOCTYPE html><html><body>Login</body></html>", contentType = "text/html")
-        val url = server.url(feedPath)
+    fun feedDownloadsLeaveTheCallingThread() = runTest {
+        // The UI adds subscriptions from the main thread, where Android forbids network access.
+        val requestThreads = CopyOnWriteArrayList<Thread>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain -> requestThreads += Thread.currentThread(); chain.proceed(chain.request()) }
+            .build()
+        RepositoryHarness(httpClient = client).use { local ->
+            local.server.setFeed(feedPath, feed("unity-day" to "Unity Day"))
+            val caller = Executors.newSingleThreadExecutor { Thread(it, "caller") }
+            try {
+                val callerThread = withContext(caller.asCoroutineDispatcher()) {
+                    local.repository.addReadOnlyCalendar(local.server.url(feedPath), "Holidays")
+                    Thread.currentThread()
+                }
 
-        val error = expectFailure<IllegalStateException> { repository.addReadOnlyCalendar(url, "Broken") }
-
-        assertEquals("Source \"Broken\": URL returned a web page instead of an iCalendar feed.", error.message)
-        assertTrue(harness.database.accountDao().getAll().isEmpty())
-        assertTrue(harness.database.collectionDao().all().isEmpty())
+                assertTrue(requestThreads.isNotEmpty())
+                assertTrue(requestThreads.none { it === callerThread })
+            } finally {
+                caller.shutdown()
+            }
+        }
     }
 
     @Test
-    fun notFoundFailsSubscriptionAndRemovesNewAccount() = runTest {
-        val error = expectFailure<IllegalStateException> {
-            repository.addReadOnlyCalendar(server.url("/feeds/missing.ics"), "Missing")
-        }
+    fun htmlResponseKeepsNewSubscriptionAsCalendarWithoutDataYet() = runTest {
+        server.setFeed(feedPath, "<!DOCTYPE html><html><body>Login</body></html>", contentType = "text/html")
 
-        assertEquals("Source \"Missing\": URL returned HTTP 404", error.message)
-        assertEquals(404, error.findCause<HttpStatusException>()!!.statusCode)
-        assertTrue(harness.database.accountDao().getAll().isEmpty())
-        assertTrue(harness.database.collectionDao().all().isEmpty())
+        val account = repository.addReadOnlyCalendar(server.url(feedPath), "Broken")
+
+        assertEquals(SyncState.Error, account.syncState)
+        assertEquals("Source \"Broken\": URL returned a web page instead of an iCalendar feed.", account.syncError)
+        val collection = harness.collection("readonly-${account.id}")!!
+        assertTrue(collection.supportsEvents)
+        assertEquals("Broken", collection.displayName)
+        assertEquals(ReadOnlyFeedStatus.NoDataYet, readOnlyFeedStatus(account, collection))
+    }
+
+    @Test
+    fun unreachableSubscriptionStaysAndLoadsOnALaterSync() = runTest {
+        val url = server.url(feedPath)
+
+        val account = repository.addReadOnlyCalendar(url, "Later")
+
+        assertEquals("Source \"Later\": URL returned HTTP 404", account.syncError)
+        val collectionHref = "readonly-${account.id}"
+        assertEquals(ReadOnlyFeedStatus.NoDataYet, readOnlyFeedStatus(account, harness.collection(collectionHref)!!))
+
+        server.setFeed(feedPath, feed("unity-day" to "Unity Day"))
+        repository.syncNow()
+
+        val synced = harness.account(account.id)!!
+        assertEquals(SyncState.Idle, synced.syncState)
+        assertEquals(null, readOnlyFeedStatus(synced, harness.collection(collectionHref)!!))
+        assertEquals(listOf("Unity Day"), harness.eventsIn(collectionHref).map { it.title })
+    }
+
+    @Test
+    fun emptyFeedIsAnEmptyEventCalendarNamedAfterTheFeed() = runTest {
+        server.setFeed(feedPath, SampleIcs.calendar("X-WR-CALNAME:School holidays"))
+
+        val account = repository.addReadOnlyCalendar(server.url(feedPath), null)
+
+        val collection = harness.collection("readonly-${account.id}")!!
+        assertTrue(collection.supportsEvents)
+        assertFalse(collection.supportsTasks)
+        assertEquals("School holidays", collection.displayName)
+        assertEquals("School holidays", collection.remoteDisplayName)
+        assertEquals(ReadOnlyFeedStatus.Empty, readOnlyFeedStatus(harness.account(account.id), collection))
     }
 
     @Test
@@ -177,12 +230,12 @@ class ReadOnlyCalendarRepositoryTest {
         val accountId = collectionHref.removePrefix("readonly-")
         server.setFeed(feedPath, "<!DOCTYPE html><html><body>Login</body></html>", contentType = "text/html")
 
-        val error = expectFailure<IllegalStateException> { repository.addReadOnlyCalendar(server.url(feedPath), "Holidays") }
+        repository.addReadOnlyCalendar(server.url(feedPath), "Holidays")
 
-        assertEquals("Source \"Holidays\": URL returned a web page instead of an iCalendar feed.", error.message)
         val account = harness.account(accountId)!!
         assertEquals(SyncState.Error, account.syncState)
-        assertEquals(error.message, account.syncError)
+        assertEquals("Source \"Holidays\": URL returned a web page instead of an iCalendar feed.", account.syncError)
+        assertEquals(ReadOnlyFeedStatus.UpdateFailed, readOnlyFeedStatus(account, harness.collection(collectionHref)!!))
         assertNotNull(harness.collection(collectionHref))
         assertEquals(listOf("Harvest festival", "Unity Day"), harness.eventsIn(collectionHref).map { it.title }.sorted())
     }

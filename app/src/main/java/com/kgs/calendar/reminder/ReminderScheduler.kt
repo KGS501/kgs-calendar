@@ -77,7 +77,7 @@ object ReminderScheduler {
         events.forEach { master ->
             val offsets = master.remindersCsv.minutes()
             if (offsets.isEmpty()) return@forEach
-            repository.expandEventReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+            repository.expandEventReminderOccurrences(master, now, windowEnd + offsets.leadMillis()).forEach { occurrence ->
                 val event = occurrence.item
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
@@ -94,7 +94,9 @@ object ReminderScheduler {
         }
 
         tasks.forEach { master ->
-            repository.expandTaskReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+            val offsets = master.remindersCsv.minutes()
+            if (offsets.isEmpty()) return@forEach
+            repository.expandTaskReminderOccurrences(master, now, windowEnd + offsets.leadMillis()).forEach { occurrence ->
                 val task = occurrence.item
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
@@ -104,7 +106,7 @@ object ReminderScheduler {
                     title = task.title.takeIf { it.isNotBlank() } ?: context.getString(R.string.untitled_task),
                     body = null,
                 )
-                plans += planner.plan(reminderOccurrence, task.remindersCsv.minutes()).map { plan ->
+                plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = taskNotificationBody(task, plan.triggerAtMillis))
                 }
             }
@@ -130,6 +132,12 @@ object ReminderScheduler {
         val visibility = graph.settingsStore.collectionVisibility.first()
         return graph.repository.isReminderStillVisible(occurrenceId, visibility) ?: true
     }
+
+    /**
+     * How far past the alarm window occurrences must be expanded: a reminder [offset] minutes before
+     * an occurrence after the window can still be due inside it (offsets go up to 30 days).
+     */
+    private fun List<Int>.leadMillis(): Long = (maxOrNull() ?: 0).coerceAtLeast(0) * 60_000L
 
     private fun String?.minutes(): List<Int> =
         this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.filter { it.isSupportedReminderOffset() }.orEmpty()
@@ -178,7 +186,7 @@ object ReminderScheduler {
         val end = event.endsAtMillis.localDateTime()
         val date = start.toLocalDate().takeUnless { triggerAt.isSameLocalDate(it) }?.format(dateFormatter)
         val time = if (event.allDay) null else "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
-        return notificationBody(listOfNotNull(date, time).joinToString(" | "), event.description.notificationText())
+        return notificationBody(listOfNotNull(date, time).joinToString(" | "), event.description.reminderNotificationText())
     }
 
     private fun taskNotificationBody(task: TaskEntity, triggerAt: Long): String? {
@@ -193,7 +201,7 @@ object ReminderScheduler {
             due != null && task.dueHasTime -> due.format(timeFormatter)
             else -> null
         }
-        return notificationBody(listOfNotNull(date, time).joinToString(" | "), task.notes.notificationText())
+        return notificationBody(listOfNotNull(date, time).joinToString(" | "), task.notes.reminderNotificationText())
     }
 
     private fun notificationBody(schedule: String, notes: String?): String? =
@@ -207,25 +215,28 @@ object ReminderScheduler {
 
     private fun Long.isSameLocalDate(date: LocalDate): Boolean =
         Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate() == date
+}
 
-    private fun String?.notificationText(): String? {
-        val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val withoutHtmlPayload = when {
-            raw.startsWith("data:text/html", ignoreCase = true) && "," in raw -> raw.substringAfter(',')
-            raw.startsWith("text/html,", ignoreCase = true) -> raw.substringAfter(',')
-            else -> raw
-        }
-        val decoded = runCatching { java.net.URLDecoder.decode(withoutHtmlPayload, Charsets.UTF_8.name()) }
-            .getOrDefault(withoutHtmlPayload)
-        val plain = if ('<' in decoded && '>' in decoded) {
-            Html.fromHtml(decoded, Html.FROM_HTML_MODE_LEGACY).toString()
-        } else {
-            decoded
-        }
-        return plain
-            .replace(Regex("[\\t\\x0B\\f\\r]+"), " ")
-            .replace(Regex("\\n{3,}"), "\n\n")
-            .trim()
-            .takeIf { it.isNotBlank() }
+/** Plain text of event/task notes for a notification; HTML (also as a data URL) is flattened. */
+internal fun String?.reminderNotificationText(): String? {
+    val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val htmlPayload = when {
+        raw.startsWith("data:text/html", ignoreCase = true) && "," in raw -> raw.substringAfter(',')
+        raw.startsWith("text/html,", ignoreCase = true) -> raw.substringAfter(',')
+        else -> null
     }
+    // Only a data-URL payload is percent-encoded; plain notes keep their "+" and "%" characters.
+    val decoded = htmlPayload
+        ?.let { payload -> runCatching { java.net.URLDecoder.decode(payload, Charsets.UTF_8.name()) }.getOrDefault(payload) }
+        ?: raw
+    val plain = if ('<' in decoded && '>' in decoded) {
+        Html.fromHtml(decoded, Html.FROM_HTML_MODE_LEGACY).toString()
+    } else {
+        decoded
+    }
+    return plain
+        .replace(Regex("[\\t\\x0B\\f\\r]+"), " ")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
+        .takeIf { it.isNotBlank() }
 }

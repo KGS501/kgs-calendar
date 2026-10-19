@@ -1,6 +1,7 @@
 package com.kgs.calendar.data.remote
 
 import android.graphics.Color
+import com.kgs.calendar.data.normalizeServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -544,6 +545,35 @@ class CalDavHttpClient(
         appPassword: String,
     ) = deleteResource(serverUrl, objectHref, username, appPassword, null)
 
+    /**
+     * The user's Nextcloud avatar from `{server}/index.php/avatar/{user id}/{size}`. Null when the
+     * server has no such endpoint (not Nextcloud) or failed; [NextcloudAvatar.isCustom] is false for
+     * the letter avatar Nextcloud generates when the user has not set a picture.
+     */
+    suspend fun fetchNextcloudAvatar(
+        serverUrl: String,
+        username: String,
+        appPassword: String,
+        sizePx: Int = 256,
+    ): NextcloudAvatar? = withContext(Dispatchers.IO) {
+        val normalized = normalizeServer(serverUrl)
+        val userId = resolveNextcloudUserId(normalized, username, appPassword)
+        val request = authenticatedRequest(
+            "${normalized.trimEnd('/')}/index.php/avatar/${userId.urlPathSegment()}/$sizePx",
+            username,
+            appPassword,
+        )
+            .header("Accept", "image/*")
+            .header("OCS-APIRequest", "true")
+            .build()
+        okHttpClient.newCall(request).execute().use { response ->
+            val contentType = response.header("Content-Type").orEmpty()
+            if (!response.isSuccessful || !contentType.startsWith("image/", ignoreCase = true)) return@withContext null
+            val bytes = response.body?.bytes()?.takeIf { it.isNotEmpty() && it.size <= MAX_AVATAR_BYTES } ?: return@withContext null
+            NextcloudAvatar(bytes = bytes, isCustom = response.header("X-NC-IsCustomAvatar") != "0")
+        }
+    }
+
     private fun discoverFromEndpoint(
         endpoint: String,
         username: String,
@@ -833,15 +863,6 @@ class CalDavHttpClient(
         return "${uri.scheme}://${uri.authority}"
     }
 
-    private fun normalizeServer(serverUrl: String): String {
-        val trimmed = serverUrl.trim().trimEnd('/')
-        return when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            else -> "https://$trimmed"
-        }
-    }
-
     private fun ensureTrailingSlash(value: String): String =
         if (value.endsWith('/')) value else "$value/"
 
@@ -928,6 +949,7 @@ class CalDavHttpClient(
         """.trimIndent()
 
         private const val TRASH_BIN_NAME = "trashbin"
+        private const val MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
         /** Answers of servers without a trash bin at the probed URL. */
         private val TRASH_BIN_ABSENT_STATUSES = setOf(400, 403, 404, 405, 409, 501)

@@ -37,6 +37,49 @@ class CalDavHttpClientTest {
     }
 
     @Test
+    fun fetchesTheNextcloudAvatarOfTheResolvedUserId() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/ocs/v1.php/cloud/user" -> MockResponse().setBody("<ocs><data><id>anna.b</id></data></ocs>")
+                "/index.php/avatar/anna.b/256" -> MockResponse()
+                    .setHeader("Content-Type", "image/png")
+                    .setHeader("X-NC-IsCustomAvatar", "1")
+                    .setBody(okio.Buffer().write(byteArrayOf(1, 2, 3)))
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+
+        val avatar = client.fetchNextcloudAvatar(server.url("/").toString(), "anna@example.com", "secret")!!
+
+        assertTrue(avatar.isCustom)
+        assertEquals(listOf<Byte>(1, 2, 3), avatar.bytes.toList())
+        val avatarRequest = generateSequence { server.takeRequest(0, TimeUnit.SECONDS) }
+            .first { it.path!!.startsWith("/index.php/avatar/") }
+        assertTrue(avatarRequest.getHeader("Authorization")!!.startsWith("Basic "))
+    }
+
+    @Test
+    fun generatedOrMissingNextcloudAvatarsAreReportedAsSuch() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path!!.startsWith("/index.php/avatar/") -> MockResponse()
+                    .setHeader("Content-Type", "image/png")
+                    .setHeader("X-NC-IsCustomAvatar", "0")
+                    .setBody(okio.Buffer().write(byteArrayOf(9)))
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+
+        assertFalse(client.fetchNextcloudAvatar(server.url("/").toString(), "anna", "secret")!!.isCustom)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                MockResponse().setHeader("Content-Type", "text/html").setBody("<html>Login</html>")
+        }
+        assertEquals(null, client.fetchNextcloudAvatar(server.url("/").toString(), "anna", "secret"))
+    }
+
+    @Test
     fun discoversPrincipalHomeSchedulingAndCollectionCapabilities() = runTest {
         serveDiscovery(collectionResponse())
 
