@@ -6,6 +6,7 @@ import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
@@ -37,6 +38,7 @@ internal data class WidgetRenderSettings(
     val dayWidgetStartHour: Int = SettingsStore.DEFAULT_DAY_WIDGET_START_HOUR,
     val dayWidgetStartAtCurrentHour: Boolean = SettingsStore.DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR,
     val multiWidgetMonthPercent: Int = SettingsStore.DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
+    val monthWidgetWeeks: WidgetMonthWeeks = WidgetMonthWeeks.FullMonth,
 ) {
     fun dayWidgetHourRowHeightDp(): Float =
         WIDGET_DAY_HOUR_ROW_HEIGHT_DP * SettingsStore.normalizeDayWidgetScalePercent(dayWidgetScalePercent) / 100f

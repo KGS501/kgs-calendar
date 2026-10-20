@@ -1,6 +1,7 @@
 package com.kgs.calendar.widget
 
 import com.kgs.calendar.data.settings.AppThemeMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.widget.data.forEachUncachedWidgetMonth
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
@@ -37,6 +38,17 @@ class WidgetMonthCacheTest {
         assertNotEquals(
             widgetMonthPageModelNamespace(settings, "Europe/Berlin"),
             widgetMonthPageModelNamespace(changedFirstDay, "Europe/Berlin"),
+        )
+    }
+
+    @Test
+    fun pageModelNamespaceChangesWithVisibleWeekSetting() {
+        val fullMonth = WidgetRenderSettings(monthWidgetWeeks = WidgetMonthWeeks.FullMonth)
+        val twoWeeks = fullMonth.copy(monthWidgetWeeks = WidgetMonthWeeks.Two)
+
+        assertNotEquals(
+            widgetMonthPageModelNamespace(fullMonth, "Europe/Berlin"),
+            widgetMonthPageModelNamespace(twoWeeks, "Europe/Berlin"),
         )
     }
 

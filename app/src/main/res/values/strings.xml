@@ -557,6 +557,9 @@
     <string name="widgets">Widgets</string>
     <string name="widget_settings_summary">Home screen widget appearance and behavior.</string>
     <string name="widget_month_settings_help">These controls only affect the month widget. Follow app uses the main app design settings.</string>
+    <string name="widget_month_visible_weeks">Visible weeks</string>
+    <string name="widget_month_weeks_count">%1$d weeks</string>
+    <string name="widget_month_weeks_full">Full month</string>
     <string name="tasks_widget_display">Displayed tasks</string>
     <string name="tasks_widget_sort">Sort order</string>
     <string name="tasks_widget_plus_action">Plus button</string>

@@ -6,7 +6,9 @@ import com.kgs.calendar.widget.WIDGET_MONTH_RENDER_SIGNATURE_VERSION
 import com.kgs.calendar.widget.model.WidgetCollectionSnapshot
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
+import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 
 internal class WidgetInteractionTokens {
     private val tokens = mutableMapOf<String, Long>()
@@ -111,6 +113,13 @@ internal fun widgetMonthPageModelNamespace(
     append(WIDGET_MONTH_RENDER_SIGNATURE_VERSION)
     append('|').append(settings.locale.toLanguageTag())
     append('|').append(settings.firstDayOfWeek.name)
+    append('|').append(settings.monthWidgetWeeks.name)
+    if (settings.monthWidgetWeeks.weekCount != null) {
+        val today = runCatching { LocalDate.now(ZoneId.of(zoneId)) }.getOrElse { LocalDate.now() }
+        val daysSinceWeekStart = (today.dayOfWeek.value - settings.firstDayOfWeek.value + 7) % 7
+        append('|').append(YearMonth.from(today))
+        append(':').append(today.minusDays(daysSinceWeekStart.toLong()).toEpochDay())
+    }
     append('|').append(settings.taskColorMode.name)
     append('|').append(settings.showCompletedTasks)
     append('|').append(settings.collectionVisibility.signature())
