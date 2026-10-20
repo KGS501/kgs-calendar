@@ -79,7 +79,7 @@ internal fun CalendarSourceGroup.automaticName(): String =
 
 @Composable
 internal fun CalendarSourceGroup.subtitle(): String = when (kind) {
-    CalendarSourceGroupKind.Local -> stringResource(R.string.local_calendar)
+    CalendarSourceGroupKind.Local -> stringResource(R.string.on_this_device)
     CalendarSourceGroupKind.AndroidDevice -> stringResource(R.string.android_device_calendars)
     CalendarSourceGroupKind.ReadOnlyUrl -> stringResource(R.string.read_only_url)
     CalendarSourceGroupKind.Custom -> stringResource(R.string.calendar_group_custom)

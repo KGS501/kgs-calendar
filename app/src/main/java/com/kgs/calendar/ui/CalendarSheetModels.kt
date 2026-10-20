@@ -7,26 +7,26 @@ import com.kgs.calendar.data.trash.TrashedItemPreview
 import com.kgs.calendar.domain.model.EventEditPayload
 import com.kgs.calendar.domain.model.TaskEditPayload
 
-internal enum class SettingsDestination(val title: String) {
-    Main("Settings"),
-    Accounts("Calendar"),
-    AddSource("Add calendar"),
-    AddAccount("Add CalDAV"),
-    AddReadOnly("Read-only calendar"),
-    AccountDetail("Edit source"),
-    Behavior("Behavior"),
-    Design("Design"),
-    Widgets("Widgets"),
-    WidgetAgenda("Agenda widget"),
-    WidgetMonth("Month widget"),
-    WidgetTasks("Tasks widget"),
-    WidgetMulti("Multi widget"),
-    WidgetDay("Day widget"),
-    Privacy("Privacy"),
-    EventFieldOrder("Event fields"),
-    TaskFieldOrder("Task fields"),
-    Sources("Calendars & sources"),
-    Reorder("Order"),
+internal enum class SettingsDestination {
+    Main,
+    Accounts,
+    AddSource,
+    AddAccount,
+    AddReadOnly,
+    AccountDetail,
+    Views,
+    NewItems,
+    Appearance,
+    General,
+    Widgets,
+    WidgetAgenda,
+    WidgetMonth,
+    WidgetTasks,
+    WidgetMulti,
+    WidgetDay,
+    Privacy,
+    EventFieldOrder,
+    TaskFieldOrder,
 }
 
 internal sealed interface CreationSheet {

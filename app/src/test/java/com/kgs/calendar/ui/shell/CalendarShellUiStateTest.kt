@@ -39,7 +39,7 @@ class CalendarShellUiStateTest {
     fun openingTheEventEditorClosesEveryOtherOverlay() {
         shell.openSearch()
         shell.openProblems()
-        shell.openSettings(SettingsDestination.Design)
+        shell.openSettings(SettingsDestination.Appearance)
         shell.editCollection(collection("work"))
         shell.openTaskDetail(task("parent"))
         shell.openSubtask(task("parent"), task("child"))
@@ -300,6 +300,19 @@ class CalendarShellUiStateTest {
         isCompleted = false,
         recurrenceRule = "FREQ=DAILY",
     )
+
+    @Test
+    fun theTrashOpensFromTheSettingsAndBackReturnsToThem() {
+        shell.openSettings(SettingsDestination.Main)
+        shell.openTrash()
+
+        assertTrue(shell.trashOpen)
+        assertTrue(shell.settingsOpen)
+
+        shell.navigateBack(closeSearch = shell::closeSearch, selectView = {})
+        assertFalse(shell.trashOpen)
+        assertTrue(shell.settingsOpen)
+    }
 
     @Test
     fun theTrashOpensFromTheDrawerAndItsItemsOpenReadOnlyDetails() {

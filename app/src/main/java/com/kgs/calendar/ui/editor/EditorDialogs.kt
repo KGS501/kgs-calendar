@@ -13,6 +13,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -633,45 +635,57 @@ internal fun SettingsReminderEditor(
 ) {
     var editingReminder by remember { mutableStateOf<Int?>(null) }
     var addingReminder by remember { mutableStateOf(false) }
-    Surface(
+    // A row inside a settings group, which gives it its rounded card. Each reminder is a pill:
+    // tapping it edits the reminder, its cross removes it.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(SettingsControlShape),
-        shape = SettingsControlShape,
-        color = settingsControlColor(),
+            .background(settingsControlColor())
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CompactEditorHeaderLine(
-                icon = Icons.Default.Notifications,
-                title = title,
-                value = if (selected.isEmpty()) {
-                    stringResource(R.string.none)
-                } else {
-                    selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", ")
-                },
-                actionIcon = Icons.Default.Add,
-                actionDescription = stringResource(R.string.add_reminder),
-                onAction = {
-                    editingReminder = null
-                    addingReminder = true
-                },
-            )
-            AnimatedVisibility(visible = selected.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    selected.normalizedReminderOffsets().forEach { minutes ->
-                        CompactValueRow(
-                            value = reminderMinuteLabel(minutes),
-                            onEdit = {
-                                editingReminder = minutes
-                                addingReminder = true
-                            },
-                            onDelete = { onSelectedChange((selected - minutes).normalizedReminderOffsets().toSet()) },
-                        )
+            selected.normalizedReminderOffsets().forEach { minutes ->
+                Row(
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(19.dp))
+                        .background(WarmBrown.copy(alpha = 0.12f))
+                        .clickable {
+                            editingReminder = minutes
+                            addingReminder = true
+                        }
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(reminderMinuteLabel(minutes), color = WarmInk, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+                    IconButton(
+                        onClick = { onSelectedChange((selected - minutes).normalizedReminderOffsets().toSet()) },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                     }
                 }
+            }
+            Row(
+                modifier = Modifier
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(19.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .clickable {
+                        editingReminder = null
+                        addingReminder = true
+                    }
+                    .padding(start = 10.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.add_reminder), color = WarmBrown, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

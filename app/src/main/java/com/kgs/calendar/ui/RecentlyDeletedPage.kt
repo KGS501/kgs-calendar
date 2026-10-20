@@ -70,7 +70,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /**
- * "Recently deleted", opened from the sidebar: the deleted events and tasks as their usual cards
+ * "Recently deleted", opened from the settings: the deleted events and tasks as their usual cards
  * (the ones search and the agenda use), ordered by event/task date. A tap
  * opens the item's detail sheet, which offers restore and permanent delete.
  */
