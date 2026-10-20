@@ -27,6 +27,7 @@ import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedText
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -200,19 +201,11 @@ internal fun EventEditorSheet(
                     onClose = onClose,
                     actionEnabled = false,
                 ) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(stringResource(R.string.event), selected = true)
-                        TypeChip(
-                            stringResource(R.string.task),
-                            selected = false,
-                            onClick = {
-                                onSwitchToTask(currentTransferDraft())
-                            },
-                        )
-                    }
+                    EditorTypeSwitch(
+                        eventSelected = true,
+                        onSelectEvent = {},
+                        onSelectTask = { onSwitchToTask(currentTransferDraft()) },
+                    )
                     NoWritableSourceNotice(
                         title = stringResource(R.string.no_writable_event_calendar_title),
                         body = stringResource(R.string.no_writable_event_calendar_body),
@@ -256,40 +249,26 @@ internal fun EventEditorSheet(
                 onClose = onClose,
             ) {
                 if (!readOnlyRemote) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(stringResource(R.string.event), selected = true)
-                        TypeChip(
-                            stringResource(R.string.task),
-                            selected = false,
-                            onClick = {
-                                onSwitchToTask(currentTransferDraft())
-                            },
-                        )
-                    }
+                    EditorTypeSwitch(
+                        eventSelected = true,
+                        onSelectEvent = {},
+                        onSelectTask = { onSwitchToTask(currentTransferDraft()) },
+                    )
                 }
-                EditorSection {
-                    if (readOnlyRemote) {
+                if (readOnlyRemote) {
+                    EditorSection {
                         ReadOnlyEditorNotice(title = title)
-                    } else {
-                        EventTitleField(
-                            value = title,
-                            onValueChange = { title = it },
-                            requestFocus = requestTitleFocus && initialEvent == null,
-                        )
                     }
-                }
-                if (!readOnlyRemote) {
-                    Text(
-                        stringResource(R.string.calendar),
-                        color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
+                } else {
+                    EventTitleField(
+                        value = title,
+                        onValueChange = { title = it },
+                        requestFocus = requestTitleFocus && initialEvent == null,
                         modifier = Modifier.editorInset(),
                     )
+                }
+                if (!readOnlyRemote) {
+                    EditorLabel(stringResource(R.string.calendar))
                     FadedHorizontalScrollRow(
                         contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -308,7 +287,7 @@ internal fun EventEditorSheet(
                     EditorSection {
                         EditorLine(Icons.Default.AccessTime) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.all_day), fontSize = 17.sp, lineHeight = 20.sp)
+                                Text(stringResource(R.string.all_day), color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
                                 Switch(
                                     checked = allDay,
                                     onCheckedChange = {
@@ -333,26 +312,26 @@ internal fun EventEditorSheet(
                 } else {
                     state.eventFieldOrder.filterNot { it == "time" }.filter { eventCapabilities.allows(it) }
                 }
+                // All further fields form one card, in the order chosen in the settings.
+                if (editableFields.isNotEmpty()) EditorGroup {
                 editableFields.forEach { field ->
                     when (field) {
                         "recurrence" -> CompactRecurrenceEditor(recurrenceRule = recurrenceRule, onRecurrenceRuleChange = { recurrenceRule = it.orEmpty() })
                         "reminders" -> CompactReminderEditor(selected = reminderMinutes, onSelectedChange = { reminderMinutes = it })
-                        "location" -> Box(Modifier.editorInset()) {
-                            LocationSelectorField(location = location, onClick = { locationPickerOpen = true })
+                        "location" -> LocationSelectorField(location = location, onClick = { locationPickerOpen = true })
+                        "notes" -> EditorSection {
+                            EditorLine(Icons.AutoMirrored.Filled.Notes, verticalAlignment = Alignment.Top) {
+                                EditorPlainTextField(
+                                    value = description,
+                                    onValueChange = { description = it },
+                                    placeholder = stringResource(R.string.notes),
+                                    minLines = 2,
+                                )
+                            }
                         }
-                        "notes" -> OutlinedTextField(
-                            description,
-                            { description = it },
-                            label = { Text(stringResource(R.string.notes)) },
-                            minLines = 3,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.editorInset().fillMaxWidth(),
-                        )
                         "status" -> EditorSection {
                             MetadataDropdownLine(stringResource(R.string.event_status), EventStatusOption.entries, eventStatus) { eventStatus = it }
-                            HorizontalDivider(color = WarmLine.copy(alpha = 0.7f))
                             MetadataDropdownLine(stringResource(R.string.sharing_visibility), EventClassOption.entries, eventClassification) { eventClassification = it }
-                            HorizontalDivider(color = WarmLine.copy(alpha = 0.7f))
                             MetadataDropdownLine(stringResource(R.string.availability), EventTransparencyOption.entries, eventTransparency) { eventTransparency = it }
                         }
                         "categories" -> TagEditor(stringResource(R.string.categories), categories.toCategoryTags(), knownCategories) { categories = it.toCategoriesCsv() }
@@ -365,6 +344,7 @@ internal fun EventEditorSheet(
                             SharedEventEditor(organizerJson, attendeesJson) { attendeesJson = it }
                         }
                     }
+                }
                 }
             }
             }
@@ -384,21 +364,9 @@ private fun EventTitleField(value: String, onValueChange: (String) -> Unit, modi
             focusRequester.requestFocus()
         }
     }
-    OutlinedTextField(
+    EditorTitleField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(stringResource(R.string.add_title)) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.titleLarge.copy(
-            color = WarmInk,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 22.sp,
-            lineHeight = 25.sp,
-        ),
-        shape = RoundedCornerShape(18.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .focusRequester(focusRequester),
+        modifier = modifier.focusRequester(focusRequester),
     )
 }

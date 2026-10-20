@@ -307,8 +307,6 @@
     <string name="remove_source_body">All locally stored data for this source will be removed. The server calendar stays unchanged.</string>
     <string name="no_problems">No problems</string>
     <string name="all_synced">All known changes are synced.</string>
-    <string name="date_only">Date only</string>
-    <string name="date_and_time">Date and time</string>
     <string name="thirty_min">30 min</string>
     <string name="one_hour">1 hour</string>
     <string name="custom_duration">Custom duration</string>
@@ -668,4 +666,9 @@
     </plurals>
     <string name="on_this_device">On this device</string>
     <string name="custom_duration_short">Other…</string>
+    <string name="task_dates_start">Start only</string>
+    <string name="task_dates_end">End only</string>
+    <string name="task_dates_both">Start &amp; end</string>
+    <string name="settings_task_with_time">With time</string>
+    <string name="settings_task_with_time_help">Off: whole days without a time</string>
 </resources>

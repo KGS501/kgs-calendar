@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -113,7 +114,7 @@ data class CalendarUiState(
     val fullWeekSwipeEnabled: Boolean = SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
     val multiDaySidebarControlsEnabled: Boolean = true,
     val defaultEventDurationMinutes: Int = 60,
-    val defaultTaskHasDate: Boolean = false,
+    val defaultTaskDates: TaskDefaultDates = TaskDefaultDates.None,
     val defaultTaskHasTime: Boolean = false,
     val defaultEventReminderMinutes: Set<Int> = emptySet(),
     val defaultTaskReminderMinutes: Set<Int> = emptySet(),

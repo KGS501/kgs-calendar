@@ -187,7 +187,7 @@ internal fun SettingsOverlay(
             onShowCompletedTasksChanged = viewModel.settings::setShowCompletedTasksInCalendar,
             onShowCalendarWeeksChanged = viewModel.settings::setShowCalendarWeeks,
             onDefaultEventDurationChanged = viewModel.settings::setDefaultEventDurationMinutes,
-            onDefaultTaskHasDateChanged = viewModel.settings::setDefaultTaskHasDate,
+            onDefaultTaskDatesSelected = viewModel.settings::setDefaultTaskDates,
             onDefaultTaskHasTimeChanged = viewModel.settings::setDefaultTaskHasTime,
             onDefaultEventRemindersChanged = viewModel.settings::setDefaultEventReminderMinutes,
             onDefaultTaskRemindersChanged = viewModel.settings::setDefaultTaskReminderMinutes,

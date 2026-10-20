@@ -36,6 +36,13 @@ import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import java.time.format.DateTimeFormatter
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +63,8 @@ import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import java.time.Instant
 import java.time.LocalDate
+import android.text.format.DateFormat as AndroidDateFormat
+import java.util.Locale
 import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.math.max
@@ -149,17 +158,11 @@ internal fun EventScheduleEditor(
         modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        EditorScheduleLine(label = stringResource(R.string.start)) {
             DatePickerField(
                 value = schedule.startDateText,
                 onValueChange = { onScheduleChange(schedule.copy(startDateText = it).recalculatePreview()) },
-                label = { Text(stringResource(R.string.start_date)) },
+                label = stringResource(R.string.start_date),
                 modifier = Modifier.weight(1f).testTag("editor-start-date"),
             )
             AnimatedVisibility(
@@ -172,22 +175,16 @@ internal fun EventScheduleEditor(
                 TimePickerField(
                     value = schedule.startTimeText,
                     onValueChange = { onScheduleChange(schedule.copy(startTimeText = it).recalculatePreview()) },
-                    label = { Text(stringResource(R.string.start)) },
-                    modifier = Modifier.width(112.dp).testTag("editor-start-time"),
+                    label = stringResource(R.string.start),
+                    modifier = Modifier.width(EditorTimeChipWidth).testTag("editor-start-time"),
                 )
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        EditorScheduleLine(label = stringResource(R.string.end)) {
             DatePickerField(
                 value = schedule.endDateText,
                 onValueChange = { onScheduleChange(schedule.copy(endDateText = it).recalculatePreview()) },
-                label = { Text(stringResource(R.string.end_date)) },
+                label = stringResource(R.string.end_date),
                 isError = endIsError,
                 modifier = Modifier.weight(1f).testTag("editor-end-date"),
             )
@@ -201,32 +198,81 @@ internal fun EventScheduleEditor(
                 TimePickerField(
                     value = schedule.endTimeText,
                     onValueChange = { onScheduleChange(schedule.copy(endTimeText = it).recalculatePreview()) },
-                    label = { Text(stringResource(R.string.end)) },
+                    label = stringResource(R.string.end),
                     isError = endIsError,
-                    modifier = Modifier.width(112.dp).testTag("editor-end-time"),
+                    modifier = Modifier.width(EditorTimeChipWidth).testTag("editor-end-time"),
                 )
             }
         }
     }
 }
 
+internal val EditorTimeChipWidth = 76.dp
+
+/** One line of a schedule: a short label such as "Start", then its date and time chips. */
+@Composable
+internal fun EditorScheduleLine(
+    label: String,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            modifier = Modifier.width(48.dp),
+        )
+        content()
+    }
+}
+
+@Composable
+internal fun editorDateLabel(isoDate: String): String {
+    val locale = LocalAppLocale.current
+    val today = LocalCalendarTimeSnapshot.current.today
+    return remember(isoDate, locale, today) { formatEditorDate(isoDate, locale, today) }
+}
+
+/**
+ * The weekday with a short date in the locale's own order, e.g. "Thu, Oct 22" or "Do., 22. Okt.";
+ * the year is added when it is not the current one.
+ */
+internal fun formatEditorDate(isoDate: String, locale: Locale, today: LocalDate = LocalDate.now()): String =
+    runCatching {
+        val date = LocalDate.parse(isoDate)
+        val skeleton = if (date.year == today.year) "EEEdMMM" else "EEEdMMMy"
+        date.format(DateTimeFormatter.ofPattern(AndroidDateFormat.getBestDateTimePattern(locale, skeleton), locale))
+    }.getOrDefault(isoDate)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DatePickerField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: @Composable () -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
     supportingText: String? = null,
+    showLabel: Boolean = false,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     var dialogOpen by remember { mutableStateOf(false) }
     PickerOutlinedField(
-        value = value,
+        value = editorDateLabel(value),
         label = label,
         onClick = { dialogOpen = true },
         isError = isError,
         supportingText = supportingText,
+        showLabel = showLabel,
+        containerColor = containerColor,
         modifier = modifier,
     )
     if (dialogOpen) {
@@ -266,7 +312,7 @@ internal fun DatePickerField(
 internal fun TimePickerField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: @Composable () -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
     supportingText: String? = null,
@@ -398,38 +444,47 @@ internal fun popupSurfaceColor(): Color =
 internal fun popupControlSurfaceColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF303134) else Color(0xFFF1F3F4)
 
+/** A date or time as a tappable chip on the editor card; [label] names it for screen readers. */
 @Composable
 internal fun PickerOutlinedField(
     value: String,
-    label: @Composable () -> Unit,
+    label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
     supportingText: String? = null,
+    showLabel: Boolean = false,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    val supportingMessage = supportingText
-    val supportingContent: (@Composable () -> Unit)? =
-        if (supportingMessage == null) null else {
-            { Text(supportingMessage) }
+    val shape = RoundedCornerShape(14.dp)
+    val error = MaterialTheme.colorScheme.error
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (showLabel) {
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
         }
-    Box(modifier = modifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            label = label,
-            singleLine = true,
-            readOnly = true,
-            shape = shape,
-            isError = isError,
-            supportingText = supportingContent,
-            modifier = Modifier.fillMaxWidth(),
-        )
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
                 .clip(shape)
-                .clickable(onClick = onClick),
-        )
+                .background(if (isError) error.copy(alpha = 0.12f) else containerColor)
+                .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+                .semantics { contentDescription = "$label: $value" }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                value,
+                color = if (isError) error else WarmInk,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (supportingText != null) {
+            Text(supportingText, color = if (isError) error else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 15.sp)
+        }
     }
 }

@@ -61,3 +61,11 @@ enum class TaskColorMode(val label: String) {
     Collection("Calendar color"),
     Priority("Priority"),
 }
+
+/** Which dates a new task starts with; whether they carry a time is a separate setting. */
+enum class TaskDefaultDates {
+    None,
+    Start,
+    Due,
+    StartAndDue,
+}

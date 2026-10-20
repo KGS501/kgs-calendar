@@ -115,6 +115,7 @@ import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
@@ -189,7 +190,7 @@ internal fun SettingsPage(
     onShowCompletedTasksChanged: (Boolean) -> Unit,
     onShowCalendarWeeksChanged: (Boolean) -> Unit,
     onDefaultEventDurationChanged: (Int) -> Unit,
-    onDefaultTaskHasDateChanged: (Boolean) -> Unit,
+    onDefaultTaskDatesSelected: (TaskDefaultDates) -> Unit,
     onDefaultTaskHasTimeChanged: (Boolean) -> Unit,
     onDefaultEventRemindersChanged: (Set<Int>) -> Unit,
     onDefaultTaskRemindersChanged: (Set<Int>) -> Unit,
@@ -1002,18 +1003,19 @@ internal fun SettingsPage(
                             SettingsGroup(title = stringResource(R.string.tasks)) {
                                 SettingsChoiceRow(
                                     title = stringResource(R.string.settings_task_date),
-                                    options = listOf(TaskDefaultSchedule.None, TaskDefaultSchedule.DateOnly, TaskDefaultSchedule.DateTime),
-                                    selected = when {
-                                        !state.defaultTaskHasDate -> TaskDefaultSchedule.None
-                                        state.defaultTaskHasTime -> TaskDefaultSchedule.DateTime
-                                        else -> TaskDefaultSchedule.DateOnly
-                                    },
+                                    options = TaskDefaultDates.entries,
+                                    selected = state.defaultTaskDates,
                                     label = { it.localizedLabel() },
-                                    onSelected = {
-                                        onDefaultTaskHasDateChanged(it != TaskDefaultSchedule.None)
-                                        onDefaultTaskHasTimeChanged(it == TaskDefaultSchedule.DateTime)
-                                    },
+                                    onSelected = onDefaultTaskDatesSelected,
                                 )
+                                SettingsReveal(visible = state.defaultTaskDates != TaskDefaultDates.None) {
+                                    SettingsSwitchRow(
+                                        title = stringResource(R.string.settings_task_with_time),
+                                        subtitle = stringResource(R.string.settings_task_with_time_help),
+                                        checked = state.defaultTaskHasTime,
+                                        onCheckedChange = onDefaultTaskHasTimeChanged,
+                                    )
+                                }
                                 if (taskTargets.isNotEmpty()) {
                                     SettingsValueRow(
                                         title = stringResource(R.string.default_list),

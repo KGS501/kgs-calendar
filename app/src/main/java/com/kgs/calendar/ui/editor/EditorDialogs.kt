@@ -55,6 +55,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.key
@@ -203,9 +206,15 @@ internal fun SharedEventEditor(
             OutlinedTextField(
                 value = newEmail,
                 onValueChange = { newEmail = it },
-                label = { Text(stringResource(R.string.email_address)) },
+                placeholder = { Text(stringResource(R.string.email_address)) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { addParticipant() }),
                 modifier = Modifier
@@ -238,7 +247,7 @@ internal fun ParticipantEditorRow(
     var roleMenuOpen by remember(attendee.email) { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+        color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -262,7 +271,7 @@ internal fun ParticipantEditorRow(
                 Text(stringResource(R.string.request_response), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp)
             }
             Box {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { roleMenuOpen = true },
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
@@ -385,10 +394,14 @@ internal fun CompactEditorHeaderLine(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+            if (value.isNotEmpty()) {
+                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
             Icon(actionIcon, contentDescription = actionDescription, tint = WarmBrown, modifier = Modifier.size(20.dp))
@@ -396,24 +409,21 @@ internal fun CompactEditorHeaderLine(
     }
 }
 
+/** A value such as a reminder as a borderless pill: tap to edit, cross to remove. */
 @Composable
-internal fun CompactValueRow(value: String, onEdit: () -> Unit, onDelete: () -> Unit) {
+internal fun EditorValuePill(value: String, onClick: () -> Unit, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .padding(start = 12.dp, end = 4.dp),
+            .height(36.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(start = 14.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
-        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+        Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+        IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -432,15 +442,14 @@ internal fun MetadataDropdownLine(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
         Box {
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(15.dp))
                     .clickable { expanded = true },
                 shape = RoundedCornerShape(15.dp),
-                color = WarmPeach.copy(alpha = 0.74f),
-                border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
@@ -586,7 +595,8 @@ internal fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<In
         CompactEditorHeaderLine(
             icon = Icons.Default.Notifications,
             title = appString(R.string.reminders),
-            value = if (selected.isEmpty()) appString(R.string.none) else selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", "),
+            // The reminders show as pills below, so the summary only says when there are none.
+            value = if (selected.isEmpty()) appString(R.string.none) else "",
             actionIcon = Icons.Default.Add,
             actionDescription = stringResource(R.string.add_reminder),
             onAction = {
@@ -595,15 +605,20 @@ internal fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<In
             },
         )
         AnimatedVisibility(visible = selected.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Each reminder is a pill: a tap edits it, its cross removes it.
+            FlowRow(
+                modifier = Modifier.padding(start = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 selected.normalizedReminderOffsets().forEach { minutes ->
-                    CompactValueRow(
+                    EditorValuePill(
                         value = reminderMinuteLabel(minutes),
-                        onEdit = {
+                        onClick = {
                             editingReminder = minutes
                             addingReminder = true
                         },
-                        onDelete = { onSelectedChange(selected - minutes) },
+                        onRemove = { onSelectedChange(selected - minutes) },
                     )
                 }
             }
@@ -955,7 +970,9 @@ internal fun RecurrenceDialog(
                                 RecurrenceEndMode.Until -> DatePickerField(
                                     value = draft.untilDate.orEmpty(),
                                     onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                                    label = { Text(stringResource(R.string.end_date)) },
+                                    label = stringResource(R.string.end_date),
+                                    showLabel = true,
+                                    containerColor = editorSectionColor(),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -1139,7 +1156,9 @@ internal fun RecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (S
                     DatePickerField(
                         value = draft.untilDate.orEmpty(),
                         onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                        label = { Text(stringResource(R.string.end_date)) },
+                        label = stringResource(R.string.end_date),
+                        showLabel = true,
+                        containerColor = editorSectionColor(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

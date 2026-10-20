@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.shell
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import android.os.Parcel
 import androidx.compose.runtime.saveable.SaverScope
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
@@ -67,7 +68,7 @@ class SavedShellStateTest {
             detailSheet = SavedItemRef.Event("meeting.ics", occurrenceStart),
             trashedDetailId = 12L,
             detailTaskBackStack = listOf(SavedItemRef.Task("inbox.ics", null), taskRef("daily.ics", occurrenceStart)),
-            editorSchedule = newTaskSchedule(today, LocalTime.of(9, 10), false, true, true, true, 30),
+            editorSchedule = newTaskSchedule(today, LocalTime.of(9, 10), false, true, TaskDefaultDates.StartAndDue, true, 30),
             draftWireframeColor = DefaultColor,
             editorWireframeMode = true,
             editorDraftId = "0f8fad5b-d9cb-469f-a165-70867728950e",

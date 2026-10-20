@@ -177,12 +177,6 @@ private fun SettingsCollectionChoiceRow(
     }
 }
 
-internal enum class TaskDefaultSchedule(val label: String) {
-    None("No date"),
-    DateOnly("Date only"),
-    DateTime("Date and time"),
-}
-
 internal enum class DurationUnit(val label: String, val minutes: Int) {
     Minutes("Minutes", 1),
     Hours("Hours", 60),
@@ -528,13 +522,6 @@ private fun String.settingsFieldIcon(): ImageVector = when (this) {
     "priority" -> Icons.Default.Flag
     "progress" -> Icons.Default.Percent
     else -> Icons.Default.Edit
-}
-
-@Composable
-internal fun CalendarUiState.localizedDefaultTaskScheduleLabel(): String = when {
-    !defaultTaskHasDate -> stringResource(R.string.no_date)
-    defaultTaskHasTime -> stringResource(R.string.date_and_time)
-    else -> stringResource(R.string.date_only)
 }
 
 @Composable

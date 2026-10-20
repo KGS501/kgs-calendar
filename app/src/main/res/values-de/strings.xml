@@ -307,8 +307,6 @@
     <string name="remove_source_body">Alle lokal gespeicherten Daten dieser Quelle werden entfernt. Der Kalender auf dem Server bleibt unverändert.</string>
     <string name="no_problems">Keine Probleme</string>
     <string name="all_synced">Alle bekannten Änderungen sind synchronisiert.</string>
-    <string name="date_only">Nur Datum</string>
-    <string name="date_and_time">Datum und Zeit</string>
     <string name="thirty_min">30 Min.</string>
     <string name="one_hour">1 Std.</string>
     <string name="custom_duration">Eigene Dauer</string>
@@ -668,4 +666,9 @@
     </plurals>
     <string name="on_this_device">Auf diesem Gerät</string>
     <string name="custom_duration_short">Andere…</string>
+    <string name="task_dates_start">Nur Start</string>
+    <string name="task_dates_end">Nur Ende</string>
+    <string name="task_dates_both">Start &amp; Ende</string>
+    <string name="settings_task_with_time">Mit Uhrzeit</string>
+    <string name="settings_task_with_time_help">Aus: ganze Tage ohne Uhrzeit</string>
 </resources>

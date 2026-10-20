@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.account.SourceImage
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -125,7 +126,7 @@ internal data class GeneralSettings(
 
 internal data class NewItemDefaults(
     val eventDurationMinutes: Int,
-    val taskHasDate: Boolean,
+    val taskDates: TaskDefaultDates,
     val taskHasTime: Boolean,
     val eventReminderMinutes: Set<Int>,
     val taskReminderMinutes: Set<Int>,
@@ -270,7 +271,7 @@ internal fun generalSettings(
 internal fun SettingsStore.editorDefaults(): Flow<EditorDefaults> = combine(
     combine(
         defaultEventDurationMinutes,
-        defaultTaskHasDate,
+        defaultTaskDates,
         defaultTaskHasTime,
         defaultEventReminderMinutes,
         defaultTaskReminderMinutes,
@@ -436,7 +437,7 @@ internal fun calendarUiState(
         fullWeekSwipeEnabled = timeline.fullWeekSwipeEnabled,
         multiDaySidebarControlsEnabled = timeline.multiDaySidebarControlsEnabled,
         defaultEventDurationMinutes = newItems.eventDurationMinutes,
-        defaultTaskHasDate = newItems.taskHasDate,
+        defaultTaskDates = newItems.taskDates,
         defaultTaskHasTime = newItems.taskHasTime,
         defaultEventReminderMinutes = newItems.eventReminderMinutes,
         defaultTaskReminderMinutes = newItems.taskReminderMinutes,
