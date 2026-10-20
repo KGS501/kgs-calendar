@@ -23,6 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,19 +237,11 @@ internal fun TaskEditorSheet(
                     onClose = onClose,
                     actionEnabled = false,
                 ) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(
-                            stringResource(R.string.event),
-                            selected = false,
-                            onClick = {
-                                onSwitchToEvent(currentTransferDraft())
-                            },
-                        )
-                        TypeChip(stringResource(R.string.task), selected = true)
-                    }
+                    EditorTypeSwitch(
+                        eventSelected = false,
+                        onSelectEvent = { onSwitchToEvent(currentTransferDraft()) },
+                        onSelectTask = {},
+                    )
                     NoWritableSourceNotice(
                         title = stringResource(R.string.no_writable_task_list_title),
                         body = stringResource(R.string.no_writable_task_list_body),
@@ -287,27 +283,21 @@ internal fun TaskEditorSheet(
                 onSave(payload)
             }, onClose = onClose) {
                 if (!readOnlyRemote && forcedParentTask == null) {
-                    FadedHorizontalScrollRow(
-                        contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TypeChip(
-                            stringResource(R.string.event),
-                            selected = false,
-                            onClick = {
-                                onSwitchToEvent(currentTransferDraft())
-                            },
-                        )
-                        TypeChip(stringResource(R.string.task), selected = true)
-                    }
+                    EditorTypeSwitch(
+                        eventSelected = false,
+                        onSelectEvent = { onSwitchToEvent(currentTransferDraft()) },
+                        onSelectTask = {},
+                    )
                 }
-                EditorSection {
-                    if (readOnlyRemote) {
+                if (readOnlyRemote) {
+                    EditorSection {
                         ReadOnlyEditorNotice(title = title)
-                    } else {
+                    }
+                } else {
+                    Column(Modifier.editorInset(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             // The editor opens the full status picker on tap.
                             TaskStatusCheckbox(
@@ -321,21 +311,11 @@ internal fun TaskEditorSheet(
                                 boxSize = 40.dp,
                                 iconSize = 26.dp,
                             )
-                            OutlinedTextField(
-                                title,
-                                { title = it },
-                                placeholder = { Text(stringResource(R.string.add_title)) },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.titleLarge.copy(
-                                    color = WarmInk,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 22.sp,
-                                    lineHeight = 25.sp,
-                                ),
-                                shape = RoundedCornerShape(18.dp),
+                            EditorTitleField(
+                                value = title,
+                                onValueChange = { title = it },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(58.dp)
                                     .focusRequester(titleFocusRequester),
                             )
                         }
@@ -348,14 +328,7 @@ internal fun TaskEditorSheet(
                     }
                 }
                 if (!readOnlyRemote && taskCollections.isNotEmpty()) {
-                    Text(
-                        stringResource(R.string.task_list),
-                        color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.editorInset(),
-                    )
+                    EditorLabel(stringResource(R.string.task_list))
                     FadedHorizontalScrollRow(
                         contentPadding = PaddingValues(horizontal = EditorHorizontalPadding),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -390,13 +363,29 @@ internal fun TaskEditorSheet(
                     }
                 }
                 val editableFields = if (readOnlyRemote) listOf("color") else state.taskFieldOrder.filterNot { it == "time" || it == "status" }
+                // All further fields form one card, in the order chosen in the settings.
+                if (editableFields.isNotEmpty()) EditorGroup {
                 editableFields.forEach { field ->
                     when (field) {
                         "recurrence" -> CompactRecurrenceEditor(recurrenceRule = recurrenceRule, onRecurrenceRuleChange = { recurrenceRule = it.orEmpty() })
                         "reminders" -> CompactReminderEditor(selected = reminderMinutes, onSelectedChange = { reminderMinutes = it })
-                        "location" -> Box(Modifier.editorInset()) { LocationSelectorField(location = location, onClick = { locationPickerOpen = true }) }
-                        "notes" -> OutlinedTextField(notes, { notes = it }, label = { Text(stringResource(R.string.note)) }, minLines = 3, shape = RoundedCornerShape(16.dp), modifier = Modifier.editorInset().fillMaxWidth())
-                        "url" -> OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.url)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.editorInset().fillMaxWidth())
+                        "location" -> LocationSelectorField(location = location, onClick = { locationPickerOpen = true })
+                        "notes" -> EditorSection {
+                            EditorLine(Icons.AutoMirrored.Filled.Notes, verticalAlignment = Alignment.Top) {
+                                EditorPlainTextField(value = notes, onValueChange = { notes = it }, placeholder = stringResource(R.string.note), minLines = 2)
+                            }
+                        }
+                        "url" -> EditorSection {
+                            EditorLine(Icons.Default.Link) {
+                                EditorPlainTextField(
+                                    value = url,
+                                    onValueChange = { url = it },
+                                    placeholder = stringResource(R.string.url),
+                                    singleLine = true,
+                                    keyboardOptions = UrlKeyboardOptions,
+                                )
+                            }
+                        }
                         "priority" -> EditorSection { PrioritySlider(priority = priority, onPriorityChange = { priority = it }) }
                         "progress" -> EditorSection { ProgressSlider(progress = percentComplete, onProgressChange = { percentComplete = it }) }
                         "color" -> ColorOverrideEditor(
@@ -406,6 +395,7 @@ internal fun TaskEditorSheet(
                         )
                         "tags" -> TagEditor(stringResource(R.string.categories), categories.toCategoryTags(), knownCategories) { categories = it.toCategoriesCsv() }
                     }
+                }
                 }
             }
             }

@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.settings.AppThemeMode
@@ -276,8 +277,8 @@ class SettingsActions internal constructor(
         scope.launch { settingsStore.setDefaultEventDurationMinutes(minutes) }
     }
 
-    fun setDefaultTaskHasDate(hasDate: Boolean) {
-        scope.launch { settingsStore.setDefaultTaskHasDate(hasDate) }
+    fun setDefaultTaskDates(dates: TaskDefaultDates) {
+        scope.launch { settingsStore.setDefaultTaskDates(dates) }
     }
 
     fun setDefaultTaskHasTime(hasTime: Boolean) {

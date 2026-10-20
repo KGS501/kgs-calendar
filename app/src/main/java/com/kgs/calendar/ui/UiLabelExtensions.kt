@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -260,10 +261,11 @@ internal fun PlannedTaskSort.localizedLabel(): String = when (this) {
 
 
 @Composable
-internal fun TaskDefaultSchedule.localizedLabel(): String = when (this) {
-    TaskDefaultSchedule.None -> appString(R.string.no_date)
-    TaskDefaultSchedule.DateOnly -> appString(R.string.date_only)
-    TaskDefaultSchedule.DateTime -> appString(R.string.date_and_time)
+internal fun TaskDefaultDates.localizedLabel(): String = when (this) {
+    TaskDefaultDates.None -> appString(R.string.no_date)
+    TaskDefaultDates.Start -> appString(R.string.task_dates_start)
+    TaskDefaultDates.Due -> appString(R.string.task_dates_end)
+    TaskDefaultDates.StartAndDue -> appString(R.string.task_dates_both)
 }
 
 

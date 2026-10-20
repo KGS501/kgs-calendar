@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.shell
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -118,23 +119,29 @@ internal fun newTaskSchedule(
     now: LocalTime,
     scheduledForDay: Boolean,
     useTaskDefaults: Boolean,
-    defaultTaskHasDate: Boolean,
+    defaultTaskDates: TaskDefaultDates,
     defaultTaskHasTime: Boolean,
     defaultEventDurationMinutes: Int,
 ): EditorScheduleState {
     val start = now.nextDraftStart()
-    val hasDate = scheduledForDay || (useTaskDefaults && defaultTaskHasDate)
-    val allDay = scheduledForDay || (useTaskDefaults && defaultTaskHasDate && !defaultTaskHasTime)
-    val usesTime = !scheduledForDay && useTaskDefaults && defaultTaskHasTime
+    // A task created for a tapped day starts on that day; otherwise the settings decide.
+    val dates = when {
+        scheduledForDay -> TaskDefaultDates.Start
+        useTaskDefaults -> defaultTaskDates
+        else -> TaskDefaultDates.None
+    }
+    val hasStartDate = dates == TaskDefaultDates.Start || dates == TaskDefaultDates.StartAndDue
+    val hasDueDate = dates == TaskDefaultDates.Due || dates == TaskDefaultDates.StartAndDue
+    val usesTime = !scheduledForDay && dates != TaskDefaultDates.None && defaultTaskHasTime
     return editorScheduleState(
         date = date,
         start = start,
         end = start.defaultDraftEnd(defaultEventDurationMinutes),
-        hasStartDate = hasDate,
-        hasEndDate = usesTime,
-        hasStartTime = usesTime,
-        hasEndTime = usesTime,
-        allDay = allDay,
+        hasStartDate = hasStartDate,
+        hasEndDate = hasDueDate,
+        hasStartTime = usesTime && hasStartDate,
+        hasEndTime = usesTime && hasDueDate,
+        allDay = dates != TaskDefaultDates.None && !usesTime,
     )
 }
 

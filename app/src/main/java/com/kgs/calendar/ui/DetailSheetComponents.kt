@@ -582,17 +582,16 @@ private fun TaskStatusPickerDialog(
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
+            shape = DialogShape,
+            color = popupSurfaceColor(),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Column(modifier = Modifier.padding(vertical = 14.dp)) {
                 Text(
                     appString(R.string.status),
                     color = WarmInk,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 20.sp,
+                    lineHeight = 26.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
                 )

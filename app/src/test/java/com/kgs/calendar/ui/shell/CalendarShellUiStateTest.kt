@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.shell
 
+import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -39,7 +40,7 @@ class CalendarShellUiStateTest {
     fun openingTheEventEditorClosesEveryOtherOverlay() {
         shell.openSearch()
         shell.openProblems()
-        shell.openSettings(SettingsDestination.Design)
+        shell.openSettings(SettingsDestination.Appearance)
         shell.editCollection(collection("work"))
         shell.openTaskDetail(task("parent"))
         shell.openSubtask(task("parent"), task("child"))
@@ -65,7 +66,7 @@ class CalendarShellUiStateTest {
         // Tapped in the task pane: the detail, its editor and a new subtask use the left pane.
         shell.openTaskDetail(task("inbox"), SheetOrigin.TaskPane)
         assertEquals(BookPane.Left, shell.detailBookPane)
-        shell.editTask(task("inbox"), newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60))
+        shell.editTask(task("inbox"), newTaskSchedule(today, LocalTime.NOON, false, false, TaskDefaultDates.None, false, 60))
         assertEquals(BookPane.Left, shell.creationBookPane)
 
         // Tapped in the calendar: the right pane, for the detail and the editor it opens.
@@ -75,7 +76,7 @@ class CalendarShellUiStateTest {
         assertEquals(BookPane.Right, shell.creationBookPane)
 
         // "New task" in the task pane opens on the left; the create button on the right.
-        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, TaskDefaultDates.None, false, 60)
         shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
         assertEquals(BookPane.Left, shell.creationBookPane)
         shell.openTaskCreation(schedule, wireframeColor = 1)
@@ -84,7 +85,7 @@ class CalendarShellUiStateTest {
 
     @Test
     fun switchingTheEditorTypeKeepsItsPane() {
-        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60)
+        val schedule = newTaskSchedule(today, LocalTime.NOON, false, false, TaskDefaultDates.None, false, 60)
         shell.openTaskCreation(schedule, wireframeColor = 1, origin = SheetOrigin.TaskPane)
 
         shell.switchEditor(EditorTransferDraft(title = "x"), CreationSheet.EventFull, conversion = null, today = today)
@@ -96,7 +97,7 @@ class CalendarShellUiStateTest {
     @Test
     fun aTimelineSlotDraftOpensItsEditorInTheRightPane() {
         shell.openTaskCreation(
-            newTaskSchedule(today, LocalTime.NOON, false, false, false, false, 60),
+            newTaskSchedule(today, LocalTime.NOON, false, false, TaskDefaultDates.None, false, 60),
             wireframeColor = 1,
             origin = SheetOrigin.TaskPane,
         )
@@ -302,6 +303,19 @@ class CalendarShellUiStateTest {
     )
 
     @Test
+    fun theTrashOpensFromTheSettingsAndBackReturnsToThem() {
+        shell.openSettings(SettingsDestination.Main)
+        shell.openTrash()
+
+        assertTrue(shell.trashOpen)
+        assertTrue(shell.settingsOpen)
+
+        shell.navigateBack(closeSearch = shell::closeSearch, selectView = {})
+        assertFalse(shell.trashOpen)
+        assertTrue(shell.settingsOpen)
+    }
+
+    @Test
     fun theTrashOpensFromTheDrawerAndItsItemsOpenReadOnlyDetails() {
         shell.openMenuDrawer()
         shell.openTrash()
@@ -353,7 +367,7 @@ class CalendarShellUiStateTest {
         assertFalse(shell.trashOpen)
 
         shell.openTrash()
-        shell.openTaskCreation(newTaskSchedule(today, LocalTime.of(9, 0), false, true, true, true, 30), wireframeColor = 1)
+        shell.openTaskCreation(newTaskSchedule(today, LocalTime.of(9, 0), false, true, TaskDefaultDates.StartAndDue, true, 30), wireframeColor = 1)
         assertFalse(shell.trashOpen)
     }
 

@@ -143,7 +143,9 @@ internal fun SettingsOverlay(
     state: CalendarUiState,
     shell: CalendarShellUiState,
 ) {
-    if (shell.settingsOpen) {
+    // "Recently deleted" opens from the settings and covers them; closing it returns there.
+    if (shell.settingsOpen && !shell.trashOpen) {
+        val trash by viewModel.trash.state.collectAsStateWithLifecycle()
         SettingsPage(
             state = state,
             initialDestination = shell.settingsStartDestination,
@@ -185,7 +187,7 @@ internal fun SettingsOverlay(
             onShowCompletedTasksChanged = viewModel.settings::setShowCompletedTasksInCalendar,
             onShowCalendarWeeksChanged = viewModel.settings::setShowCalendarWeeks,
             onDefaultEventDurationChanged = viewModel.settings::setDefaultEventDurationMinutes,
-            onDefaultTaskHasDateChanged = viewModel.settings::setDefaultTaskHasDate,
+            onDefaultTaskDatesSelected = viewModel.settings::setDefaultTaskDates,
             onDefaultTaskHasTimeChanged = viewModel.settings::setDefaultTaskHasTime,
             onDefaultEventRemindersChanged = viewModel.settings::setDefaultEventReminderMinutes,
             onDefaultTaskRemindersChanged = viewModel.settings::setDefaultTaskReminderMinutes,
@@ -212,6 +214,8 @@ internal fun SettingsOverlay(
             onSyncIntervalChanged = viewModel.settings::setSyncIntervalMinutes,
             onCollectionSettings = shell::editCollection,
             onGroupSettings = shell::editGroup,
+            trashCount = trash.entries.size,
+            onRecentlyDeleted = shell::openTrash,
             onLocalCalendarEnabledChanged = { enabled ->
                 state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->
                     viewModel.sources.setCollectionEnabled(local.href, enabled)

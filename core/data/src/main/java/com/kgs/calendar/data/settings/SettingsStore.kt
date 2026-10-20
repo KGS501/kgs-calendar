@@ -243,8 +243,17 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         (prefs[KEY_DEFAULT_EVENT_DURATION] ?: 60).coerceIn(15, 24 * 60)
     }
 
-    val defaultTaskHasDate: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_DEFAULT_TASK_HAS_DATE] ?: false
+    /**
+     * The dates a new task starts with. Settings from before this choice existed had only
+     * "date" (a start date) and "date and time" (start and due with times).
+     */
+    val defaultTaskDates: Flow<TaskDefaultDates> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_TASK_DATES]?.let { stored -> TaskDefaultDates.entries.firstOrNull { it.name == stored } }
+            ?: when {
+                prefs[KEY_DEFAULT_TASK_HAS_DATE] != true -> TaskDefaultDates.None
+                prefs[KEY_DEFAULT_TASK_HAS_TIME] == true -> TaskDefaultDates.StartAndDue
+                else -> TaskDefaultDates.Start
+            }
     }
 
     val defaultTaskHasTime: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -536,8 +545,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_DEFAULT_EVENT_DURATION] = minutes.coerceIn(15, 24 * 60) }
     }
 
-    suspend fun setDefaultTaskHasDate(hasDate: Boolean) {
-        dataStore.edit { it[KEY_DEFAULT_TASK_HAS_DATE] = hasDate }
+    suspend fun setDefaultTaskDates(dates: TaskDefaultDates) {
+        dataStore.edit { it[KEY_DEFAULT_TASK_DATES] = dates.name }
     }
 
     suspend fun setDefaultTaskHasTime(hasTime: Boolean) {
@@ -723,6 +732,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_DEFAULT_EVENT_DURATION = intPreferencesKey("default_event_duration_minutes")
         private val KEY_DEFAULT_TASK_HAS_DATE = booleanPreferencesKey("default_task_has_date")
         private val KEY_DEFAULT_TASK_HAS_TIME = booleanPreferencesKey("default_task_has_time")
+        private val KEY_DEFAULT_TASK_DATES = stringPreferencesKey("default_task_dates")
         private val KEY_DEFAULT_EVENT_REMINDERS = stringPreferencesKey("default_event_reminders_csv")
         private val KEY_DEFAULT_TASK_REMINDERS = stringPreferencesKey("default_task_reminders_csv")
         private val KEY_TASK_START_NOTIFICATIONS = booleanPreferencesKey("task_start_notifications_enabled")

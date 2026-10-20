@@ -47,6 +47,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,7 +93,7 @@ internal fun TaskScheduleEditor(
         if (scheduled) {
             EditorLine(Icons.Default.AccessTime) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.all_day), fontSize = 17.sp, lineHeight = 20.sp)
+                    Text(stringResource(R.string.all_day), color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
                     Switch(
                         checked = schedule.allDay,
                         onCheckedChange = { allDay ->
@@ -168,44 +174,21 @@ internal fun TaskParentSelector(
     LaunchedEffect(pickerOpen) {
         if (pickerOpen) query = ""
     }
-    Column(
-        modifier = Modifier.editorInset(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            stringResource(R.string.parent_task),
-            color = WarmInk,
-            fontSize = 14.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Box {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { pickerOpen = true },
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                border = BorderStroke(1.dp, WarmLine),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+    EditorSection(onClick = { pickerOpen = true }) {
+        EditorLine(Icons.Default.TaskAlt) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(stringResource(R.string.parent_task), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
                     Text(
                         selected?.title ?: stringResource(R.string.no_parent_task),
                         color = WarmInk,
-                        fontSize = 14.sp,
-                        lineHeight = 17.sp,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
                     )
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = WarmInk, modifier = Modifier.size(20.dp))
                 }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -242,13 +225,12 @@ internal fun TaskParentPickerDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+            shape = DialogShape,
+            color = popupSurfaceColor(),
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -258,8 +240,8 @@ internal fun TaskParentPickerDialog(
                     Text(
                         stringResource(R.string.parent_task),
                         color = WarmInk,
-                        fontSize = 18.sp,
-                        lineHeight = 22.sp,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
@@ -274,35 +256,16 @@ internal fun TaskParentPickerDialog(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
+                    colors = dialogFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelected(null) },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (selectedParentUid == null) WarmPeach.copy(alpha = 0.62f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                    border = BorderStroke(1.dp, if (selectedParentUid == null) WarmBrown.copy(alpha = 0.5f) else WarmLine),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
-                        Text(
-                            stringResource(R.string.no_parent_task),
-                            color = WarmInk,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = if (selectedParentUid == null) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selectedParentUid == null) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-                        }
-                    }
+                DialogChoiceGroup {
+                    DialogChoiceRow(
+                        label = stringResource(R.string.no_parent_task),
+                        selected = selectedParentUid == null,
+                        leading = { Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp)) },
+                        onClick = { onSelected(null) },
+                    )
                 }
                 if (filteredCandidates.isEmpty()) {
                     Box(
@@ -550,17 +513,11 @@ internal fun TaskScheduleRow(
         if (!dateVisible) {
             AddEditorValueRow(addLabel) { onHasDateChange(true) }
         } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            EditorScheduleLine(label = timeLabel) {
                 DatePickerField(
                     value = dateText,
                     onValueChange = onDateTextChange,
-                    label = { Text(label) },
+                    label = label,
                     isError = isError,
                     modifier = Modifier.weight(1f),
                 )
@@ -574,16 +531,16 @@ internal fun TaskScheduleRow(
                     TimePickerField(
                         value = timeText,
                         onValueChange = onTimeTextChange,
-                        label = { Text(timeLabel) },
+                        label = timeLabel,
                         isError = isError,
-                        modifier = Modifier.width(104.dp),
+                        modifier = Modifier.width(EditorTimeChipWidth),
                     )
                 }
                 IconButton(
                     onClick = { onHasDateChange(false) },
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = removeLabel, tint = WarmInk, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Close, contentDescription = removeLabel, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -592,19 +549,19 @@ internal fun TaskScheduleRow(
 
 @Composable
 internal fun AddEditorValueRow(label: String, onClick: () -> Unit) {
+    // A quiet text action on the card: accent plus sign and label, no outline.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, WarmLine, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(Icons.Default.Add, contentDescription = label, tint = WarmBrown, modifier = Modifier.size(22.dp))
-        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp)
+        Text(label, color = WarmBrown, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -630,7 +587,7 @@ internal fun TagEditor(
         query = ""
     }
     EditorSection {
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+        EditorRowTitle(Icons.AutoMirrored.Filled.Label, label)
         if (tags.isNotEmpty()) {
             FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 tags.forEach { tag ->
@@ -646,14 +603,21 @@ internal fun TagEditor(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text(stringResource(R.string.add_tag)) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f),
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+            ) {
+                EditorPlainTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = stringResource(R.string.add_tag),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                )
+            }
             IconButton(
                 onClick = { addTag(query) },
                 enabled = normalizedQuery.isNotBlank(),
@@ -688,7 +652,6 @@ internal fun TagPill(tag: String, onRemove: (() -> Unit)? = null) {
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = WarmPeach.copy(alpha = 0.84f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
     ) {
         Row(
             modifier = Modifier.padding(start = 11.dp, end = if (onRemove == null) 11.dp else 4.dp, top = 6.dp, bottom = 6.dp),
@@ -709,17 +672,9 @@ internal fun TagPill(tag: String, onRemove: (() -> Unit)? = null) {
 internal fun CategoryDetailLine(label: String, categories: String) {
     val tags = remember(categories) { categories.toCategoryTags() }
     if (tags.isEmpty()) return
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    EditorSection {
+        EditorLine(Icons.AutoMirrored.Filled.Label, verticalAlignment = Alignment.Top, iconDescription = label) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 tags.forEach { TagPill(it) }
             }
         }

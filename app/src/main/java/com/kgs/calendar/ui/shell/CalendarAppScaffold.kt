@@ -92,7 +92,6 @@ internal fun CalendarAppScaffold(
     val density = LocalDensity.current
     val quietInteraction = remember { MutableInteractionSource() }
     // The drawer shows how many items "Recently deleted" holds.
-    val trash by viewModel.trash.state.collectAsStateWithLifecycle()
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
@@ -208,8 +207,6 @@ internal fun CalendarAppScaffold(
                 onCollectionSettings = shell::editCollection,
                 onGroupSettings = shell::editGroup,
                 onAppSettings = { shell.openSettings(SettingsDestination.Main) },
-                trashCount = trash.entries.size,
-                onRecentlyDeleted = shell::openTrash,
                 problems = problemItems,
                 onProblems = shell::openProblems,
             )

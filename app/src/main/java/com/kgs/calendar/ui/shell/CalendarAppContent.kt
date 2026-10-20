@@ -235,7 +235,7 @@ internal fun CalendarAppContent(
                 now = LocalTime.now(),
                 scheduledForDay = scheduledForDay,
                 useTaskDefaults = useTaskDefaults,
-                defaultTaskHasDate = state.defaultTaskHasDate,
+                defaultTaskDates = state.defaultTaskDates,
                 defaultTaskHasTime = state.defaultTaskHasTime,
                 defaultEventDurationMinutes = state.defaultEventDurationMinutes,
             ),

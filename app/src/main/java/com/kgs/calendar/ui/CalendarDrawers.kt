@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -50,7 +51,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +64,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -103,8 +106,6 @@ internal fun CalendarDrawer(
     onCollectionSettings: (CollectionEntity) -> Unit,
     onGroupSettings: (String) -> Unit,
     onAppSettings: () -> Unit,
-    trashCount: Int,
-    onRecentlyDeleted: () -> Unit,
     problems: List<ProblemItem>,
     onProblems: () -> Unit,
 ) {
@@ -171,75 +172,74 @@ internal fun CalendarDrawer(
             color = MaterialTheme.colorScheme.background,
             shadowElevation = 0.dp,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = statusTop + 22.dp, bottom = navBottom + 14.dp),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // Settings (and problems, when there are any) stay pinned below the scrolling list.
+            Column(Modifier.fillMaxSize().padding(bottom = navBottom + 8.dp)) {
+                val listScroll = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(listScroll)
+                        .padding(top = statusTop + 22.dp, bottom = 12.dp),
                 ) {
-                    KgsLogoBurstButton()
-                    Text(
-                        "KGS Calendar",
-                        fontSize = 22.sp,
-                        lineHeight = 25.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.SansSerif,
-                        color = WarmInk,
-                    )
-                }
-                DrawerViewItem(stringResource(R.string.agenda), Icons.Default.ViewAgenda, CalendarViewMode.Agenda, state.selectedView, onViewSelected)
-                DrawerViewItem(stringResource(R.string.day), Icons.Default.ViewDay, CalendarViewMode.Day, state.selectedView, onViewSelected)
-                DrawerViewItem(
-                    stringResource(CalendarViewMode.ThreeDay.labelRes(state.weekViewEnabled)),
-                    Icons.Default.ViewWeek,
-                    CalendarViewMode.ThreeDay,
-                    state.selectedView,
-                    onViewSelected,
-                )
-                DrawerViewItem(stringResource(R.string.month), Icons.Default.CalendarMonth, CalendarViewMode.Month, state.selectedView, onViewSelected)
-                HorizontalDivider(color = WarmLine, modifier = Modifier.padding(top = 10.dp))
-                DrawerActionRow(stringResource(R.string.refresh), Icons.Default.Refresh, onSync)
-                HorizontalDivider(color = WarmLine)
-                val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
-                val visibleGroups = state.calendarGroups
-                    .map { group -> group to group.collections.filter { it.isEnabled } }
-                    .filter { (_, collections) -> collections.isNotEmpty() }
-                visibleGroups.forEachIndexed { index, (group, collections) ->
-                    if (index > 0) {
-                        HorizontalDivider(color = WarmLine.copy(alpha = 0.62f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp))
+                    Row(
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        KgsLogoBurstButton()
+                        Text(
+                            "KGS Calendar",
+                            fontSize = 22.sp,
+                            lineHeight = 25.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.SansSerif,
+                            color = WarmInk,
+                        )
                     }
-                    DrawerSourceSection(
-                        group = group,
-                        image = group.image(state.sourceImages),
-                        collections = collections,
-                        feedStatus = { collection ->
-                            readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
-                        },
-                        hiddenCollectionHrefs = state.hiddenCollectionHrefs,
-                        onGroupSettings = { onGroupSettings(group.key) },
-                        onCollectionVisibleInViews = onCollectionVisibleInViews,
-                        onCollectionSettings = onCollectionSettings,
+                    DrawerViewItem(stringResource(R.string.agenda), Icons.Default.ViewAgenda, CalendarViewMode.Agenda, state.selectedView, onViewSelected)
+                    DrawerViewItem(stringResource(R.string.day), Icons.Default.ViewDay, CalendarViewMode.Day, state.selectedView, onViewSelected)
+                    DrawerViewItem(
+                        stringResource(CalendarViewMode.ThreeDay.labelRes(state.weekViewEnabled)),
+                        Icons.Default.ViewWeek,
+                        CalendarViewMode.ThreeDay,
+                        state.selectedView,
+                        onViewSelected,
                     )
+                    DrawerViewItem(stringResource(R.string.month), Icons.Default.CalendarMonth, CalendarViewMode.Month, state.selectedView, onViewSelected)
+                    DrawerActionRow(stringResource(R.string.refresh), Icons.Default.Refresh, onSync)
+                    HorizontalDivider(color = WarmLine, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 6.dp))
+                    val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
+                    val visibleGroups = state.calendarGroups
+                        .map { group -> group to group.collections.filter { it.isEnabled } }
+                        .filter { (_, collections) -> collections.isNotEmpty() }
+                    visibleGroups.forEachIndexed { index, (group, collections) ->
+                        if (index > 0) {
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        DrawerSourceSection(
+                            group = group,
+                            image = group.image(state.sourceImages),
+                            collections = collections,
+                            feedStatus = { collection ->
+                                readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
+                            },
+                            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+                            onGroupSettings = { onGroupSettings(group.key) },
+                            onCollectionVisibleInViews = onCollectionVisibleInViews,
+                            onCollectionSettings = onCollectionSettings,
+                        )
+                    }
                 }
-                HorizontalDivider(color = WarmLine, modifier = Modifier.padding(top = 12.dp))
-                DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
-                DrawerActionRow(
-                    stringResource(R.string.recently_deleted),
-                    Icons.Default.Delete,
-                    onRecentlyDeleted,
-                    count = trashCount.takeIf { it > 0 },
-                )
+                // The line only shows while calendars scroll underneath the pinned rows.
+                HorizontalDivider(color = WarmLine.copy(alpha = if (listScroll.canScrollForward) 1f else 0f))
+                Spacer(Modifier.height(6.dp))
                 if (problems.isNotEmpty()) {
                     DrawerProblemRow(
                         count = problems.size,
                         onClick = onProblems,
                     )
                 }
+                DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
             }
         }
     }
@@ -369,13 +369,15 @@ private fun DrawerActionRow(label: String, icon: ImageVector, onClick: () -> Uni
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(28.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 30.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = WarmInk, modifier = Modifier.size(23.dp))
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp))
+        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
         if (count != null) {
             Text(count.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
         }
@@ -406,15 +408,23 @@ private fun DrawerCollectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSettings)
-            .padding(horizontal = 24.dp, vertical = 9.dp),
+            .padding(start = 18.dp, end = 24.dp, top = 3.dp, bottom = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         CollectionToggle(color = Color(collection.color), checked = visibleInViews) {
             onVisibleInViewsChanged(!visibleInViews)
         }
-        Column(Modifier.weight(1f)) {
-            Text(collection.displayName, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // A hidden calendar fades back, with its labels.
+        Column(Modifier.weight(1f).alpha(if (visibleInViews) 1f else 0.55f)) {
+            Text(
+                collection.displayName,
+                color = WarmInk,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Row(
                 modifier = Modifier.padding(top = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -449,7 +459,7 @@ internal fun HiddenCalendarCreationDialog(
     onDismiss: () -> Unit,
     onUnhide: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(stringResource(R.string.hidden_calendar_creation_title))
@@ -517,59 +527,63 @@ internal fun HiddenCalendarCreationDialog(
     )
 }
 
+/** A small, borderless label for what a calendar holds (events, tasks). */
 @Composable
 internal fun CalendarCapabilityChip(label: String, color: Color) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = color.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.30f else 0.14f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.42f)),
-    ) {
-        Text(
-            label,
-            color = color,
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-        )
-    }
+    val dark = MaterialTheme.colorScheme.background.isDark()
+    Text(
+        label,
+        // Saturated blues and greens are hard to read on dark surfaces, so they are lightened there.
+        color = if (dark) color.blendWith(Color.White, 0.45f) else color,
+        fontSize = 10.sp,
+        lineHeight = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = if (dark) 0.24f else 0.10f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
 }
 
+/**
+ * Whether a calendar shows in the views: a dot in the calendar's color, filled with a check
+ * when shown and a faint tint when hidden. The touch target is larger than the dot.
+ */
 @Composable
 private fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
     val fillColor by animateColorAsState(
-        targetValue = if (checked) color else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        targetValue = if (checked) color else color.copy(alpha = 0.18f),
         animationSpec = tween(MotionMedium, easing = MotionStandard),
         label = "collectionToggleFill",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (checked) color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
-        animationSpec = tween(MotionMedium, easing = MotionStandard),
-        label = "collectionToggleBorder",
     )
     val checkScale by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = tween(MotionShort, easing = MotionStandard),
         label = "collectionToggleCheck",
     )
-    val shape = RoundedCornerShape(7.dp)
     Box(
         modifier = Modifier
-            .size(23.dp)
-            .clip(shape)
-            .background(fillColor)
-            .border(1.2.dp, borderColor, shape)
-            .clickable(onClick = onClick),
+            .size(40.dp)
+            .clip(CircleShape)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() }),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            Icons.Default.Check,
-            contentDescription = null,
-            tint = Color.White,
+        Box(
             modifier = Modifier
-                .size(16.dp)
-                .scale(checkScale),
-        )
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(fillColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = if (color.luminance() > 0.62f) Color.Black.copy(alpha = 0.72f) else Color.White,
+                modifier = Modifier
+                    .size(15.dp)
+                    .scale(checkScale),
+            )
+        }
     }
 }
 

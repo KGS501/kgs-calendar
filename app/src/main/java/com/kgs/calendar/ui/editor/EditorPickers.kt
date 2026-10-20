@@ -49,6 +49,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -96,33 +102,16 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun LocationSelectorField(location: String, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .clickable(onClick = onClick),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, WarmLine),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(21.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(R.string.location), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    location.ifBlank { stringResource(R.string.add_location) },
-                    color = if (location.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else WarmInk,
-                    fontSize = 16.sp,
-                    lineHeight = 19.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+    EditorSection(onClick = onClick) {
+        EditorLine(Icons.Default.LocationOn) {
+            Text(
+                location.ifBlank { stringResource(R.string.add_location) },
+                color = if (location.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else WarmInk,
+                fontSize = 16.sp,
+                lineHeight = 21.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -218,6 +207,7 @@ internal fun LocationPickerPage(
                 leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp)) },
                 singleLine = true,
                 shape = RoundedCornerShape(22.dp),
+                colors = dialogFieldColors(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { searchLocations() }),
                 modifier = Modifier
@@ -242,7 +232,10 @@ internal fun LocationPickerPage(
                 lineHeight = 15.sp,
             )
             if (locationAnchor == null && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                OutlinedButton(onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }) {
+                FilledTonalButton(
+                    onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = editorSectionColor(), contentColor = WarmBrown),
+                ) {
                     Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.use_nearby_location))
@@ -302,8 +295,7 @@ internal fun LocationChoiceRow(title: String, subtitle: String, onClick: () -> U
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
+        color = editorSectionColor(),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -336,12 +328,8 @@ internal fun PrioritySlider(
         return (9 - (fraction * 8f).roundToInt()).coerceIn(1, 9)
     }
     val thumbFraction = (9 - priority.coerceIn(1, 9)) / 8f
-    Column(
-        modifier = Modifier.padding(horizontal = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.priority), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        EditorRowTitle(Icons.Default.Flag, stringResource(R.string.priority)) {
             Text("$priority", color = priorityColor(priority), fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
         }
         Box(
@@ -437,12 +425,8 @@ internal fun ProgressSlider(
     }
     val normalized = progress.coerceIn(0, 100)
     val fraction = normalized / 100f
-    Column(
-        modifier = Modifier.padding(horizontal = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.progress), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        EditorRowTitle(Icons.Default.Percent, stringResource(R.string.progress)) {
             Text("$normalized%", color = WarmBrown, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
         }
         Box(
@@ -518,7 +502,7 @@ internal fun ColorOverrideEditor(
     var colorPickerOpen by remember { mutableStateOf(false) }
     val customColorPresentation = customColorChipPresentation(selectedColor)
     EditorSection {
-        Text(stringResource(R.string.color), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+        EditorRowTitle(Icons.Default.Palette, stringResource(R.string.color))
         FadedHorizontalScrollRow(
             contentPadding = PaddingValues(horizontal = EditorSectionHorizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -579,16 +563,31 @@ internal fun ColorChoiceChip(label: String?, color: Color, selected: Boolean, on
             .clip(shape)
             .clickable(onClick = onClick),
         shape = shape,
-        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) color else WarmLine),
+        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = if (label == null) 8.dp else 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Box(Modifier.size(18.dp).clip(CircleShape).background(color))
+            ColorSwatch(color = color, selected = selected)
             label?.let { Text(it, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium) }
+        }
+    }
+}
+
+/** A color dot that shows a check while it is the chosen color. */
+@Composable
+private fun ColorSwatch(color: Color, selected: Boolean) {
+    Box(
+        Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(Icons.Default.Check, contentDescription = null, tint = if (color.luminance() > 0.62f) Color.Black else Color.White, modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -607,11 +606,7 @@ internal fun ColorEditChip(
             .clip(shape)
             .clickable(onClick = onClick),
         shape = shape,
-        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(
-            if (selected) 2.dp else 1.dp,
-            displayedColor?.let { Color(it) } ?: WarmLine,
-        ),
+        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 11.dp),
@@ -799,52 +794,6 @@ internal fun HuePicker(hue: Float, onHueChanged: (Float) -> Unit) {
 }
 
 @Composable
-internal fun TaskDateTimeEditor(
-    label: String,
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    dateText: String,
-    onDateTextChange: (String) -> Unit,
-    hasTime: Boolean,
-    onHasTimeChange: (Boolean) -> Unit,
-    timeText: String,
-    onTimeTextChange: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.titleMedium)
-            Switch(enabled, onEnabledChange)
-        }
-        if (enabled) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    dateText,
-                    onDateTextChange,
-                    label = { Text(stringResource(R.string.date)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.weight(1f),
-                )
-                if (hasTime) {
-                    OutlinedTextField(
-                        timeText,
-                        onTimeTextChange,
-                        label = { Text(stringResource(R.string.time)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.width(104.dp),
-                    )
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.time), color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp)
-                Switch(hasTime, onHasTimeChange)
-            }
-        }
-    }
-}
-
-@Composable
 internal fun EditorContainer(
     title: String,
     action: String,
@@ -871,9 +820,9 @@ internal fun EditorContainer(
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(editorScrollState),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(4.dp))
             content()
             Spacer(Modifier.height(56.dp))
         }

@@ -13,6 +13,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +55,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.key
@@ -132,23 +137,6 @@ internal fun EventIcalOption.localizedLabel(): String = when (value.uppercase(Lo
 }
 
 @Composable
-internal fun EventMetadataChipRow(
-    options: List<out EventIcalOption>,
-    selected: String,
-    onSelected: (String) -> Unit,
-) {
-    FadedHorizontalScrollRow(contentPadding = PaddingValues(horizontal = 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { option ->
-            FilterChip(
-                selected = selected.equals(option.value, ignoreCase = true),
-                onClick = { onSelected(option.value) },
-                label = { Text(option.localizedLabel(), maxLines = 1, softWrap = false) },
-            )
-        }
-    }
-}
-
-@Composable
 internal fun SharedEventEditor(
     organizerJson: String?,
     attendeesJson: String?,
@@ -201,9 +189,15 @@ internal fun SharedEventEditor(
             OutlinedTextField(
                 value = newEmail,
                 onValueChange = { newEmail = it },
-                label = { Text(stringResource(R.string.email_address)) },
+                placeholder = { Text(stringResource(R.string.email_address)) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { addParticipant() }),
                 modifier = Modifier
@@ -236,7 +230,7 @@ internal fun ParticipantEditorRow(
     var roleMenuOpen by remember(attendee.email) { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+        color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -260,7 +254,7 @@ internal fun ParticipantEditorRow(
                 Text(stringResource(R.string.request_response), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp)
             }
             Box {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { roleMenuOpen = true },
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
@@ -331,15 +325,14 @@ internal fun ModalEditorDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+            shape = DialogShape,
+            color = popupSurfaceColor(),
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(title, color = WarmInk, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, color = WarmInk, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
                 content()
             }
         }
@@ -354,18 +347,11 @@ internal fun DialogActions(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) }
-        Button(
-            onClick = onSave,
-            enabled = saveEnabled,
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
-        ) {
-            Text(appString(R.string.save))
-        }
+        DialogDismissButton(appString(R.string.cancel), onClick = onDismiss)
+        DialogConfirmButton(appString(R.string.save), onClick = onSave, enabled = saveEnabled)
     }
 }
 
@@ -383,10 +369,14 @@ internal fun CompactEditorHeaderLine(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+            if (value.isNotEmpty()) {
+                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
             Icon(actionIcon, contentDescription = actionDescription, tint = WarmBrown, modifier = Modifier.size(20.dp))
@@ -394,24 +384,21 @@ internal fun CompactEditorHeaderLine(
     }
 }
 
+/** A value such as a reminder as a borderless pill: tap to edit, cross to remove. */
 @Composable
-internal fun CompactValueRow(value: String, onEdit: () -> Unit, onDelete: () -> Unit) {
+internal fun EditorValuePill(value: String, onClick: () -> Unit, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .padding(start = 12.dp, end = 4.dp),
+            .height(36.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(start = 14.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
-        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+        Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+        IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -430,15 +417,14 @@ internal fun MetadataDropdownLine(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
+        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
         Box {
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(15.dp))
                     .clickable { expanded = true },
                 shape = RoundedCornerShape(15.dp),
-                color = WarmPeach.copy(alpha = 0.74f),
-                border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
@@ -469,33 +455,10 @@ internal fun MetadataDropdownLine(
     }
 }
 
+/** A preset in a popup list; callers place these rows in a [DialogChoiceGroup]. */
 @Composable
 internal fun PresetListRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(UniversalControlHeight)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = if (selected) WarmPeach else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(if (selected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)),
-            )
-            Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        }
-    }
+    DialogChoiceRow(label = label, selected = selected, onClick = onClick)
 }
 
 @Composable
@@ -512,12 +475,11 @@ internal fun NumberUnitRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedTextField(
+        DialogTextField(
             value = amount,
             onValueChange = { onAmountChange(it.filter(Char::isDigit).take(4)) },
-            label = { Text(label) },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
+            label = label,
+            numeric = true,
             modifier = Modifier.weight(1f),
         )
         DropdownPill(
@@ -545,8 +507,7 @@ internal fun DropdownPill(
                 .clip(RoundedCornerShape(16.dp))
                 .clickable { expanded = true },
             shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, WarmLine),
+            color = editorSectionColor(),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 11.dp),
@@ -580,11 +541,17 @@ internal fun DropdownPill(
 internal fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<Int>) -> Unit) {
     var editingReminder by remember { mutableStateOf<Int?>(null) }
     var addingReminder by remember { mutableStateOf(false) }
-    EditorSection {
+    EditorSection(
+        onClick = {
+            editingReminder = null
+            addingReminder = true
+        },
+    ) {
         CompactEditorHeaderLine(
             icon = Icons.Default.Notifications,
             title = appString(R.string.reminders),
-            value = if (selected.isEmpty()) appString(R.string.none) else selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", "),
+            // The reminders show as pills below, so the summary only says when there are none.
+            value = if (selected.isEmpty()) appString(R.string.none) else "",
             actionIcon = Icons.Default.Add,
             actionDescription = stringResource(R.string.add_reminder),
             onAction = {
@@ -593,15 +560,20 @@ internal fun CompactReminderEditor(selected: Set<Int>, onSelectedChange: (Set<In
             },
         )
         AnimatedVisibility(visible = selected.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Each reminder is a pill: a tap edits it, its cross removes it.
+            FlowRow(
+                modifier = Modifier.padding(start = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 selected.normalizedReminderOffsets().forEach { minutes ->
-                    CompactValueRow(
+                    EditorValuePill(
                         value = reminderMinuteLabel(minutes),
-                        onEdit = {
+                        onClick = {
                             editingReminder = minutes
                             addingReminder = true
                         },
-                        onDelete = { onSelectedChange(selected - minutes) },
+                        onRemove = { onSelectedChange(selected - minutes) },
                     )
                 }
             }
@@ -633,45 +605,57 @@ internal fun SettingsReminderEditor(
 ) {
     var editingReminder by remember { mutableStateOf<Int?>(null) }
     var addingReminder by remember { mutableStateOf(false) }
-    Surface(
+    // A row inside a settings group, which gives it its rounded card. Each reminder is a pill:
+    // tapping it edits the reminder, its cross removes it.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(SettingsControlShape),
-        shape = SettingsControlShape,
-        color = settingsControlColor(),
+            .background(settingsControlColor())
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CompactEditorHeaderLine(
-                icon = Icons.Default.Notifications,
-                title = title,
-                value = if (selected.isEmpty()) {
-                    stringResource(R.string.none)
-                } else {
-                    selected.normalizedReminderOffsets().map { reminderMinuteLabel(it) }.joinToString(", ")
-                },
-                actionIcon = Icons.Default.Add,
-                actionDescription = stringResource(R.string.add_reminder),
-                onAction = {
-                    editingReminder = null
-                    addingReminder = true
-                },
-            )
-            AnimatedVisibility(visible = selected.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    selected.normalizedReminderOffsets().forEach { minutes ->
-                        CompactValueRow(
-                            value = reminderMinuteLabel(minutes),
-                            onEdit = {
-                                editingReminder = minutes
-                                addingReminder = true
-                            },
-                            onDelete = { onSelectedChange((selected - minutes).normalizedReminderOffsets().toSet()) },
-                        )
+            selected.normalizedReminderOffsets().forEach { minutes ->
+                Row(
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(19.dp))
+                        .background(WarmBrown.copy(alpha = 0.12f))
+                        .clickable {
+                            editingReminder = minutes
+                            addingReminder = true
+                        }
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(reminderMinuteLabel(minutes), color = WarmInk, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+                    IconButton(
+                        onClick = { onSelectedChange((selected - minutes).normalizedReminderOffsets().toSet()) },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                     }
                 }
+            }
+            Row(
+                modifier = Modifier
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(19.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .clickable {
+                        editingReminder = null
+                        addingReminder = true
+                    }
+                    .padding(start = 10.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.add_reminder), color = WarmBrown, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -714,7 +698,7 @@ internal fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave:
     )
     ModalEditorDialog(title = appString(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            DialogChoiceGroup {
                 ReminderChoice.entries.forEach { choice ->
                     PresetListRow(
                         label = choice.localizedLabel(),
@@ -762,74 +746,9 @@ internal fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave:
 }
 
 @Composable
-internal fun ReminderEditor(selected: Set<Int>, onToggle: (Int) -> Unit) {
-    var customMinutesText by rememberSaveable { mutableStateOf("") }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(appString(R.string.reminders), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        }
-        FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReminderPresets.forEach { minutes ->
-                FilterChip(
-                    selected = minutes in selected,
-                    onClick = { onToggle(minutes) },
-                    label = { Text(reminderMinuteLabel(minutes)) },
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = customMinutesText,
-                onValueChange = { value -> customMinutesText = value.filter { it.isDigit() }.take(5) },
-                label = { Text(appString(R.string.own_minutes_before)) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.weight(1f),
-            )
-            Button(
-                onClick = {
-                    customMinutesText.toIntOrNull()?.let { onToggle(it.coerceIn(0, 60 * 24 * 30)) }
-                    customMinutesText = ""
-                },
-                enabled = customMinutesText.toIntOrNull() != null,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = WarmBrown),
-            ) {
-                Text(appString(R.string.add))
-            }
-        }
-        selected
-            .filterNot { preset -> preset in ReminderPresets }
-            .sorted()
-            .takeIf { it.isNotEmpty() }
-            ?.let { values ->
-                Text(
-                    "${appString(R.string.custom)}: ${values.map { reminderMinuteLabel(it) }.joinToString(", ")}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.editorInset(),
-                )
-            }
-    }
-}
-
-@Composable
 internal fun CompactRecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (String?) -> Unit) {
     var dialogOpen by remember { mutableStateOf(false) }
-    EditorSection {
+    EditorSection(onClick = { dialogOpen = true }) {
         CompactEditorHeaderLine(
             icon = Icons.Default.Repeat,
             title = appString(R.string.recurrence),
@@ -894,7 +813,7 @@ internal fun RecurrenceDialog(
                         unitOptions = recurrenceUnitLabels.map { it.second },
                         label = stringResource(R.string.every),
                     )
-                    Text(stringResource(R.string.ends), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.ends), color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
                     RecurrenceEndSegmented(
                         selected = draft.endMode,
                         onSelected = { update(draft.copy(endMode = it)) },
@@ -917,8 +836,7 @@ internal fun RecurrenceDialog(
                                 RecurrenceEndMode.Never -> Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f),
-                                    border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.62f)),
+                                    color = editorSectionColor(),
                                 ) {
                                     Text(
                                         stringResource(R.string.repeat_never_ends),
@@ -928,20 +846,21 @@ internal fun RecurrenceDialog(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
                                     )
                                 }
-                                RecurrenceEndMode.Count -> OutlinedTextField(
+                                RecurrenceEndMode.Count -> DialogTextField(
                                     value = draft.count?.toString().orEmpty(),
                                     onValueChange = { value ->
                                         update(draft.copy(count = value.filter(Char::isDigit).toIntOrNull()?.coerceIn(1, 999)))
                                     },
-                                    label = { Text(stringResource(R.string.repeat_after_count)) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
+                                    label = stringResource(R.string.repeat_after_count),
+                                    numeric = true,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 RecurrenceEndMode.Until -> DatePickerField(
                                     value = draft.untilDate.orEmpty(),
                                     onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                                    label = { Text(stringResource(R.string.end_date)) },
+                                    label = stringResource(R.string.end_date),
+                                    showLabel = true,
+                                    containerColor = editorSectionColor(),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -971,38 +890,14 @@ internal fun RepeatModeSegmented(
     repeated: Boolean,
     onRepeatedChange: (Boolean) -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, WarmLine.copy(alpha = 0.72f), shape),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        listOf(false to stringResource(R.string.once), true to stringResource(R.string.multiple_times)).forEachIndexed { index, (value, label) ->
-            val selected = repeated == value
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .background(if (selected) WarmPeach else MaterialTheme.colorScheme.surface)
-                    .clickable { onRepeatedChange(value) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    color = WarmInk,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
-            }
-            if (index == 0) {
-                Box(Modifier.width(1.dp).height(42.dp).background(WarmLine.copy(alpha = 0.72f)))
-            }
-        }
-    }
+    val onceLabel = stringResource(R.string.once)
+    val repeatedLabel = stringResource(R.string.multiple_times)
+    DialogSegmentedControl(
+        options = listOf(false, true),
+        selected = repeated,
+        label = { if (it) repeatedLabel else onceLabel },
+        onSelected = onRepeatedChange,
+    )
 }
 
 @Composable
@@ -1010,134 +905,18 @@ internal fun RecurrenceEndSegmented(
     selected: RecurrenceEndMode,
     onSelected: (RecurrenceEndMode) -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, WarmLine.copy(alpha = 0.72f), shape),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RecurrenceEndMode.entries.forEachIndexed { index, mode ->
-            val selectedMode = selected == mode
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .background(if (selectedMode) WarmPeach else MaterialTheme.colorScheme.surface)
-                    .clickable { onSelected(mode) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    when (mode) {
-                        RecurrenceEndMode.Never -> stringResource(R.string.never)
-                        RecurrenceEndMode.Count -> stringResource(R.string.count)
-                        RecurrenceEndMode.Until -> stringResource(R.string.date)
-                    },
-                    color = WarmInk,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = if (selectedMode) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                )
+    DialogSegmentedControl(
+        options = RecurrenceEndMode.entries,
+        selected = selected,
+        label = { mode ->
+            when (mode) {
+                RecurrenceEndMode.Never -> stringResource(R.string.never)
+                RecurrenceEndMode.Count -> stringResource(R.string.count)
+                RecurrenceEndMode.Until -> stringResource(R.string.date)
             }
-            if (index < RecurrenceEndMode.entries.lastIndex) {
-                Box(Modifier.width(1.dp).height(42.dp).background(WarmLine.copy(alpha = 0.72f)))
-            }
-        }
-    }
-}
-
-@Composable
-internal fun RecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (String?) -> Unit) {
-    val draft = remember(recurrenceRule) { RecurrenceDraft.fromRule(recurrenceRule) }
-    fun update(next: RecurrenceDraft) {
-        onRecurrenceRuleChange(next.toRule())
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.editorInset(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Default.Repeat, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(stringResource(R.string.recurrence), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-        }
-        FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RecurrenceOption.entries.filterNot { it == RecurrenceOption.Custom }.forEach { option ->
-                FilterChip(
-                    selected = draft.option == option,
-                    onClick = {
-                        update(
-                            if (option == RecurrenceOption.Once) {
-                                RecurrenceDraft()
-                            } else {
-                                draft.copy(option = option, interval = draft.interval.coerceAtLeast(1))
-                            },
-                        )
-                    },
-                    label = { Text(option.localizedLabel()) },
-                )
-            }
-        }
-        AnimatedVisibility(visible = draft.option != RecurrenceOption.Once) {
-            Column(
-                modifier = Modifier.editorInset(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft.interval.toString(),
-                    clearable = false,
-                    onValueChange = { value ->
-                        update(draft.copy(interval = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999) ?: 1))
-                    },
-                    label = { Text(appString(R.string.every_x, draft.option.localizedIntervalUnitLabel())) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(stringResource(R.string.ends), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-                FadedHorizontalScrollRow(contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    RecurrenceEndMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = draft.endMode == mode,
-                            onClick = { update(draft.copy(endMode = mode)) },
-                            label = { Text(mode.localizedLabel()) },
-                        )
-                    }
-                }
-                AnimatedVisibility(visible = draft.endMode == RecurrenceEndMode.Count) {
-                    OutlinedTextField(
-                        value = draft.count?.toString().orEmpty(),
-                        onValueChange = { value ->
-                            update(draft.copy(count = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 999)))
-                        },
-                        label = { Text(stringResource(R.string.repeat_after_count)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                AnimatedVisibility(visible = draft.endMode == RecurrenceEndMode.Until) {
-                    DatePickerField(
-                        value = draft.untilDate.orEmpty(),
-                        onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                        label = { Text(stringResource(R.string.end_date)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Text(
-                    draft.toRule()?.toLocalizedRecurrenceLabel() ?: stringResource(R.string.one_time),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
-                )
-            }
-        }
-    }
+        },
+        onSelected = onSelected,
+    )
 }
 
 internal enum class RecurrenceEndMode(val label: String) {

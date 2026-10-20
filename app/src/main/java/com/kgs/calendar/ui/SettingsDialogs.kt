@@ -39,7 +39,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Label
@@ -55,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,13 +69,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
+import com.kgs.calendar.ui.components.GripHandleIcon
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.key.key
@@ -99,85 +101,31 @@ internal fun CollectionSelectionDialog(
     onSelected: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(
+            DialogChoiceGroup(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                SettingsRadioRow(selected = selectedHref == null, title = appString(R.string.automatic), onClick = { onSelected(null) })
+                DialogChoiceRow(label = appString(R.string.automatic), selected = selectedHref == null, onClick = { onSelected(null) })
                 collections.forEach { collection ->
-                    SettingsCollectionChoiceRow(
+                    val hidden = collection.href in hiddenCollectionHrefs
+                    DialogChoiceRow(
+                        label = collection.displayName,
+                        subtitle = if (hidden) appString(R.string.calendar_hidden) else collection.localizedKindLabel(),
+                        subtitleColor = if (hidden) SyncPendingOrange else MaterialTheme.colorScheme.onSurfaceVariant,
                         selected = selectedHref == collection.href,
-                        collection = collection,
-                        hidden = collection.href in hiddenCollectionHrefs,
+                        leading = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(collection.color))) },
                         onClick = { onSelected(collection.href) },
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
+        confirmButton = { DialogDismissButton(appString(R.string.close), onClick = onDismiss) },
     )
-}
-
-@Composable
-private fun SettingsCollectionChoiceRow(
-    selected: Boolean,
-    collection: CollectionEntity,
-    hidden: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(SettingsControlHeight)
-            .clip(SettingsControlShape)
-            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 25.dp) else Modifier)
-            .clickable(onClick = onClick),
-        shape = SettingsControlShape,
-        color = if (selected) WarmPeach else settingsControlColor(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(collection.color)),
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(collection.displayName, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(collection.localizedKindLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(WarmBrown),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-    }
-}
-
-internal enum class TaskDefaultSchedule(val label: String) {
-    None("No date"),
-    DateOnly("Date only"),
-    DateTime("Date and time"),
 }
 
 internal enum class DurationUnit(val label: String, val minutes: Int) {
@@ -191,76 +139,80 @@ private enum class EventDurationChoice {
     Custom,
 }
 
+/** The app themes as tiles with their colors; the selected one is filled with the accent. */
 @Composable
-internal fun ThemeSelectionDialog(
+internal fun ThemeSwatchPicker(
     selected: AppThemeMode,
     onSelected: (AppThemeMode) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(appString(R.string.choose_design)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AppThemeMode.entries.forEach { mode ->
-                    ThemeChoiceRow(
-                        mode = mode,
-                        selected = selected == mode,
-                        colors = mode.themePreviewColors(scheme),
-                        onClick = { onSelected(mode) },
-                    )
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(settingsControlColor())
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            AppThemeMode.entries.forEach { mode ->
+                ThemeSwatch(
+                    label = mode.localizedLabel(),
+                    colors = mode.themePreviewColors(scheme),
+                    selected = selected == mode,
+                    onClick = { onSelected(mode) },
+                    modifier = Modifier.weight(1f),
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
-    )
+        }
+    }
 }
 
 @Composable
-private fun ThemeChoiceRow(
-    mode: AppThemeMode,
-    selected: Boolean,
+private fun ThemeSwatch(
+    label: String,
     colors: List<Color>,
+    selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(SettingsControlHeight)
-            .clip(SettingsControlShape)
-            .clickable(onClick = onClick),
-        shape = SettingsControlShape,
-        color = if (selected) WarmPeach else settingsControlColor(),
+    val container = if (selected) WarmPeach else Color.Transparent
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(container)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(colors.getOrElse(1) { Color.LightGray }),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                mode.localizedLabel(),
-                color = WarmInk,
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
+            // The main color as a large dot, the accent as a small one beside it.
+            Box(Modifier.size(30.dp).clip(CircleShape).background(colors.first()))
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 6.dp, bottom = 6.dp)
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(colors.getOrElse(3) { colors.first() }),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                colors.forEach { color ->
-                    Box(Modifier.size(18.dp).clip(CircleShape).background(color))
-                }
-            }
             if (selected) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }
+        Text(
+            label,
+            color = WarmInk,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -300,6 +252,7 @@ internal fun EventDurationDialog(
         DurationUnit.Hours to hourDurationLabel,
     )
     ModalEditorDialog(title = appString(R.string.default_event_duration), onDismiss = onDismiss) {
+        DialogChoiceGroup {
         PresetListRow(
             label = appString(R.string.thirty_min),
             selected = choice == EventDurationChoice.ThirtyMinutes,
@@ -315,6 +268,7 @@ internal fun EventDurationDialog(
             selected = choice == EventDurationChoice.Custom,
             onClick = { choice = EventDurationChoice.Custom },
         )
+        }
         AnimatedVisibility(visible = choice == EventDurationChoice.Custom) {
             NumberUnitRow(
                 amount = amountText,
@@ -349,36 +303,6 @@ internal fun EventDurationDialog(
 }
 
 @Composable
-internal fun <T> SettingsChoiceDialog(
-    title: String,
-    options: List<T>,
-    selected: T,
-    label: @Composable (T) -> String,
-    onSelected: (T) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                options.forEach { option ->
-                    SettingsRadioRow(
-                        selected = option == selected,
-                        title = label(option),
-                        onClick = { onSelected(option) },
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
-    )
-}
-
-@Composable
 internal fun FieldOrderList(
     fields: List<String>,
     onChanged: (List<String>) -> Unit,
@@ -388,8 +312,8 @@ internal fun FieldOrderList(
         if (fields != ordered) ordered = fields
     }
     val density = LocalDensity.current
-    val rowHeightDp = SettingsControlHeight
-    val spacingDp = 8.dp
+    val rowHeightDp = ReorderRowHeight
+    val spacingDp = ReorderRowGap
     val stepPx = with(density) { (rowHeightDp + spacingDp).toPx() }
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -423,7 +347,7 @@ internal fun FieldOrderList(
                         .graphicsLayer { translationY = if (isDragging) dragOffsetPx else animatedDisplacement }
                         .fillMaxWidth()
                         .height(rowHeightDp)
-                        .clip(SettingsControlShape)
+                        .clip(reorderRowShape(index, ordered.size, isDragging))
                         .background(if (isDragging) WarmPeach else settingsControlColor()),
                 ) {
                     Row(
@@ -432,27 +356,14 @@ internal fun FieldOrderList(
                             .padding(start = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(WarmBrown.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = field.settingsFieldIcon(),
-                                contentDescription = null,
-                                tint = WarmBrown,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
+                        SettingsIconBadge(field.settingsFieldIcon())
+                        Spacer(Modifier.width(16.dp))
                         Text(
                             field.localizedSettingsFieldLabel(),
                             color = WarmInk,
-                            fontSize = 15.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            lineHeight = 21.sp,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f),
                         )
                         Box(
@@ -492,7 +403,7 @@ internal fun FieldOrderList(
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Default.DragHandle, contentDescription = stringResource(R.string.move), tint = WarmInk.copy(alpha = 0.72f), modifier = Modifier.size(26.dp))
+                            Icon(GripHandleIcon, contentDescription = stringResource(R.string.move), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                         }
                     }
                 }
@@ -537,13 +448,6 @@ private fun String.settingsFieldIcon(): ImageVector = when (this) {
 }
 
 @Composable
-internal fun CalendarUiState.localizedDefaultTaskScheduleLabel(): String = when {
-    !defaultTaskHasDate -> stringResource(R.string.no_date)
-    defaultTaskHasTime -> stringResource(R.string.date_and_time)
-    else -> stringResource(R.string.date_only)
-}
-
-@Composable
 internal fun CollectionReorderList(
     collections: List<CollectionEntity>,
     accounts: List<AccountEntity>,
@@ -557,8 +461,8 @@ internal fun CollectionReorderList(
     // rows animate into the gap. We only commit the new order on release.
     var ordered by remember { mutableStateOf(collections) }
     val density = LocalDensity.current
-    val rowHeightDp = SettingsControlHeight
-    val spacingDp = 8.dp
+    val rowHeightDp = ReorderRowHeight
+    val spacingDp = ReorderRowGap
     val stepPx = with(density) { (rowHeightDp + spacingDp).toPx() }
 
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
@@ -616,23 +520,17 @@ internal fun CollectionReorderList(
                 enter = expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)) + fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)),
                 exit = shrinkVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)),
             ) {
-                // Indicate the dragged row with a border + brighter fill instead of a
+                // Indicate the dragged row with a brighter fill and full rounding instead of a
                 // shadow — the elevation shadow used to flash a grey rectangle on drop.
+                val hidden = collection.href in hiddenCollectionHrefs
                 Box(
                     modifier = Modifier
                         .zIndex(if (isDragging) 10f else 0f)
                         .graphicsLayer { translationY = if (isDragging) dragOffsetPx else animatedDisplacement }
                         .fillMaxWidth()
                         .height(rowHeightDp)
-                        .clip(SettingsControlShape)
+                        .clip(reorderRowShape(visibleIndex, reorderable.size, isDragging))
                         .background(if (isDragging) WarmPeach else settingsControlColor())
-                        .then(
-                            if (collection.href in hiddenCollectionHrefs) {
-                                Modifier.dashedBorder(SyncPendingOrange, 25.dp)
-                            } else {
-                                Modifier
-                            },
-                        )
                         .clickable(onClick = { onCollectionClick(collection) }),
                 ) {
                 Row(
@@ -643,11 +541,11 @@ internal fun CollectionReorderList(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(collection.color)),
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(Color(collection.color).copy(alpha = if (hidden) 0.35f else 1f)),
                     )
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(16.dp))
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -657,24 +555,31 @@ internal fun CollectionReorderList(
                     ) {
                         Text(
                             collection.displayName,
-                            color = WarmInk,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
+                            color = WarmInk.copy(alpha = if (hidden) 0.6f else 1f),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        val tags = buildString {
-                            append(accountNames[collection.accountId] ?: stringResource(R.string.source))
-                            append(" • ")
-                            append(
-                                listOfNotNull(
-                                    stringResource(R.string.events).takeIf { collection.supportsEvents },
-                                    stringResource(R.string.tasks).takeIf { collection.supportsTasks },
-                                ).joinToString(" + "),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (hidden) {
+                                Text(stringResource(R.string.calendar_hidden), color = SyncPendingOrange, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
+                            }
+                            Text(
+                                accountNames[collection.accountId] ?: stringResource(R.string.source),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                lineHeight = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                         }
-                        Text(tags, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1)
                     }
                     // Generous handle hit area: full row height, ~56dp wide. Keying the
                     // pointerInput on `index` ensures the gesture closure always sees this
@@ -725,10 +630,10 @@ internal fun CollectionReorderList(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DragHandle,
+                            imageVector = GripHandleIcon,
                             contentDescription = stringResource(R.string.move),
-                            tint = WarmInk.copy(alpha = 0.7f),
-                            modifier = Modifier.size(26.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
@@ -739,16 +644,17 @@ internal fun CollectionReorderList(
         if (inactiveCollections.isNotEmpty()) {
             Text(
                 stringResource(R.string.inactive_calendars),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
+                color = WarmBrown,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+                modifier = Modifier.padding(top = 18.dp, start = 16.dp, bottom = 6.dp),
             )
-            inactiveCollections.forEach { collection ->
+            inactiveCollections.forEachIndexed { index, collection ->
                 key("inactive-${collection.href}") {
                     InactiveCollectionOrderRow(
                         collection = collection,
+                        shape = reorderRowShape(index, inactiveCollections.size, dragging = false),
                         accountName = accountNames[collection.accountId] ?: stringResource(R.string.source),
                         hidden = collection.href in hiddenCollectionHrefs,
                         onClick = { onCollectionClick(collection) },
@@ -762,6 +668,7 @@ internal fun CollectionReorderList(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 lineHeight = 16.sp,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
     }
@@ -770,6 +677,7 @@ internal fun CollectionReorderList(
 @Composable
 private fun InactiveCollectionOrderRow(
     collection: CollectionEntity,
+    shape: Shape,
     accountName: String,
     hidden: Boolean,
     onClick: () -> Unit,
@@ -777,10 +685,9 @@ private fun InactiveCollectionOrderRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(SettingsControlHeight)
-            .clip(SettingsControlShape)
+            .height(ReorderRowHeight)
+            .clip(shape)
             .background(settingsControlColor().copy(alpha = 0.72f))
-            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 25.dp) else Modifier)
             .clickable(onClick = onClick),
     ) {
         Row(
@@ -788,33 +695,48 @@ private fun InactiveCollectionOrderRow(
                 .fillMaxSize()
                 .padding(start = 16.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(collection.color).copy(alpha = 0.62f)),
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(Color(collection.color).copy(alpha = 0.45f)),
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     collection.displayName,
                     color = WarmInk.copy(alpha = 0.72f),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "$accountName - ${stringResource(R.string.calendar_inactive)}",
+                    if (hidden) {
+                        "$accountName · ${stringResource(R.string.calendar_hidden)}"
+                    } else {
+                        accountName
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
+}
+
+private val ReorderRowHeight = 64.dp
+private val ReorderRowGap = 2.dp
+
+/** Rows of a reorderable list form one card: outer corners round, inner ones square. */
+private fun reorderRowShape(index: Int, count: Int, dragging: Boolean): Shape {
+    if (dragging) return RoundedCornerShape(18.dp)
+    val top = if (index <= 0) 24.dp else 0.dp
+    val bottom = if (index >= count - 1) 24.dp else 0.dp
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }

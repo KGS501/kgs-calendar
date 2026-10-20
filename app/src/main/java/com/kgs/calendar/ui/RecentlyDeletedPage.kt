@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.RestoreFromTrash
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -70,7 +69,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /**
- * "Recently deleted", opened from the sidebar: the deleted events and tasks as their usual cards
+ * "Recently deleted", opened from the settings: the deleted events and tasks as their usual cards
  * (the ones search and the agenda use), ordered by event/task date. A tap
  * opens the item's detail sheet, which offers restore and permanent delete.
  */
@@ -275,7 +274,6 @@ internal fun TrashedItemDetailBanner(
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = accent.copy(alpha = if (dark) 0.26f else 0.14f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("trashed_detail_banner"),
@@ -341,7 +339,6 @@ internal fun TrashedItemDetailBanner(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.46f)),
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -385,19 +382,16 @@ private fun TrashConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         modifier = Modifier.padding(horizontal = 20.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
         containerColor = popupSurfaceColor(),
         titleContentColor = WarmInk,
         textContentColor = WarmInk,
         title = { Text(title, fontWeight = FontWeight.SemiBold) },
         text = { Text(body) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(confirmLabel, color = MaterialTheme.colorScheme.error)
-            }
+            DialogConfirmButton(text = confirmLabel, onClick = onConfirm, destructive = true)
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
     )
@@ -428,10 +422,9 @@ private fun TrashNoticeDialog(notice: TrashNotice, onDismiss: () -> Unit) {
             ?.let { appString(R.string.empty_trash_failed_server_refused, it) }
             ?: appString(R.string.empty_trash_failed_generic, notice.reason)
     }
-    AlertDialog(
+    KgsAlertDialog(
         modifier = Modifier.padding(horizontal = 20.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
         containerColor = popupSurfaceColor(),
         title = { Text(title, color = WarmInk, fontWeight = FontWeight.SemiBold) },
         text = { Text(body, color = WarmInk, lineHeight = 20.sp) },
