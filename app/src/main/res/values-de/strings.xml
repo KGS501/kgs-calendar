@@ -554,15 +554,15 @@
     <string name="restore_failed_generic">„%1$s“ konnte nicht wiederhergestellt werden: %2$s</string>
     <string name="restore_failed_gone_from_server">„%1$s“ ist nicht mehr im Nextcloud-Papierkorb. Vielleicht ist seine Zeit dort abgelaufen oder es wurde auf einem anderen Gerät gelöscht.</string>
     <string name="restore_failed_server_refused">Der Server hat das Wiederherstellen von „%1$s“ abgelehnt (HTTP %2$d). Vielleicht enthält sein Kalender schon einen Eintrag mit demselben Namen, ist nur lesbar freigegeben oder existiert nicht mehr.</string>
-    <string name="delete_recoverable">Du kannst es in der Seitenleiste unter Zuletzt gelöscht wiederherstellen, solange es dort aufbewahrt wird.</string>
-    <string name="all_series_deleted_recoverable">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie in der Seitenleiste unter Zuletzt gelöscht wiederherstellen, solange sie dort aufbewahrt wird.</string>
+    <string name="delete_recoverable">Du kannst es in den Einstellungen unter Zuletzt gelöscht wiederherstellen, solange es dort aufbewahrt wird.</string>
+    <string name="all_series_deleted_recoverable">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie in den Einstellungen unter Zuletzt gelöscht wiederherstellen, solange sie dort aufbewahrt wird.</string>
     <plurals name="delete_recoverable_days">
-        <item quantity="one">Du kannst es %1$d Tag lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
-        <item quantity="other">Du kannst es %1$d Tage lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="one">Du kannst es %1$d Tag lang in den Einstellungen unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="other">Du kannst es %1$d Tage lang in den Einstellungen unter Zuletzt gelöscht wiederherstellen.</item>
     </plurals>
     <plurals name="all_series_deleted_recoverable_days">
-        <item quantity="one">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tag lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
-        <item quantity="other">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tage lang in der Seitenleiste unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="one">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tag lang in den Einstellungen unter Zuletzt gelöscht wiederherstellen.</item>
+        <item quantity="other">Alle Termine dieser Serie werden gelöscht. Du kannst die Serie %1$d Tage lang in den Einstellungen unter Zuletzt gelöscht wiederherstellen.</item>
     </plurals>
     <string name="trash_deleted_today">Heute gelöscht</string>
     <string name="trash_deleted_yesterday">Gestern gelöscht</string>

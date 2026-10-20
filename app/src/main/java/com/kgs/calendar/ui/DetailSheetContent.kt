@@ -51,6 +51,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -69,7 +85,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -531,54 +546,63 @@ internal fun DetailSheetContent(
         }
         when (detail) {
             is DetailSheet.Event -> {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = WarmPeach.copy(alpha = 0.42f),
+                // The event's color as a slim bar beside its title; the actions sit at the end.
+                Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Box(Modifier.size(18.dp).clip(CircleShape).background(Color(detail.event.displayColor())))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Box(
+                        Modifier
+                            .width(6.dp)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color(detail.event.displayColor())),
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            stringResource(R.string.event),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        SelectionContainer {
                             Text(
-                                stringResource(R.string.event),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
+                                detail.event.title,
+                                color = WarmInk,
+                                fontSize = 24.sp,
+                                lineHeight = 30.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            SelectionContainer {
-                                Text(
-                                    detail.event.title,
-                                    color = WarmInk,
-                                    fontSize = 22.sp,
-                                    lineHeight = 26.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                        }
+                    }
+                    val ev = detail.event
+                    val recurring = ev.isRecurring || !ev.recurrenceRule.isNullOrBlank()
+                    if (trashedItem == null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DetailActionButton(Icons.Default.Edit, stringResource(R.string.edit)) { onEditEvent(ev) }
+                            Box(
+                                Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(editorSectionColor()),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                DetailOverflowMenu(
+                                    copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
+                                    hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
+                                    recurringScopes = recurring,
+                                    itemLabel = stringResource(R.string.event),
+                                    canDelete = !readOnlySource,
+                                    trashRetentionDays = trashRetentionDays,
+                                    onDuplicate = { onDuplicateEvent(ev) },
+                                    onCopyTo = { onCopyEventTo(ev, it) },
+                                    onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
+                                    onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
+                                    onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
                                 )
                             }
-                        }
-                        val ev = detail.event
-                        val recurring = ev.isRecurring || !ev.recurrenceRule.isNullOrBlank()
-                        if (trashedItem == null) {
-                            IconButton(onClick = { onEditEvent(ev) }) {
-                                Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = WarmInk)
-                            }
-                            DetailOverflowMenu(
-                                copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
-                                hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
-                                recurringScopes = recurring,
-                                itemLabel = stringResource(R.string.event),
-                                canDelete = !readOnlySource,
-                                trashRetentionDays = trashRetentionDays,
-                                onDuplicate = { onDuplicateEvent(ev) },
-                                onCopyTo = { onCopyEventTo(ev, it) },
-                                onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
-                                onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
-                                onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
-                            )
                         }
                     }
                 }
@@ -775,7 +799,6 @@ private fun SyncIssueDetailBanner(syncError: String) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = container,
-        border = BorderStroke(1.dp, SyncPendingOrange.copy(alpha = 0.58f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -1089,7 +1112,6 @@ private fun PendingSyncDetailBanner(mutation: PendingMutationEntity) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = container,
-        border = BorderStroke(1.dp, SyncPendingOrange.copy(alpha = 0.58f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -1243,50 +1265,33 @@ private fun CopyTargetDialog(
     onDismiss: () -> Unit,
     onCopyTo: (String) -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         modifier = Modifier.padding(horizontal = 20.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
         title = {
             Text(stringResource(R.string.copy_to), color = WarmInk, fontWeight = FontWeight.SemiBold)
         },
         text = {
-            Column(
+            DialogChoiceGroup(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 copyTargets.forEach { collection ->
                     val hidden = collection.href in hiddenCollectionHrefs
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 14.dp) else Modifier)
-                            .clickable { onCopyTo(collection.href) }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        Box(Modifier.size(12.dp).clip(CircleShape).background(Color(collection.color)))
-                        Text(
-                            collection.displayName,
-                            color = WarmInk,
-                            fontSize = 16.sp,
-                            lineHeight = 19.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    DialogChoiceRow(
+                        label = collection.displayName,
+                        subtitle = if (hidden) appString(R.string.calendar_hidden) else null,
+                        subtitleColor = SyncPendingOrange,
+                        selected = false,
+                        leading = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(collection.color))) },
+                        onClick = { onCopyTo(collection.href) },
+                    )
                 }
             }
         },
         confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) }
-        },
+        dismissButton = { DialogDismissButton(appString(R.string.cancel), onClick = onDismiss) },
     )
 }
 
@@ -1301,11 +1306,9 @@ internal fun RecurringSaveScopeDialog(
     onSaveFollowing: () -> Unit,
     onSaveAll: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         modifier = Modifier.padding(horizontal = 20.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(24.dp),
-        containerColor = scopeDialogBackground(),
         titleContentColor = WarmInk,
         textContentColor = WarmInk,
         title = { Text(appString(R.string.edit_repeat_question), fontWeight = FontWeight.SemiBold) },
@@ -1346,11 +1349,9 @@ private fun DeleteConfirmationDialog(
         if (pendingScope == null) {
             // A recurring event offers three choices, laid out as a clean vertical stack of
             // full-width buttons instead of cramming them into the dialog's button row.
-            AlertDialog(
+            KgsAlertDialog(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 onDismissRequest = onDismiss,
-                shape = RoundedCornerShape(24.dp),
-                containerColor = scopeDialogBackground(),
                 titleContentColor = WarmInk,
                 textContentColor = WarmInk,
                 title = { Text(appString(R.string.delete_repeat_question), fontWeight = FontWeight.SemiBold) },
@@ -1372,11 +1373,9 @@ private fun DeleteConfirmationDialog(
                 dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
             )
         } else {
-            AlertDialog(
+            KgsAlertDialog(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 onDismissRequest = { pending = null },
-                shape = RoundedCornerShape(24.dp),
-                containerColor = scopeDialogBackground(),
                 titleContentColor = WarmInk,
                 textContentColor = WarmInk,
                 title = { Text(appString(R.string.truly_delete), fontWeight = FontWeight.SemiBold) },
@@ -1392,7 +1391,9 @@ private fun DeleteConfirmationDialog(
                     )
                 },
                 confirmButton = {
-                    TextButton(
+                    DialogConfirmButton(
+                        text = appString(R.string.delete),
+                        destructive = true,
                         onClick = {
                             when (pendingScope) {
                                 EventDeleteScope.This -> onDeleteThis()
@@ -1400,17 +1401,15 @@ private fun DeleteConfirmationDialog(
                                 EventDeleteScope.All -> onDeleteAll()
                             }
                         },
-                    ) { Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                    )
                 },
                 dismissButton = { TextButton(onClick = { pending = null }) { Text(appString(R.string.cancel)) } },
             )
         }
     } else {
-        AlertDialog(
+        KgsAlertDialog(
             modifier = Modifier.padding(horizontal = 20.dp),
             onDismissRequest = onDismiss,
-            shape = RoundedCornerShape(24.dp),
-            containerColor = scopeDialogBackground(),
             titleContentColor = WarmInk,
             textContentColor = WarmInk,
             title = { Text(appString(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
@@ -1422,48 +1421,32 @@ private fun DeleteConfirmationDialog(
                 )
             },
             confirmButton = {
-                TextButton(onClick = onDeleteAll) {
-                    Text(appString(R.string.delete), color = MaterialTheme.colorScheme.error)
-                }
+                DialogConfirmButton(text = appString(R.string.delete), destructive = true, onClick = onDeleteAll)
             },
             dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
         )
     }
 }
 
+/** A scope choice in the delete and save dialogs: a filled row, red for the widest scope. */
 @Composable
 private fun DeleteScopeButton(text: String, destructive: Boolean = false, onClick: () -> Unit) {
-    val container = if (destructive) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val outline = if (destructive) {
-        MaterialTheme.colorScheme.error.copy(alpha = 0.46f)
-    } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
-    }
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = container,
-        border = BorderStroke(1.dp, outline),
+        color = if (destructive) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else editorSectionColor(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            color = if (destructive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
-            fontSize = 15.sp,
-            lineHeight = 18.sp,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            color = if (destructive) MaterialTheme.colorScheme.error else WarmInk,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Medium,
         )
     }
 }
-
-@Composable
-private fun scopeDialogBackground(): Color =
-    popupSurfaceColor()
 
 @Composable
 private fun EventMetadata(
@@ -1478,10 +1461,11 @@ private fun EventMetadata(
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
     val accountEmailSet = remember(accountEmails) { accountEmails.map { it.lowercase(Locale.ROOT) }.toSet() }
     val ownAttendee = attendees.firstOrNull { it.email.lowercase(Locale.ROOT) in accountEmailSet }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // All fields form one card of icon rows, in the order chosen in the settings.
+    CardGroup {
         fieldOrder.forEach { field ->
             when (field) {
-                "time" -> DetailLine(stringResource(R.string.time), event.localizedFullTimeLabel())
+                "time" -> DetailLine(stringResource(R.string.time), event.localizedFullTimeLabel(), Icons.Default.AccessTime)
                 "location" -> event.location?.takeIf { it.isNotBlank() }?.let { LocationDetailLine(it, event.locationMapVerified, autoLoadMapPreviews) }
                 "participants" -> if (organizer != null || attendees.isNotEmpty()) {
                     SharedEventDetail(
@@ -1491,18 +1475,23 @@ private fun EventMetadata(
                         onParticipationChanged = onParticipationChanged,
                     )
                 }
-                "notes" -> event.description?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.notes), it) }
+                "notes" -> event.description?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.notes), it, Icons.AutoMirrored.Filled.Notes) }
                 "categories" -> event.categories?.takeIf { it.isNotBlank() }?.let { CategoryDetailLine(stringResource(R.string.categories), it) }
                 "status" -> if (!readOnlySource) {
-                    DetailLine(stringResource(R.string.event_status), event.statusLabelText())
-                    DetailLine(stringResource(R.string.sharing_visibility), event.classLabelText())
-                    DetailLine(stringResource(R.string.availability), event.transparencyLabelText())
+                    DetailFactsLine(
+                        icon = Icons.Default.Info,
+                        facts = listOf(
+                            stringResource(R.string.event_status) to event.statusLabelText(),
+                            stringResource(R.string.sharing_visibility) to event.classLabelText(),
+                            stringResource(R.string.availability) to event.transparencyLabelText(),
+                        ),
+                    )
                 }
-                "recurrence" -> event.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel()) }
-                "reminders" -> event.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it) }
+                "recurrence" -> event.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "reminders" -> event.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it, Icons.Default.Notifications) }
             }
         }
-        event.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it) }
+        event.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it, Icons.Default.WarningAmber, showLabel = true) }
     }
 }
 
@@ -1513,16 +1502,9 @@ private fun SharedEventDetail(
     ownAttendee: CalendarParticipant?,
     onParticipationChanged: (String) -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(stringResource(R.string.participants), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
+    EditorSection {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EditorRowTitle(Icons.Default.Group, stringResource(R.string.participants))
             organizer?.let {
                 Text(stringResource(R.string.organized_by, it.displayName), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium)
             }
@@ -1549,14 +1531,13 @@ private fun SharedEventDetail(
                 }
             }
             ownAttendee?.let {
-                HorizontalDivider(color = WarmLine.copy(alpha = 0.72f))
-                Text(stringResource(R.string.my_participation), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-                FadedHorizontalScrollRow(contentPadding = PaddingValues(horizontal = 0.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.my_participation), color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("ACCEPTED" to stringResource(R.string.accept), "TENTATIVE" to stringResource(R.string.tentative), "DECLINED" to stringResource(R.string.decline)).forEach { (value, label) ->
-                        FilterChip(
+                        SettingsChoicePill(
+                            label = label,
                             selected = it.partstat.equals(value, ignoreCase = true),
                             onClick = { onParticipationChanged(value) },
-                            label = { Text(label) },
                         )
                     }
                 }
@@ -1574,14 +1555,15 @@ private fun TaskMetadata(
     onPriorityChanged: (Int) -> Unit,
     onProgressChanged: (Int) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // All fields form one card of icon rows, in the order chosen in the settings.
+    CardGroup {
         fieldOrder.forEach { field ->
             when (field) {
-                "status" -> DetailLine(stringResource(R.string.status), task.localizedStatusLabel())
-                "time" -> DetailLine(stringResource(R.string.time), task.localizedTaskTimeLabel())
+                "status" -> DetailLine(stringResource(R.string.status), task.localizedStatusLabel(), Icons.Default.TaskAlt, showLabel = true)
+                "time" -> DetailLine(stringResource(R.string.time), task.localizedTaskTimeLabel(), Icons.Default.AccessTime)
                 "location" -> task.location?.takeIf { it.isNotBlank() }?.let { LocationDetailLine(it, task.locationMapVerified, autoLoadMapPreviews) }
-                "notes" -> task.notes?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.note), it) }
-                "url" -> task.url?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.url), it) }
+                "notes" -> task.notes?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.note), it, Icons.AutoMirrored.Filled.Notes) }
+                "url" -> task.url?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.url), it, Icons.Default.Link) }
                 "priority" -> task.priority?.let {
                     if (editable) EditablePriorityLine(it, onPriorityChanged) else ReadOnlyPriorityLine(it)
                 }
@@ -1590,19 +1572,20 @@ private fun TaskMetadata(
                     if (editable) EditableProgressLine(progress, onProgressChanged) else ReadOnlyProgressLine(progress)
                 }
                 "tags" -> task.categories?.takeIf { it.isNotBlank() }?.let { CategoryDetailLine(stringResource(R.string.categories), it) }
-                "recurrence" -> task.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel()) }
-                "reminders" -> task.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it) }
+                "recurrence" -> task.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "reminders" -> task.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it, Icons.Default.Notifications) }
             }
         }
-        task.completedAtMillis?.let { DetailLine(stringResource(R.string.completed_on), it.toDate().toString()) }
-        task.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it) }
+        task.completedAtMillis?.let { DetailLine(stringResource(R.string.completed_on), it.toDate().toString(), Icons.Default.CheckCircle, showLabel = true) }
+        task.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it, Icons.Default.WarningAmber, showLabel = true) }
     }
 }
 
 @Composable
 private fun EditablePriorityLine(priority: Int, onPriorityChanged: (Int) -> Unit) {
     var draftPriority by remember(priority) { mutableStateOf(priority.coerceIn(1, 9)) }
-    DetailMetricLine(label = stringResource(R.string.priority), value = draftPriority.coerceIn(1, 9).toString()) {
+    // The slider brings its own heading and value.
+    EditorSection {
         PrioritySlider(
             priority = draftPriority,
             onPriorityChange = { draftPriority = it },
@@ -1614,7 +1597,7 @@ private fun EditablePriorityLine(priority: Int, onPriorityChanged: (Int) -> Unit
 @Composable
 private fun EditableProgressLine(progress: Int, onProgressChanged: (Int) -> Unit) {
     var draftProgress by remember(progress) { mutableStateOf(progress.coerceIn(0, 100)) }
-    DetailMetricLine(label = stringResource(R.string.progress), value = "${draftProgress.coerceIn(0, 100)}%") {
+    EditorSection {
         ProgressSlider(
             progress = draftProgress,
             onProgressChange = { draftProgress = it },
@@ -1623,63 +1606,83 @@ private fun EditableProgressLine(progress: Int, onProgressChanged: (Int) -> Unit
     }
 }
 
+/**
+ * One field of the detail card: its icon, then the value. The label is only shown where the icon
+ * alone would not say what the value is; otherwise it is read out with the icon.
+ */
 @Composable
-private fun DetailLine(label: String, value: String) {
+private fun DetailLine(label: String, value: String, icon: ImageVector, showLabel: Boolean = false) {
     val displayValue = remember(value) { value.cleanCalendarDisplayText() }
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            LinkableSelectableText(displayValue)
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorLine(icon, verticalAlignment = Alignment.Top, iconDescription = label) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (showLabel) {
+                    Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
+                }
+                LinkableSelectableText(displayValue)
+            }
         }
+    }
+}
+
+/** Several short facts, such as an event's status and visibility, as label and value lines. */
+@Composable
+private fun DetailFactsLine(icon: ImageVector, facts: List<Pair<String, String>>) {
+    EditorSection {
+        EditorLine(icon, verticalAlignment = Alignment.Top) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                facts.forEach { (label, value) ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
+                        Text(value, color = WarmInk, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A round, tinted icon button in the detail header. */
+@Composable
+private fun DetailActionButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(editorSectionColor())
+            .clickable(role = Role.Button, onClickLabel = description, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = WarmInk, modifier = Modifier.size(20.dp))
     }
 }
 
 @Composable
 private fun ReadOnlyProgressLine(progress: Int) {
-    DetailMetricLine(label = stringResource(R.string.progress), value = "${progress.coerceIn(0, 100)}%") {
+    DetailMetricLine(icon = Icons.Default.Percent, label = stringResource(R.string.progress), value = "${progress.coerceIn(0, 100)}%") {
         ReadOnlyProgressBar(progress = progress, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun ReadOnlyPriorityLine(priority: Int) {
-    DetailMetricLine(label = stringResource(R.string.priority), value = priority.coerceIn(1, 9).toString()) {
+    DetailMetricLine(icon = Icons.Default.Flag, label = stringResource(R.string.priority), value = priority.coerceIn(1, 9).toString()) {
         ReadOnlyPriorityBar(priority = priority, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun DetailMetricLine(
+    icon: ImageVector,
     label: String,
     value: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(value, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
-            }
-            content()
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorRowTitle(icon, label) {
+            Text(value, color = WarmBrown, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
         }
+        content()
     }
 }
 
@@ -1756,20 +1759,13 @@ private fun ReadOnlyPriorityBar(priority: Int, modifier: Modifier = Modifier) {
 private fun LocationDetailLine(location: String, mapVerified: Boolean?, autoLoadMapPreviews: Boolean) {
     val context = LocalContext.current
     val displayValue = remember(location) { location.cleanCalendarDisplayText() }
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(stringResource(R.string.location), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            LinkableSelectableText(displayValue, onClick = { context.openMapLocation(displayValue) })
-            LocationMapPreview(displayValue, mapVerified, autoLoadMapPreviews)
+    val label = stringResource(R.string.location)
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorLine(Icons.Default.LocationOn, verticalAlignment = Alignment.Top, iconDescription = label) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinkableSelectableText(displayValue, onClick = { context.openMapLocation(displayValue) })
+                LocationMapPreview(displayValue, mapVerified, autoLoadMapPreviews)
+            }
         }
     }
 }
@@ -1783,8 +1779,9 @@ private fun LocationMapPreview(location: String, mapVerified: Boolean?, autoLoad
 
     if (!previewRequested) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = { previewRequested = true },
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = WarmBrown),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1817,7 +1814,6 @@ private fun LocationMapPreview(location: String, mapVerified: Boolean?, autoLoad
             .height(128.dp),
         shape = RoundedCornerShape(16.dp),
         color = WarmLine.copy(alpha = if (resolved) 0.35f else 0.18f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.7f)),
     ) {
         OpenStreetMapPreview(
             suggestion = resolvedSuggestion,

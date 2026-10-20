@@ -29,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
@@ -134,7 +133,7 @@ internal fun NoWritableSourceNotice(
 
 @Composable
 internal fun InvalidTimeRangeDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(appString(R.string.invalid_time_range_title)) },
         text = { Text(appString(R.string.invalid_time_range_message)) },
@@ -143,7 +142,6 @@ internal fun InvalidTimeRangeDialog(onDismiss: () -> Unit) {
                 Text(appString(R.string.ok))
             }
         },
-        shape = RoundedCornerShape(26.dp),
         containerColor = popupSurfaceColor(),
     )
 }

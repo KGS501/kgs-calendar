@@ -47,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.input.ImeAction
@@ -224,13 +225,12 @@ internal fun TaskParentPickerDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+            shape = DialogShape,
+            color = popupSurfaceColor(),
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -240,8 +240,8 @@ internal fun TaskParentPickerDialog(
                     Text(
                         stringResource(R.string.parent_task),
                         color = WarmInk,
-                        fontSize = 18.sp,
-                        lineHeight = 22.sp,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
@@ -256,35 +256,16 @@ internal fun TaskParentPickerDialog(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
+                    colors = dialogFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelected(null) },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (selectedParentUid == null) WarmPeach.copy(alpha = 0.62f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
-                    border = BorderStroke(1.dp, if (selectedParentUid == null) WarmBrown.copy(alpha = 0.5f) else WarmLine),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
-                        Text(
-                            stringResource(R.string.no_parent_task),
-                            color = WarmInk,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = if (selectedParentUid == null) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selectedParentUid == null) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
-                        }
-                    }
+                DialogChoiceGroup {
+                    DialogChoiceRow(
+                        label = stringResource(R.string.no_parent_task),
+                        selected = selectedParentUid == null,
+                        leading = { Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp)) },
+                        onClick = { onSelected(null) },
+                    )
                 }
                 if (filteredCandidates.isEmpty()) {
                     Box(
@@ -691,17 +672,9 @@ internal fun TagPill(tag: String, onRemove: (() -> Unit)? = null) {
 internal fun CategoryDetailLine(label: String, categories: String) {
     val tags = remember(categories) { categories.toCategoryTags() }
     if (tags.isEmpty()) return
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
-            FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    EditorSection {
+        EditorLine(Icons.AutoMirrored.Filled.Label, verticalAlignment = Alignment.Top, iconDescription = label) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 tags.forEach { TagPill(it) }
             }
         }

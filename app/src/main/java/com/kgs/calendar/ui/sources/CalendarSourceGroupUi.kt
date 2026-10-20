@@ -1,5 +1,11 @@
 package com.kgs.calendar.ui.sources
 
+import com.kgs.calendar.ui.dialogFieldColors
+import com.kgs.calendar.ui.DialogFieldCaption
+import com.kgs.calendar.ui.DialogDismissButton
+import com.kgs.calendar.ui.DialogConfirmButton
+import com.kgs.calendar.ui.DialogChoiceRow
+import com.kgs.calendar.ui.DialogChoiceGroup
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,6 +62,7 @@ import com.kgs.calendar.domain.source.CalendarSourceGroup
 import com.kgs.calendar.domain.source.CalendarSourceGroupKind
 import com.kgs.calendar.domain.source.CalendarSourceGroups
 import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.ui.KgsAlertDialog
 import com.kgs.calendar.ui.WarmBrown
 import com.kgs.calendar.ui.WarmInk
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField
@@ -155,7 +161,7 @@ internal fun CalendarGroupSettingsDialog(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(onPickImage)
     }
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.calendar_group_edit)) },
         text = {
@@ -177,15 +183,18 @@ internal fun CalendarGroupSettingsDialog(
                     fontSize = 13.sp,
                     lineHeight = 17.sp,
                 )
-                ClearableOutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.calendar_group_name)) },
-                    placeholder = { Text(automaticName) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DialogFieldCaption(stringResource(R.string.calendar_group_name))
+                    ClearableOutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        placeholder = { Text(automaticName) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = dialogFieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (group.customName != null && group.kind != CalendarSourceGroupKind.Custom) {
                     TextButton(onClick = { name = automaticName }) {
                         Text(stringResource(R.string.calendar_group_reset_name))
@@ -194,7 +203,8 @@ internal fun CalendarGroupSettingsDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DialogConfirmButton(
+                text = stringResource(R.string.save),
                 onClick = {
                     val trimmed = name.trim()
                     // The automatic name needs no override; a custom group always keeps a name.
@@ -206,10 +216,10 @@ internal fun CalendarGroupSettingsDialog(
                     )
                     onDismiss()
                 },
-            ) { Text(stringResource(R.string.save)) }
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss)
         },
     )
 }
@@ -235,7 +245,7 @@ internal fun CalendarGroupPickerDialog(
     val choices = remember(groups, automatic) {
         listOfNotNull(automatic) + groups.filter { it.key != automatic?.key && it.collections.isNotEmpty() }
     }
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.calendar_group_choose)) },
         text = {
@@ -250,29 +260,34 @@ internal fun CalendarGroupPickerDialog(
                     lineHeight = 17.sp,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                choices.forEach { group ->
-                    val label = if (group.key == automatic?.key) {
-                        stringResource(R.string.calendar_group_automatic, group.displayName())
-                    } else {
-                        group.displayName()
-                    }
-                    GroupChoiceRow(
-                        label = label,
-                        avatarName = group.displayName(),
-                        image = group.image(images),
-                        selected = group.key == current?.key,
-                    ) {
-                        onSelect(group.key.takeUnless { it == automatic?.key })
-                        onDismiss()
+                DialogChoiceGroup {
+                    choices.forEach { group ->
+                        val label = if (group.key == automatic?.key) {
+                            stringResource(R.string.calendar_group_automatic, group.displayName())
+                        } else {
+                            group.displayName()
+                        }
+                        val groupImage = group.image(images)
+                        val avatarName = group.displayName()
+                        DialogChoiceRow(
+                            label = label,
+                            selected = group.key == current?.key,
+                            leading = { SourceAvatar(avatarName, groupImage, 30.dp) },
+                            onClick = {
+                                onSelect(group.key.takeUnless { it == automatic?.key })
+                                onDismiss()
+                            },
+                        )
                     }
                 }
                 if (creating) {
                     ClearableOutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        label = { Text(stringResource(R.string.calendar_group_new_name)) },
+                        placeholder = { Text(stringResource(R.string.calendar_group_new_name)) },
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
+                        colors = dialogFieldColors(),
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                     )
                 } else {
@@ -285,56 +300,26 @@ internal fun CalendarGroupPickerDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = WarmInk, modifier = Modifier.size(28.dp))
-                        Text(stringResource(R.string.calendar_group_new), color = WarmInk, fontSize = 14.sp)
+                        Icon(Icons.Default.Add, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(24.dp))
+                        Text(stringResource(R.string.calendar_group_new), color = WarmBrown, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         },
         confirmButton = {
             if (creating) {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(R.string.save),
                     enabled = newName.isNotBlank(),
                     onClick = {
                         onCreate(newName.trim())
                         onDismiss()
                     },
-                ) { Text(stringResource(R.string.save)) }
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss)
         },
     )
-}
-
-@Composable
-private fun GroupChoiceRow(
-    label: String,
-    avatarName: String,
-    image: SourceImage?,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        SourceAvatar(avatarName, image, 28.dp)
-        Text(
-            label,
-            color = WarmInk,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(20.dp))
-    }
 }

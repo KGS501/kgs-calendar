@@ -49,6 +49,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Check
@@ -205,6 +207,7 @@ internal fun LocationPickerPage(
                 leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp)) },
                 singleLine = true,
                 shape = RoundedCornerShape(22.dp),
+                colors = dialogFieldColors(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { searchLocations() }),
                 modifier = Modifier
@@ -229,7 +232,10 @@ internal fun LocationPickerPage(
                 lineHeight = 15.sp,
             )
             if (locationAnchor == null && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                OutlinedButton(onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }) {
+                FilledTonalButton(
+                    onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = editorSectionColor(), contentColor = WarmBrown),
+                ) {
                     Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.use_nearby_location))
@@ -289,8 +295,7 @@ internal fun LocationChoiceRow(title: String, subtitle: String, onClick: () -> U
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-        border = BorderStroke(1.dp, WarmLine.copy(alpha = 0.72f)),
+        color = editorSectionColor(),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

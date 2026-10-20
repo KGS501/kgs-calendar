@@ -54,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -102,79 +101,31 @@ internal fun CollectionSelectionDialog(
     onSelected: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(
+            DialogChoiceGroup(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                SettingsRadioRow(selected = selectedHref == null, title = appString(R.string.automatic), onClick = { onSelected(null) })
+                DialogChoiceRow(label = appString(R.string.automatic), selected = selectedHref == null, onClick = { onSelected(null) })
                 collections.forEach { collection ->
-                    SettingsCollectionChoiceRow(
+                    val hidden = collection.href in hiddenCollectionHrefs
+                    DialogChoiceRow(
+                        label = collection.displayName,
+                        subtitle = if (hidden) appString(R.string.calendar_hidden) else collection.localizedKindLabel(),
+                        subtitleColor = if (hidden) SyncPendingOrange else MaterialTheme.colorScheme.onSurfaceVariant,
                         selected = selectedHref == collection.href,
-                        collection = collection,
-                        hidden = collection.href in hiddenCollectionHrefs,
+                        leading = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(collection.color))) },
                         onClick = { onSelected(collection.href) },
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
+        confirmButton = { DialogDismissButton(appString(R.string.close), onClick = onDismiss) },
     )
-}
-
-@Composable
-private fun SettingsCollectionChoiceRow(
-    selected: Boolean,
-    collection: CollectionEntity,
-    hidden: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(SettingsControlHeight)
-            .clip(SettingsControlShape)
-            .then(if (hidden) Modifier.dashedBorder(SyncPendingOrange, 25.dp) else Modifier)
-            .clickable(onClick = onClick),
-        shape = SettingsControlShape,
-        color = if (selected) WarmPeach else settingsControlColor(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(collection.color)),
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(collection.displayName, color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(collection.localizedKindLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(WarmBrown),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-    }
 }
 
 internal enum class DurationUnit(val label: String, val minutes: Int) {
@@ -301,6 +252,7 @@ internal fun EventDurationDialog(
         DurationUnit.Hours to hourDurationLabel,
     )
     ModalEditorDialog(title = appString(R.string.default_event_duration), onDismiss = onDismiss) {
+        DialogChoiceGroup {
         PresetListRow(
             label = appString(R.string.thirty_min),
             selected = choice == EventDurationChoice.ThirtyMinutes,
@@ -316,6 +268,7 @@ internal fun EventDurationDialog(
             selected = choice == EventDurationChoice.Custom,
             onClick = { choice = EventDurationChoice.Custom },
         )
+        }
         AnimatedVisibility(visible = choice == EventDurationChoice.Custom) {
             NumberUnitRow(
                 amount = amountText,
@@ -347,36 +300,6 @@ internal fun EventDurationDialog(
             saveEnabled = choice != EventDurationChoice.Custom || amountText.toIntOrNull() != null,
         )
     }
-}
-
-@Composable
-internal fun <T> SettingsChoiceDialog(
-    title: String,
-    options: List<T>,
-    selected: T,
-    label: @Composable (T) -> String,
-    onSelected: (T) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                options.forEach { option ->
-                    SettingsRadioRow(
-                        selected = option == selected,
-                        title = label(option),
-                        onClick = { onSelected(option) },
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.close)) } },
-    )
 }
 
 @Composable

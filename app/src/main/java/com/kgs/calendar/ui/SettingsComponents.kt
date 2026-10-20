@@ -557,33 +557,6 @@ internal fun SettingsInfoRow(label: String, value: String) {
 }
 
 @Composable
-internal fun SettingsRadioRow(selected: Boolean, title: String, leadingIcon: ImageVector? = null, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = if (selected) WarmPeach else Color.Transparent,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            leadingIcon?.let {
-                Icon(it, contentDescription = null, tint = if (selected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            }
-            Text(title, color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-@Composable
 internal fun CalendarMetadataRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),

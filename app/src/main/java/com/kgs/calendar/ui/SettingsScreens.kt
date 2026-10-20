@@ -68,7 +68,6 @@ import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -1301,20 +1300,20 @@ internal fun SettingsPage(
         )
     }
     deleteAccountCandidateId?.let { accountId ->
-        AlertDialog(
+        KgsAlertDialog(
             onDismissRequest = { deleteAccountCandidateId = null },
             title = { Text(stringResource(R.string.remove_source_question)) },
             text = { Text(stringResource(R.string.remove_source_body)) },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(R.string.remove),
+                    destructive = true,
                     onClick = {
                         onDeleteAccount(accountId)
                         deleteAccountCandidateId = null
                         navigateBack()
                     },
-                ) {
-                    Text(stringResource(R.string.remove), color = MaterialTheme.colorScheme.error)
-                }
+                )
             },
             dismissButton = {
                 TextButton(onClick = { deleteAccountCandidateId = null }) {
@@ -1939,17 +1938,19 @@ internal fun CollectionSettingsSheet(
         )
     }
     if (confirmDelete) {
-        AlertDialog(
+        KgsAlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.delete_server_calendar)) },
             text = { Text(stringResource(R.string.delete_server_calendar_warning, collection.displayName)) },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(R.string.delete),
+                    destructive = true,
                     onClick = {
                         confirmDelete = false
                         onDelete?.invoke()
                     },
-                ) { Text(stringResource(R.string.delete)) }
+                )
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) }

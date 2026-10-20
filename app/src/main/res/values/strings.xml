@@ -554,15 +554,15 @@
     <string name="restore_failed_generic">“%1$s” could not be restored: %2$s</string>
     <string name="restore_failed_gone_from_server">“%1$s” is no longer in the Nextcloud trash bin. Its time there may have run out, or it was deleted on another device.</string>
     <string name="restore_failed_server_refused">The server refused to restore “%1$s” (HTTP %2$d). Its calendar may already contain an item with the same name, be shared read-only, or no longer exist.</string>
-    <string name="delete_recoverable">You can restore it from Recently deleted in the sidebar while it is kept there.</string>
-    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar while it is kept there.</string>
+    <string name="delete_recoverable">You can restore it from Recently deleted in the settings while it is kept there.</string>
+    <string name="all_series_deleted_recoverable">All events in this series will be deleted. You can restore the series from Recently deleted in the settings while it is kept there.</string>
     <plurals name="delete_recoverable_days">
-        <item quantity="one">You can restore it from Recently deleted in the sidebar for %1$d day.</item>
-        <item quantity="other">You can restore it from Recently deleted in the sidebar for %1$d days.</item>
+        <item quantity="one">You can restore it from Recently deleted in the settings for %1$d day.</item>
+        <item quantity="other">You can restore it from Recently deleted in the settings for %1$d days.</item>
     </plurals>
     <plurals name="all_series_deleted_recoverable_days">
-        <item quantity="one">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d day.</item>
-        <item quantity="other">All events in this series will be deleted. You can restore the series from Recently deleted in the sidebar for %1$d days.</item>
+        <item quantity="one">All events in this series will be deleted. You can restore the series from Recently deleted in the settings for %1$d day.</item>
+        <item quantity="other">All events in this series will be deleted. You can restore the series from Recently deleted in the settings for %1$d days.</item>
     </plurals>
     <string name="trash_deleted_today">Deleted today</string>
     <string name="trash_deleted_yesterday">Deleted yesterday</string>
@@ -602,7 +602,7 @@
     <string name="calendar_group_image">Image</string>
     <string name="calendar_group_choose_image">Choose image</string>
     <string name="calendar_group_remove_image">Remove image</string>
-    <string name="calendar_group_image_help">Shown in the sidebar instead of the picture the source provides, or the initial.</string>
+    <string name="calendar_group_image_help">Shown in the settings instead of the picture the source provides, or the initial.</string>
     <string name="calendar_group_image_failed">This image could not be used. Choose a JPEG, PNG or WebP picture.</string>
     <string name="calendar_group_choose">Sidebar group</string>
     <string name="calendar_group_help">Calendars are grouped by where they come from; subscriptions from the same website share a group. Move this calendar into another group or a new one.</string>

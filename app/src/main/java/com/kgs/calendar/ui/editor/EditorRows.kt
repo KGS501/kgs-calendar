@@ -156,7 +156,7 @@ private fun EditorTypeSegment(text: String, selected: Boolean, onClick: () -> Un
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) MaterialTheme.colorScheme.surface else Color.Transparent)
+            .background(if (selected) selectedSegmentColor() else Color.Transparent)
             .clickable(enabled = !selected, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
@@ -216,7 +216,13 @@ internal val LocalEditorGrouped = compositionLocalOf { false }
 
 /** The fill of editor cards: the page tint, so cards stand out from the sheet without outlines. */
 @Composable
-internal fun editorSectionColor(): Color = MaterialTheme.colorScheme.background
+internal fun editorSectionColor(): Color =
+    // In dark mode, raised cards are a touch lighter than the sheet, as elevation reads there.
+    if (MaterialTheme.colorScheme.background.isDark()) {
+        MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.07f)
+    } else {
+        MaterialTheme.colorScheme.background
+    }
 
 private val EditorCardShape = RoundedCornerShape(24.dp)
 
@@ -249,9 +255,17 @@ internal fun EditorGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    CardGroup(modifier.editorInset(), content)
+}
+
+/** Like [EditorGroup], for places that already have their own side padding. */
+@Composable
+internal fun CardGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
         modifier = modifier
-            .editorInset()
             .fillMaxWidth()
             .clip(EditorCardShape),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -359,20 +373,6 @@ internal fun EditorPlainTextField(
 }
 
 @Composable
-internal fun CalendarChip(title: String, color: Color) {
-    Surface(shape = RoundedCornerShape(12.dp), color = WarmPeach.copy(alpha = 0.66f)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(Modifier.size(18.dp).clip(CircleShape).background(color))
-            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
-    }
-}
-
-@Composable
 internal fun CalendarSelectorChip(
     collection: CollectionEntity,
     selected: Boolean,
@@ -422,6 +422,7 @@ internal fun EditorLine(
     icon: ImageVector?,
     modifier: Modifier = Modifier,
     verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+    iconDescription: String? = null,
     content: @Composable () -> Unit,
 ) {
     Row(
@@ -432,7 +433,7 @@ internal fun EditorLine(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
-            icon?.let { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp)) }
+            icon?.let { Icon(it, contentDescription = iconDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(23.dp)) }
         }
         Box(Modifier.weight(1f)) { content() }
     }

@@ -51,7 +51,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -460,7 +459,7 @@ internal fun HiddenCalendarCreationDialog(
     onDismiss: () -> Unit,
     onUnhide: () -> Unit,
 ) {
-    AlertDialog(
+    KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(stringResource(R.string.hidden_calendar_creation_title))
@@ -531,15 +530,17 @@ internal fun HiddenCalendarCreationDialog(
 /** A small, borderless label for what a calendar holds (events, tasks). */
 @Composable
 internal fun CalendarCapabilityChip(label: String, color: Color) {
+    val dark = MaterialTheme.colorScheme.background.isDark()
     Text(
         label,
-        color = color,
+        // Saturated blues and greens are hard to read on dark surfaces, so they are lightened there.
+        color = if (dark) color.blendWith(Color.White, 0.45f) else color,
         fontSize = 10.sp,
         lineHeight = 12.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.24f else 0.10f))
+            .background(color.copy(alpha = if (dark) 0.24f else 0.10f))
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
 }
