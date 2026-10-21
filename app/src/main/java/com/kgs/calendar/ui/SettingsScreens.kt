@@ -149,6 +149,9 @@ import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.ui.sources.AccountAvatarDialog
+import com.kgs.calendar.ui.sources.avatarColor
 import com.kgs.calendar.ui.sources.shownName
 import com.kgs.calendar.ui.sources.image
 import com.kgs.calendar.ui.sources.label
@@ -224,6 +227,9 @@ internal fun SettingsPage(
     onSyncIntervalChanged: (Int) -> Unit = {},
     onCollectionSettings: (CollectionEntity) -> Unit,
     onDeleteLocalCalendar: () -> Unit = {},
+    onPickAccountImage: (String, Uri) -> Unit = { _, _ -> },
+    onRemoveAccountImage: (String) -> Unit = {},
+    onAvatarColorSelected: (String, Int?) -> Unit = { _, _ -> },
     onAddLocalCalendar: () -> Unit = {},
     onGroupSettings: (String) -> Unit = {},
     trashCount: Int = 0,
@@ -256,6 +262,7 @@ internal fun SettingsPage(
     var serverDetailsOpen by rememberSaveable { mutableStateOf(false) }
     var accountFieldEdit by remember { mutableStateOf<AccountFieldEdit?>(null) }
     var createServerCalendarOpen by remember { mutableStateOf(false) }
+    var accountAvatarOpen by remember { mutableStateOf(false) }
     var navigatingForward by remember { mutableStateOf(true) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -502,13 +509,14 @@ internal fun SettingsPage(
                                         run {
                                             val groupName = group.displayName()
                                             val groupImage = group.image(state.sourceImages)
+                                            val groupColor = group.avatarColor(state.calendarGroupSettings)
                                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 val single = groupAccounts.size == 1
                                                 if (!single) {
                                                     SettingsRow(
                                                         title = groupName,
                                                         subtitle = group.subtitle(),
-                                                        leading = { SourceAvatar(groupName, groupImage, 40.dp) },
+                                                        leading = { SourceAvatar(groupName, groupImage, 40.dp, groupColor) },
                                                         onClick = { onGroupSettings(group.key) },
                                                     ) {
                                                         Icon(
@@ -525,21 +533,31 @@ internal fun SettingsPage(
                                                         .takeIf { account.sourceType == SourceType.ReadOnlyUrl }
                                                         ?.firstOrNull { it.accountId == account.id }
                                                         ?.displayName
+                                                    val rowTitle = when {
+                                                        single -> groupName
+                                                        feedCalendarName != null -> feedCalendarName
+                                                        else -> account.shownName()
+                                                    }
                                                     SettingsNavRow(
-                                                        title = when {
-                                                            single -> groupName
-                                                            feedCalendarName != null -> feedCalendarName
-                                                            else -> account.shownName()
-                                                        },
+                                                        title = rowTitle,
                                                         subtitle = if (account.id == UiLocalAccountId && localCollection?.isEnabled == false) {
                                                             stringResource(R.string.calendar_inactive)
                                                         } else {
                                                             account.sourceDescription(state.collections, single)
                                                         },
+                                                        // Every source has its picture; those of a group are indented under it.
                                                         leading = if (single) {
-                                                            { SourceAvatar(groupName, groupImage, 40.dp) }
+                                                            { SourceAvatar(groupName, groupImage, 40.dp, groupColor) }
                                                         } else {
-                                                            { Spacer(Modifier.width(40.dp)) }
+                                                            {
+                                                                SourceAvatar(
+                                                                    rowTitle,
+                                                                    account.image(state.sourceImages),
+                                                                    32.dp,
+                                                                    account.avatarColor(state.calendarGroupSettings),
+                                                                    modifier = Modifier.padding(start = 20.dp),
+                                                                )
+                                                            }
                                                         },
                                                         warning = account.needsAttention(),
                                                     ) { openAccount(account) }
@@ -592,10 +610,9 @@ internal fun SettingsPage(
                             ) {
                                 SourceOptionCard(
                                     title = stringResource(R.string.caldav_and_nextcloud),
-                                    value = stringResource(R.string.caldav_account_summary),
                                     leadingIcon = Icons.Default.Cloud,
                                     color = SettingsColors.Calendars,
-                                    traits = stringResource(R.string.source_traits_caldav),
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.tasks) to SourceChipColors.Tasks, stringResource(R.string.source_full_sync) to SourceChipColors.FullSync),
                                     examples = listOf(
                                         SourceExampleBrand("Nextcloud", Color(0xFF0082C9), iconRes = R.drawable.brand_nextcloud),
                                         SourceExampleBrand("mailbox.org", Color(0xFF76B900), iconRes = R.drawable.brand_mailbox),
@@ -608,10 +625,9 @@ internal fun SettingsPage(
                                 }
                                 SourceOptionCard(
                                     title = stringResource(R.string.android_device_calendars),
-                                    value = stringResource(R.string.android_device_calendars_summary),
                                     leadingIcon = Icons.Default.PhoneAndroid,
                                     color = SettingsColors.NewItems,
-                                    traits = stringResource(R.string.source_traits_device),
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.source_full_sync) to SourceChipColors.FullSync),
                                     examples = listOf(
                                         SourceExampleBrand("Google", Color(0xFF4285F4), iconRes = R.drawable.brand_google_calendar),
                                         SourceExampleBrand("Microsoft", Color(0xFF00A4EF), iconRes = R.drawable.brand_microsoft),
@@ -622,10 +638,9 @@ internal fun SettingsPage(
                                 }
                                 SourceOptionCard(
                                     title = stringResource(R.string.subscribe_url),
-                                    value = stringResource(R.string.subscribe_url_summary),
                                     leadingIcon = Icons.Default.Public,
                                     color = SettingsColors.Appearance,
-                                    traits = stringResource(R.string.source_traits_subscription),
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.source_read_only) to SourceChipColors.ReadOnly),
                                     examples = listOf(
                                         SourceExampleBrand("ICS", Color(0xFF7C3AED), imageVector = Icons.Default.Event),
                                         SourceExampleBrand("webcal", Color(0xFF0891B2), imageVector = Icons.Default.Link),
@@ -639,17 +654,15 @@ internal fun SettingsPage(
                                 if (accounts.none { it.id == UiLocalAccountId }) {
                                     SourceOptionCard(
                                         title = stringResource(R.string.local_calendar),
-                                        value = stringResource(R.string.local_calendar_summary),
                                         leadingIcon = Icons.Default.Smartphone,
                                         color = SettingsColors.General,
-                                        traits = stringResource(R.string.source_traits_local),
+                                        chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.tasks) to SourceChipColors.Tasks, stringResource(R.string.source_device_only) to SourceChipColors.DeviceOnly),
                                         examples = emptyList(),
                                     ) {
                                         onAddLocalCalendar()
                                         navigateToRoot(SettingsDestination.Accounts)
                                     }
                                 }
-                                SettingsFootnote(stringResource(R.string.add_source_footer))
                             }
                         }
                         SettingsDestination.AddAccount -> {
@@ -771,12 +784,32 @@ internal fun SettingsPage(
                                     username: String = account.username,
                                     password: String? = null,
                                 ) = onUpdateAccount(account.id, name, serverUrl, username, password)
+                                // A subscription is known by its calendar's name, as in the source list.
+                                val headerName = state.collections
+                                    .takeIf { isReadOnlySource }
+                                    ?.firstOrNull { it.accountId == account.id }
+                                    ?.displayName
+                                    ?: accountName
                                 SourceIdentityHeader(
-                                    name = accountName,
+                                    name = headerName,
                                     description = account.sourceDescription(state.collections, single = true),
-                                    avatarName = accountGroupName,
-                                    image = accountGroupImage,
+                                    avatarName = headerName,
+                                    image = account.image(state.sourceImages),
+                                    color = account.avatarColor(state.calendarGroupSettings),
+                                    onAvatarClick = { accountAvatarOpen = true },
                                 )
+                                if (accountAvatarOpen) {
+                                    AccountAvatarDialog(
+                                        account = account,
+                                        name = headerName,
+                                        images = state.sourceImages,
+                                        settings = state.calendarGroupSettings,
+                                        onPickImage = { uri -> onPickAccountImage(account.id, uri) },
+                                        onRemoveImage = { onRemoveAccountImage(account.id) },
+                                        onColorSelected = { color -> onAvatarColorSelected(SourceImageKeys.account(account.id), color) },
+                                        onDismiss = { accountAvatarOpen = false },
+                                    )
+                                }
                                 SettingsGroup(title = stringResource(R.string.account_section)) {
                                     SettingsEditRow(stringResource(R.string.name), accountName) {
                                         accountFieldEdit = AccountFieldEdit(AccountField.Name, accountName)
@@ -801,7 +834,7 @@ internal fun SettingsPage(
                                         SettingsNavRow(
                                             title = accountGroupName,
                                             subtitle = stringResource(R.string.calendar_group_edit_summary),
-                                            leading = { SourceAvatar(accountGroupName, accountGroupImage, 40.dp) },
+                                            leading = { SourceAvatar(accountGroupName, accountGroupImage, 40.dp, accountGroup.avatarColor(state.calendarGroupSettings)) },
                                             onClick = { onGroupSettings(accountGroup.key) },
                                         )
                                     }
@@ -1718,19 +1751,22 @@ private const val BugReportIssuesUrl = "https://github.com/KGS501/kgs-calendar/i
 private const val SourceCodeUrl = "https://github.com/KGS501/kgs-calendar"
 private const val ReleasesUrl = "https://github.com/KGS501/kgs-calendar/releases"
 
-/** The colors of the settings areas' icons, so each area is recognizable at a glance. */
+/**
+ * The muted colors of the settings areas' icons: each area is recognizable at a glance, while the
+ * soft tint keeps the page calm.
+ */
 private object SettingsColors {
-    val Calendars = Color(0xFF3B82F6)
-    val Views = Color(0xFF6366F1)
-    val NewItems = Color(0xFF16A34A)
-    val Appearance = Color(0xFFA855F7)
-    val General = Color(0xFF64748B)
-    val Widgets = Color(0xFFF97316)
-    val Trash = Color(0xFFEF4444)
-    val About = Color(0xFF0EA5E9)
-    val Sponsor = Color(0xFFEC4899)
-    val Bug = Color(0xFFF59E0B)
-    val Privacy = Color(0xFF14B8A6)
+    val Calendars = Color(0xFF4F6D9A)
+    val Views = Color(0xFF6A6FA8)
+    val NewItems = Color(0xFF5E8C6A)
+    val Appearance = Color(0xFF8C6A9E)
+    val General = Color(0xFF5F7682)
+    val Widgets = Color(0xFFB0785A)
+    val Trash = Color(0xFFA8605E)
+    val About = Color(0xFF4E8A8C)
+    val Sponsor = Color(0xFF9A6070)
+    val Bug = Color(0xFFA08A4E)
+    val Privacy = Color(0xFF4E8A8C)
 }
 
 /** The installed version name, e.g. "V.1.4.5-2". */
@@ -1758,7 +1794,8 @@ private fun AboutIdentityCard() {
         Image(
             painterResource(R.drawable.kgs_logo_vector),
             contentDescription = null,
-            modifier = Modifier.size(72.dp).padding(bottom = 10.dp),
+            // The mark fills about 62 % of this drawable; at 92 dp it matches the 56 dp mark in KGS Notes.
+            modifier = Modifier.size(92.dp),
         )
         Text("KGS Calendar", color = WarmInk, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
         Text(stringResource(R.string.version_value, appVersionName()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp, lineHeight = 20.sp)

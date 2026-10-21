@@ -21,7 +21,6 @@
     <string name="caldav">CalDAV</string>
     <string name="caldav_and_nextcloud">CalDAV / Nextcloud</string>
     <string name="caldav_account">CalDAV-Konto</string>
-    <string name="caldav_account_summary">Kalender und Aufgaben von jedem CalDAV-Server</string>
     <string name="caldav_server_url">CalDAV-Server-URL</string>
     <string name="nextcloud_browser_login_help">Bei Nextcloud kannst du dich statt mit Passwort im Browser anmelden. Andere CalDAV-Server brauchen Benutzername und Passwort oder App-Passwort.</string>
     <string name="caldav_discovery">CalDAV-Erkennung</string>
@@ -40,7 +39,6 @@
     <string name="delete_server_calendar">Serverkalender löschen</string>
     <string name="delete_server_calendar_warning">„%1$s“ und alle zugehörigen Termine/Aufgaben vom CalDAV-Server löschen? Dies kann nicht rückgängig gemacht werden.</string>
     <string name="android_device_calendars">Android-Gerätekalender</string>
-    <string name="android_device_calendars_summary">Bereits über Android synchronisierte Kalender verwenden.</string>
     <string name="android_hidden_calendars_title">Ausgeblendete/nicht synchronisierte Gerätekalender gefunden</string>
     <string name="android_hidden_calendars_help">Diese Kalender existieren im Android Calendar Provider, sind vom Gerät aber als ausgeblendet oder nicht synchronisiert markiert. Prüfe bei Google-Kalendern https://calendar.google.com/calendar/syncselect, danach die Sync-Einstellung des einzelnen Kalenders in Google Calendar und Android-Einstellungen &gt; Passwörter/Konten &gt; Kontosynchronisierung &gt; Kalender.</string>
     <string name="more_hidden_calendars">+%1$d weitere</string>
@@ -243,7 +241,6 @@
     <string name="calendar_order">Kalenderreihenfolge</string>
     <string name="nextcloud_account_summary">Account mit Kalendern und Aufgaben</string>
     <string name="subscribe_url">URL abonnieren</string>
-    <string name="subscribe_url_summary">ICS-/Kalender-URL, nur lesen</string>
     <string name="nextcloud_account">Nextcloud Account</string>
     <string name="ics_calendar_url">ICS-/Kalender-URL</string>
     <string name="add_url">URL hinzufügen</string>
@@ -602,7 +599,6 @@
     <string name="calendar_group_image">Bild</string>
     <string name="calendar_group_choose_image">Bild auswählen</string>
     <string name="calendar_group_remove_image">Bild entfernen</string>
-    <string name="calendar_group_image_help">Wird in der Seitenleiste statt des Bildes der Quelle oder des Anfangsbuchstabens angezeigt.</string>
     <string name="calendar_group_image_failed">Dieses Bild konnte nicht verwendet werden. Wähle ein JPEG-, PNG- oder WebP-Bild.</string>
     <string name="calendar_group_choose">Gruppe in der Seitenleiste</string>
     <string name="calendar_group_help">Kalender werden nach ihrer Herkunft gruppiert; Abonnements derselben Website teilen sich eine Gruppe. Verschiebe diesen Kalender in eine andere oder eine neue Gruppe.</string>
@@ -636,7 +632,6 @@
     <string name="sync_every_hours">Alle %1$d Std.</string>
     <string name="sync_hourly">Stündlich</string>
     <string name="sync_daily">Einmal täglich</string>
-    <string name="add_source_footer">Gerätekalender synchronisieren weiter über ihre eigenen Apps, etwa Google Kalender.</string>
     <string name="nextcloud_browser_login">Im Browser anmelden (Nextcloud)</string>
     <string name="account_section">Konto</string>
     <string name="settings_display">Anzeige</string>
@@ -688,11 +683,13 @@
     <string name="delete_local_calendar_footer">Unter Kalender hinzufügen kannst du wieder einen leeren lokalen Kalender anlegen.</string>
     <string name="delete_local_calendar_question">Lokalen Kalender löschen?</string>
     <string name="delete_local_calendar_body">Der lokale Kalender und alle seine Termine und Aufgaben werden von diesem Gerät gelöscht. Das lässt sich nicht rückgängig machen.</string>
-    <string name="source_traits_caldav">Termine &amp; Aufgaben · Zwei-Wege-Sync</string>
-    <string name="source_traits_device">Termine · Über ihre Apps synchronisiert</string>
-    <string name="source_traits_subscription">Termine · Nur lesen</string>
-    <string name="source_traits_local">Termine &amp; Aufgaben · Nur auf diesem Gerät</string>
-    <string name="local_calendar_summary">Ein Kalender, der auf diesem Gerät bleibt und kein Konto braucht.</string>
     <string name="settings_task_start_date">Startdatum</string>
     <string name="settings_task_end_date">Enddatum</string>
+    <string name="done">Fertig</string>
+    <string name="avatar_color">Farbe</string>
+    <string name="avatar_picture_and_color">Bild und Farbe</string>
+    <string name="change_picture">Bild und Farbe ändern</string>
+    <string name="source_full_sync">Voller Sync</string>
+    <string name="source_read_only">Nur lesen</string>
+    <string name="source_device_only">Nur auf diesem Gerät</string>
 </resources>

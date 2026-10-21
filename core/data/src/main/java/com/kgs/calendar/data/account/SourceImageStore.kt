@@ -16,6 +16,9 @@ object SourceImageKeys {
     /** The image a source provides itself: a Nextcloud avatar or an iCalendar feed's IMAGE. */
     fun account(accountId: String): String = "account:$accountId"
 
+    /** An image the user picked for a source; it is shown instead of the one the source provides. */
+    fun accountCustom(accountId: String): String = "account-custom:$accountId"
+
     /** An image the user picked for a sidebar group. */
     fun group(groupKey: String): String = "group:$groupKey"
 }

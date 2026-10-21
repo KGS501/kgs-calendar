@@ -357,6 +357,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    /** Sets the color of the letter picture of [key] (a source or group image key); null restores the automatic one. */
+    suspend fun setAvatarColor(key: String, color: Int?) {
+        editCalendarGroups { settings ->
+            settings.copy(avatarColors = if (color == null) settings.avatarColors - key else settings.avatarColors + (key to color))
+        }
+    }
+
     private suspend fun editCalendarGroups(transform: (CalendarGroupSettings) -> CalendarGroupSettings) {
         dataStore.edit { prefs ->
             val next = transform(CalendarGroupSettings.decode(prefs[KEY_CALENDAR_GROUPS]))

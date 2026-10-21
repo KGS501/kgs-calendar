@@ -80,7 +80,11 @@ class CalendarSourceGroupsTest {
 
     @Test
     fun settingsSurviveEncoding() {
-        val settings = CalendarGroupSettings(mapOf("a" to "custom:x"), mapOf("custom:x" to "Ä \"quoted\""))
+        val settings = CalendarGroupSettings(
+            mapOf("a" to "custom:x"),
+            mapOf("custom:x" to "Ä \"quoted\""),
+            avatarColors = mapOf("account:feed-1" to 0xFF4F6D9A.toInt(), "group:custom:x" to 0xFF5E8C6A.toInt()),
+        )
 
         assertEquals(settings, CalendarGroupSettings.decode(settings.encode()))
         assertEquals(CalendarGroupSettings(), CalendarGroupSettings.decode("not json"))

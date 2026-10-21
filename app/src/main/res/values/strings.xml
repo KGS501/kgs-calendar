@@ -21,7 +21,6 @@
     <string name="caldav">CalDAV</string>
     <string name="caldav_and_nextcloud">CalDAV / Nextcloud</string>
     <string name="caldav_account">CalDAV account</string>
-    <string name="caldav_account_summary">Calendars and tasks from any CalDAV server</string>
     <string name="caldav_server_url">CalDAV server URL</string>
     <string name="nextcloud_browser_login_help">For Nextcloud you can sign in with the browser instead of a password. Other CalDAV servers need a username and password or app password.</string>
     <string name="caldav_discovery">CalDAV discovery</string>
@@ -40,7 +39,6 @@
     <string name="delete_server_calendar">Delete server calendar</string>
     <string name="delete_server_calendar_warning">Delete “%1$s” and all of its events/tasks from the CalDAV server? This cannot be undone.</string>
     <string name="android_device_calendars">Android device calendars</string>
-    <string name="android_device_calendars_summary">Use calendars already synchronized through Android.</string>
     <string name="android_hidden_calendars_title">Hidden/not synced device calendars found</string>
     <string name="android_hidden_calendars_help">These calendars exist in Android\'s Calendar Provider but are marked hidden or not synced by the device. For Google calendars, check https://calendar.google.com/calendar/syncselect, then open Google Calendar\'s per-calendar Sync setting and Android Settings &gt; Passwords/accounts &gt; Account sync &gt; Calendar.</string>
     <string name="more_hidden_calendars">+%1$d more</string>
@@ -243,7 +241,6 @@
     <string name="calendar_order">Calendar order</string>
     <string name="nextcloud_account_summary">Account with calendars and tasks</string>
     <string name="subscribe_url">Subscribe to URL</string>
-    <string name="subscribe_url_summary">Read-only ICS/calendar URL</string>
     <string name="nextcloud_account">Nextcloud account</string>
     <string name="ics_calendar_url">ICS/calendar URL</string>
     <string name="add_url">Add URL</string>
@@ -602,7 +599,6 @@
     <string name="calendar_group_image">Image</string>
     <string name="calendar_group_choose_image">Choose image</string>
     <string name="calendar_group_remove_image">Remove image</string>
-    <string name="calendar_group_image_help">Shown in the settings instead of the picture the source provides, or the initial.</string>
     <string name="calendar_group_image_failed">This image could not be used. Choose a JPEG, PNG or WebP picture.</string>
     <string name="calendar_group_choose">Sidebar group</string>
     <string name="calendar_group_help">Calendars are grouped by where they come from; subscriptions from the same website share a group. Move this calendar into another group or a new one.</string>
@@ -636,7 +632,6 @@
     <string name="sync_every_hours">Every %1$d h</string>
     <string name="sync_hourly">Every hour</string>
     <string name="sync_daily">Once a day</string>
-    <string name="add_source_footer">Device calendars keep syncing through their own apps, such as Google Calendar.</string>
     <string name="nextcloud_browser_login">Sign in with browser (Nextcloud)</string>
     <string name="account_section">Account</string>
     <string name="settings_display">Display</string>
@@ -688,11 +683,13 @@
     <string name="delete_local_calendar_footer">You can add an empty local calendar again under Add calendar.</string>
     <string name="delete_local_calendar_question">Delete local calendar?</string>
     <string name="delete_local_calendar_body">The local calendar and all its events and tasks are deleted from this device. This cannot be undone.</string>
-    <string name="source_traits_caldav">Events &amp; tasks · Syncs both ways</string>
-    <string name="source_traits_device">Events · Synced by their apps</string>
-    <string name="source_traits_subscription">Events · Read-only</string>
-    <string name="source_traits_local">Events &amp; tasks · Only on this device</string>
-    <string name="local_calendar_summary">A calendar that stays on this device and needs no account.</string>
     <string name="settings_task_start_date">Start date</string>
     <string name="settings_task_end_date">End date</string>
+    <string name="done">Done</string>
+    <string name="avatar_color">Color</string>
+    <string name="avatar_picture_and_color">Picture and color</string>
+    <string name="change_picture">Change picture and color</string>
+    <string name="source_full_sync">Full sync</string>
+    <string name="source_read_only">Read only</string>
+    <string name="source_device_only">Only on this device</string>
 </resources>

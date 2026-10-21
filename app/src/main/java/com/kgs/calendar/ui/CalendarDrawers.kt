@@ -53,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.LaunchedEffect
@@ -90,6 +91,7 @@ import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.avatarColor
 import com.kgs.calendar.ui.sources.image
 import com.kgs.calendar.ui.sources.label
 import com.kgs.calendar.ui.sources.subtitle
@@ -221,6 +223,7 @@ internal fun CalendarDrawer(
                         DrawerSourceSection(
                             group = group,
                             image = group.image(state.sourceImages),
+                            avatarColor = group.avatarColor(state.calendarGroupSettings),
                             collections = collections,
                             feedStatus = { collection ->
                                 readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
@@ -278,6 +281,7 @@ private fun DrawerProblemRow(count: Int, onClick: () -> Unit) {
 private fun DrawerSourceSection(
     group: CalendarSourceGroup,
     image: SourceImage?,
+    avatarColor: Int,
     collections: List<CollectionEntity>,
     feedStatus: (CollectionEntity) -> ReadOnlyFeedStatus?,
     hiddenCollectionHrefs: Set<String>,
@@ -294,7 +298,7 @@ private fun DrawerSourceSection(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        SourceAvatar(groupName, image, 30.dp)
+        SourceAvatar(groupName, image, 30.dp, avatarColor)
         Column(Modifier.weight(1f)) {
             Text(groupName, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val subtitle = group.subtitle()
@@ -549,46 +553,64 @@ internal fun CalendarCapabilityChip(label: String, color: Color) {
 }
 
 /**
- * Whether a calendar shows in the views: a squircle outline in the calendar's color with a filled
- * squircle inside, separated by a small gap. Unchecking shrinks the inner squircle away. The
- * touch target is larger than the box.
+ * Whether a calendar shows in the views: a rounded square outline in the calendar's color with a
+ * filled rounded square inside. The inner corners follow the outer ones (outer radius minus the
+ * inset), so both read as one shape. Pressing presses the box in; checking grows the inner square
+ * with a slight overshoot, unchecking shrinks it away.
  */
 @Composable
 internal fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val boxScale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
+        label = "collectionTogglePress",
+    )
     val innerScale by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 520f),
+        animationSpec = if (checked) spring(dampingRatio = 0.55f, stiffness = 500f) else tween(MotionShort, easing = MotionStandardAccelerate),
         label = "collectionToggleInner",
     )
-    val outerShape = RoundedCornerShape(8.dp)
-    val innerShape = RoundedCornerShape(5.dp)
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() }),
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Checkbox,
+                onValueChange = { onClick() },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(22.dp)
-                .border(2.dp, color, outerShape),
+                .size(ToggleOuterSize)
+                .scale(boxScale)
+                .border(ToggleStroke, color, RoundedCornerShape(ToggleOuterRadius)),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 Modifier
-                    .size(12.dp)
+                    .size(ToggleOuterSize - (ToggleStroke + ToggleGap) * 2)
                     .graphicsLayer {
                         scaleX = innerScale
                         scaleY = innerScale
                         alpha = innerScale.coerceIn(0f, 1f)
                     }
-                    .clip(innerShape)
+                    .clip(RoundedCornerShape(ToggleOuterRadius - ToggleStroke - ToggleGap))
                     .background(color),
             )
         }
     }
 }
+
+private val ToggleOuterSize = 24.dp
+private val ToggleOuterRadius = 8.dp
+private val ToggleStroke = 2.dp
+private val ToggleGap = 2.5.dp
 
 @Composable
 private fun DrawerGlyph(selected: Boolean, modifier: Modifier = Modifier) {

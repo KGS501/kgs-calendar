@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
+import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.CalendarShellUiState
@@ -217,6 +218,9 @@ internal fun SettingsOverlay(
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
             onDeleteLocalCalendar = viewModel.sources::deleteLocalCalendar,
+            onPickAccountImage = viewModel.sources::setAccountImage,
+            onRemoveAccountImage = viewModel.sources::removeAccountImage,
+            onAvatarColorSelected = viewModel.sources::setAvatarColor,
             onAddLocalCalendar = viewModel.sources::addLocalCalendar,
             onClose = shell::closeSettings,
         )
@@ -295,6 +299,7 @@ internal fun CollectionSettingsHost(
                 groups = state.calendarGroups,
                 accounts = state.accounts,
                 images = state.sourceImages,
+                settings = state.calendarGroupSettings,
                 onSelect = { groupKey -> viewModel.sources.moveCollectionToGroup(collection.href, groupKey) },
                 onCreate = { name -> viewModel.sources.moveCollectionToNewGroup(collection.href, name) },
                 onDismiss = { pickingGroup = false },
@@ -319,9 +324,11 @@ internal fun CalendarGroupDialogHost(
     CalendarGroupSettingsDialog(
         group = group,
         images = state.sourceImages,
+        settings = state.calendarGroupSettings,
         onRename = { name -> viewModel.sources.renameGroup(group.key, name) },
         onPickImage = { uri -> viewModel.sources.setGroupImage(group.key, uri) },
         onRemoveImage = { viewModel.sources.removeGroupImage(group.key) },
+        onColorSelected = { color -> viewModel.sources.setAvatarColor(SourceImageKeys.group(group.key), color) },
         onDismiss = shell::closeGroupEditor,
     )
 }

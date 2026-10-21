@@ -32,6 +32,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.foundation.layout.widthIn
@@ -140,17 +143,18 @@ internal fun accentContainerContentColor(): Color =
 /** The background of a row inside a [SettingsGroup]. */
 private fun Modifier.settingsRowBackground(color: Color): Modifier = fillMaxWidth().background(color)
 
-/** A white icon on a solid colored squircle, so each settings area is recognizable at a glance. */
+/** An icon in its area's muted color on a soft tint of it, so each settings area is recognizable at a glance. */
 @Composable
 internal fun SettingsColorBadge(icon: ImageVector, color: Color) {
+    val dark = MaterialTheme.colorScheme.background.isDark()
     Box(
         modifier = Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(color),
+            .background(color.copy(alpha = if (dark) 0.28f else 0.14f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+        Icon(icon, contentDescription = null, tint = if (dark) color.blendWith(Color.White, 0.45f) else color, modifier = Modifier.size(21.dp))
     }
 }
 
@@ -333,6 +337,7 @@ internal fun SettingsSwitchRow(
  * A number on a small fixed scale. The setting is saved when the finger lifts, so dragging
  * does not store every step in between.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsSliderRow(
     title: String,
@@ -361,8 +366,28 @@ internal fun SettingsSliderRow(
             }
             Text(valueLabel(shown), color = WarmBrown, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
         }
+        val sliderInteraction = remember { MutableInteractionSource() }
+        val steps = (span / safeStep - 1).coerceAtLeast(0)
+        // Long scales get no tick dots; they would only crowd the track.
+        val showTicks = steps <= 12
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = WarmBrown,
+            activeTrackColor = WarmBrown,
+            inactiveTrackColor = WarmBrown.copy(alpha = 0.16f),
+            activeTickColor = if (showTicks) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else Color.Transparent,
+            inactiveTickColor = if (showTicks) WarmBrown.copy(alpha = 0.55f) else Color.Transparent,
+        )
         Slider(
             value = shown.toFloat(),
+            interactionSource = sliderInteraction,
+            // A short handle that barely rises above the track.
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = sliderInteraction,
+                    colors = sliderColors,
+                    thumbSize = DpSize(4.dp, 26.dp),
+                )
+            },
             onValueChange = {
                 val snapped = range.first + (((it - range.first) / safeStep).roundToInt() * safeStep)
                 dragged = snapped.coerceIn(range.first, range.last)
@@ -371,14 +396,8 @@ internal fun SettingsSliderRow(
                 dragged?.let { if (it != value) onValueChanged(it) }
             },
             valueRange = range.first.toFloat()..range.last.toFloat(),
-            steps = (span / safeStep - 1).coerceAtLeast(0),
-            colors = SliderDefaults.colors(
-                thumbColor = WarmBrown,
-                activeTrackColor = WarmBrown,
-                inactiveTrackColor = WarmBrown.copy(alpha = 0.16f),
-                activeTickColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                inactiveTickColor = WarmBrown.copy(alpha = 0.55f),
-            ),
+            steps = steps,
+            colors = sliderColors,
         )
     }
 }
@@ -546,10 +565,9 @@ internal data class SourceExampleBrand(
 @Composable
 internal fun SourceOptionCard(
     title: String,
-    value: String,
     leadingIcon: ImageVector,
     color: Color,
-    traits: String,
+    chips: List<Pair<String, Color>>,
     examples: List<SourceExampleBrand>,
     onClick: () -> Unit,
 ) {
@@ -564,20 +582,22 @@ internal fun SourceOptionCard(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SettingsColorBadge(leadingIcon, color)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(title, color = WarmInk, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
-                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, lineHeight = 19.sp)
-                Text(traits, color = color, fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+                // What the source holds and how it syncs, as the same chips the sidebar uses.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    chips.forEach { (label, chipColor) -> CalendarCapabilityChip(label, chipColor) }
+                }
             }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp).align(Alignment.CenterVertically),
+                modifier = Modifier.size(22.dp),
             )
         }
         if (examples.isNotEmpty()) {
@@ -591,6 +611,15 @@ internal fun SourceOptionCard(
             }
         }
     }
+}
+
+/** Chip colors for what a calendar source holds and how it syncs. */
+internal object SourceChipColors {
+    val Events = Color(0xFF2F5AEA)
+    val Tasks = Color(0xFF00A86B)
+    val FullSync = Color(0xFF7B5EA7)
+    val ReadOnly = Color(0xFFB7791F)
+    val DeviceOnly = Color(0xFF64748B)
 }
 
 @Composable

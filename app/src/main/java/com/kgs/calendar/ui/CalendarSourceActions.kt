@@ -174,6 +174,25 @@ class CalendarSourceActions internal constructor(
         scope.launch { repository.deleteSourceImage(SourceImageKeys.group(groupKey)) }
     }
 
+    /** Uses a picked picture for the source [accountId] instead of the one it provides. */
+    fun setAccountImage(accountId: String, uri: Uri) {
+        scope.launch {
+            val bytes = pickedContentReader.read(uri)
+            if (bytes == null || !repository.saveSourceImage(SourceImageKeys.accountCustom(accountId), bytes)) {
+                message.value = strings.get(R.string.calendar_group_image_failed)
+            }
+        }
+    }
+
+    fun removeAccountImage(accountId: String) {
+        scope.launch { repository.deleteSourceImage(SourceImageKeys.accountCustom(accountId)) }
+    }
+
+    /** Sets the color of the letter picture of [imageKey]; null restores the automatic color. */
+    fun setAvatarColor(imageKey: String, color: Int?) {
+        scope.launch { settingsStore.setAvatarColor(imageKey, color) }
+    }
+
     fun addAndroidDeviceCalendars() {
         runStructuralMutation(CalendarStructuralMutation.AddSource, "Android device calendars added.", showManualSync = true) {
             repository.enableAndroidCalendars(
@@ -200,11 +219,13 @@ class CalendarSourceActions internal constructor(
             val accounts = repository.observeAccounts().first()
             repository.deleteAccount(accountId)
             // The source's own group goes with it, unless other feeds of the same website remain.
+            settingsStore.setAvatarColor(SourceImageKeys.account(accountId), null)
             val removed = accounts.firstOrNull { it.id == accountId } ?: return@runStructuralMutation
             val groupKey = CalendarSourceGroups.automaticKey(removed, accounts)
             if (accounts.none { it.id != accountId && CalendarSourceGroups.automaticKey(it, accounts) == groupKey }) {
                 repository.deleteSourceImage(SourceImageKeys.group(groupKey))
                 settingsStore.setCalendarGroupName(groupKey, null)
+                settingsStore.setAvatarColor(SourceImageKeys.group(groupKey), null)
             }
         }
     }
