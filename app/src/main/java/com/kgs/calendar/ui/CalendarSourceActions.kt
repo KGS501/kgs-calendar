@@ -209,6 +209,22 @@ class CalendarSourceActions internal constructor(
         }
     }
 
+    /** Deletes the local calendar with all its events and tasks; it is not created again on start. */
+    fun deleteLocalCalendar() {
+        runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
+            settingsStore.setLocalCalendarRemoved(true)
+            repository.deleteAccount(UiLocalAccountId)
+        }
+    }
+
+    /** Adds an empty local calendar again after it was deleted. */
+    fun addLocalCalendar() {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, "Source added.") {
+            settingsStore.setLocalCalendarRemoved(false)
+            repository.ensureLocalCalendar()
+        }
+    }
+
     fun externalLoginUrlConsumed() {
         transient.externalLoginUrl.value = null
     }

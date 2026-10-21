@@ -53,6 +53,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -408,7 +410,8 @@ private fun DrawerCollectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSettings)
-            .padding(start = 18.dp, end = 24.dp, top = 3.dp, bottom = 3.dp),
+            // Indented under the group's picture, so each group's calendars read as one set.
+            .padding(start = 42.dp, end = 24.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -546,21 +549,19 @@ internal fun CalendarCapabilityChip(label: String, color: Color) {
 }
 
 /**
- * Whether a calendar shows in the views: a dot in the calendar's color, filled with a check
- * when shown and a faint tint when hidden. The touch target is larger than the dot.
+ * Whether a calendar shows in the views: a squircle outline in the calendar's color with a filled
+ * squircle inside, separated by a small gap. Unchecking shrinks the inner squircle away. The
+ * touch target is larger than the box.
  */
 @Composable
-private fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
-    val fillColor by animateColorAsState(
-        targetValue = if (checked) color else color.copy(alpha = 0.18f),
-        animationSpec = tween(MotionMedium, easing = MotionStandard),
-        label = "collectionToggleFill",
-    )
-    val checkScale by animateFloatAsState(
+internal fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
+    val innerScale by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
-        animationSpec = tween(MotionShort, easing = MotionStandard),
-        label = "collectionToggleCheck",
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 520f),
+        label = "collectionToggleInner",
     )
+    val outerShape = RoundedCornerShape(8.dp)
+    val innerShape = RoundedCornerShape(5.dp)
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -571,17 +572,19 @@ private fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit
         Box(
             modifier = Modifier
                 .size(22.dp)
-                .clip(CircleShape)
-                .background(fillColor),
+                .border(2.dp, color, outerShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                tint = if (color.luminance() > 0.62f) Color.Black.copy(alpha = 0.72f) else Color.White,
-                modifier = Modifier
-                    .size(15.dp)
-                    .scale(checkScale),
+            Box(
+                Modifier
+                    .size(12.dp)
+                    .graphicsLayer {
+                        scaleX = innerScale
+                        scaleY = innerScale
+                        alpha = innerScale.coerceIn(0f, 1f)
+                    }
+                    .clip(innerShape)
+                    .background(color),
             )
         }
     }

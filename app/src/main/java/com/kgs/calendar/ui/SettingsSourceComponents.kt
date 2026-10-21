@@ -1,0 +1,163 @@
+package com.kgs.calendar.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.kgs.calendar.R
+import com.kgs.calendar.data.account.SourceImage
+import com.kgs.calendar.ui.components.ClearableOutlinedTextField
+import com.kgs.calendar.ui.sources.SourceAvatar
+
+/** The field of a calendar source that is being edited in its own popup. */
+internal enum class AccountField { Name, ServerUrl, Username, Password }
+
+internal data class AccountFieldEdit(val field: AccountField, val initialValue: String)
+
+/** A source's picture, name and kind, centered at the top of its page. */
+@Composable
+internal fun SourceIdentityHeader(name: String, description: String, avatarName: String, image: SourceImage?) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        SourceAvatar(avatarName, image, 72.dp, modifier = Modifier.padding(bottom = 8.dp))
+        Text(name, color = WarmInk, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(
+            description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            lineHeight = 19.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** A setting's current value with an edit pencil; a tap opens a popup to change it. */
+@Composable
+internal fun SettingsEditRow(title: String, value: String, onClick: () -> Unit) {
+    SettingsRow(title = title, subtitle = value, onClick = onClick) {
+        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** Edits one field of a calendar source; the change is saved right away. */
+@Composable
+internal fun AccountFieldDialog(
+    edit: AccountFieldEdit,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var value by rememberSaveable(edit) { mutableStateOf(edit.initialValue) }
+    val title = stringResource(
+        when (edit.field) {
+            AccountField.Name -> R.string.name
+            AccountField.ServerUrl -> R.string.server_url
+            AccountField.Username -> R.string.username
+            AccountField.Password -> R.string.change_password
+        },
+    )
+    KgsAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (edit.field == AccountField.Password) {
+                    Text(stringResource(R.string.change_password_help), fontSize = 14.sp, lineHeight = 20.sp)
+                    SecurePasswordField(
+                        value = value,
+                        onValueChange = { value = it },
+                        label = stringResource(R.string.password_or_app_password),
+                        colors = dialogFieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    ClearableOutlinedTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        singleLine = true,
+                        keyboardOptions = when (edit.field) {
+                            AccountField.ServerUrl -> UrlKeyboardOptions
+                            AccountField.Username -> UsernameKeyboardOptions
+                            else -> androidx.compose.foundation.text.KeyboardOptions.Default
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = dialogFieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            DialogConfirmButton(
+                text = stringResource(R.string.save),
+                enabled = value.isNotBlank() && (edit.field == AccountField.Password || value != edit.initialValue),
+                onClick = { onSave(value.trim()) },
+            )
+        },
+        dismissButton = { DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss) },
+    )
+}
+
+/** Creates a new calendar on a CalDAV server, for events, tasks or both. */
+@Composable
+internal fun CreateServerCalendarDialog(
+    onDismiss: () -> Unit,
+    onCreate: (name: String, events: Boolean, tasks: Boolean) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var events by rememberSaveable { mutableStateOf(true) }
+    var tasks by rememberSaveable { mutableStateOf(false) }
+    KgsAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.create_server_calendar)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ClearableOutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text(stringResource(R.string.name)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = dialogFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CardGroup {
+                    DialogSwitchRow(stringResource(R.string.events), events) { events = it }
+                    DialogSwitchRow(stringResource(R.string.tasks), tasks) { tasks = it }
+                }
+            }
+        },
+        confirmButton = {
+            DialogConfirmButton(
+                text = stringResource(R.string.create),
+                enabled = name.isNotBlank() && (events || tasks),
+                onClick = { onCreate(name.trim(), events, tasks) },
+            )
+        },
+        dismissButton = { DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss) },
+    )
+}

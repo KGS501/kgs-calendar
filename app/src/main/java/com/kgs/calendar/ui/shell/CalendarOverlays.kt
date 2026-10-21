@@ -216,11 +216,8 @@ internal fun SettingsOverlay(
             onGroupSettings = shell::editGroup,
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
-            onLocalCalendarEnabledChanged = { enabled ->
-                state.collections.firstOrNull { it.href.isLocalCollectionHref() }?.let { local ->
-                    viewModel.sources.setCollectionEnabled(local.href, enabled)
-                }
-            },
+            onDeleteLocalCalendar = viewModel.sources::deleteLocalCalendar,
+            onAddLocalCalendar = viewModel.sources::addLocalCalendar,
             onClose = shell::closeSettings,
         )
     }

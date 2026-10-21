@@ -69,10 +69,20 @@ import com.kgs.calendar.ui.components.ClearableOutlinedTextField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** The name the local calendar's source is created with; shown in the app's language until renamed. */
+internal const val DefaultLocalSourceName = "Local calendar"
+
+/** A source's name as shown; the untouched default name of the local calendar follows the app's language. */
+@Composable
+internal fun AccountEntity.shownName(): String {
+    val stored = displayName?.takeIf { it.isNotBlank() } ?: username
+    return if (id == "local" && stored == DefaultLocalSourceName) stringResource(R.string.local_calendar) else stored
+}
+
 /** The group's name as shown: the user's name, the source's name, or the localized kind. */
 @Composable
 internal fun CalendarSourceGroup.displayName(): String =
-    name ?: when (kind) {
+    customName ?: defaultName?.takeUnless { kind == CalendarSourceGroupKind.Local && it == DefaultLocalSourceName } ?: when (kind) {
         CalendarSourceGroupKind.Local -> stringResource(R.string.local_calendar)
         CalendarSourceGroupKind.AndroidDevice -> stringResource(R.string.android_device_calendars)
         else -> stringResource(R.string.calendar_group_custom)

@@ -636,7 +636,7 @@
     <string name="sync_every_hours">Every %1$d h</string>
     <string name="sync_hourly">Every hour</string>
     <string name="sync_daily">Once a day</string>
-    <string name="add_source_footer">Device calendars stay synced by their own apps, such as Google Calendar, and provide events only.</string>
+    <string name="add_source_footer">Device calendars keep syncing through their own apps, such as Google Calendar.</string>
     <string name="nextcloud_browser_login">Sign in with browser (Nextcloud)</string>
     <string name="account_section">Account</string>
     <string name="settings_display">Display</string>
@@ -671,4 +671,28 @@
     <string name="task_dates_both">Start &amp; end</string>
     <string name="settings_task_with_time">With time</string>
     <string name="settings_task_with_time_help">Off: whole days without a time</string>
+    <string name="settings_project">Project</string>
+    <string name="about_kgs_calendar">About KGS Calendar</string>
+    <string name="version_value">Version %1$s</string>
+    <string name="source_code">Source code</string>
+    <string name="release_notes">What\'s new</string>
+    <string name="release_notes_summary">Release notes on GitHub</string>
+    <string name="about_tagline">A calendar and task app for Nextcloud, CalDAV, subscriptions and the calendars on your device.</string>
+    <string name="sponsor_project_summary">GitHub Sponsors</string>
+    <string name="report_bug_summary">Issues on GitHub</string>
+    <string name="password">Password</string>
+    <string name="change_password">Change password</string>
+    <string name="change_password_help">Enter the new password or app password for this account.</string>
+    <string name="server_section">Server</string>
+    <string name="delete_local_calendar">Delete local calendar</string>
+    <string name="delete_local_calendar_footer">You can add an empty local calendar again under Add calendar.</string>
+    <string name="delete_local_calendar_question">Delete local calendar?</string>
+    <string name="delete_local_calendar_body">The local calendar and all its events and tasks are deleted from this device. This cannot be undone.</string>
+    <string name="source_traits_caldav">Events &amp; tasks · Syncs both ways</string>
+    <string name="source_traits_device">Events · Synced by their apps</string>
+    <string name="source_traits_subscription">Events · Read-only</string>
+    <string name="source_traits_local">Events &amp; tasks · Only on this device</string>
+    <string name="local_calendar_summary">A calendar that stays on this device and needs no account.</string>
+    <string name="settings_task_start_date">Start date</string>
+    <string name="settings_task_end_date">End date</string>
 </resources>

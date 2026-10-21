@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
-/** The drag handle of reorderable rows: six dots in two rows of three. */
+/** The drag handle of reorderable rows: six dots in two columns of three. */
 internal val GripHandleIcon: ImageVector by lazy {
     ImageVector.Builder(
         name = "GripHandle",
@@ -16,8 +16,8 @@ internal val GripHandleIcon: ImageVector by lazy {
         viewportHeight = 24f,
     ).apply {
         path(fill = SolidColor(Color.Black)) {
-            for (centerY in listOf(9f, 15f)) {
-                for (centerX in listOf(6f, 12f, 18f)) {
+            for (centerX in listOf(9f, 15f)) {
+                for (centerY in listOf(6f, 12f, 18f)) {
                     moveTo(centerX + DotRadius, centerY)
                     arcToRelative(DotRadius, DotRadius, 0f, isMoreThanHalf = true, isPositiveArc = true, dx1 = -2 * DotRadius, dy1 = 0f)
                     arcToRelative(DotRadius, DotRadius, 0f, isMoreThanHalf = true, isPositiveArc = true, dx1 = 2 * DotRadius, dy1 = 0f)

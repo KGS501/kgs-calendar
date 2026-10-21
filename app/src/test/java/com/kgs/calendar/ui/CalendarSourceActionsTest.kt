@@ -62,14 +62,39 @@ class CalendarSourceActionsTest {
         assertEquals(ReadOnlyFeedStatus.NoDataYet, readOnlyFeedStatus(account, collection))
     }
 
-    private fun actions(scope: CoroutineScope) = CalendarSourceActions(
-        scope = scope,
-        repository = harness.repository,
-        settingsStore = SettingsStore(
+    @Test
+    fun deletedLocalCalendarStaysGoneUntilItIsAddedAgain() = runTest {
+        harness.repository.ensureLocalCalendar()
+        val localHref = harness.database.collectionDao().forAccount(UiLocalAccountId).single().href
+
+        actions(this).deleteLocalCalendar()
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { settingsStore.localCalendarRemoved.first { it } }
+            withTimeout(30_000) { while (harness.database.accountDao().get(UiLocalAccountId) != null) kotlinx.coroutines.delay(20) }
+        }
+        // The calendar and its collection are gone, and the app is told not to create it again on start.
+        assertEquals(null, harness.database.collectionDao().get(localHref))
+
+        actions(this).addLocalCalendar()
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { settingsStore.localCalendarRemoved.first { !it } }
+            withTimeout(30_000) { while (harness.database.collectionDao().get(localHref) == null) kotlinx.coroutines.delay(20) }
+        }
+        assertEquals(UiLocalAccountId, harness.database.collectionDao().get(localHref)!!.accountId)
+    }
+
+    private val settingsStore by lazy {
+        SettingsStore(
             PreferenceDataStoreFactory.create(scope = dataStoreScope) {
                 File(tempFolder.root, "settings.preferences_pb")
             },
-        ),
+        )
+    }
+
+    private fun actions(scope: CoroutineScope) = CalendarSourceActions(
+        scope = scope,
+        repository = harness.repository,
+        settingsStore = settingsStore,
         sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(
             includeDisabledProviderCalendars = { false },
             fullRefresh = {},

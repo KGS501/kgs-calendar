@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -35,7 +36,7 @@ internal class IcsImportViewModel(
     private val imports: EventImports,
     queries: CalendarQueries,
     private val sources: CalendarSourceManager,
-    settings: SettingsStore,
+    private val settings: SettingsStore,
     private val readAttachment: suspend (Uri) -> String,
     private val onImported: suspend () -> Unit,
 ) : ViewModel() {
@@ -74,7 +75,8 @@ internal class IcsImportViewModel(
             try {
                 val events = withContext(Dispatchers.IO) {
                     val parsed = imports.reader.read(text)
-                    sources.ensureLocalCalendar()
+                    // Imports can go to the local calendar, unless the user deleted it.
+                    if (!settings.localCalendarRemoved.first()) sources.ensureLocalCalendar()
                     parsed
                 }
                 rawIcs = text

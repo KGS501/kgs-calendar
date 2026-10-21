@@ -32,6 +32,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -134,6 +140,20 @@ internal fun accentContainerContentColor(): Color =
 /** The background of a row inside a [SettingsGroup]. */
 private fun Modifier.settingsRowBackground(color: Color): Modifier = fillMaxWidth().background(color)
 
+/** A white icon on a solid colored squircle, so each settings area is recognizable at a glance. */
+@Composable
+internal fun SettingsColorBadge(icon: ImageVector, color: Color) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+    }
+}
+
 /** An icon in a soft accent circle, used in front of navigation rows. */
 @Composable
 internal fun SettingsIconBadge(icon: ImageVector, tint: Color = WarmBrown) {
@@ -158,6 +178,7 @@ internal fun SettingsRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    iconColor: Color? = null,
     leading: (@Composable () -> Unit)? = null,
     titleColor: Color = WarmInk,
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -178,6 +199,7 @@ internal fun SettingsRow(
     ) {
         when {
             leading != null -> leading()
+            icon != null && iconColor != null -> SettingsColorBadge(icon, iconColor)
             icon != null -> SettingsIconBadge(icon)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -197,6 +219,7 @@ internal fun SettingsNavRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    iconColor: Color? = null,
     leading: (@Composable () -> Unit)? = null,
     warning: Boolean = false,
     trailingText: String? = null,
@@ -206,6 +229,7 @@ internal fun SettingsNavRow(
         title = title,
         subtitle = subtitle,
         icon = icon,
+        iconColor = iconColor,
         leading = leading,
         modifier = modifier,
         onClick = onClick,
@@ -240,7 +264,34 @@ internal fun SettingsValueRow(
     icon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
-    SettingsRow(title = title, subtitle = value, subtitleColor = WarmBrown, icon = icon, onClick = onClick)
+    SettingsRow(title = title, icon = icon, role = Role.DropdownList, onClick = onClick) {
+        SettingsValuePill(value)
+    }
+}
+
+/** The current value of a setting as a tinted pill at the row's end, like a closed menu. */
+@Composable
+private fun SettingsValuePill(value: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(editorSectionColor())
+            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            value,
+            color = WarmBrown,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(max = 150.dp),
+        )
+        Icon(Icons.Default.UnfoldMore, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+    }
 }
 
 @Composable
@@ -353,16 +404,18 @@ internal fun <T> SettingsStepSliderRow(
     )
 }
 
-/** A choice between a few [options], shown as pills that wrap onto further lines. */
+/**
+ * A choice between two or three short options as one segmented control on a single line.
+ * Longer or more options use [SettingsDropdownRow] instead, so nothing wraps.
+ */
 @Composable
-internal fun <T> SettingsChoiceRow(
+internal fun <T> SettingsSegmentedRow(
     title: String,
     options: List<T>,
     selected: T,
     label: @Composable (T) -> String,
     onSelected: (T) -> Unit,
     subtitle: String? = null,
-    optionIcon: ((T) -> ImageVector?)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -376,51 +429,74 @@ internal fun <T> SettingsChoiceRow(
                 Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 18.sp)
             }
         }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            options.forEach { option ->
-                SettingsChoicePill(
-                    label = label(option),
-                    selected = option == selected,
-                    icon = optionIcon?.invoke(option),
-                    onClick = { onSelected(option) },
-                )
-            }
-        }
+        DialogSegmentedControl(options = options, selected = selected, label = label, onSelected = onSelected)
     }
 }
 
-/** A borderless pill: filled with the accent when selected, a quiet tint otherwise. */
+/**
+ * A setting with several options: the row shows the current choice, and a tap opens a menu of
+ * all options right at the row.
+ */
 @Composable
-internal fun SettingsChoicePill(
-    label: String,
-    selected: Boolean,
+internal fun <T> SettingsDropdownRow(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+    subtitle: String? = null,
     icon: ImageVector? = null,
-    onClick: () -> Unit,
+    optionIcon: ((T) -> ImageVector?)? = null,
 ) {
-    val container by animateColorAsState(
-        targetValue = if (selected) WarmBrown else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-        animationSpec = tween(MotionShort, easing = MotionStandard),
-        label = "settingsChoicePill",
-    )
-    val content = if (selected) MaterialTheme.colorScheme.onPrimary else WarmInk
-    Row(
-        modifier = Modifier
-            .heightIn(min = 38.dp)
-            .clip(RoundedCornerShape(19.dp))
-            .background(container)
-            .clickable(role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        val leadingIcon = if (selected) Icons.Default.Check else icon
-        if (leadingIcon != null) {
-            Icon(leadingIcon, contentDescription = null, tint = content, modifier = Modifier.size(17.dp))
+    var expanded by remember { mutableStateOf(false) }
+    val labels = options.map { label(it) }
+    Box {
+        SettingsRow(
+            title = title,
+            subtitle = subtitle,
+            icon = icon,
+            role = Role.DropdownList,
+            onClick = { expanded = true },
+        ) {
+            SettingsValuePill(labels[options.indexOf(selected).coerceAtLeast(0)])
         }
-        Text(label, color = content, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+        // Anchored at the row's end, so the menu opens right at the value pill.
+        Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp)) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = popupSurfaceColor(),
+            shadowElevation = 8.dp,
+            offset = DpOffset(x = 0.dp, y = (-8).dp),
+        ) {
+            options.forEachIndexed { index, option ->
+                val isSelected = option == selected
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            labels[index],
+                            color = WarmInk,
+                            fontSize = 15.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    leadingIcon = optionIcon?.invoke(option)?.let { optionIconVector ->
+                        { Icon(optionIconVector, contentDescription = null, tint = if (isSelected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    },
+                    trailingIcon = if (isSelected) {
+                        { Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(option)
+                    },
+                )
+            }
+        }
+        }
     }
 }
 
@@ -463,45 +539,55 @@ internal data class SourceExampleBrand(
     val imageVector: ImageVector? = null,
 )
 
-/** One kind of calendar source on the "Add calendar" page, with example services below it. */
+/**
+ * One kind of calendar source on the "Add calendar" page: its own card with a colored icon, a
+ * short description, what it can do, and example services in their brand colors.
+ */
 @Composable
 internal fun SourceOptionCard(
     title: String,
     value: String,
     leadingIcon: ImageVector,
+    color: Color,
+    traits: String,
     examples: List<SourceExampleBrand>,
     onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
-            .settingsRowBackground(settingsControlColor())
+            .fillMaxWidth()
+            .clip(SettingsGroupShape)
+            .background(settingsControlColor())
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SettingsIconBadge(leadingIcon)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
-                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 18.sp)
+            SettingsColorBadge(leadingIcon, color)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = WarmInk, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, lineHeight = 19.sp)
+                Text(traits, color = color, fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
             }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(22.dp).align(Alignment.CenterVertically),
             )
         }
-        FadedHorizontalScrollRow(
-            contentPadding = PaddingValues(start = 70.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            examples.forEach { brand ->
-                SourceExamplePill(brand)
+        if (examples.isNotEmpty()) {
+            FadedHorizontalScrollRow(
+                contentPadding = PaddingValues(start = 72.dp, end = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                examples.forEach { brand ->
+                    SourceExamplePill(brand)
+                }
             }
         }
     }

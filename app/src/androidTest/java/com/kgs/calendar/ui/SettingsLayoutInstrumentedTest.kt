@@ -145,12 +145,12 @@ class SettingsLayoutInstrumentedTest {
     }
 
     @Test
-    fun choicePillsSelectAnOption() {
+    fun segmentedControlSelectsAnOption() {
         var selected by mutableStateOf("Monday")
         composeRule.setContent {
             KgsCalendarTheme {
                 SettingsGroup {
-                    SettingsChoiceRow(
+                    SettingsSegmentedRow(
                         title = "First day of week",
                         options = listOf("Monday", "Sunday", "Saturday"),
                         selected = selected,
@@ -163,5 +163,28 @@ class SettingsLayoutInstrumentedTest {
 
         composeRule.onNodeWithText("Sunday").performClick()
         composeRule.runOnIdle { assertEquals("Sunday", selected) }
+    }
+
+    @Test
+    fun dropdownShowsTheChoiceAndOpensAMenuOfAllOptions() {
+        var selected by mutableStateOf("1 h")
+        composeRule.setContent {
+            KgsCalendarTheme {
+                SettingsGroup {
+                    SettingsDropdownRow(
+                        title = "Duration",
+                        options = listOf("30 min", "1 h", "2 h"),
+                        selected = selected,
+                        label = { it },
+                        onSelected = { selected = it },
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("1 h").assertIsDisplayed()
+        composeRule.onNodeWithText("Duration").performClick()
+        composeRule.onNodeWithText("2 h").performClick()
+        composeRule.runOnIdle { assertEquals("2 h", selected) }
     }
 }
