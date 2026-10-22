@@ -592,15 +592,17 @@ internal fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Uni
                 .border(ToggleStroke, color, RoundedCornerShape(ToggleOuterRadius)),
             contentAlignment = Alignment.Center,
         ) {
+            val innerSize = ToggleOuterSize - (ToggleStroke + ToggleGap) * 2
             Box(
                 Modifier
-                    .size(ToggleOuterSize - (ToggleStroke + ToggleGap) * 2)
+                    .size(innerSize)
                     .graphicsLayer {
                         scaleX = innerScale
                         scaleY = innerScale
                         alpha = innerScale.coerceIn(0f, 1f)
                     }
-                    .clip(RoundedCornerShape(ToggleOuterRadius - ToggleStroke - ToggleGap))
+                    // A scaled copy of the outer shape: the same radius in proportion to its size.
+                    .clip(RoundedCornerShape(ToggleOuterRadius * (innerSize / ToggleOuterSize)))
                     .background(color),
             )
         }
