@@ -53,6 +53,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -88,6 +91,7 @@ import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.avatarColor
 import com.kgs.calendar.ui.sources.image
 import com.kgs.calendar.ui.sources.label
 import com.kgs.calendar.ui.sources.subtitle
@@ -219,6 +223,7 @@ internal fun CalendarDrawer(
                         DrawerSourceSection(
                             group = group,
                             image = group.image(state.sourceImages),
+                            avatarColor = group.avatarColor(state.calendarGroupSettings),
                             collections = collections,
                             feedStatus = { collection ->
                                 readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
@@ -276,6 +281,7 @@ private fun DrawerProblemRow(count: Int, onClick: () -> Unit) {
 private fun DrawerSourceSection(
     group: CalendarSourceGroup,
     image: SourceImage?,
+    avatarColor: Int,
     collections: List<CollectionEntity>,
     feedStatus: (CollectionEntity) -> ReadOnlyFeedStatus?,
     hiddenCollectionHrefs: Set<String>,
@@ -292,7 +298,7 @@ private fun DrawerSourceSection(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        SourceAvatar(groupName, image, 30.dp)
+        SourceAvatar(groupName, image, 30.dp, avatarColor)
         Column(Modifier.weight(1f)) {
             Text(groupName, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val subtitle = group.subtitle()
@@ -408,7 +414,8 @@ private fun DrawerCollectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSettings)
-            .padding(start = 18.dp, end = 24.dp, top = 3.dp, bottom = 3.dp),
+            // Indented under the group's picture, so each group's calendars read as one set.
+            .padding(start = 42.dp, end = 24.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -546,46 +553,66 @@ internal fun CalendarCapabilityChip(label: String, color: Color) {
 }
 
 /**
- * Whether a calendar shows in the views: a dot in the calendar's color, filled with a check
- * when shown and a faint tint when hidden. The touch target is larger than the dot.
+ * Whether a calendar shows in the views: a rounded square outline in the calendar's color with a
+ * filled rounded square inside. The inner corners follow the outer ones (outer radius minus the
+ * inset), so both read as one shape. Pressing presses the box in; checking grows the inner square
+ * with a slight overshoot, unchecking shrinks it away.
  */
 @Composable
-private fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
-    val fillColor by animateColorAsState(
-        targetValue = if (checked) color else color.copy(alpha = 0.18f),
-        animationSpec = tween(MotionMedium, easing = MotionStandard),
-        label = "collectionToggleFill",
+internal fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val boxScale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 700f),
+        label = "collectionTogglePress",
     )
-    val checkScale by animateFloatAsState(
+    val innerScale by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
-        animationSpec = tween(MotionShort, easing = MotionStandard),
-        label = "collectionToggleCheck",
+        animationSpec = if (checked) spring(dampingRatio = 0.55f, stiffness = 500f) else tween(MotionShort, easing = MotionStandardAccelerate),
+        label = "collectionToggleInner",
     )
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() }),
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Checkbox,
+                onValueChange = { onClick() },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(22.dp)
-                .clip(CircleShape)
-                .background(fillColor),
+                .size(ToggleOuterSize)
+                .scale(boxScale)
+                .border(ToggleStroke, color, RoundedCornerShape(ToggleOuterRadius)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                tint = if (color.luminance() > 0.62f) Color.Black.copy(alpha = 0.72f) else Color.White,
-                modifier = Modifier
-                    .size(15.dp)
-                    .scale(checkScale),
+            val innerSize = ToggleOuterSize - (ToggleStroke + ToggleGap) * 2
+            Box(
+                Modifier
+                    .size(innerSize)
+                    .graphicsLayer {
+                        scaleX = innerScale
+                        scaleY = innerScale
+                        alpha = innerScale.coerceIn(0f, 1f)
+                    }
+                    // A scaled copy of the outer shape: the same radius in proportion to its size.
+                    .clip(RoundedCornerShape(ToggleOuterRadius * (innerSize / ToggleOuterSize)))
+                    .background(color),
             )
         }
     }
 }
+
+private val ToggleOuterSize = 20.dp
+private val ToggleOuterRadius = 6.5.dp
+private val ToggleStroke = 1.8.dp
+private val ToggleGap = 2.dp
 
 @Composable
 private fun DrawerGlyph(selected: Boolean, modifier: Modifier = Modifier) {

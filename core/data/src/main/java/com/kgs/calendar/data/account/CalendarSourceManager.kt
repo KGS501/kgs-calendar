@@ -228,6 +228,7 @@ class CalendarSourceManager internal constructor(
 
     suspend fun deleteAccount(accountId: String) {
         sourceImages.delete(SourceImageKeys.account(accountId))
+        sourceImages.delete(SourceImageKeys.accountCustom(accountId))
         credentialsStore.clear(accountId)
         database.accountDao().delete(accountId)
         // Its server trash bin can't be reached any more; local snapshots of its items stay.

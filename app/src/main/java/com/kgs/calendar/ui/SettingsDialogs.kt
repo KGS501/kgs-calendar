@@ -56,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -80,6 +81,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.Role
 import com.kgs.calendar.ui.components.GripHandleIcon
+import com.kgs.calendar.ui.sources.shownName
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.key.key
@@ -343,12 +345,10 @@ internal fun FieldOrderList(
                 )
                 Box(
                     modifier = Modifier
-                        .zIndex(if (isDragging) 10f else 0f)
-                        .graphicsLayer { translationY = if (isDragging) dragOffsetPx else animatedDisplacement }
+                        .reorderLift(isDragging) { if (isDragging) dragOffsetPx else animatedDisplacement }
                         .fillMaxWidth()
                         .height(rowHeightDp)
-                        .clip(reorderRowShape(index, ordered.size, isDragging))
-                        .background(if (isDragging) WarmPeach else settingsControlColor()),
+                        .background(settingsControlColor()),
                 ) {
                     Row(
                         modifier = Modifier
@@ -493,7 +493,7 @@ internal fun CollectionReorderList(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(spacingDp), modifier = Modifier.fillMaxWidth()) {
-        val accountNames = remember(accounts) { accounts.associate { it.id to (it.displayName ?: it.username) } }
+        val accountNames = accounts.associate { it.id to it.shownName() }
         ordered.forEach { collection ->
           key(collection.href) {
             val visibleIndex = reorderable.indexOfFirst { it.href == collection.href }
@@ -517,20 +517,17 @@ internal fun CollectionReorderList(
             )
             AnimatedVisibility(
                 visible = visible,
+                // Lifted on the row itself, the list's direct child, so it draws above the others.
+                modifier = Modifier.reorderLift(isDragging) { if (isDragging) dragOffsetPx else animatedDisplacement },
                 enter = expandVertically(animationSpec = tween(MotionMedium, easing = MotionStandard)) + fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)),
                 exit = shrinkVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)),
             ) {
-                // Indicate the dragged row with a brighter fill and full rounding instead of a
-                // shadow — the elevation shadow used to flash a grey rectangle on drop.
                 val hidden = collection.href in hiddenCollectionHrefs
                 Box(
                     modifier = Modifier
-                        .zIndex(if (isDragging) 10f else 0f)
-                        .graphicsLayer { translationY = if (isDragging) dragOffsetPx else animatedDisplacement }
                         .fillMaxWidth()
                         .height(rowHeightDp)
-                        .clip(reorderRowShape(visibleIndex, reorderable.size, isDragging))
-                        .background(if (isDragging) WarmPeach else settingsControlColor())
+                        .background(settingsControlColor())
                         .clickable(onClick = { onCollectionClick(collection) }),
                 ) {
                 Row(
@@ -654,7 +651,7 @@ internal fun CollectionReorderList(
                 key("inactive-${collection.href}") {
                     InactiveCollectionOrderRow(
                         collection = collection,
-                        shape = reorderRowShape(index, inactiveCollections.size, dragging = false),
+                        shape = ReorderCardShape,
                         accountName = accountNames[collection.accountId] ?: stringResource(R.string.source),
                         hidden = collection.href in hiddenCollectionHrefs,
                         onClick = { onCollectionClick(collection) },
@@ -731,12 +728,34 @@ private fun InactiveCollectionOrderRow(
 }
 
 private val ReorderRowHeight = 64.dp
-private val ReorderRowGap = 2.dp
+private val ReorderRowGap = 8.dp
+private val ReorderCardShape = RoundedCornerShape(20.dp)
 
-/** Rows of a reorderable list form one card: outer corners round, inner ones square. */
-private fun reorderRowShape(index: Int, count: Int, dragging: Boolean): Shape {
-    if (dragging) return RoundedCornerShape(18.dp)
-    val top = if (index <= 0) 24.dp else 0.dp
-    val bottom = if (index >= count - 1) 24.dp else 0.dp
-    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+/**
+ * Each row of a reorderable list is its own rounded card. While dragged it follows the finger
+ * in front of the others, grows slightly and casts a shadow that fades in and out.
+ */
+@Composable
+private fun Modifier.reorderLift(isDragging: Boolean, translation: () -> Float): Modifier {
+    val elevation by animateDpAsState(
+        targetValue = if (isDragging) 12.dp else 0.dp,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "reorderLiftElevation",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isDragging) 1.03f else 1f,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "reorderLiftScale",
+    )
+    return this
+        // Stays in front until the shadow has faded after the drop.
+        .zIndex(if (isDragging || elevation > 0.dp) 10f else 0f)
+        .graphicsLayer {
+            translationY = translation()
+            scaleX = scale
+            scaleY = scale
+            shadowElevation = elevation.toPx()
+            shape = ReorderCardShape
+            clip = true
+        }
 }

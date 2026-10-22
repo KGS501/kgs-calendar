@@ -1532,15 +1532,14 @@ private fun SharedEventDetail(
             }
             ownAttendee?.let {
                 Text(stringResource(R.string.my_participation), color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("ACCEPTED" to stringResource(R.string.accept), "TENTATIVE" to stringResource(R.string.tentative), "DECLINED" to stringResource(R.string.decline)).forEach { (value, label) ->
-                        SettingsChoicePill(
-                            label = label,
-                            selected = it.partstat.equals(value, ignoreCase = true),
-                            onClick = { onParticipationChanged(value) },
-                        )
-                    }
-                }
+                val answers = listOf("ACCEPTED" to stringResource(R.string.accept), "TENTATIVE" to stringResource(R.string.tentative), "DECLINED" to stringResource(R.string.decline))
+                DialogSegmentedControl(
+                    options = answers.map { answer -> answer.first },
+                    // No answer yet selects nothing.
+                    selected = answers.firstOrNull { answer -> it.partstat.equals(answer.first, ignoreCase = true) }?.first.orEmpty(),
+                    label = { value -> answers.first { answer -> answer.first == value }.second },
+                    onSelected = onParticipationChanged,
+                )
             }
         }
     }

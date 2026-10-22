@@ -50,6 +50,8 @@ import com.kgs.calendar.ui.shell.eventDraftColor
 import com.kgs.calendar.ui.shell.timelineSlotDraftPreview
 import java.time.LocalDate
 import kotlin.math.roundToInt
+import com.kgs.calendar.ui.theme.CappedFontScale
+import com.kgs.calendar.ui.theme.MaxCalendarFontScale
 
 /** The calendar with its create button, drawers and search overlay, blurred behind the create menu. */
 @Composable
@@ -121,54 +123,57 @@ internal fun CalendarAppScaffold(
                     .fillMaxSize()
                     .blur(backgroundBlur),
             ) {
-                CalendarShell(
-                    state = renderState,
-                    onMenu = shell::openMenuDrawer,
-                    onDateSelected = viewModel::selectDate,
-                    onViewSelected = onViewSelected,
-                    onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
-                    onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
-                    onLandscapeTimelineCompactChanged = viewModel.settings::setLandscapeTimelineCompact,
-                    onToday = viewModel::today,
-                    onSearch = shell::openSearch,
-                    onTasks = shell::openTaskDrawer,
-                    onTaskStatusChanged = viewModel.edits::setTaskStatus,
-                    onEventMoved = viewModel.edits::moveTimedEvent,
-                    onTaskMoved = viewModel.edits::moveTimedTask,
-                    onEventMovedAllDay = viewModel.edits::moveAllDayEvent,
-                    onTaskMovedAllDay = viewModel.edits::moveAllDayTask,
-                    onSlotSelected = { date, start ->
-                        shell.selectDraftSlot(
-                            preview = timelineSlotDraftPreview(date, start, state.defaultEventDurationMinutes),
-                            wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
-                        )
-                    },
-                    onAllDaySlotSelected = { date ->
-                        shell.selectDraftSlot(
-                            preview = allDaySlotDraftPreview(date),
-                            wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
-                        )
-                    },
-                    draftEvent = shell.draftEventSelection(),
-                    onDraftEventChanged = { draft ->
-                        shell.moveDraft(EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay))
-                    },
-                    onDraftInteraction = shell::onDraftInteraction,
-                    onDraftTap = shell::requestCreationExpand,
-                    // In the tabletop and book postures the editor is a panel beside the calendar, not a low sheet over it.
-                    timelineBottomInset = if (shell.editorWireframeMode && foldPosture == FoldPosture.Normal) {
-                        EditorTinyVisibleHeight
-                    } else {
-                        0.dp
-                    },
-                    onDetail = shell::openDetail,
-                    overdueTasksExpanded = shell.overdueTasksExpanded,
-                    onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },
-                    onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
-                    onLoadLaterAgenda = viewModel::loadLaterAgenda,
-                    timelineViewportMemory = viewModel.timelineViewportMemory,
-                    foregroundRecenterRequest = foregroundRecenterRequest,
-                )
+                // Seven day columns leave little room, so the calendar stops growing with the font earlier.
+                CappedFontScale(MaxCalendarFontScale) {
+                    CalendarShell(
+                        state = renderState,
+                        onMenu = shell::openMenuDrawer,
+                        onDateSelected = viewModel::selectDate,
+                        onViewSelected = onViewSelected,
+                        onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
+                        onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
+                        onLandscapeTimelineCompactChanged = viewModel.settings::setLandscapeTimelineCompact,
+                        onToday = viewModel::today,
+                        onSearch = shell::openSearch,
+                        onTasks = shell::openTaskDrawer,
+                        onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                        onEventMoved = viewModel.edits::moveTimedEvent,
+                        onTaskMoved = viewModel.edits::moveTimedTask,
+                        onEventMovedAllDay = viewModel.edits::moveAllDayEvent,
+                        onTaskMovedAllDay = viewModel.edits::moveAllDayTask,
+                        onSlotSelected = { date, start ->
+                            shell.selectDraftSlot(
+                                preview = timelineSlotDraftPreview(date, start, state.defaultEventDurationMinutes),
+                                wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+                            )
+                        },
+                        onAllDaySlotSelected = { date ->
+                            shell.selectDraftSlot(
+                                preview = allDaySlotDraftPreview(date),
+                                wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+                            )
+                        },
+                        draftEvent = shell.draftEventSelection(),
+                        onDraftEventChanged = { draft ->
+                            shell.moveDraft(EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay))
+                        },
+                        onDraftInteraction = shell::onDraftInteraction,
+                        onDraftTap = shell::requestCreationExpand,
+                        // In the tabletop and book postures the editor is a panel beside the calendar, not a low sheet over it.
+                        timelineBottomInset = if (shell.editorWireframeMode && foldPosture == FoldPosture.Normal) {
+                            EditorTinyVisibleHeight
+                        } else {
+                            0.dp
+                        },
+                        onDetail = shell::openDetail,
+                        overdueTasksExpanded = shell.overdueTasksExpanded,
+                        onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },
+                        onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
+                        onLoadLaterAgenda = viewModel::loadLaterAgenda,
+                        timelineViewportMemory = viewModel.timelineViewportMemory,
+                        foregroundRecenterRequest = foregroundRecenterRequest,
+                    )
+                }
             }
             AnimatedVisibility(
                 visible = shell.creationSheet == null,
@@ -191,25 +196,28 @@ internal fun CalendarAppScaffold(
             if (state.isManualSyncing) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
-            CalendarDrawer(
-                visible = shell.drawerOpen,
-                state = renderState,
-                onDismiss = shell::closeDrawer,
-                onViewSelected = {
-                    onViewSelected(it)
-                    shell.closeDrawer()
-                },
-                onSync = {
-                    viewModel.sources.syncNow()
-                    shell.closeDrawer()
-                },
-                onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
-                onCollectionSettings = shell::editCollection,
-                onGroupSettings = shell::editGroup,
-                onAppSettings = { shell.openSettings(SettingsDestination.Main) },
-                problems = problemItems,
-                onProblems = shell::openProblems,
-            )
+            // The sidebar is narrow too: long words would break inside its labels.
+            CappedFontScale(MaxCalendarFontScale) {
+                CalendarDrawer(
+                    visible = shell.drawerOpen,
+                    state = renderState,
+                    onDismiss = shell::closeDrawer,
+                    onViewSelected = {
+                        onViewSelected(it)
+                        shell.closeDrawer()
+                    },
+                    onSync = {
+                        viewModel.sources.syncNow()
+                        shell.closeDrawer()
+                    },
+                    onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
+                    onCollectionSettings = shell::editCollection,
+                    onGroupSettings = shell::editGroup,
+                    onAppSettings = { shell.openSettings(SettingsDestination.Main) },
+                    problems = problemItems,
+                    onProblems = shell::openProblems,
+                )
+            }
             }
             if (bookLayout != null && bookPanesShown) {
                 val pane = bookLayout.paneBounds(BookPane.Right, rootWidthPx)

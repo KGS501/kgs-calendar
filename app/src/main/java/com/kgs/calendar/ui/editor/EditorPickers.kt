@@ -394,8 +394,8 @@ internal fun PrioritySlider(
                 )
                 drawRoundRect(
                     color = priorityColor(priority),
-                    topLeft = Offset(thumbX - 8.dp.toPx(), centerY - 12.dp.toPx()),
-                    size = Size(16.dp.toPx(), 24.dp.toPx()),
+                    topLeft = Offset(thumbX - 8.dp.toPx(), centerY - 10.dp.toPx()),
+                    size = Size(16.dp.toPx(), 20.dp.toPx()),
                     cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
                 )
             }

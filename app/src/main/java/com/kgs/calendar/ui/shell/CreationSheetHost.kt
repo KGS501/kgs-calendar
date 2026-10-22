@@ -1,5 +1,17 @@
 package com.kgs.calendar.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -35,7 +47,8 @@ internal fun CreationSheetHost(
             bookPane = shell.creationBookPane,
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
-            when (shell.creationSheet) {
+            EditorTypeTransition(shell.creationSheet ?: creationSheet, shell) { target, transferDraft ->
+            when (target) {
                 CreationSheet.EventLow -> EventEditorSheet(
                     state = state,
                     schedule = shell.editorSchedule,
@@ -44,7 +57,7 @@ internal fun CreationSheetHost(
                     initialEvent = null,
                     draftStore = viewModel.editorDrafts,
                     draftId = shell.editorDraftId,
-                    transferDraft = shell.editorTransferDraft,
+                    transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
                     onSave = { payload ->
@@ -71,7 +84,7 @@ internal fun CreationSheetHost(
                     initialTask = null,
                     draftStore = viewModel.editorDrafts,
                     draftId = shell.editorDraftId,
-                    transferDraft = shell.editorTransferDraft,
+                    transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
                         viewModel.edits.createTask(payload)
@@ -91,8 +104,9 @@ internal fun CreationSheetHost(
                 )
                 else -> Unit
             }
+            }
         }
-    } else creationSheet?.let { sheet ->
+    } else creationSheet?.let { currentSheet ->
         KgsModalBottomSheet(
             onDismissRequest = shell::closeCreationSheet,
             containerColor = MaterialTheme.colorScheme.surface,
@@ -100,10 +114,10 @@ internal fun CreationSheetHost(
             dismissOnOutsideTap = false,
             collapseRequest = 0,
             anchorMode = SheetAnchorMode.Editor,
-            separationShadow = sheet == CreationSheet.EventFull || sheet == CreationSheet.Task,
+            separationShadow = currentSheet == CreationSheet.EventFull || currentSheet == CreationSheet.Task,
             followFoldPosture = true,
             bookPane = shell.creationBookPane,
-            initialSnap = when (sheet) {
+            initialSnap = when (currentSheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,
                 -> SheetSnap.Half
@@ -118,6 +132,7 @@ internal fun CreationSheetHost(
             },
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
+            EditorTypeTransition(currentSheet, shell) { sheet, transferDraft ->
             when (sheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,
@@ -131,7 +146,7 @@ internal fun CreationSheetHost(
                     initialEvent = null,
                     draftStore = viewModel.editorDrafts,
                     draftId = shell.editorDraftId,
-                    transferDraft = shell.editorTransferDraft,
+                    transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
                     onSave = { payload ->
@@ -223,7 +238,7 @@ internal fun CreationSheetHost(
                     initialTask = null,
                     draftStore = viewModel.editorDrafts,
                     draftId = shell.editorDraftId,
-                    transferDraft = shell.editorTransferDraft,
+                    transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
                         when (val source = shell.conversionSource) {
@@ -324,6 +339,55 @@ internal fun CreationSheetHost(
                     onClose = { closeAnimated(shell::closeCreationSheet) },
                 )
             }
+            }
+        }
+    }
+}
+
+private fun CreationSheet.isEventEditor(): Boolean = when (this) {
+    CreationSheet.EventLow,
+    CreationSheet.EventFull,
+    is CreationSheet.EditEvent,
+    is CreationSheet.DuplicateEvent,
+    -> true
+    else -> false
+}
+
+/**
+ * Swipes between the event and the task editor: switching to the task slides it in from the
+ * right, like the Task half of the switch, and back to the event slides from the left. Each side
+ * keeps the transfer draft it was opened with, so the editor sliding out does not reset its
+ * fields while it is still visible.
+ */
+@Composable
+private fun EditorTypeTransition(
+    sheet: CreationSheet,
+    shell: CalendarShellUiState,
+    content: @Composable (CreationSheet, EditorTransferDraft?) -> Unit,
+) {
+    // The editor type shown before this composition; null until the sheet has shown one.
+    val previousIsEvent = remember { mutableStateOf<Boolean?>(null) }
+    SideEffect { previousIsEvent.value = sheet.isEventEditor() }
+    AnimatedContent(
+        targetState = sheet,
+        contentKey = { it.isEventEditor() },
+        transitionSpec = {
+            val direction = if (targetState.isEventEditor()) -1 else 1
+            (
+                slideInHorizontally(tween(MotionLong, easing = MotionEmphasized)) { it * direction } +
+                    fadeIn(tween(MotionMedium, easing = MotionStandard))
+                ) togetherWith (
+                slideOutHorizontally(tween(MotionLong, easing = MotionEmphasized)) { -it * direction } +
+                    fadeOut(tween(MotionMedium, easing = MotionStandardAccelerate))
+                ) using SizeTransform(clip = true)
+        },
+        label = "editorType",
+    ) { target ->
+        val transferDraft = remember(target) { shell.editorTransferDraft }
+        // An editor that slides in starts its switch on the other half and moves the pill over.
+        val slidIn = remember { previousIsEvent.value.let { it != null && it != target.isEventEditor() } }
+        CompositionLocalProvider(LocalEditorTypeSwitchAnimates provides slidIn) {
+            content(target, transferDraft)
         }
     }
 }

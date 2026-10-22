@@ -80,6 +80,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -140,6 +149,10 @@ import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.ui.sources.AccountAvatarDialog
+import com.kgs.calendar.ui.sources.avatarColor
+import com.kgs.calendar.ui.sources.shownName
 import com.kgs.calendar.ui.sources.image
 import com.kgs.calendar.ui.sources.label
 import com.kgs.calendar.ui.sources.subtitle
@@ -213,7 +226,11 @@ internal fun SettingsPage(
     onSync: () -> Unit,
     onSyncIntervalChanged: (Int) -> Unit = {},
     onCollectionSettings: (CollectionEntity) -> Unit,
-    onLocalCalendarEnabledChanged: (Boolean) -> Unit,
+    onDeleteLocalCalendar: () -> Unit = {},
+    onPickAccountImage: (String, Uri) -> Unit = { _, _ -> },
+    onRemoveAccountImage: (String) -> Unit = {},
+    onAvatarColorSelected: (String, Int?) -> Unit = { _, _ -> },
+    onAddLocalCalendar: () -> Unit = {},
     onGroupSettings: (String) -> Unit = {},
     trashCount: Int = 0,
     onRecentlyDeleted: () -> Unit = {},
@@ -242,26 +259,27 @@ internal fun SettingsPage(
     var addPassword by rememberSaveable { mutableStateOf("") }
     var addAccountError by rememberSaveable { mutableStateOf<String?>(null) }
     var addAccountSubmitting by remember { mutableStateOf(false) }
-    var editAccountName by rememberSaveable { mutableStateOf("") }
-    var editAccountServerUrl by rememberSaveable { mutableStateOf("") }
-    var editAccountUsername by rememberSaveable { mutableStateOf("") }
-    var editAccountPassword by rememberSaveable { mutableStateOf("") }
     var serverDetailsOpen by rememberSaveable { mutableStateOf(false) }
-    var newCalDavCalendarName by rememberSaveable { mutableStateOf("") }
-    var newCalDavCalendarEvents by rememberSaveable { mutableStateOf(true) }
-    var newCalDavCalendarTasks by rememberSaveable { mutableStateOf(false) }
+    var accountFieldEdit by remember { mutableStateOf<AccountFieldEdit?>(null) }
+    var createServerCalendarOpen by remember { mutableStateOf(false) }
+    var accountAvatarOpen by remember { mutableStateOf(false) }
     var navigatingForward by remember { mutableStateOf(true) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val currentDestination = remember(navigationStack) {
         runCatching { SettingsDestination.valueOf(navigationStack.last()) }.getOrDefault(SettingsDestination.Main)
     }
+    // Each page keeps its scroll position while it is in the back stack, so going back returns
+    // to where the user was; a page opened anew starts at the top.
+    val scrollStates = remember { mutableMapOf<SettingsDestination, ScrollState>() }
     fun navigateTo(destination: SettingsDestination) {
         navigatingForward = true
+        scrollStates.remove(destination)
         navigationStack = navigationStack + destination.name
     }
     fun navigateToRoot(destination: SettingsDestination) {
         navigatingForward = true
+        scrollStates.keys.retainAll { it == SettingsDestination.Main }
         navigationStack = listOf(SettingsDestination.Main.name, destination.name)
     }
     fun resetAddAccountForm() {
@@ -273,10 +291,6 @@ internal fun SettingsPage(
     }
     fun openAccount(account: AccountEntity) {
         selectedAccountId = account.id
-        editAccountName = account.displayName ?: account.username
-        editAccountServerUrl = account.serverUrl
-        editAccountUsername = account.username
-        editAccountPassword = ""
         serverDetailsOpen = false
         navigateTo(SettingsDestination.AccountDetail)
     }
@@ -371,7 +385,7 @@ internal fun SettingsPage(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollStates.getOrPut(page) { ScrollState(0) })
                         .padding(top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
@@ -385,6 +399,7 @@ internal fun SettingsPage(
                                         state.collections.count { it.isEnabled }.let { pluralStringResource(R.plurals.settings_calendar_count, it, it) },
                                     ).joinToString(" · "),
                                     icon = Icons.Default.CalendarMonth,
+                                    iconColor = SettingsColors.Calendars,
                                     warning = accounts.any { it.needsAttention() },
                                 ) { navigateTo(SettingsDestination.Accounts) }
                             }
@@ -393,26 +408,31 @@ internal fun SettingsPage(
                                     title = stringResource(R.string.settings_views),
                                     subtitle = stringResource(R.string.settings_views_summary),
                                     icon = Icons.Default.ViewWeek,
+                                    iconColor = SettingsColors.Views,
                                 ) { navigateTo(SettingsDestination.Views) }
                                 SettingsNavRow(
                                     title = stringResource(R.string.settings_new_items),
                                     subtitle = stringResource(R.string.settings_new_items_summary),
                                     icon = Icons.Default.EditCalendar,
+                                    iconColor = SettingsColors.NewItems,
                                 ) { navigateTo(SettingsDestination.NewItems) }
                                 SettingsNavRow(
                                     title = stringResource(R.string.appearance),
                                     subtitle = stringResource(R.string.settings_appearance_summary),
                                     icon = Icons.Default.Palette,
+                                    iconColor = SettingsColors.Appearance,
                                 ) { navigateTo(SettingsDestination.Appearance) }
                                 SettingsNavRow(
                                     title = stringResource(R.string.settings_general),
                                     subtitle = stringResource(R.string.settings_general_summary),
                                     icon = Icons.Default.Tune,
+                                    iconColor = SettingsColors.General,
                                 ) { navigateTo(SettingsDestination.General) }
                                 SettingsNavRow(
                                     title = stringResource(R.string.widgets),
                                     subtitle = stringResource(R.string.widget_settings_summary),
                                     icon = Icons.Default.Widgets,
+                                    iconColor = SettingsColors.Widgets,
                                 ) { navigateTo(SettingsDestination.Widgets) }
                             }
                             SettingsGroup {
@@ -424,24 +444,55 @@ internal fun SettingsPage(
                                         stringResource(R.string.recently_deleted_summary_empty)
                                     },
                                     icon = Icons.Default.Delete,
+                                    iconColor = SettingsColors.Trash,
                                     onClick = onRecentlyDeleted,
                                 )
                             }
-                            SettingsGroup(title = stringResource(R.string.settings_about)) {
+                            SettingsGroup(title = stringResource(R.string.settings_project)) {
                                 SettingsNavRow(
-                                    title = stringResource(R.string.privacy),
-                                    subtitle = stringResource(R.string.privacy_summary),
-                                    icon = Icons.Default.Lock,
-                                ) { navigateTo(SettingsDestination.Privacy) }
+                                    title = stringResource(R.string.about_kgs_calendar),
+                                    subtitle = stringResource(R.string.version_value, appVersionName()),
+                                    icon = Icons.Default.Info,
+                                    iconColor = SettingsColors.About,
+                                ) { navigateTo(SettingsDestination.About) }
                                 SettingsLinkRow(
                                     title = stringResource(R.string.sponsor_project),
+                                    subtitle = stringResource(R.string.sponsor_project_summary),
                                     icon = Icons.Default.Favorite,
+                                    iconColor = SettingsColors.Sponsor,
                                     url = SponsorProjectUrl,
                                 )
                                 SettingsLinkRow(
                                     title = stringResource(R.string.report_bug),
+                                    subtitle = stringResource(R.string.report_bug_summary),
                                     icon = Icons.Default.BugReport,
+                                    iconColor = SettingsColors.Bug,
                                     url = BugReportIssuesUrl,
+                                )
+                            }
+                        }
+                        SettingsDestination.About -> {
+                            AboutIdentityCard()
+                            SettingsGroup {
+                                SettingsLinkRow(
+                                    title = stringResource(R.string.source_code),
+                                    subtitle = "github.com/KGS501/kgs-calendar",
+                                    icon = Icons.Default.Code,
+                                    iconColor = SettingsColors.Views,
+                                    url = SourceCodeUrl,
+                                )
+                                SettingsNavRow(
+                                    title = stringResource(R.string.privacy),
+                                    subtitle = stringResource(R.string.privacy_summary),
+                                    icon = Icons.Default.Lock,
+                                    iconColor = SettingsColors.Privacy,
+                                ) { navigateTo(SettingsDestination.Privacy) }
+                                SettingsLinkRow(
+                                    title = stringResource(R.string.release_notes),
+                                    subtitle = stringResource(R.string.release_notes_summary),
+                                    icon = Icons.Default.NewReleases,
+                                    iconColor = SettingsColors.NewItems,
+                                    url = ReleasesUrl,
                                 )
                             }
                         }
@@ -458,13 +509,14 @@ internal fun SettingsPage(
                                         run {
                                             val groupName = group.displayName()
                                             val groupImage = group.image(state.sourceImages)
+                                            val groupColor = group.avatarColor(state.calendarGroupSettings)
                                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 val single = groupAccounts.size == 1
                                                 if (!single) {
                                                     SettingsRow(
                                                         title = groupName,
                                                         subtitle = group.subtitle(),
-                                                        leading = { SourceAvatar(groupName, groupImage, 40.dp) },
+                                                        leading = { SourceAvatar(groupName, groupImage, 40.dp, groupColor) },
                                                         onClick = { onGroupSettings(group.key) },
                                                     ) {
                                                         Icon(
@@ -481,21 +533,31 @@ internal fun SettingsPage(
                                                         .takeIf { account.sourceType == SourceType.ReadOnlyUrl }
                                                         ?.firstOrNull { it.accountId == account.id }
                                                         ?.displayName
+                                                    val rowTitle = when {
+                                                        single -> groupName
+                                                        feedCalendarName != null -> feedCalendarName
+                                                        else -> account.shownName()
+                                                    }
                                                     SettingsNavRow(
-                                                        title = when {
-                                                            single -> groupName
-                                                            feedCalendarName != null -> feedCalendarName
-                                                            else -> account.displayName ?: account.username
-                                                        },
+                                                        title = rowTitle,
                                                         subtitle = if (account.id == UiLocalAccountId && localCollection?.isEnabled == false) {
                                                             stringResource(R.string.calendar_inactive)
                                                         } else {
                                                             account.sourceDescription(state.collections, single)
                                                         },
+                                                        // Every source has its picture; those of a group are indented under it.
                                                         leading = if (single) {
-                                                            { SourceAvatar(groupName, groupImage, 40.dp) }
+                                                            { SourceAvatar(groupName, groupImage, 40.dp, groupColor) }
                                                         } else {
-                                                            { Spacer(Modifier.width(40.dp)) }
+                                                            {
+                                                                SourceAvatar(
+                                                                    rowTitle,
+                                                                    account.image(state.sourceImages),
+                                                                    32.dp,
+                                                                    account.avatarColor(state.calendarGroupSettings),
+                                                                    modifier = Modifier.padding(start = 20.dp),
+                                                                )
+                                                            }
                                                         },
                                                         warning = account.needsAttention(),
                                                     ) { openAccount(account) }
@@ -542,11 +604,15 @@ internal fun SettingsPage(
                             }
                         }
                         SettingsDestination.AddSource -> {
-                            SettingsGroup(footer = stringResource(R.string.add_source_footer)) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
                                 SourceOptionCard(
                                     title = stringResource(R.string.caldav_and_nextcloud),
-                                    value = stringResource(R.string.caldav_account_summary),
-                                    leadingIcon = Icons.Default.PersonAdd,
+                                    leadingIcon = Icons.Default.Cloud,
+                                    color = SettingsColors.Calendars,
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.tasks) to SourceChipColors.Tasks, stringResource(R.string.source_full_sync) to SourceChipColors.FullSync),
                                     examples = listOf(
                                         SourceExampleBrand("Nextcloud", Color(0xFF0082C9), iconRes = R.drawable.brand_nextcloud),
                                         SourceExampleBrand("mailbox.org", Color(0xFF76B900), iconRes = R.drawable.brand_mailbox),
@@ -559,8 +625,9 @@ internal fun SettingsPage(
                                 }
                                 SourceOptionCard(
                                     title = stringResource(R.string.android_device_calendars),
-                                    value = stringResource(R.string.android_device_calendars_summary),
-                                    leadingIcon = Icons.Default.CalendarMonth,
+                                    leadingIcon = Icons.Default.PhoneAndroid,
+                                    color = SettingsColors.NewItems,
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.source_full_sync) to SourceChipColors.FullSync),
                                     examples = listOf(
                                         SourceExampleBrand("Google", Color(0xFF4285F4), iconRes = R.drawable.brand_google_calendar),
                                         SourceExampleBrand("Microsoft", Color(0xFF00A4EF), iconRes = R.drawable.brand_microsoft),
@@ -571,8 +638,9 @@ internal fun SettingsPage(
                                 }
                                 SourceOptionCard(
                                     title = stringResource(R.string.subscribe_url),
-                                    value = stringResource(R.string.subscribe_url_summary),
                                     leadingIcon = Icons.Default.Public,
+                                    color = SettingsColors.Appearance,
+                                    chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.source_read_only) to SourceChipColors.ReadOnly),
                                     examples = listOf(
                                         SourceExampleBrand("ICS", Color(0xFF7C3AED), imageVector = Icons.Default.Event),
                                         SourceExampleBrand("webcal", Color(0xFF0891B2), imageVector = Icons.Default.Link),
@@ -581,6 +649,19 @@ internal fun SettingsPage(
                                 ) {
                                     readOnlyUrl = ""
                                     navigateTo(SettingsDestination.AddReadOnly)
+                                }
+                                // Only one local calendar exists; it can be added again after it was deleted.
+                                if (accounts.none { it.id == UiLocalAccountId }) {
+                                    SourceOptionCard(
+                                        title = stringResource(R.string.local_calendar),
+                                        leadingIcon = Icons.Default.Smartphone,
+                                        color = SettingsColors.General,
+                                        chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.tasks) to SourceChipColors.Tasks, stringResource(R.string.source_device_only) to SourceChipColors.DeviceOnly),
+                                        examples = emptyList(),
+                                    ) {
+                                        onAddLocalCalendar()
+                                        navigateToRoot(SettingsDestination.Accounts)
+                                    }
                                 }
                             }
                         }
@@ -692,59 +773,60 @@ internal fun SettingsPage(
                                 val isLocalSource = account.id == UiLocalAccountId || account.serverUrl.startsWith(UiLocalCollectionPrefix)
                                 val isAndroidSource = account.isAndroidProviderAccount()
                                 val isReadOnlySource = account.sourceType == SourceType.ReadOnlyUrl || account.username == "Read-only URL"
+                                val isCalDavSource = !isLocalSource && !isAndroidSource && !isReadOnlySource
                                 val accountGroup = state.calendarGroups.firstOrNull { it.key == CalendarSourceGroups.automaticKey(account, state.accounts) }
-                                val accountGroupName = accountGroup?.displayName() ?: (account.displayName ?: account.username)
+                                val accountName = account.shownName()
+                                val accountGroupName = accountGroup?.displayName() ?: accountName
                                 val accountGroupImage = accountGroup?.image(state.sourceImages)
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 32.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                ) {
-                                    SourceAvatar(accountGroupName, accountGroupImage, 56.dp)
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(account.displayName ?: account.username, color = WarmInk, fontSize = 20.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
-                                        Text(account.sourceDescription(state.collections, single = true), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 18.sp)
-                                    }
-                                }
-                                SettingsForm(title = stringResource(R.string.account_section)) {
-                                    OutlinedTextField(editAccountName, { editAccountName = it }, label = { Text(stringResource(R.string.name)) }, singleLine = true, shape = SettingsFieldShape, modifier = Modifier.fillMaxWidth())
-                                    if (!isLocalSource && !isAndroidSource) {
-                                        OutlinedTextField(editAccountServerUrl, { editAccountServerUrl = it }, label = { Text(stringResource(R.string.server_url)) }, singleLine = true, keyboardOptions = UrlKeyboardOptions, shape = SettingsFieldShape, modifier = Modifier.fillMaxWidth())
-                                    }
-                                    if (!isLocalSource && !isAndroidSource && !isReadOnlySource) {
-                                        OutlinedTextField(editAccountUsername, { editAccountUsername = it }, label = { Text(stringResource(R.string.username)) }, singleLine = true, keyboardOptions = UsernameKeyboardOptions, shape = SettingsFieldShape, modifier = Modifier.fillMaxWidth())
-                                        SecurePasswordField(
-                                            value = editAccountPassword,
-                                            onValueChange = { editAccountPassword = it },
-                                            label = stringResource(R.string.new_password_optional),
-                                            shape = SettingsFieldShape,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                }
-                                SettingsPrimaryAction(
-                                    label = stringResource(R.string.save_changes),
-                                    icon = Icons.Default.Check,
-                                ) {
-                                    onUpdateAccount(
-                                        account.id,
-                                        editAccountName,
-                                        if (isLocalSource || isAndroidSource) account.serverUrl else editAccountServerUrl,
-                                        if (isLocalSource || isAndroidSource) account.username else editAccountUsername,
-                                        if (isLocalSource || isAndroidSource) null else editAccountPassword.ifBlank { null },
+                                fun update(
+                                    name: String = accountName,
+                                    serverUrl: String = account.serverUrl,
+                                    username: String = account.username,
+                                    password: String? = null,
+                                ) = onUpdateAccount(account.id, name, serverUrl, username, password)
+                                // A subscription is known by its calendar's name, as in the source list.
+                                val headerName = state.collections
+                                    .takeIf { isReadOnlySource }
+                                    ?.firstOrNull { it.accountId == account.id }
+                                    ?.displayName
+                                    ?: accountName
+                                SourceIdentityHeader(
+                                    name = headerName,
+                                    description = account.sourceDescription(state.collections, single = true),
+                                    avatarName = headerName,
+                                    image = account.image(state.sourceImages),
+                                    color = account.avatarColor(state.calendarGroupSettings),
+                                    onAvatarClick = { accountAvatarOpen = true },
+                                )
+                                if (accountAvatarOpen) {
+                                    AccountAvatarDialog(
+                                        account = account,
+                                        name = headerName,
+                                        images = state.sourceImages,
+                                        settings = state.calendarGroupSettings,
+                                        onPickImage = { uri -> onPickAccountImage(account.id, uri) },
+                                        onRemoveImage = { onRemoveAccountImage(account.id) },
+                                        onColorSelected = { color -> onAvatarColorSelected(SourceImageKeys.account(account.id), color) },
+                                        onDismiss = { accountAvatarOpen = false },
                                     )
-                                    navigateBack()
                                 }
-                                val localCollection = state.collections.firstOrNull { it.href.isLocalCollectionHref() }
-                                // The local calendar can be turned off once another source provides calendars.
-                                if (isLocalSource && localCollection != null && accounts.any { it.id != UiLocalAccountId }) {
-                                    SettingsGroup {
-                                        SettingsSwitchRow(
-                                            title = stringResource(R.string.show_local_calendar),
-                                            subtitle = stringResource(R.string.show_local_calendar_help),
-                                            checked = localCollection.isEnabled,
-                                            onCheckedChange = onLocalCalendarEnabledChanged,
-                                        )
+                                SettingsGroup(title = stringResource(R.string.account_section)) {
+                                    SettingsEditRow(stringResource(R.string.name), accountName) {
+                                        accountFieldEdit = AccountFieldEdit(AccountField.Name, accountName)
+                                    }
+                                    if (!isLocalSource && !isAndroidSource) {
+                                        SettingsEditRow(
+                                            title = stringResource(if (isReadOnlySource) R.string.ics_calendar_url else R.string.server_url),
+                                            value = account.serverUrl,
+                                        ) { accountFieldEdit = AccountFieldEdit(AccountField.ServerUrl, account.serverUrl) }
+                                    }
+                                    if (isCalDavSource) {
+                                        SettingsEditRow(stringResource(R.string.username), account.username) {
+                                            accountFieldEdit = AccountFieldEdit(AccountField.Username, account.username)
+                                        }
+                                        SettingsEditRow(stringResource(R.string.password), "••••••••") {
+                                            accountFieldEdit = AccountFieldEdit(AccountField.Password, "")
+                                        }
                                     }
                                 }
                                 if (accountGroup != null) {
@@ -752,7 +834,7 @@ internal fun SettingsPage(
                                         SettingsNavRow(
                                             title = accountGroupName,
                                             subtitle = stringResource(R.string.calendar_group_edit_summary),
-                                            leading = { SourceAvatar(accountGroupName, accountGroupImage, 40.dp) },
+                                            leading = { SourceAvatar(accountGroupName, accountGroupImage, 40.dp, accountGroup.avatarColor(state.calendarGroupSettings)) },
                                             onClick = { onGroupSettings(accountGroup.key) },
                                         )
                                     }
@@ -766,49 +848,15 @@ internal fun SettingsPage(
                                         )
                                     }
                                 }
-                                if (!isLocalSource && !isAndroidSource && account.sourceType == SourceType.CalDav) {
-                                    SettingsForm(title = stringResource(R.string.create_server_calendar)) {
-                                        OutlinedTextField(
-                                            value = newCalDavCalendarName,
-                                            onValueChange = { newCalDavCalendarName = it },
-                                            label = { Text(stringResource(R.string.name)) },
-                                            singleLine = true,
-                                            shape = SettingsFieldShape,
-                                            modifier = Modifier.fillMaxWidth(),
+                                if (isCalDavSource) {
+                                    SettingsGroup(title = stringResource(R.string.server_section)) {
+                                        SettingsRow(
+                                            title = stringResource(R.string.create_server_calendar),
+                                            titleColor = WarmBrown,
+                                            icon = Icons.Default.Add,
+                                            enabled = !state.isBusy,
+                                            onClick = { createServerCalendarOpen = true },
                                         )
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            SettingsChoicePill(
-                                                label = stringResource(R.string.events),
-                                                selected = newCalDavCalendarEvents,
-                                                icon = Icons.Default.Event,
-                                                onClick = { newCalDavCalendarEvents = !newCalDavCalendarEvents },
-                                            )
-                                            SettingsChoicePill(
-                                                label = stringResource(R.string.tasks),
-                                                selected = newCalDavCalendarTasks,
-                                                icon = Icons.Default.TaskAlt,
-                                                onClick = { newCalDavCalendarTasks = !newCalDavCalendarTasks },
-                                            )
-                                        }
-                                    }
-                                    SettingsSecondaryAction(
-                                        label = stringResource(R.string.create_server_calendar),
-                                        icon = Icons.Default.Add,
-                                        enabled = newCalDavCalendarName.isNotBlank() &&
-                                            (newCalDavCalendarEvents || newCalDavCalendarTasks) &&
-                                            !state.isBusy,
-                                    ) {
-                                        onCreateCalDavCalendar(
-                                            account.id,
-                                            newCalDavCalendarName,
-                                            newCalDavCalendarEvents,
-                                            newCalDavCalendarTasks,
-                                        )
-                                        newCalDavCalendarName = ""
-                                    }
-                                }
-                                if (!isLocalSource && !isAndroidSource && !isReadOnlySource) {
-                                    SettingsGroup {
                                         SettingsRow(
                                             title = stringResource(R.string.caldav_discovery),
                                             onClick = { serverDetailsOpen = !serverDetailsOpen },
@@ -842,21 +890,45 @@ internal fun SettingsPage(
                                         }
                                     }
                                 }
-                                if (!isLocalSource) {
-                                    TextButton(
+                                SettingsGroup(footer = if (isLocalSource) stringResource(R.string.delete_local_calendar_footer) else null) {
+                                    SettingsRow(
+                                        title = stringResource(if (isLocalSource) R.string.delete_local_calendar else R.string.remove_source),
+                                        titleColor = MaterialTheme.colorScheme.error,
+                                        leading = {
+                                            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
+                                        },
                                         onClick = { deleteAccountCandidateId = account.id },
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(stringResource(R.string.remove_source), color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
-                                    }
+                                    )
+                                }
+                                accountFieldEdit?.let { edit ->
+                                    AccountFieldDialog(
+                                        edit = edit,
+                                        onDismiss = { accountFieldEdit = null },
+                                        onSave = { value ->
+                                            when (edit.field) {
+                                                AccountField.Name -> update(name = value)
+                                                AccountField.ServerUrl -> update(serverUrl = value)
+                                                AccountField.Username -> update(username = value)
+                                                AccountField.Password -> update(password = value)
+                                            }
+                                            accountFieldEdit = null
+                                        },
+                                    )
+                                }
+                                if (createServerCalendarOpen) {
+                                    CreateServerCalendarDialog(
+                                        onDismiss = { createServerCalendarOpen = false },
+                                        onCreate = { name, events, tasks ->
+                                            onCreateCalDavCalendar(account.id, name, events, tasks)
+                                            createServerCalendarOpen = false
+                                        },
+                                    )
                                 }
                             }
                         }
                         SettingsDestination.Views -> {
                             SettingsGroup {
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.default_view),
                                     options = listOf(CalendarViewMode.Agenda, CalendarViewMode.Day, CalendarViewMode.ThreeDay, CalendarViewMode.Month),
                                     selected = state.selectedView,
@@ -864,7 +936,7 @@ internal fun SettingsPage(
                                     optionIcon = { it.settingsIcon() },
                                     onSelected = onViewSelected,
                                 )
-                                SettingsChoiceRow(
+                                SettingsSegmentedRow(
                                     title = stringResource(R.string.first_day_of_week),
                                     options = listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY, DayOfWeek.SATURDAY),
                                     selected = state.firstDayOfWeek,
@@ -969,9 +1041,9 @@ internal fun SettingsPage(
                                 state.collections.filter { it.supportsTasks && it.isEnabled && !it.isReadOnlyCollection() }
                             }
                             SettingsGroup(title = stringResource(R.string.events)) {
-                                // Common durations as pills; any other length goes through the dialog.
+                                // Common durations in a menu; any other length goes through the dialog.
                                 val currentDuration = state.defaultEventDurationMinutes
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.duration),
                                     options = EventDurationPresets + CustomDurationOption,
                                     selected = currentDuration.takeIf { it in EventDurationPresets } ?: CustomDurationOption,
@@ -1000,12 +1072,25 @@ internal fun SettingsPage(
                                 )
                             }
                             SettingsGroup(title = stringResource(R.string.tasks)) {
-                                SettingsChoiceRow(
-                                    title = stringResource(R.string.settings_task_date),
-                                    options = TaskDefaultDates.entries,
-                                    selected = state.defaultTaskDates,
-                                    label = { it.localizedLabel() },
-                                    onSelected = onDefaultTaskDatesSelected,
+                                // Which dates a new task gets: a switch each for start and end.
+                                val dates = state.defaultTaskDates
+                                val hasStart = dates == TaskDefaultDates.Start || dates == TaskDefaultDates.StartAndDue
+                                val hasEnd = dates == TaskDefaultDates.Due || dates == TaskDefaultDates.StartAndDue
+                                fun datesFor(start: Boolean, end: Boolean) = when {
+                                    start && end -> TaskDefaultDates.StartAndDue
+                                    start -> TaskDefaultDates.Start
+                                    end -> TaskDefaultDates.Due
+                                    else -> TaskDefaultDates.None
+                                }
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.settings_task_start_date),
+                                    checked = hasStart,
+                                    onCheckedChange = { onDefaultTaskDatesSelected(datesFor(it, hasEnd)) },
+                                )
+                                SettingsSwitchRow(
+                                    title = stringResource(R.string.settings_task_end_date),
+                                    checked = hasEnd,
+                                    onCheckedChange = { onDefaultTaskDatesSelected(datesFor(hasStart, it)) },
                                 )
                                 SettingsReveal(visible = state.defaultTaskDates != TaskDefaultDates.None) {
                                     SettingsSwitchRow(
@@ -1047,7 +1132,7 @@ internal fun SettingsPage(
                         SettingsDestination.Appearance -> {
                             SettingsGroup(title = stringResource(R.string.color_scheme)) {
                                 ThemeSwatchPicker(selected = state.themeMode, onSelected = onThemeSelected)
-                                SettingsChoiceRow(
+                                SettingsSegmentedRow(
                                     title = stringResource(R.string.color_mode),
                                     options = listOf(AppColorMode.Auto, AppColorMode.Light, AppColorMode.Dark),
                                     selected = state.colorMode,
@@ -1056,7 +1141,7 @@ internal fun SettingsPage(
                                 )
                             }
                             SettingsGroup(title = stringResource(R.string.tasks)) {
-                                SettingsChoiceRow(
+                                SettingsSegmentedRow(
                                     title = stringResource(R.string.color_source),
                                     subtitle = stringResource(R.string.color_source_help),
                                     options = listOf(TaskColorMode.Collection, TaskColorMode.Priority),
@@ -1085,7 +1170,7 @@ internal fun SettingsPage(
                         }
                         SettingsDestination.General -> {
                             SettingsGroup {
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.app_language),
                                     options = listOf(AppLanguageMode.System, AppLanguageMode.English, AppLanguageMode.German),
                                     selected = state.languageMode,
@@ -1153,7 +1238,7 @@ internal fun SettingsPage(
                                 onColorModeSelected = onTasksWidgetColorModeSelected,
                             )
                             SettingsGroup(title = stringResource(R.string.widget_content)) {
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.tasks_widget_display),
                                     options = listOf(WidgetTaskDisplayMode.Planned, WidgetTaskDisplayMode.Unplanned, WidgetTaskDisplayMode.Today),
                                     selected = state.widgetSettings.tasksWidgetDisplayMode,
@@ -1167,14 +1252,14 @@ internal fun SettingsPage(
                                         onCheckedChange = onTasksWidgetIncludeOverdueChanged,
                                     )
                                 }
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.tasks_widget_plus_action),
                                     options = listOf(WidgetTaskCreateMode.Today, WidgetTaskCreateMode.Unplanned),
                                     selected = state.widgetSettings.tasksWidgetCreateMode,
                                     label = { it.localizedLabel() },
                                     onSelected = onTasksWidgetCreateModeSelected,
                                 )
-                                SettingsChoiceRow(
+                                SettingsDropdownRow(
                                     title = stringResource(R.string.tasks_widget_subtasks_default),
                                     options = listOf(
                                         WidgetTaskSubtaskDefaultMode.FollowApp,
@@ -1300,16 +1385,17 @@ internal fun SettingsPage(
         )
     }
     deleteAccountCandidateId?.let { accountId ->
+        val local = accountId == UiLocalAccountId
         KgsAlertDialog(
             onDismissRequest = { deleteAccountCandidateId = null },
-            title = { Text(stringResource(R.string.remove_source_question)) },
-            text = { Text(stringResource(R.string.remove_source_body)) },
+            title = { Text(stringResource(if (local) R.string.delete_local_calendar_question else R.string.remove_source_question)) },
+            text = { Text(stringResource(if (local) R.string.delete_local_calendar_body else R.string.remove_source_body)) },
             confirmButton = {
                 DialogConfirmButton(
-                    text = stringResource(R.string.remove),
+                    text = stringResource(if (local) R.string.delete else R.string.remove),
                     destructive = true,
                     onClick = {
-                        onDeleteAccount(accountId)
+                        if (local) onDeleteLocalCalendar() else onDeleteAccount(accountId)
                         deleteAccountCandidateId = null
                         navigateBack()
                     },
@@ -1441,11 +1527,19 @@ private fun SettingsSecondaryAction(
 
 /** A row that opens a web page. */
 @Composable
-private fun SettingsLinkRow(title: String, icon: ImageVector, url: String) {
+private fun SettingsLinkRow(
+    title: String,
+    icon: ImageVector,
+    url: String,
+    subtitle: String? = null,
+    iconColor: Color? = null,
+) {
     val context = LocalContext.current
     SettingsRow(
         title = title,
+        subtitle = subtitle,
         icon = icon,
+        iconColor = iconColor,
         onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
     ) {
         Icon(
@@ -1466,7 +1560,7 @@ private fun WidgetLookGroup(
     onColorModeSelected: (WidgetColorMode) -> Unit,
 ) {
     SettingsGroup(title = stringResource(R.string.widget_look)) {
-        SettingsChoiceRow(
+        SettingsDropdownRow(
             title = stringResource(R.string.color_scheme),
             options = listOf(
                 WidgetThemeMode.FollowApp,
@@ -1479,7 +1573,7 @@ private fun WidgetLookGroup(
             label = { it.localizedLabel() },
             onSelected = onThemeSelected,
         )
-        SettingsChoiceRow(
+        SettingsDropdownRow(
             title = stringResource(R.string.color_mode),
             options = listOf(WidgetColorMode.FollowApp, WidgetColorMode.FollowOs, WidgetColorMode.Light, WidgetColorMode.Dark),
             selected = colorMode,
@@ -1618,6 +1712,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.WidgetMulti -> stringResource(R.string.widget_multi_name)
     SettingsDestination.WidgetDay -> stringResource(R.string.widget_day_name)
     SettingsDestination.Privacy -> stringResource(R.string.privacy)
+    SettingsDestination.About -> stringResource(R.string.about_kgs_calendar)
     SettingsDestination.EventFieldOrder -> stringResource(R.string.event_fields)
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
 }
@@ -1653,6 +1748,67 @@ private fun PrivacyPolicyPage() {
 
 private const val PrivacyPolicyUrl = "https://kgs501.github.io/kgs-calendar/"
 private const val BugReportIssuesUrl = "https://github.com/KGS501/kgs-calendar/issues"
+private const val SourceCodeUrl = "https://github.com/KGS501/kgs-calendar"
+private const val ReleasesUrl = "https://github.com/KGS501/kgs-calendar/releases"
+
+/**
+ * The muted colors of the settings areas' icons: each area is recognizable at a glance, while the
+ * soft tint keeps the page calm.
+ */
+private object SettingsColors {
+    val Calendars = Color(0xFF4F6D9A)
+    val Views = Color(0xFF6A6FA8)
+    val NewItems = Color(0xFF5E8C6A)
+    val Appearance = Color(0xFF8C6A9E)
+    val General = Color(0xFF5F7682)
+    val Widgets = Color(0xFFB0785A)
+    val Trash = Color(0xFFA8605E)
+    val About = Color(0xFF4E8A8C)
+    val Sponsor = Color(0xFF9A6070)
+    val Bug = Color(0xFFA08A4E)
+    val Privacy = Color(0xFF4E8A8C)
+}
+
+/** The installed version name, e.g. "V.1.4.5-2". */
+@Composable
+private fun appVersionName(): String {
+    val context = LocalContext.current
+    return remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+    }
+}
+
+/** The app's mark, name and version at the top of the about page. */
+@Composable
+private fun AboutIdentityCard() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(SettingsGroupShape)
+            .background(settingsControlColor())
+            .padding(vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Image(
+            painterResource(R.drawable.kgs_logo_vector),
+            contentDescription = null,
+            // The mark fills about 62 % of this drawable; at 92 dp it matches the 56 dp mark in KGS Notes.
+            modifier = Modifier.size(92.dp),
+        )
+        Text("KGS Calendar", color = WarmInk, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.version_value, appVersionName()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp, lineHeight = 20.sp)
+        Text(
+            stringResource(R.string.about_tagline),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 10.dp, start = 24.dp, end = 24.dp),
+        )
+    }
+}
 internal const val SponsorProjectUrl = "https://github.com/sponsors/KGS501"
 private const val GoogleCalendarSyncSelectUrl = "https://calendar.google.com/calendar/syncselect"
 

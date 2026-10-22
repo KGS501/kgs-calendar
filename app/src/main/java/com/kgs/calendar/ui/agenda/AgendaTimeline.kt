@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui.agenda
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -301,6 +302,8 @@ internal fun AgendaTimeline(
                                 text = emptyMessage,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    // As tall as the date beside it, so the next day starts below it.
+                                    .heightIn(min = agendaDateStackHeight)
                                     .padding(start = 62.dp, top = 18.dp),
                                 style = androidx.compose.ui.text.TextStyle(
                                     color = MaterialTheme.colorScheme.onSurface,

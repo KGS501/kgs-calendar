@@ -31,6 +31,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import com.kgs.calendar.ui.components.ClearTextButton
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
@@ -130,7 +141,13 @@ internal fun RoundEditorAction(
     }
 }
 
-/** Event or task: a segmented switch whose selected half is a raised pill, without outlines. */
+/** True for an editor that slides in after a switch; its type switch then animates the pill over. */
+internal val LocalEditorTypeSwitchAnimates = compositionLocalOf { false }
+
+/**
+ * Event or task: a segmented switch whose selected half is a raised pill, without outlines.
+ * The pill slides to the chosen half.
+ */
 @Composable
 internal fun EditorTypeSwitch(
     eventSelected: Boolean,
@@ -138,25 +155,49 @@ internal fun EditorTypeSwitch(
     onSelectTask: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    val target = if (eventSelected) 0f else 1f
+    val animatesIn = LocalEditorTypeSwitchAnimates.current
+    val position = remember { Animatable(if (animatesIn) 1f - target else target) }
+    LaunchedEffect(target) {
+        position.animateTo(target, tween(MotionLong, easing = MotionEmphasized))
+    }
+    var widthPx by remember { mutableIntStateOf(0) }
+    val pillColor = selectedSegmentColor()
+    Box(
         modifier = modifier
             .editorInset()
             .clip(RoundedCornerShape(22.dp))
             .background(editorSectionColor())
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(4.dp)
+            .width(IntrinsicSize.Max)
+            .onSizeChanged { widthPx = it.width },
     ) {
-        EditorTypeSegment(stringResource(R.string.event), selected = eventSelected, onClick = onSelectEvent)
-        EditorTypeSegment(stringResource(R.string.task), selected = !eventSelected, onClick = onSelectTask)
+        Box(
+            Modifier
+                .matchParentSize()
+                .wrapContentWidth(Alignment.Start),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .width(with(LocalDensity.current) { (widthPx / 2).toDp() })
+                    .offset { IntOffset((position.value * widthPx / 2).roundToInt(), 0) }
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(pillColor),
+            )
+        }
+        Row {
+            EditorTypeSegment(stringResource(R.string.event), selected = position.value < 0.5f, modifier = Modifier.weight(1f), onClick = onSelectEvent)
+            EditorTypeSegment(stringResource(R.string.task), selected = position.value >= 0.5f, modifier = Modifier.weight(1f), onClick = onSelectTask)
+        }
     }
 }
 
 @Composable
-private fun EditorTypeSegment(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun EditorTypeSegment(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) selectedSegmentColor() else Color.Transparent)
             .clickable(enabled = !selected, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,

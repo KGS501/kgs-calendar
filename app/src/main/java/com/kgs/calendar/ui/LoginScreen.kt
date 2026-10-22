@@ -43,6 +43,8 @@ import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedText
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +77,7 @@ internal fun SecurePasswordField(
     label: String,
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(16.dp),
+    colors: TextFieldColors = OutlinedTextFieldDefaults.colors(),
 ) {
     var visible by remember { mutableStateOf(false) }
     OutlinedTextField(
@@ -93,6 +96,7 @@ internal fun SecurePasswordField(
             }
         },
         shape = shape,
+        colors = colors,
         modifier = modifier,
     )
 }

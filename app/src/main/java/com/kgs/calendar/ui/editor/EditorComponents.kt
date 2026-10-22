@@ -68,6 +68,9 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import com.kgs.calendar.ui.theme.MaxAppFontScale
 
 @Composable
 internal fun ReadOnlyEditorNotice(title: String) {
@@ -174,7 +177,7 @@ internal fun EventScheduleEditor(
                     value = schedule.startTimeText,
                     onValueChange = { onScheduleChange(schedule.copy(startTimeText = it).recalculatePreview()) },
                     label = stringResource(R.string.start),
-                    modifier = Modifier.width(EditorTimeChipWidth).testTag("editor-start-time"),
+                    modifier = Modifier.width(editorTimeChipWidth()).testTag("editor-start-time"),
                 )
             }
         }
@@ -198,39 +201,60 @@ internal fun EventScheduleEditor(
                     onValueChange = { onScheduleChange(schedule.copy(endTimeText = it).recalculatePreview()) },
                     label = stringResource(R.string.end),
                     isError = endIsError,
-                    modifier = Modifier.width(EditorTimeChipWidth).testTag("editor-end-time"),
+                    modifier = Modifier.width(editorTimeChipWidth()).testTag("editor-end-time"),
                 )
             }
         }
     }
 }
 
-internal val EditorTimeChipWidth = 76.dp
+private val EditorTimeChipWidth = 76.dp
 
-/** One line of a schedule: a short label such as "Start", then its date and time chips. */
+/** The width of a time chip, which grows with the font so the time is never cut off. */
+@Composable
+internal fun editorTimeChipWidth(): Dp =
+    EditorTimeChipWidth * LocalDensity.current.fontScale.coerceIn(1f, MaxAppFontScale)
+
+/**
+ * One line of a schedule: a short label such as "Start", then its date and time chips. With a
+ * large font the label sits above the chips, so the date keeps room for its text.
+ */
 @Composable
 internal fun EditorScheduleLine(
     label: String,
     content: @Composable RowScope.() -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val labelAbove = LocalDensity.current.fontScale > EditorScheduleLabelAboveFontScale
+    val labelText: @Composable (Modifier) -> Unit = { modifier ->
         Text(
             label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
             lineHeight = 18.sp,
             maxLines = 1,
-            modifier = Modifier.width(48.dp),
+            softWrap = false,
+            modifier = modifier,
         )
-        content()
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (labelAbove) labelText(Modifier.padding(start = 4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!labelAbove) labelText(Modifier.width(48.dp))
+            content()
+        }
     }
 }
+
+private const val EditorScheduleLabelAboveFontScale = 1.15f
 
 @Composable
 internal fun editorDateLabel(isoDate: String): String {

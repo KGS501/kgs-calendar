@@ -300,6 +300,15 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_TASK_FIELD_ORDER].toFieldOrder(DEFAULT_TASK_FIELD_ORDER)
     }
 
+    /** True after the user deleted the local calendar; it is then not created again on start. */
+    val localCalendarRemoved: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_LOCAL_CALENDAR_REMOVED] ?: false
+    }
+
+    suspend fun setLocalCalendarRemoved(removed: Boolean) {
+        dataStore.edit { it[KEY_LOCAL_CALENDAR_REMOVED] = removed }
+    }
+
     val welcomeCompleted: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_WELCOME_COMPLETED] ?: false
     }
@@ -345,6 +354,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         editCalendarGroups { settings ->
             val trimmed = name?.trim().orEmpty()
             settings.copy(names = if (trimmed.isEmpty()) settings.names - groupKey else settings.names + (groupKey to trimmed))
+        }
+    }
+
+    /** Sets the color of the letter picture of [key] (a source or group image key); null restores the automatic one. */
+    suspend fun setAvatarColor(key: String, color: Int?) {
+        editCalendarGroups { settings ->
+            settings.copy(avatarColors = if (color == null) settings.avatarColors - key else settings.avatarColors + (key to color))
         }
     }
 
@@ -733,6 +749,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_DEFAULT_TASK_HAS_DATE = booleanPreferencesKey("default_task_has_date")
         private val KEY_DEFAULT_TASK_HAS_TIME = booleanPreferencesKey("default_task_has_time")
         private val KEY_DEFAULT_TASK_DATES = stringPreferencesKey("default_task_dates")
+        private val KEY_LOCAL_CALENDAR_REMOVED = booleanPreferencesKey("local_calendar_removed")
         private val KEY_DEFAULT_EVENT_REMINDERS = stringPreferencesKey("default_event_reminders_csv")
         private val KEY_DEFAULT_TASK_REMINDERS = stringPreferencesKey("default_task_reminders_csv")
         private val KEY_TASK_START_NOTIFICATIONS = booleanPreferencesKey("task_start_notifications_enabled")

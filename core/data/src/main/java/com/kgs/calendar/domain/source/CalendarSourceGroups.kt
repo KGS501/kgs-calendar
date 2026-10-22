@@ -11,26 +11,39 @@ import org.json.JSONObject
  * The user's changes to how calendars are grouped in the sidebar and the source lists.
  * [assignments] moves calendars (by href) into another group; [names] renames groups by key.
  * A custom group ([CalendarSourceGroups.CUSTOM_PREFIX]) exists while a calendar is assigned to it.
+ * [avatarColors] are the colors the user chose for the letter pictures of sources and groups,
+ * keyed like their images (see `SourceImageKeys`).
  */
 data class CalendarGroupSettings(
     val assignments: Map<String, String> = emptyMap(),
     val names: Map<String, String> = emptyMap(),
+    val avatarColors: Map<String, Int> = emptyMap(),
 ) {
     fun encode(): String = JSONObject()
         .put(KEY_ASSIGNMENTS, JSONObject(assignments))
         .put(KEY_NAMES, JSONObject(names))
+        .apply { if (avatarColors.isNotEmpty()) put(KEY_AVATAR_COLORS, JSONObject(avatarColors)) }
         .toString()
 
     companion object {
         private const val KEY_ASSIGNMENTS = "assignments"
         private const val KEY_NAMES = "names"
+        private const val KEY_AVATAR_COLORS = "avatarColors"
 
         fun decode(value: String?): CalendarGroupSettings {
             val json = value?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return CalendarGroupSettings()
             return CalendarGroupSettings(
                 assignments = json.optJSONObject(KEY_ASSIGNMENTS).toStringMap(),
                 names = json.optJSONObject(KEY_NAMES).toStringMap(),
+                avatarColors = json.optJSONObject(KEY_AVATAR_COLORS).toIntMap(),
             )
+        }
+
+        private fun JSONObject?.toIntMap(): Map<String, Int> {
+            val json = this ?: return emptyMap()
+            return json.keys().asSequence()
+                .mapNotNull { key -> (json.opt(key) as? Number)?.toInt()?.let { key to it } }
+                .toMap()
         }
 
         private fun JSONObject?.toStringMap(): Map<String, String> {

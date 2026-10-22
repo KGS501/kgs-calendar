@@ -25,6 +25,7 @@ internal enum class SettingsDestination {
     WidgetMulti,
     WidgetDay,
     Privacy,
+    About,
     EventFieldOrder,
     TaskFieldOrder,
 }

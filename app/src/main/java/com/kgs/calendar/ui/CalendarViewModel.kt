@@ -183,7 +183,8 @@ class CalendarViewModel(
 
     init {
         viewModelScope.launch {
-            runCatching { repository.ensureLocalCalendar() }
+            // A deleted local calendar stays deleted until the user adds it again.
+            runCatching { if (!settingsStore.localCalendarRemoved.first()) repository.ensureLocalCalendar() }
                 .onSuccess { message.value = null }
                 .onFailure { message.value = it.message ?: "Could not prepare local calendar." }
         }
