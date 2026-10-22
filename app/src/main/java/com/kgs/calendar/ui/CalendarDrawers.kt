@@ -607,10 +607,10 @@ internal fun CollectionToggle(color: Color, checked: Boolean, onClick: () -> Uni
     }
 }
 
-private val ToggleOuterSize = 24.dp
-private val ToggleOuterRadius = 8.dp
-private val ToggleStroke = 2.dp
-private val ToggleGap = 2.5.dp
+private val ToggleOuterSize = 20.dp
+private val ToggleOuterRadius = 6.5.dp
+private val ToggleStroke = 1.8.dp
+private val ToggleGap = 2.dp
 
 @Composable
 private fun DrawerGlyph(selected: Boolean, modifier: Modifier = Modifier) {

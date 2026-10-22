@@ -533,7 +533,7 @@ internal fun TaskScheduleRow(
                         onValueChange = onTimeTextChange,
                         label = timeLabel,
                         isError = isError,
-                        modifier = Modifier.width(EditorTimeChipWidth),
+                        modifier = Modifier.width(editorTimeChipWidth()),
                     )
                 }
                 IconButton(

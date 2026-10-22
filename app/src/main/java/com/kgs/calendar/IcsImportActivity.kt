@@ -1,5 +1,6 @@
 package com.kgs.calendar
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +19,7 @@ import com.kgs.calendar.importing.icsAttachmentUri
 import com.kgs.calendar.importing.readIcsAttachment
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
+import com.kgs.calendar.ui.theme.withAppFontScaleCap
 
 class IcsImportActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
@@ -33,6 +35,10 @@ class IcsImportActivity : ComponentActivity() {
                 onImported = { ReminderScheduler.reschedule(graph.appContext) },
             ) as T
         }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppFontScaleCap())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

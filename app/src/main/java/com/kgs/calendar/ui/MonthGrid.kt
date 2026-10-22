@@ -76,6 +76,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import com.kgs.calendar.ui.theme.calendarTextScale
 
 @Composable
 internal fun MonthBlock(
@@ -92,6 +93,7 @@ internal fun MonthBlock(
     val leading = firstDay.leadingDaysFrom(firstDayOfWeek)
     val length = month.lengthOfMonth()
     val rowCount = ((leading + length + 6) / 7)
+    val rowHeight = MonthDayRowHeight * calendarTextScale()
     Column(Modifier.fillMaxWidth()) {
         // Breathing room + big month name where one month ends and the next begins.
         Text(
@@ -127,7 +129,7 @@ internal fun MonthBlock(
                         )
                     }
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(MonthDayRowHeight),
+                        modifier = Modifier.fillMaxWidth().height(rowHeight),
                     ) {
                         Row(
                             modifier = Modifier.matchParentSize(),
@@ -309,7 +311,7 @@ private fun MonthDayCard(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .size(20.dp),
+                .size(20.dp * calendarTextScale()),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -318,6 +320,8 @@ private fun MonthDayCard(
                 fontSize = 12.sp,
                 lineHeight = 13.sp,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false,
             )
         }
         val pills = buildList {
@@ -610,9 +614,11 @@ private fun MonthRowPillOverlay(
         val spacing = 4.dp
         val cellWidth = (maxWidth - spacing * 6) / 7f
         val step = cellWidth + spacing
-        val pillTop = 25.dp
-        val pillHeight = 13.dp
-        val laneStep = 15.dp
+        // The pills grow with their text, below the day number.
+        val textScale = calendarTextScale()
+        val pillTop = 25.dp * textScale
+        val pillHeight = 13.dp * textScale
+        val laneStep = 15.dp * textScale
 
         segments.forEach { segment ->
             val startColumn = ChronoUnit.DAYS.between(rowStartDate, segment.visualStart).toInt().coerceIn(0, 6)

@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import com.kgs.calendar.ui.theme.withAppFontScaleCap
 
 class MainActivity : ComponentActivity() {
     private val graph by lazy { KgsCalendarApplication.graph(this) }
@@ -51,6 +52,10 @@ class MainActivity : ComponentActivity() {
     }
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* result ignored */ }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppFontScaleCap())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

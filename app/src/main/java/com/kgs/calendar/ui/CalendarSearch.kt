@@ -116,6 +116,7 @@ import java.time.DayOfWeek
 import java.time.YearMonth
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import com.kgs.calendar.ui.theme.calendarTextScale
 
 @Composable
 internal fun CalendarSearchOverlay(
@@ -1286,11 +1287,12 @@ private fun SearchResultCard(
     val isPast = mutePast && event.endsAtMillis < System.currentTimeMillis()
     val isSpan = spanEndDate.isAfter(displayDate)
     val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
+    // The card keeps room for its three lines when the text is larger.
     val rowHeight = when {
         isSpan -> AgendaMultiDaySpanCardHeight
         attendees.isNotEmpty() -> 76.dp
         else -> 64.dp
-    }
+    } * calendarTextScale()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
