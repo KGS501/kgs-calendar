@@ -202,9 +202,12 @@ class CalendarSourceActions internal constructor(
         }
     }
 
+    /** A source's name lives only on this device, so it is saved at once without a refresh. */
     fun renameAccount(accountId: String, displayName: String) {
-        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source renamed.") {
-            repository.renameAccount(accountId, displayName)
+        scope.launch {
+            runCatching { repository.renameAccount(accountId, displayName) }
+                .onSuccess { message.value = "Source renamed." }
+                .onFailure { message.value = it.message ?: "Could not update calendar settings." }
         }
     }
 
@@ -272,9 +275,23 @@ class CalendarSourceActions internal constructor(
         }
     }
 
+    /**
+     * Shows a calendar's new name and color at once, then sends them to its server. The server
+     * step waits behind any running refresh; the app does not.
+     */
     fun updateCollectionAppearance(href: String, displayName: String, customColor: Int?) {
-        runStructuralMutation(CalendarStructuralMutation.EditCalendar) {
-            repository.updateCollectionAppearance(href, displayName, customColor)
+        scope.launch {
+            val saved = runCatching { repository.updateCollectionAppearanceLocally(href, displayName, customColor) }
+                .onFailure { message.value = it.message ?: "Could not update calendar settings." }
+                .isSuccess
+            if (saved) {
+                runStructuralMutation(
+                    CalendarStructuralMutation.EditCalendar,
+                    failureMessage = { strings.get(R.string.calendar_appearance_saved_on_device_only) },
+                ) {
+                    repository.pushCollectionAppearance(href)
+                }
+            }
         }
     }
 

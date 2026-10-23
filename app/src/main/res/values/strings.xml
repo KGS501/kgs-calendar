@@ -19,7 +19,6 @@
     <string name="read_only_url">Read-only URL</string>
     <string name="nextcloud">Nextcloud</string>
     <string name="caldav">CalDAV</string>
-    <string name="caldav_and_nextcloud">CalDAV / Nextcloud</string>
     <string name="caldav_account">CalDAV account</string>
     <string name="caldav_server_url">CalDAV server URL</string>
     <string name="nextcloud_browser_login_help">For Nextcloud you can sign in with the browser instead of a password. Other CalDAV servers need a username and password or app password.</string>
@@ -319,6 +318,8 @@
     <string name="metadata">Metadata</string>
     <string name="permissions">Permissions</string>
     <string name="calendar_active_help">Inactive calendars don\'t sync and are hidden everywhere</string>
+    <string name="calendar_use_categories">Use categories from this calendar</string>
+    <string name="calendar_use_categories_help">Suggests the categories used here when you add categories to events and tasks.</string>
     <string name="calendar_access">Access</string>
     <string name="calendar_writes">Writes</string>
     <string name="calendar_sync_state">Sync state</string>
@@ -527,6 +528,7 @@
     <string name="follow_app">Follow app</string>
     <string name="follow_os">Follow OS</string>
     <string name="calendar_settings_saved_refresh_failed">The calendar setting was saved, but the full refresh failed. The app will retry during the next sync.</string>
+    <string name="calendar_appearance_saved_on_device_only">Saved on this device. The server could not be updated, so other apps still show the old name and color.</string>
     <string name="calendar_settings_saved_reconciliation_failed">The calendar setting and refresh completed, but reminders or widgets could not be updated.</string>
     <string name="recently_deleted">Recently deleted</string>
     <string name="recently_deleted_empty_title">Nothing here</string>

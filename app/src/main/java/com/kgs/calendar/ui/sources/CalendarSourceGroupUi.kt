@@ -6,6 +6,7 @@ import com.kgs.calendar.ui.DialogDismissButton
 import com.kgs.calendar.ui.DialogConfirmButton
 import com.kgs.calendar.ui.DialogChoiceRow
 import com.kgs.calendar.ui.DialogChoiceGroup
+import com.kgs.calendar.ui.ColorChoiceRow
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -28,14 +30,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -143,13 +142,18 @@ internal fun defaultAvatarColor(key: String): Int =
 
 /** The letter-picture color of a source. */
 internal fun AccountEntity.avatarColor(settings: CalendarGroupSettings): Int =
-    SourceImageKeys.account(id).let { key -> settings.avatarColors[key] ?: defaultAvatarColor(key) }
+    settings.avatarColors[SourceImageKeys.account(id)] ?: automaticAvatarColor()
+
+/** The letter-picture color of a source when the user has not picked one. */
+internal fun AccountEntity.automaticAvatarColor(): Int = defaultAvatarColor(SourceImageKeys.account(id))
 
 /** The letter-picture color of a group; a group of one source uses that source's color. */
 internal fun CalendarSourceGroup.avatarColor(settings: CalendarGroupSettings): Int =
-    settings.avatarColors[SourceImageKeys.group(key)]
-        ?: accounts.singleOrNull()?.avatarColor(settings)
-        ?: defaultAvatarColor(SourceImageKeys.group(key))
+    settings.avatarColors[SourceImageKeys.group(key)] ?: automaticAvatarColor(settings)
+
+/** The letter-picture color of a group when the user has not picked one for it. */
+internal fun CalendarSourceGroup.automaticAvatarColor(settings: CalendarGroupSettings): Int =
+    accounts.singleOrNull()?.avatarColor(settings) ?: defaultAvatarColor(SourceImageKeys.group(key))
 
 /** The group that holds [collection], and its automatic group when the user moved it elsewhere. */
 internal fun List<CalendarSourceGroup>.groupOf(collection: CollectionEntity): CalendarSourceGroup? =
@@ -205,6 +209,7 @@ internal fun AvatarAppearanceEditor(
     name: String,
     image: SourceImage?,
     color: Int,
+    automaticColor: Int,
     customColor: Int?,
     hasCustomImage: Boolean,
     onPickImage: (Uri) -> Unit,
@@ -228,31 +233,13 @@ internal fun AvatarAppearanceEditor(
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DialogFieldCaption(stringResource(R.string.avatar_color))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AvatarColorSwatch(color = null, selected = customColor == null, onClick = { onColorSelected(null) })
-                AvatarPalette.forEach { option ->
-                    AvatarColorSwatch(color = option, selected = customColor == option, onClick = { onColorSelected(option) })
-                }
-            }
-        }
-    }
-}
-
-/** One color choice; the null color is "automatic", drawn as a split dot. */
-@Composable
-private fun AvatarColorSwatch(color: Int?, selected: Boolean, onClick: () -> Unit) {
-    val description = if (color == null) stringResource(R.string.automatic) else null
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(role = Role.RadioButton, onClickLabel = description, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            selected -> Icon(Icons.Default.Check, contentDescription = description, tint = if (color == null) WarmInk else Color.White, modifier = Modifier.size(18.dp))
-            color == null -> Text("A", color = WarmInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            ColorChoiceRow(
+                selectedColor = customColor,
+                automaticColor = automaticColor,
+                onColorSelected = onColorSelected,
+                contentPadding = PaddingValues(0.dp),
+                viewportBleed = 0.dp,
+            )
         }
     }
 }
@@ -277,6 +264,7 @@ internal fun AccountAvatarDialog(
                 name = name,
                 image = account.image(images),
                 color = account.avatarColor(settings),
+                automaticColor = account.automaticAvatarColor(),
                 customColor = settings.avatarColors[SourceImageKeys.account(account.id)],
                 hasCustomImage = account.hasCustomImage(images),
                 onPickImage = onPickImage,
@@ -312,6 +300,7 @@ internal fun CalendarGroupSettingsDialog(
                     name = name.ifBlank { automaticName },
                     image = group.image(images),
                     color = group.avatarColor(settings),
+                    automaticColor = group.automaticAvatarColor(settings),
                     customColor = settings.avatarColors[SourceImageKeys.group(group.key)],
                     hasCustomImage = group.hasCustomImage(images),
                     onPickImage = onPickImage,

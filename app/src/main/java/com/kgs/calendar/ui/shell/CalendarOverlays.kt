@@ -263,6 +263,10 @@ internal fun CollectionSettingsHost(
                 visibleInViews = collection.href !in state.hiddenCollectionHrefs,
                 eventsVisible = collection.href !in state.collectionVisibility.eventsHiddenIn,
                 tasksVisible = collection.href !in state.collectionVisibility.tasksHiddenIn,
+                categoriesSynced = state.categorySync.usesCategoriesOf(collection),
+                onCategoriesSyncedChanged = { synced ->
+                    viewModel.settings.setCollectionCategorySync(collection, synced)
+                },
                 onSave = { name, color ->
                     viewModel.sources.updateCollectionAppearance(collection.href, name, color)
                     shell.closeCollectionEditor()

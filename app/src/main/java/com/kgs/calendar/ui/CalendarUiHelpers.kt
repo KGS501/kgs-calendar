@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.key.key
+import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.R
@@ -515,14 +516,20 @@ internal fun List<String>.toCategoriesCsv(): String =
         .distinctBy { it.lowercase(Locale.ROOT) }
         .joinToString(",")
 
-internal fun CalendarUiState.allKnownCategoryTags(): List<String> =
-    buildList {
-        events.forEach { addAll(it.categories.toCategoryTags()) }
-        datedTasks.forEach { addAll(it.categories.toCategoryTags()) }
-        inboxTasks.forEach { addAll(it.categories.toCategoryTags()) }
-        scheduledOpenTasks.forEach { addAll(it.categories.toCategoryTags()) }
-        completedTasks.forEach { addAll(it.categories.toCategoryTags()) }
+/** The user's categories: those used in the calendars whose categories count (see [CategorySync]). */
+internal fun CalendarUiState.allKnownCategoryTags(): List<String> {
+    val sharedHrefs = collections.filter(categorySync::usesCategoriesOf).mapTo(HashSet()) { it.href }
+    return buildList {
+        fun add(collectionHref: String, categories: String?) {
+            if (collectionHref in sharedHrefs) addAll(categories.toCategoryTags())
+        }
+        events.forEach { add(it.collectionHref, it.categories) }
+        datedTasks.forEach { add(it.collectionHref, it.categories) }
+        inboxTasks.forEach { add(it.collectionHref, it.categories) }
+        scheduledOpenTasks.forEach { add(it.collectionHref, it.categories) }
+        completedTasks.forEach { add(it.collectionHref, it.categories) }
     }.distinctBy { it.lowercase(Locale.ROOT) }.sortedBy { it.lowercase(Locale.ROOT) }
+}
 
 internal data class ProblemItem(
     val id: String,

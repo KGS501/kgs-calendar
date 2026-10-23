@@ -2,7 +2,14 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,13 +39,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import kotlin.math.roundToInt
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
@@ -82,6 +85,8 @@ internal fun EditorTopBar(
     modifier: Modifier = Modifier,
     saveEnabled: Boolean = true,
 ) {
+    val typeSlide = LocalEditorTypeSlide.current
+    val inPlace = typeSlide?.run { Modifier.staysInPlace() } ?: Modifier
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -97,6 +102,7 @@ internal fun EditorTopBar(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
             contentColor = WarmInk,
             onClick = onClose,
+            modifier = inPlace,
         )
         Text(
             title,
@@ -106,7 +112,8 @@ internal fun EditorTopBar(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             modifier = Modifier
-                .weight(1f),
+                .weight(1f)
+                .then(typeSlide?.run { Modifier.crossfades() } ?: Modifier),
             textAlign = TextAlign.Center,
         )
         RoundEditorAction(
@@ -116,6 +123,7 @@ internal fun EditorTopBar(
             contentColor = if (saveEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
             enabled = saveEnabled,
             onClick = onSave,
+            modifier = inPlace,
         )
     }
 }
@@ -127,10 +135,11 @@ internal fun RoundEditorAction(
     containerColor: Color,
     contentColor: Color,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(36.dp)
             .clip(CircleShape)
             .background(containerColor)
@@ -145,8 +154,47 @@ internal fun RoundEditorAction(
 internal val LocalEditorTypeSwitchAnimates = compositionLocalOf { false }
 
 /**
+ * Switching between the event and the task editor slides only the fields below the type switch:
+ * the event editor's in from the start side, the task editor's from the end side, like the halves
+ * of the switch. The top bar and the switch stay in place; the editor sliding out hides its own,
+ * so the ones of the editor sliding in, drawn at the same spot, look like a single sheet.
+ */
+internal class EditorTypeSlide(
+    private val scope: AnimatedVisibilityScope,
+    private val isEvent: Boolean,
+) {
+    private val leaving: Boolean
+        get() = scope.transition.targetState == EnterExitState.PostExit
+
+    /** The top bar's buttons and the type switch: shown only by the editor sliding in. */
+    fun Modifier.staysInPlace(): Modifier = alpha(if (leaving) 0f else 1f)
+
+    /** The title, which names the editor type: the old one fades out, then the new one in. */
+    fun Modifier.crossfades(): Modifier = with(scope) {
+        animateEnterExit(
+            enter = fadeIn(tween(MotionShort, delayMillis = MotionShort, easing = MotionStandard)),
+            exit = fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)),
+        )
+    }
+
+    /** The fields below the type switch. */
+    fun Modifier.slides(): Modifier = with(scope) {
+        val side = if (isEvent) -1 else 1
+        animateEnterExit(
+            enter = slideInHorizontally(tween(MotionLong, easing = MotionEmphasized)) { it * side } +
+                fadeIn(tween(MotionMedium, easing = MotionStandard)),
+            exit = slideOutHorizontally(tween(MotionLong, easing = MotionEmphasized)) { it * side } +
+                fadeOut(tween(MotionMedium, easing = MotionStandardAccelerate)),
+        )
+    }
+}
+
+/** Set while an editor can switch between event and task; see [EditorTypeSlide]. */
+internal val LocalEditorTypeSlide = compositionLocalOf<EditorTypeSlide?> { null }
+
+/**
  * Event or task: a segmented switch whose selected half is a raised pill, without outlines.
- * The pill slides to the chosen half.
+ * The pill slides to the chosen half, and the labels' colors follow it.
  */
 @Composable
 internal fun EditorTypeSwitch(
@@ -161,7 +209,6 @@ internal fun EditorTypeSwitch(
     LaunchedEffect(target) {
         position.animateTo(target, tween(MotionLong, easing = MotionEmphasized))
     }
-    var widthPx by remember { mutableIntStateOf(0) }
     val pillColor = selectedSegmentColor()
     Box(
         modifier = modifier
@@ -169,36 +216,40 @@ internal fun EditorTypeSwitch(
             .clip(RoundedCornerShape(22.dp))
             .background(editorSectionColor())
             .padding(4.dp)
-            .width(IntrinsicSize.Max)
-            .onSizeChanged { widthPx = it.width },
+            .width(IntrinsicSize.Max),
     ) {
+        // Sized in the same pass as the switch, so the pill shows from the first frame.
         Box(
             Modifier
                 .matchParentSize()
-                .wrapContentWidth(Alignment.Start),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .width(with(LocalDensity.current) { (widthPx / 2).toDp() })
-                    .offset { IntOffset((position.value * widthPx / 2).roundToInt(), 0) }
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(pillColor),
-            )
-        }
+                .layout { measurable, constraints ->
+                    // The switch's intrinsic width asks with unbounded constraints; the pill adds nothing.
+                    if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) return@layout layout(0, 0) {}
+                    val half = constraints.maxWidth / 2
+                    val pill = measurable.measure(Constraints.fixed(half, constraints.maxHeight))
+                    layout(constraints.maxWidth, constraints.maxHeight) {
+                        pill.placeRelative((position.value * half).roundToInt(), 0)
+                    }
+                }
+                .clip(RoundedCornerShape(18.dp))
+                .background(pillColor),
+        )
         Row {
-            EditorTypeSegment(stringResource(R.string.event), selected = position.value < 0.5f, modifier = Modifier.weight(1f), onClick = onSelectEvent)
-            EditorTypeSegment(stringResource(R.string.task), selected = position.value >= 0.5f, modifier = Modifier.weight(1f), onClick = onSelectTask)
+            val taskShare = position.value.coerceIn(0f, 1f)
+            EditorTypeSegment(stringResource(R.string.event), selectedShare = 1f - taskShare, enabled = !eventSelected, modifier = Modifier.weight(1f), onClick = onSelectEvent)
+            EditorTypeSegment(stringResource(R.string.task), selectedShare = taskShare, enabled = eventSelected, modifier = Modifier.weight(1f), onClick = onSelectTask)
         }
     }
 }
 
+/** One half of [EditorTypeSwitch]; [selectedShare] is how much of the pill lies under it. */
 @Composable
-private fun EditorTypeSegment(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun EditorTypeSegment(text: String, selectedShare: Float, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val selected = selectedShare >= 0.5f
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .clickable(enabled = !selected, role = Role.Tab, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -209,7 +260,7 @@ private fun EditorTypeSegment(text: String, selected: Boolean, modifier: Modifie
             maxLines = 1,
             softWrap = false,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (selected) WarmInk else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = lerp(MaterialTheme.colorScheme.onSurfaceVariant, WarmInk, selectedShare),
         )
     }
 }

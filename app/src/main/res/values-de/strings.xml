@@ -19,7 +19,6 @@
     <string name="read_only_url">Abonnement (nur lesen)</string>
     <string name="nextcloud">Nextcloud</string>
     <string name="caldav">CalDAV</string>
-    <string name="caldav_and_nextcloud">CalDAV / Nextcloud</string>
     <string name="caldav_account">CalDAV-Konto</string>
     <string name="caldav_server_url">CalDAV-Server-URL</string>
     <string name="nextcloud_browser_login_help">Bei Nextcloud kannst du dich statt mit Passwort im Browser anmelden. Andere CalDAV-Server brauchen Benutzername und Passwort oder App-Passwort.</string>
@@ -319,6 +318,8 @@
     <string name="metadata">Metadaten</string>
     <string name="permissions">Berechtigungen</string>
     <string name="calendar_active_help">Inaktive Kalender werden nicht synchronisiert und überall ausgeblendet</string>
+    <string name="calendar_use_categories">Kategorien dieses Kalenders verwenden</string>
+    <string name="calendar_use_categories_help">Schlägt die hier verwendeten Kategorien vor, wenn du Terminen und Aufgaben Kategorien gibst.</string>
     <string name="calendar_access">Zugriff</string>
     <string name="calendar_writes">Schreibzugriff</string>
     <string name="calendar_sync_state">Sync-Status</string>
@@ -527,6 +528,7 @@
     <string name="follow_app">App folgen</string>
     <string name="follow_os">System folgen</string>
     <string name="calendar_settings_saved_refresh_failed">Die Kalendereinstellung wurde gespeichert, aber die vollst&#228;ndige Aktualisierung ist fehlgeschlagen. Beim n&#228;chsten Abgleich wird sie erneut versucht.</string>
+    <string name="calendar_appearance_saved_on_device_only">Auf diesem Gerät gespeichert. Der Server konnte nicht aktualisiert werden, daher zeigen andere Apps noch den alten Namen und die alte Farbe.</string>
     <string name="calendar_settings_saved_reconciliation_failed">Die Kalendereinstellung und Aktualisierung wurden abgeschlossen, aber Erinnerungen oder Widgets konnten nicht aktualisiert werden.</string>
     <string name="recently_deleted">Zuletzt gelöscht</string>
     <string name="recently_deleted_empty_title">Hier ist nichts</string>

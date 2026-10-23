@@ -3,6 +3,7 @@ package com.kgs.calendar.ui.haptics
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -32,6 +33,9 @@ enum class KgsHapticCue {
 
     /** A completed task was ticked open again. */
     TaskReopened,
+
+    /** A slider under the finger moved to another step. */
+    SliderStep,
 }
 
 fun interface KgsHapticPerformer {
@@ -59,6 +63,8 @@ class KgsHaptics(
     fun taskToggled(completed: Boolean) =
         perform(if (completed) KgsHapticCue.TaskCompleted else KgsHapticCue.TaskReopened)
 
+    fun sliderStep() = perform(KgsHapticCue.SliderStep)
+
     fun perform(cue: KgsHapticCue) {
         if (!isEnabled()) return
         // Enable with `adb shell setprop log.tag.KgsHaptics DEBUG` to verify cues on an emulator.
@@ -83,6 +89,8 @@ internal val KgsHapticCue.feedbackType: HapticFeedbackType
         KgsHapticCue.Drop -> HapticFeedbackType.Confirm
         KgsHapticCue.TaskCompleted -> HapticFeedbackType.ToggleOn
         KgsHapticCue.TaskReopened -> HapticFeedbackType.ToggleOff
+        // The lightest tick, made for controls that step quickly, such as a 0-100 % slider.
+        KgsHapticCue.SliderStep -> HapticFeedbackType.SegmentFrequentTick
     }
 
 val LocalKgsHaptics = staticCompositionLocalOf { KgsHaptics.Off }
@@ -124,5 +132,35 @@ internal fun DragSnapHaptics(slot: Any) {
     val tracker = remember { DragSnapTracker() }
     LaunchedEffect(slot) {
         if (tracker.onSlot(slot)) haptics.dragSnap()
+    }
+}
+
+/**
+ * Tells when the user moves a slider to another step. [sync] takes the value the slider shows,
+ * so a value that changes elsewhere never ticks.
+ */
+internal class SliderStepTracker(private var value: Int) {
+    fun onUserValue(next: Int): Boolean {
+        if (next == value) return false
+        value = next
+        return true
+    }
+
+    fun sync(shown: Int) {
+        value = shown
+    }
+}
+
+/**
+ * Returns the function a slider calls with every value the user moves it to; it ticks once per
+ * step. [value] is the value the slider shows.
+ */
+@Composable
+internal fun rememberSliderStepHaptics(value: Int): (Int) -> Unit {
+    val haptics = LocalKgsHaptics.current
+    val tracker = remember { SliderStepTracker(value) }
+    SideEffect { tracker.sync(value) }
+    return remember(haptics, tracker) {
+        { next -> if (tracker.onUserValue(next)) haptics.sliderStep() }
     }
 }

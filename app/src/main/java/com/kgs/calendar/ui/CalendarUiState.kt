@@ -27,6 +27,7 @@ import com.kgs.calendar.data.account.SourceImage
 import com.kgs.calendar.domain.source.CalendarGroupSettings
 import com.kgs.calendar.domain.source.CalendarSourceGroup
 import com.kgs.calendar.domain.source.CalendarSourceGroups
+import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.CollectionVisibility
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -138,6 +139,7 @@ data class CalendarUiState(
     val welcomeCompleted: Boolean = true,
     val showDisabledAndroidProviderCalendars: Boolean = false,
     val collectionVisibility: CollectionVisibility = CollectionVisibility(),
+    val categorySync: CategorySync = CategorySync(),
 ) {
     val hasAccount: Boolean = accounts.isNotEmpty() || account != null
 

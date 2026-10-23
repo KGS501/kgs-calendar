@@ -24,6 +24,7 @@ import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.MultiDayCounts
 import com.kgs.calendar.domain.source.CalendarGroupSettings
+import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,6 +99,7 @@ internal data class AppBehaviourSettings(
     val welcomeCompleted: Boolean,
     val showDisabledAndroidProviderCalendars: Boolean,
     val collectionVisibility: CollectionVisibility,
+    val categorySync: CategorySync,
 )
 
 internal data class TimelineZoomSettings(
@@ -246,9 +248,10 @@ internal fun generalSettings(
         settingsStore.maxVisibleAllDayItems,
         settingsStore.welcomeCompleted,
         settingsStore.showDisabledAndroidProviderCalendars,
-        collectionVisibility,
-        ::AppBehaviourSettings,
-    ),
+        combine(collectionVisibility, settingsStore.categorySync, ::Pair),
+    ) { focusTitle, maxAllDay, welcome, showDisabled, (visibility, categorySync) ->
+        AppBehaviourSettings(focusTitle, maxAllDay, welcome, showDisabled, visibility, categorySync)
+    },
     combine(
         firstDayOfWeek,
         weekViewEnabled,
@@ -461,5 +464,6 @@ internal fun calendarUiState(
         welcomeCompleted = behaviour.welcomeCompleted,
         showDisabledAndroidProviderCalendars = behaviour.showDisabledAndroidProviderCalendars,
         collectionVisibility = behaviour.collectionVisibility,
+        categorySync = behaviour.categorySync,
     )
 }

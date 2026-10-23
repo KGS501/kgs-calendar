@@ -263,6 +263,11 @@ class CalendarRepository(
     suspend fun updateCollectionAppearance(href: String, displayName: String, customColor: Int?) =
         sources.updateCollectionAppearance(href, displayName, customColor)
 
+    suspend fun updateCollectionAppearanceLocally(href: String, displayName: String, customColor: Int?) =
+        sources.updateCollectionAppearanceLocally(href, displayName, customColor)
+
+    suspend fun pushCollectionAppearance(href: String) = sources.pushCollectionAppearance(href)
+
     suspend fun createCalDavCalendar(
         accountId: String,
         displayName: String,

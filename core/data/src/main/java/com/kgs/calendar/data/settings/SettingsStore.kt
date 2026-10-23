@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -22,6 +23,7 @@ import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.CalendarGroupSettings
 import com.kgs.calendar.domain.source.CalendarSourceGroups
+import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -330,6 +332,23 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             tasksHiddenIn = prefs[KEY_TASKS_HIDDEN_COLLECTION_HREFS].orEmpty(),
         )
     }.distinctUntilChanged()
+
+    /** The calendars whose categories join the user's own, beyond the defaults (see [CategorySync]). */
+    val categorySync: Flow<CategorySync> = dataStore.data.map { prefs ->
+        CategorySync(
+            enabledIn = prefs[KEY_CATEGORY_SYNC_ENABLED_HREFS].orEmpty(),
+            disabledIn = prefs[KEY_CATEGORY_SYNC_DISABLED_HREFS].orEmpty(),
+        )
+    }.distinctUntilChanged()
+
+    /** Stores whether [collection]'s categories join the user's own; its default is not stored. */
+    suspend fun setCategorySync(collection: CollectionEntity, synced: Boolean) {
+        val isDefault = synced == CategorySync.usesCategoriesByDefault(collection)
+        dataStore.edit { prefs ->
+            prefs.setHref(KEY_CATEGORY_SYNC_ENABLED_HREFS, collection.href, included = synced && !isDefault)
+            prefs.setHref(KEY_CATEGORY_SYNC_DISABLED_HREFS, collection.href, included = !synced && !isDefault)
+        }
+    }
 
     /** How calendars are grouped in the sidebar and the source lists, beyond the automatic grouping. */
     val calendarGroupSettings: Flow<CalendarGroupSettings> = dataStore.data.map { prefs ->
@@ -761,6 +780,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
         private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
         private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
+        private val KEY_CATEGORY_SYNC_ENABLED_HREFS = stringSetPreferencesKey("category_sync_enabled_hrefs")
+        private val KEY_CATEGORY_SYNC_DISABLED_HREFS = stringSetPreferencesKey("category_sync_disabled_hrefs")
         private val KEY_CALENDAR_GROUPS = stringPreferencesKey("calendar_groups")
         private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
         private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
