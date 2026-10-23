@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -72,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.key.key
+import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
@@ -536,6 +538,8 @@ internal data class ProblemItem(
     val title: String,
     val body: String,
     val target: ProblemTarget? = null,
+    /** Set for an item whose upload hit a conflict; the user picks the version to keep. */
+    val conflictResourceHref: String? = null,
 )
 
 internal sealed interface ProblemTarget {
@@ -549,7 +553,7 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
         message
             ?.takeIf { it.isNotBlank() && it.isProblemMessage() }
             ?.let {
-                add(ProblemItem("message-$it", stringResource(R.string.app_notice), it))
+                add(ProblemItem("message-$it", stringResource(R.string.app_notice), friendlyErrorText(it)))
             }
         (accounts + listOfNotNull(account))
             .distinctBy { it.id }
@@ -566,13 +570,13 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
                             ProblemItem(
                                 id = "source-${source.id}",
                                 title = stringResource(R.string.problem_feed_no_data_title, feedName),
-                                body = stringResource(R.string.problem_feed_no_data_body, error),
+                                body = stringResource(R.string.problem_feed_no_data_body, friendlyErrorText(error)),
                             )
                         } else {
                             ProblemItem(
                                 id = "source-${source.id}",
                                 title = stringResource(R.string.source_named, sourceName),
-                                body = error,
+                                body = friendlyErrorText(error),
                             )
                         }
                     )
@@ -608,16 +612,20 @@ internal fun CalendarUiState.problemItems(): List<ProblemItem> =
             val itemTitle = (event?.title ?: task?.title)
                 ?.ifBlank { stringResource(R.string.no_title) }
                 ?: stringResource(R.string.unknown_item)
+            val conflict = resource.syncError.isSyncConflictError()
             add(
                 ProblemItem(
                     id = "resource-${resource.href}",
                     title = "$typeLabel: $itemTitle",
-                    body = resource.syncError.orEmpty(),
+                    body = if (conflict) stringResource(R.string.sync_conflict_body) else friendlyErrorText(resource.syncError.orEmpty()),
                     target = target,
+                    conflictResourceHref = resource.href.takeIf { conflict },
                 ),
             )
         }
-        pendingMutationItems.forEach { mutation ->
+        // A conflict already stands for its waiting change.
+        val conflictHrefs = problemResources.filter { it.syncError.isSyncConflictError() }.mapTo(HashSet()) { it.href }
+        pendingMutationItems.filterNot { it.resourceHref in conflictHrefs }.forEach { mutation ->
             val event = eventCandidates.firstOrNull { it.resourceHref == mutation.resourceHref }
             val task = taskCandidates.firstOrNull { it.resourceHref == mutation.resourceHref }
             val target = when {
@@ -1327,7 +1335,7 @@ internal fun monthMarkersFor(
 }
 
 private fun String.toDisplayDate(): String = runCatching {
-    LocalDate.parse(this).format(DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", Locale.getDefault()))
+    LocalDate.parse(this).format(dayMonthFormatter(Locale.getDefault(), weekday = "EEE", year = true))
 }.getOrDefault(this)
 
 internal enum class SheetSnap {
@@ -1527,7 +1535,7 @@ internal fun EventEntity.localizedTimeLabel(): String {
 
 @Composable
 internal fun EventEntity.localizedAgendaSpanLabel(startDate: LocalDate, endDate: LocalDate): String {
-    val dateFormatter = DateTimeFormatter.ofPattern("d. MMM yyyy", LocalAppLocale.current)
+    val dateFormatter = dayMonthFormatter(LocalAppLocale.current, year = true)
     val allDayLabel = appString(R.string.all_day)
     return if (allDay) {
         "${startDate.format(dateFormatter)} - ${endDate.format(dateFormatter)}, $allDayLabel"
@@ -1538,7 +1546,7 @@ internal fun EventEntity.localizedAgendaSpanLabel(startDate: LocalDate, endDate:
 
 @Composable
 internal fun EventEntity.localizedFullTimeLabel(): String {
-    val dateFormatter = DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", LocalAppLocale.current)
+    val dateFormatter = dayMonthFormatter(LocalAppLocale.current, weekday = "EEE", year = true)
     val allDayLabel = stringResource(R.string.all_day)
     val startDate = startsAtMillis.toDate()
     val endDate = (endsAtMillis - 1).toDate()
@@ -1556,12 +1564,12 @@ internal fun TaskEntity.localizedTaskTimeLabel(): String {
     val dueDate = dueAtMillis?.toDate()
     val date = dueDate ?: startDate ?: return stringResource(R.string.inbox)
     val locale = LocalAppLocale.current
-    val dateText = date.format(DateTimeFormatter.ofPattern("EEE, d. MMM", locale))
+    val dateText = date.format(dayMonthFormatter(locale, weekday = "EEE"))
     val startTimed = startAtMillis?.takeIf { startHasTime }
     val dueTimed = dueAtMillis?.takeIf { dueHasTime }
     return when {
         startTimed != null && dueTimed != null && startDate == dueDate -> "$dateText, ${startTimed.toTimeText()}-${dueTimed.toTimeText()}"
-        startTimed != null && dueTimed != null -> "${startTimed.toDate().format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${startTimed.toTimeText()} - ${dueTimed.toDate().format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${dueTimed.toTimeText()}"
+        startTimed != null && dueTimed != null -> "${startTimed.toDate().format(dayMonthFormatter(locale))} ${startTimed.toTimeText()} - ${dueTimed.toDate().format(dayMonthFormatter(locale))} ${dueTimed.toTimeText()}"
         startTimed != null -> "$dateText, ${stringResource(R.string.from_time, startTimed.toTimeText())}"
         dueTimed != null -> "$dateText, ${stringResource(R.string.until_time, dueTimed.toTimeText())}"
         else -> "$dateText, ${stringResource(R.string.all_day)}"

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import com.kgs.calendar.sync.reparseForCurrentZoneIfNeeded
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.MainActivity
 import com.kgs.calendar.reminder.ReminderScheduler
@@ -119,13 +120,16 @@ class KgsWidgetRefreshReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         if (action !in REFRESH_ACTIONS) return
         val appContext = context.applicationContext
-        val widgets = KgsCalendarApplication.graph(appContext).widgets
+        val graph = KgsCalendarApplication.graph(appContext)
+        val widgets = graph.widgets
         WidgetDayRollover.schedule(appContext)
         widgets.state.dataGeneration.increment()
         val rollover = action == WidgetDayRollover.ACTION_DAY_ROLLOVER
         val pending = goAsync()
         widgets.scheduler.launch {
             try {
+                // All-day items are stored in the zone they were read in; read them again in the new one.
+                if (action == Intent.ACTION_TIMEZONE_CHANGED) runCatching { graph.reparseForCurrentZoneIfNeeded() }
                 // All-day and floating reminders were planned in local time.
                 if (!rollover) runCatching { ReminderScheduler.reschedule(appContext) }
                 widgets.scheduler.updateAllAndAwait(if (rollover) WidgetUpdateCause.Periodic else WidgetUpdateCause.Configuration)

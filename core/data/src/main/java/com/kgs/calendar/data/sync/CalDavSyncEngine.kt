@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.sync
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import android.database.SQLException
 import com.kgs.calendar.data.DEFAULT_COLORS
 import com.kgs.calendar.data.LocalWriteSupport
@@ -23,6 +24,7 @@ import com.kgs.calendar.data.remote.RemoteResourceData
 import com.kgs.calendar.data.remote.isTransientFailure
 import com.kgs.calendar.data.remote.isConnectionFailure
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.data.remote.isOnlySyncConflicts
 import com.kgs.calendar.data.secure.CredentialsStore
 import com.kgs.calendar.data.secure.StoredCredentials
 import com.kgs.calendar.domain.model.ComponentType
@@ -42,9 +44,11 @@ class CalDavSyncEngine internal constructor(
     private val icalCodec: IcalCodec,
     private val localWrites: LocalWriteSupport,
     private val uploader: PendingMutationUploader,
-    private val zoneId: ZoneId,
+    private val fixedZoneId: ZoneId?,
     private val sourceImages: SourceImageStore = SourceImageStore(null),
 ) : CalendarSourceSyncEngine {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     /** Every account the other engines don't claim is a CalDAV account, so this engine must be asked last. */
     override fun handles(account: AccountEntity): Boolean = true
 
@@ -68,7 +72,8 @@ class CalDavSyncEngine internal constructor(
             uploadFailure?.let(pullError::addSuppressed)
             throw pullError
         }
-        uploadFailure?.let { throw it }
+        // A conflict is shown on its item, where the user settles it; it does not fail the source.
+        uploadFailure?.takeUnless { it.isOnlySyncConflicts() }?.let { throw it }
         database.accountDao().updateSyncState(SyncState.Idle, null, System.currentTimeMillis(), account.id)
         refreshNextcloudAvatar(account, credentials)
         return true
@@ -122,6 +127,36 @@ class CalDavSyncEngine internal constructor(
         )
         syncCollection(credentials, collection, stored)
         return true
+    }
+
+    /**
+     * Downloads one item again and stores the server's version, or removes the item when the
+     * server no longer has it. Used once its unsent local change was dropped: an incremental
+     * sync would not list it, since the server version arrived while the change was pending.
+     */
+    internal suspend fun refreshResource(collectionHref: String, resourceHref: String) {
+        val collection = database.collectionDao().get(collectionHref) ?: return
+        val credentials = credentialsStore.get(collection.accountId) ?: error("Missing account credentials. Reconnect this calendar account.")
+        val remote = try {
+            calDavClient.getResourceWithEtag(credentials.serverUrl, resourceHref, credentials.username, credentials.appPassword)
+        } catch (error: HttpStatusException) {
+            if (error.statusCode != 404 && error.statusCode != 410) throw error
+            localWrites.writeTransaction {
+                if (database.pendingMutationDao().forResource(resourceHref).isNotEmpty()) return@writeTransaction
+                database.eventDao().deleteByResource(resourceHref)
+                database.taskDao().deleteByResource(resourceHref)
+                database.resourceDao().delete(resourceHref)
+            }
+            return
+        }
+        val download = RemoteCalDavDownload(
+            remote = RemoteResource(resourceHref, remote.etag),
+            local = database.resourceDao().get(resourceHref),
+            localHref = resourceHref,
+            etag = remote.etag,
+            outcome = parsedDownload(remote.calendarData, collection, resourceHref, remote.etag),
+        )
+        localWrites.writeTransaction { applyRemoteCalDavDownload(collection, download) }
     }
 
     private suspend fun pullAccount(account: AccountEntity, credentials: StoredCredentials, options: SourceSyncOptions) {

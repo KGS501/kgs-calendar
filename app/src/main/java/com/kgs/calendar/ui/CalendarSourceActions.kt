@@ -92,14 +92,14 @@ class CalendarSourceActions internal constructor(
                 return@launch
             }
             refreshAndroidProviderDiagnosticsInternal()
-            val resultMessage = structuralMutationMessage(saved.getOrThrow(), "CalDAV account synced.")
+            val resultMessage = structuralMutationMessage(saved.getOrThrow())
             message.value = resultMessage
             busy.value = false
         }
     }
 
     fun startBrowserLogin(serverUrl: String) {
-        runStructuralMutation(CalendarStructuralMutation.AddSource, "Login complete.") {
+        runStructuralMutation(CalendarStructuralMutation.AddSource) {
             val login = repository.startLoginFlow(serverUrl)
             transient.externalLoginUrl.value = login.loginUrl
             repository.completeLoginFlow(login.pollEndpoint, login.token)
@@ -194,7 +194,7 @@ class CalendarSourceActions internal constructor(
     }
 
     fun addAndroidDeviceCalendars() {
-        runStructuralMutation(CalendarStructuralMutation.AddSource, "Android device calendars added.", showManualSync = true) {
+        runStructuralMutation(CalendarStructuralMutation.AddSource, showManualSync = true) {
             repository.enableAndroidCalendars(
                 includeDisabledProviderCalendars = includeDisabledAndroidProviderCalendars(),
             )
@@ -206,19 +206,19 @@ class CalendarSourceActions internal constructor(
     fun renameAccount(accountId: String, displayName: String) {
         scope.launch {
             runCatching { repository.renameAccount(accountId, displayName) }
-                .onSuccess { message.value = "Source renamed." }
+                .onSuccess { message.value = null }
                 .onFailure { message.value = it.message ?: "Could not update calendar settings." }
         }
     }
 
     fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) {
-        runStructuralMutation(CalendarStructuralMutation.EditSource, "Source updated.") {
+        runStructuralMutation(CalendarStructuralMutation.EditSource) {
             repository.updateAccount(accountId, displayName, serverUrl, username, appPassword)
         }
     }
 
     fun deleteAccount(accountId: String) {
-        runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
+        runStructuralMutation(CalendarStructuralMutation.RemoveSource) {
             val accounts = repository.observeAccounts().first()
             repository.deleteAccount(accountId)
             // The source's own group goes with it, unless other feeds of the same website remain.
@@ -235,7 +235,7 @@ class CalendarSourceActions internal constructor(
 
     /** Deletes the local calendar with all its events and tasks; it is not created again on start. */
     fun deleteLocalCalendar() {
-        runStructuralMutation(CalendarStructuralMutation.RemoveSource, "Source removed.") {
+        runStructuralMutation(CalendarStructuralMutation.RemoveSource) {
             settingsStore.setLocalCalendarRemoved(true)
             repository.deleteAccount(UiLocalAccountId)
         }
@@ -243,7 +243,7 @@ class CalendarSourceActions internal constructor(
 
     /** Adds an empty local calendar again after it was deleted. */
     fun addLocalCalendar() {
-        runStructuralMutation(CalendarStructuralMutation.AddSource, "Source added.") {
+        runStructuralMutation(CalendarStructuralMutation.AddSource) {
             settingsStore.setLocalCalendarRemoved(false)
             repository.ensureLocalCalendar()
         }
@@ -260,7 +260,6 @@ class CalendarSourceActions internal constructor(
                 forceFullCalDavRefresh = true,
             )
             refreshAndroidProviderDiagnosticsInternal()
-            message.value = "Sync complete."
         }
     }
 
@@ -301,7 +300,7 @@ class CalendarSourceActions internal constructor(
         supportsEvents: Boolean,
         supportsTasks: Boolean,
     ) {
-        runStructuralMutation(CalendarStructuralMutation.AddCalendar, "CalDAV calendar created.") {
+        runStructuralMutation(CalendarStructuralMutation.AddCalendar) {
             repository.createCalDavCalendar(
                 accountId = accountId,
                 displayName = displayName,
@@ -313,7 +312,7 @@ class CalendarSourceActions internal constructor(
     }
 
     fun deleteCalDavCalendar(href: String) {
-        runStructuralMutation(CalendarStructuralMutation.RemoveCalendar, "CalDAV calendar deleted.") {
+        runStructuralMutation(CalendarStructuralMutation.RemoveCalendar) {
             repository.deleteCalDavCalendar(href)
         }
     }
@@ -342,7 +341,6 @@ class CalendarSourceActions internal constructor(
 
     private fun runStructuralMutation(
         kind: CalendarStructuralMutation,
-        successMessage: String? = null,
         showManualSync: Boolean = false,
         failureMessage: (Throwable) -> String = { it.message ?: "Could not update calendar settings." },
         mutation: suspend () -> Unit,
@@ -354,7 +352,7 @@ class CalendarSourceActions internal constructor(
                 sourceCalendarMutationCoordinator.run(kind, mutation = mutation)
             }.onSuccess { result ->
                 refreshAndroidProviderDiagnosticsInternal()
-                message.value = structuralMutationMessage(result, successMessage)
+                message.value = structuralMutationMessage(result)
             }.onFailure {
                 message.value = failureMessage(it)
             }
@@ -365,9 +363,9 @@ class CalendarSourceActions internal constructor(
 
     private fun structuralMutationMessage(
         result: StructuralMutationResult,
-        successMessage: String?,
     ): String? = when (result) {
-        StructuralMutationResult.Complete -> successMessage
+        // Only problems are reported; a change that worked shows itself.
+        StructuralMutationResult.Complete -> null
         is StructuralMutationResult.SavedWithFollowUpFailure -> when (result.stage) {
             PostMutationStage.Refresh -> strings.get(R.string.calendar_settings_saved_refresh_failed)
             PostMutationStage.Reconciliation -> strings.get(R.string.calendar_settings_saved_reconciliation_failed)

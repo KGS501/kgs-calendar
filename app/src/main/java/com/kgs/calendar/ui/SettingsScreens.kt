@@ -1591,6 +1591,7 @@ internal fun ProblemsPage(
     onEventClick: (EventEntity) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    onResolveConflict: (resourceHref: String, keepLocal: Boolean) -> Unit = { _, _ -> },
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -1679,6 +1680,16 @@ internal fun ProblemsPage(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp,
                                     )
+                                    problem.conflictResourceHref?.let { href ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(onClick = { onResolveConflict(href, true) }) {
+                                                Text(stringResource(R.string.sync_conflict_keep_mine))
+                                            }
+                                            TextButton(onClick = { onResolveConflict(href, false) }) {
+                                                Text(stringResource(R.string.sync_conflict_use_server))
+                                            }
+                                        }
+                                    }
                                 }
                                 if (problem.target != null) {
                                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))

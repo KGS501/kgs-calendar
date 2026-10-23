@@ -1,5 +1,8 @@
 package com.kgs.calendar.ui
 
+import kotlin.coroutines.cancellation.CancellationException
+import com.kgs.calendar.data.remote.isOnlySyncConflicts
+import com.kgs.calendar.data.remote.isConnectionFailure
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
@@ -50,7 +53,7 @@ class CalendarEditActions internal constructor(
     fun updateEventManualColor(uid: String, manualColor: Int?) {
         runEdit {
             repository.updateEventManualColor(uid, manualColor)
-            message.value = "Event color updated."
+            message.value = null
         }
     }
 
@@ -131,7 +134,7 @@ class CalendarEditActions internal constructor(
     fun updateTaskManualColor(uid: String, manualColor: Int?) {
         runEdit {
             repository.updateTaskManualColor(uid, manualColor)
-            message.value = "Task color updated."
+            message.value = null
         }
     }
 
@@ -204,12 +207,35 @@ class CalendarEditActions internal constructor(
         }
     }
 
+    /** Settles an upload conflict with this device's version ([keepLocal]) or the server's. */
+    fun resolveConflict(resourceHref: String, keepLocal: Boolean) {
+        scope.launch {
+            runCatching {
+                if (keepLocal) repository.resolveConflictKeepingLocal(resourceHref) else repository.resolveConflictUsingServer(resourceHref)
+            }.onSuccess {
+                message.value = null
+                widgetRefresher.updateAll()
+            }.onFailure {
+                message.value = it.message ?: "Could not save changes."
+            }
+            runCatching { reminderRescheduler.reschedule() }
+        }
+    }
+
     private fun runEdit(rescheduleReminders: Boolean = false, block: suspend () -> Unit) {
         scope.launch {
             val startedAt = System.currentTimeMillis()
             runCatching {
                 block()
-                repository.pushPendingChangesCreatedSince(startedAt)
+                // Saved on this device either way. Offline or in conflict, the change waits on its
+                // item, which shows it among the problems; a notice would only repeat that.
+                try {
+                    repository.pushPendingChangesCreatedSince(startedAt)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    if (!error.isConnectionFailure() && !error.isOnlySyncConflicts()) throw error
+                }
             }.onSuccess {
                 message.value = null
                 widgetRefresher.updateAll()

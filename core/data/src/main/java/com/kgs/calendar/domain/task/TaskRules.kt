@@ -3,6 +3,9 @@ package com.kgs.calendar.domain.task
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.domain.model.TaskStatus
+import com.kgs.calendar.domain.time.toDate
+import java.time.LocalDate
+import java.time.ZoneId
 
 val TaskEntity.taskStatus: TaskStatus?
     get() = TaskStatus.from(status)
@@ -61,3 +64,15 @@ fun TaskEntity.displayColor(mode: TaskColorMode): Int =
         TaskColorMode.Collection -> color
         TaskColorMode.Priority -> priority?.let(::priorityColorArgb) ?: color
     }
+
+/**
+ * A day strictly between the start and due days of a task with a time on both. The whole day
+ * belongs to the task, so it shows as a full-day item, like the middle days of a timed multi-day
+ * event, not as a 24-hour block.
+ */
+fun TaskEntity.isTimedMultiDayMiddleOn(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
+    val start = startAtMillis?.takeIf { startHasTime } ?: return false
+    val due = dueAtMillis?.takeIf { dueHasTime } ?: return false
+    if (due <= start) return false
+    return date.isAfter(start.toDate(zoneId)) && date.isBefore((due - 1).toDate(zoneId))
+}

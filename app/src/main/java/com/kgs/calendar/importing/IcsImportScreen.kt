@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -82,7 +83,7 @@ internal fun IcsImportScreen(
                 item { Text(stringResource(R.string.ics_import_result, result.imported, result.skipped)) }
             }
             if (state.events.isNotEmpty() && state.result == null) {
-                item { Text(stringResource(R.string.ics_import_help, state.events.size)) }
+                item { Text(pluralStringResource(R.plurals.ics_import_help, state.events.size, state.events.size)) }
                 item { Text(stringResource(R.string.ics_import_destination), style = MaterialTheme.typography.titleMedium) }
                 items(state.calendars, key = { it.href }) { calendar ->
                     Row(

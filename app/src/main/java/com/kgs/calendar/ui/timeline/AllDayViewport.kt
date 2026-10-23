@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.graphics.Paint
 import android.graphics.Rect
 import androidx.compose.animation.AnimatedContent
@@ -1384,7 +1385,7 @@ private fun DayTasksSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            day.format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", LocalAppLocale.current)),
+            day.format(dayMonthFormatter(LocalAppLocale.current, month = "MMMM", weekday = "EEEE")),
             color = WarmInk,
             fontSize = 22.sp,
             lineHeight = 26.sp,

@@ -29,7 +29,7 @@ import java.time.ZoneId
 class CalendarQueries(
     private val database: KgsDatabase,
     private val recurrenceExpander: RecurrenceExpander,
-    zoneId: ZoneId,
+    zoneId: ZoneId?,
 ) {
     private val taskRecurrenceExpander = TaskRecurrenceExpander(recurrenceExpander)
     private val occurrenceSearch = CalendarOccurrenceSearch(zoneId)

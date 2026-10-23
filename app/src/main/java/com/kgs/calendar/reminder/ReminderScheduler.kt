@@ -1,5 +1,7 @@
 package com.kgs.calendar.reminder
 
+import java.util.Locale
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -34,7 +36,6 @@ object ReminderScheduler {
     private const val KEY_CODES = "scheduled_codes"
     private const val KEY_ACTIVE_TASK_CODES_PREFIX = "active_task_codes:"
     private const val WINDOW_DAYS = 21L
-    private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yy")
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val rescheduleMutex = Mutex()
 
@@ -184,7 +185,7 @@ object ReminderScheduler {
     private fun eventNotificationBody(event: EventEntity, triggerAt: Long): String? {
         val start = event.startsAtMillis.localDateTime()
         val end = event.endsAtMillis.localDateTime()
-        val date = start.toLocalDate().takeUnless { triggerAt.isSameLocalDate(it) }?.format(dateFormatter)
+        val date = start.toLocalDate().takeUnless { triggerAt.isSameLocalDate(it) }?.format(dayMonthFormatter(Locale.getDefault(), weekday = "EEE"))
         val time = if (event.allDay) null else "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
         return notificationBody(listOfNotNull(date, time).joinToString(" | "), event.description.reminderNotificationText())
     }
@@ -193,7 +194,7 @@ object ReminderScheduler {
         val start = task.startAtMillis?.localDateTime()
         val due = task.dueAtMillis?.localDateTime()
         val taskDate = start?.toLocalDate() ?: due?.toLocalDate()
-        val date = taskDate?.takeUnless { triggerAt.isSameLocalDate(it) }?.format(dateFormatter)
+        val date = taskDate?.takeUnless { triggerAt.isSameLocalDate(it) }?.format(dayMonthFormatter(Locale.getDefault(), weekday = "EEE"))
         val time = when {
             start != null && task.startHasTime && due != null && task.dueHasTime ->
                 "${start.format(timeFormatter)} - ${due.format(timeFormatter)}"

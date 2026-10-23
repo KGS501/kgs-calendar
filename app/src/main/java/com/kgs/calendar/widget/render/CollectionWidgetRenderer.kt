@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.os.Bundle
 import android.util.TypedValue
@@ -198,7 +199,7 @@ internal class CollectionWidgetRenderer(
 
     private fun headerSubtitle(kind: KgsWidgetKind, today: LocalDate, settings: WidgetRenderSettings): String {
         val textContext = context.withWidgetLocale(settings.locale)
-        val shortDate = today.format(DateTimeFormatter.ofPattern("EEE, d. MMM", settings.locale))
+        val shortDate = today.format(dayMonthFormatter(settings.locale, weekday = "EEE"))
         return when (kind) {
             KgsWidgetKind.Month, KgsWidgetKind.Multi -> YearMonth.from(today).format(DateTimeFormatter.ofPattern("MMMM yyyy", settings.locale))
             KgsWidgetKind.Day -> shortDate

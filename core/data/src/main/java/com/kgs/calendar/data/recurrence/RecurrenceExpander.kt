@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.recurrence
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
@@ -35,7 +36,10 @@ import java.util.Locale
  * (e.g. BYSETPOS with complex combinations) falls back to returning just the
  * master event when in range, rather than silently producing wrong dates.
  */
-class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
+/** A null [zoneId] follows the device's zone (see [orDeviceZone]). */
+class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
+    internal val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     private val timeZoneRegistry = TimeZoneRegistryFactory.getInstance().createRegistry()
 
     fun expand(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> {
@@ -161,6 +165,9 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
     ): List<EventEntity>? = runCatching {
         val recur = Recur(rule)
         val valueType = if (master.allDay) Value.DATE else Value.DATE_TIME
+        val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)
+        // Occurrences that began before the range but still reach into it count too.
+        val searchStartMillis = rangeStartMillis - duration
         val seed: net.fortuna.ical4j.model.Date
         val rangeStart: net.fortuna.ical4j.model.Date
         val rangeEnd: net.fortuna.ical4j.model.Date
@@ -169,7 +176,7 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
                 Instant.ofEpochMilli(master.startsAtMillis).atZone(sourceZone).toLocalDate().format(DATE),
             )
             rangeStart = net.fortuna.ical4j.model.Date(
-                Instant.ofEpochMilli(rangeStartMillis).atZone(sourceZone).toLocalDate().format(DATE),
+                Instant.ofEpochMilli(searchStartMillis).atZone(sourceZone).toLocalDate().format(DATE),
             )
             rangeEnd = net.fortuna.ical4j.model.Date(
                 Instant.ofEpochMilli(rangeEndMillis).atZone(sourceZone).toLocalDate().plusDays(1).format(DATE),
@@ -181,10 +188,9 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
             } else {
                 DateTime(master.startsAtMillis)
             }
-            rangeStart = if (timeZone != null) DateTime(java.util.Date(rangeStartMillis), timeZone) else DateTime(rangeStartMillis)
+            rangeStart = if (timeZone != null) DateTime(java.util.Date(searchStartMillis), timeZone) else DateTime(searchStartMillis)
             rangeEnd = if (timeZone != null) DateTime(java.util.Date(rangeEndMillis), timeZone) else DateTime(rangeEndMillis)
         }
-        val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)
         recur.getDates(seed, rangeStart, rangeEnd, valueType)
             .asSequence()
             .map { date ->
@@ -260,6 +266,9 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
     ) {
         var emitted: Int = 0
         var iterations: Int = 0
+
+        /** The earliest start that still reaches into the range: fast-forwards stop here, not at its start. */
+        val searchStart: Long get() = rangeStart - duration
     }
 
     /** Returns false to signal the outer loop must stop (count/until exhausted or safety cap). */
@@ -308,7 +317,7 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
         var cursor = masterDate
         // Fast-forward to first occurrence in [rangeStart, ...] when COUNT is not set.
         if (state.count == null) {
-            val rangeStartDate = Instant.ofEpochMilli(state.rangeStart).atZone(state.zone).toLocalDate()
+            val rangeStartDate = Instant.ofEpochMilli(state.searchStart).atZone(state.zone).toLocalDate()
             if (cursor.isBefore(rangeStartDate)) {
                 val daysGap = java.time.temporal.ChronoUnit.DAYS.between(cursor, rangeStartDate)
                 val skip = (daysGap / interval).coerceAtLeast(0)
@@ -340,7 +349,7 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
         var weekStart = masterDate.with(TemporalAdjusters.previousOrSame(wkst))
         // Fast-forward weeks when COUNT is not set.
         if (state.count == null) {
-            val rangeStartDate = Instant.ofEpochMilli(state.rangeStart).atZone(state.zone).toLocalDate()
+            val rangeStartDate = Instant.ofEpochMilli(state.searchStart).atZone(state.zone).toLocalDate()
             if (weekStart.isBefore(rangeStartDate)) {
                 val weeksGap = java.time.temporal.ChronoUnit.WEEKS.between(weekStart, rangeStartDate)
                 val skip = (weeksGap / interval).coerceAtLeast(0)
@@ -371,7 +380,7 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
     ) {
         var cursor = masterDate.withDayOfMonth(1)
         if (state.count == null) {
-            val rangeStartDate = Instant.ofEpochMilli(state.rangeStart).atZone(state.zone).toLocalDate().withDayOfMonth(1)
+            val rangeStartDate = Instant.ofEpochMilli(state.searchStart).atZone(state.zone).toLocalDate().withDayOfMonth(1)
             if (cursor.isBefore(rangeStartDate)) {
                 val monthsGap = java.time.temporal.ChronoUnit.MONTHS.between(cursor, rangeStartDate)
                 val skip = (monthsGap / interval).coerceAtLeast(0)
@@ -404,7 +413,7 @@ class RecurrenceExpander(internal val zoneId: ZoneId = ZoneId.systemDefault()) {
     ) {
         var cursor = masterDate.withDayOfYear(1)
         if (state.count == null) {
-            val rangeStartYear = Instant.ofEpochMilli(state.rangeStart).atZone(state.zone).toLocalDate().year
+            val rangeStartYear = Instant.ofEpochMilli(state.searchStart).atZone(state.zone).toLocalDate().year
             if (cursor.year < rangeStartYear) {
                 val yearsGap = (rangeStartYear - cursor.year).toLong()
                 val skip = (yearsGap / interval).coerceAtLeast(0)

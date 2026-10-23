@@ -289,7 +289,7 @@ internal fun ParticipantEditorRow(
 internal fun reminderMinuteLabel(minutes: Int): String = when {
     minutes == REMINDER_AT_END -> appString(R.string.at_end)
     minutes == REMINDER_AT_START -> appString(R.string.at_start)
-    minutes % 1440 == 0 -> appString(R.string.days_before, minutes / 1440)
+    minutes % 1440 == 0 -> appPluralString(R.plurals.days_before, minutes / 1440, minutes / 1440)
     minutes % 60 == 0 -> appString(R.string.hours_before, minutes / 60)
     else -> appString(R.string.minutes_before, minutes)
 }

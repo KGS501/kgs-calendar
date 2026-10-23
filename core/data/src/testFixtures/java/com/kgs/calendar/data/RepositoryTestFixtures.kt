@@ -103,6 +103,7 @@ class RepositoryHarness(
         syncOrchestrator = components.syncOrchestrator,
         repairs = components.repairs,
         trash = components.trash,
+        conflicts = components.conflicts,
     )
 
     private var startedServer: FakeCalDavServer? = null

@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.agenda
 
+import java.time.ZoneId
+import com.kgs.calendar.ui.model.isOngoingOn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -109,10 +111,12 @@ internal fun AgendaTimeline(
                     .forEach(::add)
             }
             val entries = results.map { result ->
+                // An open task that began earlier and is still running is today's work, not the past's.
+                val ongoingSince = (result as? CalendarSearchResult.TaskItem)?.task?.takeIf { it.isOngoingOn(today) }
                 AgendaTimelineEntry(
                     key = result.stableKey(),
-                    date = result.date,
-                    sortMillis = result.sortMillis,
+                    date = if (ongoingSince != null) today else result.date,
+                    sortMillis = if (ongoingSince != null) today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() else result.sortMillis,
                     value = result,
                 )
             }

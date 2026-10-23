@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.model
 
+import com.kgs.calendar.domain.task.isOpen
+import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -97,6 +99,7 @@ private fun EventEntity.toAgendaDateSpans(
 }
 
 internal fun TaskEntity.isFullDayTaskOn(day: LocalDate): Boolean {
+    if (isTimedMultiDayMiddleOn(day)) return true
     if (startAtMillis == null && dueAtMillis == null) return false
     if (startHasTime || dueHasTime) return false
     return day in visibleDates()
@@ -126,6 +129,16 @@ internal fun EventEntity.allDayTopEndDate(): LocalDate? =
 internal fun TaskEntity.taskDate(): LocalDate? {
     val millis = dueAtMillis ?: startAtMillis ?: return null
     return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+}
+
+/** An open task whose start lies before [today] and whose due day is [today] or later. */
+internal fun TaskEntity.isOngoingOn(today: LocalDate): Boolean {
+    if (!isOpen()) return false
+    val startMillis = startAtMillis ?: return false
+    val start = startMillis.toDate()
+    // A due time is exclusive (a task due at midnight ends the day before); a due date is not.
+    val due = dueAtMillis?.let { if (dueHasTime) (it - 1).coerceAtLeast(startMillis).toDate() else it.toDate() } ?: return false
+    return start.isBefore(today) && !due.isBefore(today)
 }
 
 internal fun TaskEntity.agendaSortMillis(): Long? =

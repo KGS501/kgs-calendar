@@ -41,6 +41,7 @@ import com.kgs.calendar.widget.KgsWidgetKind
 
 @Composable
 internal fun ProblemsOverlay(
+    viewModel: CalendarViewModel,
     shell: CalendarShellUiState,
     problemItems: List<ProblemItem>,
 ) {
@@ -50,6 +51,7 @@ internal fun ProblemsOverlay(
             onEventClick = shell::openProblemEventDetail,
             onTaskClick = shell::openProblemTaskDetail,
             onClose = shell::closeProblems,
+            onResolveConflict = viewModel.edits::resolveConflict,
         )
     }
 }

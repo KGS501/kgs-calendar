@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -1149,6 +1150,7 @@ private fun AgendaDateStack(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
         )
+        // Never wrapped: a wide weekday such as "Wed" would otherwise lose its last letter.
         Text(
             text = date.format(DateTimeFormatter.ofPattern("EEE", LocalAppLocale.current)).replace(".", ""),
             color = if (highlighted) highlightedTextColor else color,
@@ -1156,6 +1158,9 @@ private fun AgendaDateStack(
             lineHeight = agendaChronologyPresentation.dateLineHeightSp.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
+            softWrap = false,
+            // Centered, it may use the column's side padding.
+            modifier = Modifier.wrapContentWidth(unbounded = true),
         )
     }
 }

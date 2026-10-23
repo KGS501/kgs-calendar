@@ -14,6 +14,7 @@ import com.kgs.calendar.data.mutation.EventMutations
 import com.kgs.calendar.data.mutation.TaskMutations
 import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.search.CalendarSearchMode
+import com.kgs.calendar.data.sync.SyncConflictResolver
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
 import com.kgs.calendar.data.trash.TrashBin
@@ -41,6 +42,7 @@ class CalendarRepository(
     private val syncOrchestrator: SyncOrchestrator,
     private val repairs: SyncRepairs,
     private val trash: TrashBin,
+    private val conflicts: SyncConflictResolver,
 ) {
     fun observeAccount(): Flow<AccountEntity?> = queries.observeAccount()
 
@@ -161,6 +163,12 @@ class CalendarRepository(
         includeDisabledProviderCalendars: Boolean = false,
         forceFullCalDavRefresh: Boolean = false,
     ) = syncOrchestrator.syncNow(includeDisabledProviderCalendars, forceFullCalDavRefresh)
+
+    /** Keeps this device's version of an item whose upload hit a conflict and uploads it. */
+    suspend fun resolveConflictKeepingLocal(resourceHref: String) = conflicts.keepLocal(resourceHref)
+
+    /** Drops this device's unsent change to an item whose upload hit a conflict for the server's version. */
+    suspend fun resolveConflictUsingServer(resourceHref: String) = conflicts.useServer(resourceHref)
 
     suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long) =
         syncOrchestrator.pushPendingChangesCreatedSince(startedAtMillis)

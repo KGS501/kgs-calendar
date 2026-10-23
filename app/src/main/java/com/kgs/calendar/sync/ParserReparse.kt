@@ -1,5 +1,8 @@
 package com.kgs.calendar.sync
 
+import com.kgs.calendar.AppGraph
+import java.time.ZoneId
+import kotlinx.coroutines.flow.first
 import kotlin.coroutines.cancellation.CancellationException
 
 internal const val FULL_REPARSE_VERSION = 5
@@ -27,3 +30,41 @@ internal suspend fun reparseCachedIcalIfNeeded(
     }
     recordVersion(PARSER_REPARSE_VERSION)
 }
+
+/**
+ * All-day and floating times are stored as instants in the zone they were read in. When the
+ * device's zone changed since (after a flight, say), re-reads the cached calendar data and reloads
+ * the device calendars in the new zone, so all-day items stay on their dates. The first check only
+ * records the zone. Returns true when the data was read again.
+ */
+internal suspend fun reparseForZoneChangeIfNeeded(
+    storedZoneId: String?,
+    currentZoneId: String,
+    reparseAllResources: suspend () -> Unit,
+    reloadDeviceCalendars: suspend () -> Unit,
+    recordZone: suspend (String) -> Unit,
+): Boolean {
+    if (storedZoneId == currentZoneId) return false
+    if (storedZoneId != null) {
+        try {
+            reparseAllResources()
+            reloadDeviceCalendars()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // Recorded only after a pass that completed, so a failed one runs again.
+            return false
+        }
+    }
+    recordZone(currentZoneId)
+    return storedZoneId != null
+}
+
+/** [reparseForZoneChangeIfNeeded] for the device's current zone. */
+internal suspend fun AppGraph.reparseForCurrentZoneIfNeeded(): Boolean = reparseForZoneChangeIfNeeded(
+    storedZoneId = settingsStore.parsedZoneId.first(),
+    currentZoneId = ZoneId.systemDefault().id,
+    reparseAllResources = repository::reparseLocalResources,
+    reloadDeviceCalendars = { repository.refreshAndroidCalendarsIfEnabled() },
+    recordZone = settingsStore::setParsedZoneId,
+)

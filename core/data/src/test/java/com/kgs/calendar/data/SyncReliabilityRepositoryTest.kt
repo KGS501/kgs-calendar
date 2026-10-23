@@ -1,5 +1,6 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.runBlocking
@@ -170,7 +171,8 @@ class SyncReliabilityRepositoryTest {
         val remote = server.stored(href)!!
         // Simulate a cache written by an older app while an unsent edit remained in the outbox.
         harness.database.resourceDao().upsert(harness.resource(href)!!.copy(etag = remote.etag, rawIcs = remote.ics))
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
+        assertTrue(harness.resource(href)!!.syncError.isSyncConflictError())
         assertTrue(harness.pendingMutations().single().payloadIcs!!.contains("Unsent edit"))
         assertEquals(remote.ics, server.stored(href)!!.ics)
     }
@@ -208,7 +210,8 @@ class SyncReliabilityRepositoryTest {
         harness.database.resourceDao().markSynced(href, null)
         repository.deleteEvent("event")
         server.putRemote(server.eventsHref, "event.ics", SampleIcs.event("event", "Other client edit"))
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
+        assertTrue(harness.resource(href)!!.syncError.isSyncConflictError())
         assertTrue(server.stored(href)!!.ics.contains("Other client edit"))
         assertTrue(server.requests("DELETE").isEmpty())
         assertEquals(MutationAction.Delete, harness.pendingMutations().single().action)

@@ -319,5 +319,30 @@ class RecurrenceExpanderTest {
         )
     }
 
+    @Test
+    fun anOccurrenceThatStartedBeforeTheRangeButReachesIntoItIsIncluded() {
+        // A night shift, 22:00 to 06:00, viewed on the morning after; the series began a year earlier.
+        // Rule to (series start, the evening the shift begins in 2026).
+        val cases = listOf(
+            "FREQ=DAILY" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            "FREQ=WEEKLY;BYDAY=MO" to (LocalDate.of(2025, 10, 13) to LocalDate.of(2026, 10, 12)),
+            "FREQ=MONTHLY;BYMONTHDAY=12" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            "FREQ=YEARLY" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            // BYSETPOS goes through the standards-based expansion: the second Sunday.
+            "FREQ=MONTHLY;BYDAY=SU;BYSETPOS=2" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 11)),
+        )
+        cases.forEach { (rule, dates) ->
+            val (seriesStart, evening) = dates
+            val master = masterEvent(seriesStart, LocalTime.of(22, 0), durationMinutes = 8 * 60, rrule = rule)
+            // The early morning only: just the shift from the evening before reaches into it.
+            val s = evening.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val e = evening.plusDays(1).atTime(6, 0).atZone(zone).toInstant().toEpochMilli()
+
+            val occurrences = expander.expand(master, s, e)
+
+            assertEquals(rule, listOf(evening), occurrences.map { it.startsAtMillis.atZoneDate() })
+        }
+    }
+
     private fun Long.atZoneDate(): LocalDate = java.time.Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 }

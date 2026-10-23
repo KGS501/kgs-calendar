@@ -15,6 +15,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
+import com.kgs.calendar.sync.reparseForCurrentZoneIfNeeded
 import com.kgs.calendar.widget.update.WidgetDayRollover
 import com.kgs.calendar.domain.source.isLocalAccount
 import kotlinx.coroutines.CoroutineScope
@@ -118,6 +119,9 @@ class KgsCalendarApplication : Application() {
                 reparseAllResources = appGraph.repository::reparseLocalResources,
                 recordVersion = appGraph.settingsStore::setParserReparseVersion,
             )
+            if (appGraph.reparseForCurrentZoneIfNeeded()) {
+                runCatching { ReminderScheduler.reschedule(this@KgsCalendarApplication) }
+            }
         }
     }
 

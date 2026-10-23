@@ -19,7 +19,7 @@ enum class CalendarSearchMode {
  * the occurrences that belong to the caller's loaded recurrence window.
  */
 class CalendarOccurrenceSearch(
-    zoneId: ZoneId = ZoneId.systemDefault(),
+    zoneId: ZoneId? = null,
 ) {
     private val eventExpander = RecurrenceExpander(zoneId)
     private val taskExpander = TaskRecurrenceExpander(eventExpander)

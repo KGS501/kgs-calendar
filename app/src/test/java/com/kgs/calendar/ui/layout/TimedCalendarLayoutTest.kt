@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.layout
 
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.ui.model.isFullDayTaskOn
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -35,6 +36,27 @@ class TimedCalendarLayoutTest {
         val placement = event.timedPlacementOn(day, hourHeightDp = 60f)
 
         assertEquals(TimedPlacement(topDp = 0f, heightDp = 90f, startMinute = 0, endMinute = 90), placement)
+    }
+
+    @Test
+    fun aTimedTaskOverSeveralDaysFillsItsMiddleDaysAsAFullDayItem() {
+        val first = LocalDate.of(2026, 10, 22)
+        val task = task(
+            start = millis(first, LocalTime.of(9, 0)),
+            due = millis(first.plusDays(4), LocalTime.of(17, 0)),
+            startHasTime = true,
+            dueHasTime = true,
+        )
+
+        // First and last day: the timed part. Middle days: a full-day item, not a 24-hour block.
+        assertEquals(540, task.timedPlacementOn(first, hourHeightDp = 60f)!!.startMinute)
+        assertEquals(17 * 60, task.timedPlacementOn(first.plusDays(4), hourHeightDp = 60f)!!.endMinute)
+        (1..3).forEach { offset ->
+            val middle = first.plusDays(offset.toLong())
+            assertEquals(null, task.timedPlacementOn(middle, hourHeightDp = 60f))
+            assertEquals(true, task.isFullDayTaskOn(middle))
+        }
+        assertEquals(false, task.isFullDayTaskOn(first))
     }
 
     @Test

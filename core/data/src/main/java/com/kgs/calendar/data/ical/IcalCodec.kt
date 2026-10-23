@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.ical
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
@@ -26,8 +27,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class IcalCodec(
-    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    /** Null follows the device's zone (see [orDeviceZone]). */
+    private val fixedZoneId: ZoneId? = null,
 ) {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     fun parse(
         rawIcs: String,
         collectionHref: String,

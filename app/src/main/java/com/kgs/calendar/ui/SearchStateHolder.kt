@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -30,8 +31,9 @@ internal data class SearchUiState(
 class SearchStateHolder internal constructor(
     private val repository: CalendarRepository,
     private val collectionVisibility: Flow<CollectionVisibility>,
-    private val zoneId: ZoneId,
+    private val fixedZoneId: ZoneId?,
 ) {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
     private val searchQuery = MutableStateFlow("")
     private val searchMode = MutableStateFlow(CalendarSearchMode.TextAndLabels)
     private val searchOccurrenceRange = MutableStateFlow(initialSearchOccurrenceRange(LocalDate.now(zoneId)))

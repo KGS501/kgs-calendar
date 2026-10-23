@@ -672,6 +672,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         if (next.isEmpty()) remove(key) else this[key] = next
     }
 
+    /** The time zone the cached calendar data was last read in; null before the first check. */
+    val parsedZoneId: Flow<String?> = dataStore.data.map { prefs -> prefs[KEY_PARSED_ZONE_ID] }
+
+    suspend fun setParsedZoneId(zoneId: String) {
+        dataStore.edit { it[KEY_PARSED_ZONE_ID] = zoneId }
+    }
+
     val parserReparseVersion: Flow<Int> = dataStore.data.map { prefs ->
         prefs[KEY_PARSER_REPARSE_VERSION] ?: 0
     }
@@ -786,6 +793,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
         private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
         private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")
+        private val KEY_PARSED_ZONE_ID = stringPreferencesKey("parsed_zone_id")
         private val KEY_EXACT_ALARM_PROMPT_SHOWN = booleanPreferencesKey("exact_alarm_prompt_shown")
         private val KEY_DEFAULT_EVENT_COLLECTION = stringPreferencesKey("default_event_collection_href")
         private val KEY_DEFAULT_TASK_COLLECTION = stringPreferencesKey("default_task_collection_href")

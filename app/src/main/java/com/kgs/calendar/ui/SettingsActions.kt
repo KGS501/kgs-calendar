@@ -362,7 +362,7 @@ class SettingsActions internal constructor(
                 reminderRescheduler.reschedule()
                 message.value = null
             }.onFailure {
-                message.value = it.message ?: "Benachrichtigungen konnten nicht aktualisiert werden."
+                message.value = it.message ?: "Could not update notifications."
             }
         }
     }

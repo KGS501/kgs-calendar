@@ -557,7 +557,7 @@ class CalendarViewModelTest {
             reminderRescheduler = ReminderRescheduler { reminderReschedules.update { it + 1 } },
             appLifecycleSignals = lifecycleSignals,
             uiStrings = UiStrings { "string-$it" },
-            zoneId = TEST_ZONE,
+            fixedZoneId = TEST_ZONE,
             initialWidgetLaunchTarget = widgetTarget,
             initialSharedEvent = sharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,
