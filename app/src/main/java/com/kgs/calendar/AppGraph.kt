@@ -90,6 +90,7 @@ class AppGraph(context: Context) {
         syncOrchestrator = syncOrchestrator,
         repairs = syncRepairs,
         trash = calendarData.trash,
+        conflicts = calendarData.conflicts,
     )
 
     val sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(

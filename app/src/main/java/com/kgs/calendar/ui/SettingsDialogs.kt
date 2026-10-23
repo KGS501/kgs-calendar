@@ -4,7 +4,6 @@ package com.kgs.calendar.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -323,11 +322,10 @@ internal fun FieldOrderList(
         (start + (dragOffsetPx / stepPx).roundToInt()).coerceIn(0, ordered.lastIndex)
     }
 
+    // Nothing here may clip: a lifted row's shadow reaches past the list's edges.
     Column(
         verticalArrangement = Arrangement.spacedBy(spacingDp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         ordered.forEachIndexed { index, field ->
             key(field) {

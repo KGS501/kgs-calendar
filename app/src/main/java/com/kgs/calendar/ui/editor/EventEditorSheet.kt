@@ -113,7 +113,7 @@ internal fun EventEditorSheet(
     var eventClassification by draft.field("classification", DraftCodec.Text, initialEvent?.uid) { initialEvent?.classification ?: EventClassOption.Public.value }
     var eventTransparency by draft.field("transparency", DraftCodec.Text, initialEvent?.uid) { initialEvent?.transparency ?: EventTransparencyOption.Busy.value }
     var categories by draft.field("categories", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.categories ?: transferDraft?.categories.orEmpty() }
-    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
+    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks, state.collections, state.categorySync) {
         state.allKnownCategoryTags()
     }
     var reminderMinutes by draft.field("reminderMinutes", DraftCodec.MinuteSet, initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
@@ -200,12 +200,14 @@ internal fun EventEditorSheet(
                     onAction = {},
                     onClose = onClose,
                     actionEnabled = false,
+                    typeSwitch = {
+                        EditorTypeSwitch(
+                            eventSelected = true,
+                            onSelectEvent = {},
+                            onSelectTask = { onSwitchToTask(currentTransferDraft()) },
+                        )
+                    },
                 ) {
-                    EditorTypeSwitch(
-                        eventSelected = true,
-                        onSelectEvent = {},
-                        onSelectTask = { onSwitchToTask(currentTransferDraft()) },
-                    )
                     NoWritableSourceNotice(
                         title = stringResource(R.string.no_writable_event_calendar_title),
                         body = stringResource(R.string.no_writable_event_calendar_body),
@@ -247,14 +249,16 @@ internal fun EventEditorSheet(
                     )
                 },
                 onClose = onClose,
+                typeSwitch = if (readOnlyRemote) null else {
+                    {
+                        EditorTypeSwitch(
+                            eventSelected = true,
+                            onSelectEvent = {},
+                            onSelectTask = { onSwitchToTask(currentTransferDraft()) },
+                        )
+                    }
+                },
             ) {
-                if (!readOnlyRemote) {
-                    EditorTypeSwitch(
-                        eventSelected = true,
-                        onSelectEvent = {},
-                        onSelectTask = { onSwitchToTask(currentTransferDraft()) },
-                    )
-                }
                 if (readOnlyRemote) {
                     EditorSection {
                         ReadOnlyEditorNotice(title = title)
@@ -351,7 +355,7 @@ internal fun EventEditorSheet(
         }
     }
     if (invalidRangeDialogOpen) {
-        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
+        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false }, message = R.string.invalid_event_time_range_message)
     }
 }
 

@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.mutation
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.canCreateResources
 import com.kgs.calendar.data.canDeleteResources
@@ -34,8 +35,10 @@ class TaskMutations internal constructor(
     private val localWrites: LocalWriteSupport,
     private val icalCodec: IcalCodec,
     private val trashSnapshots: TrashSnapshots,
-    private val zoneId: ZoneId,
+    private val fixedZoneId: ZoneId?,
 ) {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     suspend fun createTask(payload: TaskEditPayload): Unit = localWrites.writeTransaction {
         val collection = payload.collectionHref?.let { database.collectionDao().get(it) }
             ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }

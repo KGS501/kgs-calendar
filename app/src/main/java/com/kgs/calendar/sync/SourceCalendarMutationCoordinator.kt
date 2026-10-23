@@ -10,7 +10,8 @@ enum class CalendarStructuralMutation(val requiresFullRefresh: Boolean) {
     EnableSource(true),
     DisableSource(true),
     AddCalendar(true),
-    EditCalendar(true),
+    /** A new name or color: saved on the server directly, so nothing else changes. */
+    EditCalendar(false),
     RemoveCalendar(true),
     EnableCalendar(true),
     DisableCalendar(true),

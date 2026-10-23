@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.CollectionVisibility
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -98,6 +100,34 @@ class SettingsStoreCollectionVisibilityTest {
         store.setCollectionHiddenInViews("shared", hidden = false)
         assertEquals(CollectionVisibility(), store.collectionVisibility.first())
     }
+
+    @Test
+    fun onlyCategoryChoicesThatDifferFromTheDefaultAreStored() = runBlocking {
+        val (_, store, dataStore) = storeWithDataStore(File(tempFolder.root, "categories.preferences_pb"))
+        val own = collection("own", readOnly = false)
+        val shared = collection("shared", readOnly = true)
+
+        store.setCategorySync(own, synced = false)
+        store.setCategorySync(shared, synced = true)
+        assertEquals(CategorySync(enabledIn = setOf("shared"), disabledIn = setOf("own")), store.categorySync.first())
+
+        store.setCategorySync(own, synced = true)
+        store.setCategorySync(shared, synced = false)
+        assertEquals(CategorySync(), store.categorySync.first())
+        assertEquals(emptyMap<Preferences.Key<*>, Any>(), dataStore.data.first().asMap())
+    }
+
+    private fun collection(href: String, readOnly: Boolean) = CollectionEntity(
+        href = href,
+        accountId = "account",
+        displayName = href,
+        color = 0,
+        supportsEvents = true,
+        supportsTasks = true,
+        syncToken = null,
+        ctag = null,
+        readOnly = readOnly,
+    )
 
     private fun store(file: File): Pair<CoroutineScope, SettingsStore> =
         storeWithDataStore(file).let { (scope, store, _) -> scope to store }

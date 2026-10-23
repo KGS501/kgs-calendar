@@ -609,7 +609,7 @@ internal fun SettingsPage(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 SourceOptionCard(
-                                    title = stringResource(R.string.caldav_and_nextcloud),
+                                    title = stringResource(R.string.caldav),
                                     leadingIcon = Icons.Default.Cloud,
                                     color = SettingsColors.Calendars,
                                     chips = listOf(stringResource(R.string.events) to SourceChipColors.Events, stringResource(R.string.tasks) to SourceChipColors.Tasks, stringResource(R.string.source_full_sync) to SourceChipColors.FullSync),
@@ -1591,6 +1591,7 @@ internal fun ProblemsPage(
     onEventClick: (EventEntity) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    onResolveConflict: (resourceHref: String, keepLocal: Boolean) -> Unit = { _, _ -> },
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -1679,6 +1680,16 @@ internal fun ProblemsPage(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp,
                                     )
+                                    problem.conflictResourceHref?.let { href ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(onClick = { onResolveConflict(href, true) }) {
+                                                Text(stringResource(R.string.sync_conflict_keep_mine))
+                                            }
+                                            TextButton(onClick = { onResolveConflict(href, false) }) {
+                                                Text(stringResource(R.string.sync_conflict_use_server))
+                                            }
+                                        }
+                                    }
                                 }
                                 if (problem.target != null) {
                                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -1945,6 +1956,8 @@ internal fun CollectionSettingsSheet(
     tasksVisible: Boolean = true,
     onEventsVisibleChanged: (Boolean) -> Unit = {},
     onTasksVisibleChanged: (Boolean) -> Unit = {},
+    categoriesSynced: Boolean = true,
+    onCategoriesSyncedChanged: (Boolean) -> Unit = {},
     onDelete: (() -> Unit)? = null,
     groupName: String? = null,
     onChooseGroup: (() -> Unit)? = null,
@@ -1952,14 +1965,12 @@ internal fun CollectionSettingsSheet(
 ) {
     var name by remember(collection.href) { mutableStateOf(collection.displayName) }
     var customColor by remember(collection.href) { mutableStateOf(collection.customColor) }
-    var colorPickerOpen by remember(collection.href) { mutableStateOf(false) }
     var enabled by remember(collection.href) { mutableStateOf(collection.isEnabled) }
     var confirmDelete by remember(collection.href) { mutableStateOf(false) }
     var metadataExpanded by remember(collection.href) { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val metadataRows = collection.localizedPermissionMetadataRows()
     val automaticColor = collection.automaticColor ?: collection.sourceColor ?: collection.color
-    val effectiveColor = customColor ?: automaticColor
     val automaticDescription = if (collection.sourceColor != null) {
         stringResource(R.string.source_color_help)
     } else {
@@ -1986,18 +1997,13 @@ internal fun CollectionSettingsSheet(
             }
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.name)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
             SettingsGroup(horizontalPadding = 0.dp) {
-                SettingsRow(
+                SettingsColorRow(
                     title = stringResource(R.string.color),
                     subtitle = if (customColor == null) automaticDescription else stringResource(R.string.custom_color_active),
-                    leading = { Box(Modifier.size(28.dp).clip(CircleShape).background(Color(effectiveColor))) },
-                    onClick = { colorPickerOpen = true },
-                ) {
-                    if (customColor != null) {
-                        TextButton(onClick = { customColor = null }) {
-                            Text(stringResource(R.string.reset))
-                        }
-                    }
-                }
+                    selectedColor = customColor,
+                    automaticColor = automaticColor,
+                    onColorSelected = { customColor = it },
+                )
                 if (groupName != null && onChooseGroup != null) {
                     SettingsNavRow(
                         title = stringResource(R.string.calendar_group_choose),
@@ -2033,6 +2039,15 @@ internal fun CollectionSettingsSheet(
                             )
                         }
                     }
+                }
+                // Device calendars have no categories.
+                if (!collection.isAndroidProviderCollection()) {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.calendar_use_categories),
+                        subtitle = stringResource(R.string.calendar_use_categories_help),
+                        checked = categoriesSynced,
+                        onCheckedChange = onCategoriesSyncedChanged,
+                    )
                 }
                 SettingsSwitchRow(
                     title = stringResource(R.string.active),
@@ -2082,16 +2097,6 @@ internal fun CollectionSettingsSheet(
             }
             Spacer(Modifier.height(18.dp))
         }
-    }
-    if (colorPickerOpen) {
-        ColorPickerDialog(
-            initialColor = effectiveColor,
-            onDismiss = { colorPickerOpen = false },
-            onSave = {
-                customColor = it
-                colorPickerOpen = false
-            },
-        )
     }
     if (confirmDelete) {
         KgsAlertDialog(

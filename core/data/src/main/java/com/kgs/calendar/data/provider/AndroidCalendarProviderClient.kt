@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.provider
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import android.Manifest
 import android.content.ContentResolver
 import android.content.ContentUris
@@ -25,8 +26,11 @@ import kotlin.math.max
 
 class AndroidCalendarProviderClient(
     private val context: Context,
-    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    /** Null follows the device's zone (see [orDeviceZone]). */
+    private val fixedZoneId: ZoneId? = null,
 ) {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     private val resolver: ContentResolver
         get() = context.contentResolver
 

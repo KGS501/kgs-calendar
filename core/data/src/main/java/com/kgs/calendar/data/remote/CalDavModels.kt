@@ -132,7 +132,20 @@ class HttpStatusException(
 class CalDavConflictException(
     method: String,
     href: String,
-) : IllegalStateException("Sync conflict: this item changed on the server. Your local change is still saved on this device; the server version was not overwritten. ($method $href)")
+) : IllegalStateException("$MESSAGE_PREFIX this item changed on the server. Your local change is still saved on this device; the server version was not overwritten. ($method $href)") {
+    companion object {
+        /** Starts the stored sync error of an item whose upload hit a conflict. */
+        const val MESSAGE_PREFIX = "Sync conflict:"
+    }
+}
+
+/** True for the stored sync error of an item another device changed before this one's upload. */
+fun String?.isSyncConflictError(): Boolean = this?.startsWith(CalDavConflictException.MESSAGE_PREFIX) == true
+
+/** True when [this] and everything suppressed in it are upload conflicts. */
+fun Throwable.isOnlySyncConflicts(): Boolean =
+    (this is CalDavConflictException || cause?.isOnlySyncConflicts() == true) &&
+        suppressed.all { it.isOnlySyncConflicts() }
 
 data class SyncCollectionResult(
     val changedResources: List<RemoteResource>,

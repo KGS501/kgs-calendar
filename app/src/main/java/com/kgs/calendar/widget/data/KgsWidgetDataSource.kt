@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.content.res.Configuration
 import com.kgs.calendar.R
@@ -730,15 +731,15 @@ internal class KgsWidgetDataSource(
         val startDate = startAtMillis?.toDate(zoneId)
         val dueDate = dueAtMillis?.toDate(zoneId)
         val date = dueDate ?: startDate ?: return labels.getString(R.string.inbox)
-        val dateText = date.format(DateTimeFormatter.ofPattern("EEE, d. MMM", locale))
+        val dateText = date.format(dayMonthFormatter(locale, weekday = "EEE"))
         val startTimed = startAtMillis?.takeIf { startHasTime }
         val dueTimed = dueAtMillis?.takeIf { dueHasTime }
         return when {
             startTimed != null && dueTimed != null && startDate == dueDate ->
                 "$dateText, ${startTimed.toTimeText(zoneId)}-${dueTimed.toTimeText(zoneId)}"
             startTimed != null && dueTimed != null ->
-                "${startTimed.toDate(zoneId).format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${startTimed.toTimeText(zoneId)} - " +
-                    "${dueTimed.toDate(zoneId).format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${dueTimed.toTimeText(zoneId)}"
+                "${startTimed.toDate(zoneId).format(dayMonthFormatter(locale))} ${startTimed.toTimeText(zoneId)} - " +
+                    "${dueTimed.toDate(zoneId).format(dayMonthFormatter(locale))} ${dueTimed.toTimeText(zoneId)}"
             startTimed != null ->
                 "$dateText, ${labels.getString(R.string.from_time, startTimed.toTimeText(zoneId))}"
             dueTimed != null ->
@@ -807,13 +808,13 @@ internal class KgsWidgetDataSource(
         val labels = textContext(locale)
         return when (this) {
             today -> labels.getString(R.string.today)
-            else -> format(DateTimeFormatter.ofPattern("EEE, d. MMM", locale))
+            else -> format(dayMonthFormatter(locale, weekday = "EEE"))
         }
     }
 
     private fun LocalDate.widgetSpanDateText(labels: Context): String {
         val locale = labels.resources.configuration.locales[0] ?: Locale.getDefault()
-        return format(DateTimeFormatter.ofPattern("d. MMM", locale))
+        return format(dayMonthFormatter(locale))
     }
 
     private fun LocalTime.timeText(): String =

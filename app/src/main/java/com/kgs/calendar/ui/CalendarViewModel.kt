@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -101,7 +102,8 @@ class CalendarViewModel(
     appLifecycleSignals: AppLifecycleSignals,
     uiStrings: UiStrings,
     pickedContentReader: PickedContentReader = PickedContentReader { null },
-    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    /** Null follows the device's zone, so a zone change applies while the app runs. */
+    private val fixedZoneId: ZoneId? = null,
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
     initialCalendarLaunchTarget: CalendarLaunchTarget? = null,
     initialSharedEvent: SharedEventDraft? = null,
@@ -111,6 +113,8 @@ class CalendarViewModel(
     /** The open editor's draft; kept here so that it survives rotation without the saved-state Bundle. */
     val editorDrafts: EditorDraftStore = EditorDraftStore(),
 ) : ViewModel() {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     private val initialSelectedDate = initialCalendarLaunchTarget?.date ?: initialWidgetLaunchTarget?.date ?: LocalDate.now()
     private val initialSelectedView = initialCalendarLaunchTarget?.viewMode ?: initialWidgetLaunchTarget?.viewMode ?: CalendarViewMode.ThreeDay
     private val initialDateNavigationSerial = if (initialWidgetLaunchTarget != null || initialCalendarLaunchTarget != null) 1 else 0
@@ -391,7 +395,7 @@ class CalendarViewModel(
         visibility.visibleTasks(tasks)
     }
 
-    val search = SearchStateHolder(repository, collectionVisibility, zoneId)
+    val search = SearchStateHolder(repository, collectionVisibility, fixedZoneId)
 
     val settings = SettingsActions(
         scope = viewModelScope,

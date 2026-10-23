@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
@@ -337,6 +338,11 @@ class SettingsActions internal constructor(
         updateCollectionVisibility { settingsStore.setCollectionTasksHidden(href, hidden = !visible) }
     }
 
+    /** Whether the categories used in [collection] join the user's own category suggestions. */
+    fun setCollectionCategorySync(collection: CollectionEntity, synced: Boolean) {
+        scope.launch { settingsStore.setCategorySync(collection, synced) }
+    }
+
     /** Hidden items never notify, so every visibility change replaces the planned reminders at once. */
     private fun updateCollectionVisibility(block: suspend () -> Unit) {
         scope.launch {
@@ -356,7 +362,7 @@ class SettingsActions internal constructor(
                 reminderRescheduler.reschedule()
                 message.value = null
             }.onFailure {
-                message.value = it.message ?: "Benachrichtigungen konnten nicht aktualisiert werden."
+                message.value = it.message ?: "Could not update notifications."
             }
         }
     }

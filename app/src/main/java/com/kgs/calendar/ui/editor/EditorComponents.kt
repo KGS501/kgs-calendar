@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
@@ -135,11 +136,14 @@ internal fun NoWritableSourceNotice(
 }
 
 @Composable
-internal fun InvalidTimeRangeDialog(onDismiss: () -> Unit) {
+internal fun InvalidTimeRangeDialog(
+    onDismiss: () -> Unit,
+    @StringRes message: Int = R.string.invalid_time_range_message,
+) {
     KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(appString(R.string.invalid_time_range_title)) },
-        text = { Text(appString(R.string.invalid_time_range_message)) },
+        text = { Text(appString(message)) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(appString(R.string.ok))

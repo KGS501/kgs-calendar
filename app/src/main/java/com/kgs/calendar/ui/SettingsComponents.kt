@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kgs.calendar.R
+import com.kgs.calendar.ui.haptics.rememberSliderStepHaptics
 import kotlin.math.roundToInt
 
 /*
@@ -216,6 +217,37 @@ internal fun SettingsRow(
     }
 }
 
+/** A color setting: its title and the app's color choices ([ColorChoiceRow]) below it. */
+@Composable
+internal fun SettingsColorRow(
+    title: String,
+    selectedColor: Int?,
+    automaticColor: Int,
+    onColorSelected: (Int?) -> Unit,
+    subtitle: String? = null,
+) {
+    Column(
+        modifier = Modifier
+            .settingsRowBackground(settingsControlColor())
+            .padding(vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = WarmInk, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
+            if (!subtitle.isNullOrBlank()) {
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+        }
+        ColorChoiceRow(
+            selectedColor = selectedColor,
+            automaticColor = automaticColor,
+            onColorSelected = onColorSelected,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            viewportBleed = 0.dp,
+        )
+    }
+}
+
 /** A row that opens a page; [warning] marks a source that needs attention. */
 @Composable
 internal fun SettingsNavRow(
@@ -367,6 +399,7 @@ internal fun SettingsSliderRow(
             Text(valueLabel(shown), color = WarmBrown, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
         }
         val sliderInteraction = remember { MutableInteractionSource() }
+        val stepHaptics = rememberSliderStepHaptics(shown)
         val steps = (span / safeStep - 1).coerceAtLeast(0)
         // Long scales get no tick dots; they would only crowd the track.
         val showTicks = steps <= 12
@@ -390,7 +423,9 @@ internal fun SettingsSliderRow(
             },
             onValueChange = {
                 val snapped = range.first + (((it - range.first) / safeStep).roundToInt() * safeStep)
-                dragged = snapped.coerceIn(range.first, range.last)
+                val next = snapped.coerceIn(range.first, range.last)
+                stepHaptics(next)
+                dragged = next
             },
             onValueChangeFinished = {
                 dragged?.let { if (it != value) onValueChanged(it) }

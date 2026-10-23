@@ -20,6 +20,7 @@ import com.kgs.calendar.data.sync.CalDavSyncEngine
 import com.kgs.calendar.data.sync.PendingMutationUploader
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
 import com.kgs.calendar.data.sync.RemoteSyncLock
+import com.kgs.calendar.data.sync.SyncConflictResolver
 import com.kgs.calendar.data.sync.SyncOrchestrator
 import com.kgs.calendar.data.sync.SyncRepairs
 import com.kgs.calendar.data.trash.ServerTrashBin
@@ -41,7 +42,8 @@ class CalendarDataComponents(
     androidCalendarProviderClient: AndroidCalendarProviderClient,
     icalCodec: IcalCodec,
     readOnlyHttpClient: OkHttpClient,
-    zoneId: ZoneId = ZoneId.systemDefault(),
+    /** Null follows the device's zone, so a zone change applies while the app runs. */
+    zoneId: ZoneId? = null,
     recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
     /** Where source and group images are kept; null keeps none (tests). */
     sourceImageDirectory: File? = null,
@@ -75,6 +77,8 @@ class CalendarDataComponents(
         trash = trash,
         remoteSyncLock = remoteSyncLock,
     )
+
+    val conflicts = SyncConflictResolver(database, credentialsStore, calDavClient, uploader, calDavSyncEngine, remoteSyncLock)
 
     val sources = CalendarSourceManager(
         database = database,

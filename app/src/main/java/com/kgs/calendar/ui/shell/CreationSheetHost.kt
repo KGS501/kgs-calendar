@@ -1,12 +1,9 @@
 package com.kgs.calendar.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -354,10 +351,11 @@ private fun CreationSheet.isEventEditor(): Boolean = when (this) {
 }
 
 /**
- * Swipes between the event and the task editor: switching to the task slides it in from the
- * right, like the Task half of the switch, and back to the event slides from the left. Each side
- * keeps the transfer draft it was opened with, so the editor sliding out does not reset its
- * fields while it is still visible.
+ * Swipes between the event and the task editor: switching to the task slides its fields in from
+ * the right, like the Task half of the switch, and back to the event slides from the left. The
+ * sheet, its top bar and the switch stay in place ([EditorTypeSlide]). Each side keeps the
+ * transfer draft it was opened with, so the editor sliding out does not reset its fields while
+ * they are still visible.
  */
 @Composable
 private fun EditorTypeTransition(
@@ -371,22 +369,18 @@ private fun EditorTypeTransition(
     AnimatedContent(
         targetState = sheet,
         contentKey = { it.isEventEditor() },
-        transitionSpec = {
-            val direction = if (targetState.isEventEditor()) -1 else 1
-            (
-                slideInHorizontally(tween(MotionLong, easing = MotionEmphasized)) { it * direction } +
-                    fadeIn(tween(MotionMedium, easing = MotionStandard))
-                ) togetherWith (
-                slideOutHorizontally(tween(MotionLong, easing = MotionEmphasized)) { -it * direction } +
-                    fadeOut(tween(MotionMedium, easing = MotionStandardAccelerate))
-                ) using SizeTransform(clip = true)
-        },
+        // The editors move their parts themselves; this keeps the one sliding out until it is gone.
+        transitionSpec = { EnterTransition.None togetherWith ExitTransition.None using SizeTransform(clip = true) },
         label = "editorType",
     ) { target ->
         val transferDraft = remember(target) { shell.editorTransferDraft }
         // An editor that slides in starts its switch on the other half and moves the pill over.
         val slidIn = remember { previousIsEvent.value.let { it != null && it != target.isEventEditor() } }
-        CompositionLocalProvider(LocalEditorTypeSwitchAnimates provides slidIn) {
+        val slide = remember(this, target.isEventEditor()) { EditorTypeSlide(this, target.isEventEditor()) }
+        CompositionLocalProvider(
+            LocalEditorTypeSwitchAnimates provides slidIn,
+            LocalEditorTypeSlide provides slide,
+        ) {
             content(target, transferDraft)
         }
     }

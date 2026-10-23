@@ -14,12 +14,14 @@
     <string name="app_settings">App-Einstellungen</string>
     <string name="settings">Einstellungen</string>
     <string name="problems">Probleme</string>
-    <string name="problem_count">%1$d Hinweis(e)</string>
+    <plurals name="problem_count">
+        <item quantity="one">%1$d Hinweis</item>
+        <item quantity="other">%1$d Hinweise</item>
+    </plurals>
     <string name="local_calendar">Lokaler Kalender</string>
     <string name="read_only_url">Abonnement (nur lesen)</string>
     <string name="nextcloud">Nextcloud</string>
     <string name="caldav">CalDAV</string>
-    <string name="caldav_and_nextcloud">CalDAV / Nextcloud</string>
     <string name="caldav_account">CalDAV-Konto</string>
     <string name="caldav_server_url">CalDAV-Server-URL</string>
     <string name="nextcloud_browser_login_help">Bei Nextcloud kannst du dich statt mit Passwort im Browser anmelden. Andere CalDAV-Server brauchen Benutzername und Passwort oder App-Passwort.</string>
@@ -319,6 +321,8 @@
     <string name="metadata">Metadaten</string>
     <string name="permissions">Berechtigungen</string>
     <string name="calendar_active_help">Inaktive Kalender werden nicht synchronisiert und überall ausgeblendet</string>
+    <string name="calendar_use_categories">Kategorien dieses Kalenders verwenden</string>
+    <string name="calendar_use_categories_help">Schlägt die hier verwendeten Kategorien vor, wenn du Terminen und Aufgaben Kategorien gibst.</string>
     <string name="calendar_access">Zugriff</string>
     <string name="calendar_writes">Schreibzugriff</string>
     <string name="calendar_sync_state">Sync-Status</string>
@@ -366,7 +370,7 @@
     <string name="non_participant">Nicht-Teilnehmer</string>
     <string name="invalid_time_range_title">Ungültiger Zeitraum</string>
     <string name="invalid_time_range_message">Das Ende muss nach dem Start liegen. Passe Enddatum oder Endzeit an, bevor du speicherst.</string>
-    <string name="invalid_time_range_field_error">Ende muss nach Start liegen</string>
+    <string name="invalid_event_time_range_message">Das Ende darf nicht vor dem Start liegen. Passe Enddatum oder Endzeit an, bevor du speicherst.</string>
     <string name="no_response">Keine Antwort</string>
     <string name="delegated">Delegiert</string>
     <string name="invitation_preparing">Einladung wird vorbereitet</string>
@@ -397,7 +401,10 @@
     <string name="at_time">Zum Zeitpunkt</string>
     <string name="minutes_before">%1$d Min. vorher</string>
     <string name="hours_before">%1$d Std. vorher</string>
-    <string name="days_before">%1$d Tag(e) vorher</string>
+    <plurals name="days_before">
+        <item quantity="one">%1$d Tag vorher</item>
+        <item quantity="other">%1$d Tage vorher</item>
+    </plurals>
     <string name="one_week_before">1 Woche vorher</string>
     <string name="five_min">5 Min.</string>
     <string name="ten_min">10 Min.</string>
@@ -527,6 +534,24 @@
     <string name="follow_app">App folgen</string>
     <string name="follow_os">System folgen</string>
     <string name="calendar_settings_saved_refresh_failed">Die Kalendereinstellung wurde gespeichert, aber die vollst&#228;ndige Aktualisierung ist fehlgeschlagen. Beim n&#228;chsten Abgleich wird sie erneut versucht.</string>
+    <string name="calendar_appearance_saved_on_device_only">Auf diesem Gerät gespeichert. Der Server konnte nicht aktualisiert werden, daher zeigen andere Apps noch den alten Namen und die alte Farbe.</string>
+    <string name="sync_conflict_body">Es wurde auf einem anderen Gerät geändert, während du es hier geändert hast. Wähle, welche Version bleiben soll.</string>
+    <string name="sync_conflict_keep_mine">Meine behalten</string>
+    <string name="sync_conflict_use_server">Die andere nehmen</string>
+    <string name="error_generic">Etwas ist schiefgelaufen. Bitte versuche es erneut.</string>
+    <string name="error_unreachable">Der Server war nicht erreichbar. Prüfe die Internetverbindung, privates DNS oder VPN und die Serveradresse.</string>
+    <string name="error_timeout">Der Server hat zu lange nicht geantwortet. Die App versucht es bei der nächsten Synchronisierung erneut.</string>
+    <string name="error_credentials_missing">Die Anmeldung für diese Quelle fehlt. Bearbeite die Quelle und gib das Passwort erneut ein.</string>
+    <string name="error_feed_web_page">Die Adresse öffnet eine Webseite, keinen Kalender. Verwende den Abo-Link (.ics oder webcal).</string>
+    <string name="error_feed_invalid">Die Adresse liefert keinen gültigen Kalender.</string>
+    <string name="error_http_login">Der Server hat die Anmeldung nicht akzeptiert. Bearbeite die Quelle und prüfe Benutzername und App-Passwort. (HTTP %1$d)</string>
+    <string name="error_http_forbidden">Der Server hat das nicht erlaubt. Vielleicht darfst du diesen Kalender nicht ändern. (HTTP %1$d)</string>
+    <string name="error_http_not_found">Der Server hat es nicht gefunden. Vielleicht wurde es woanders gelöscht. (HTTP %1$d)</string>
+    <string name="error_http_too_large">Der Server hat es als zu groß abgelehnt. (HTTP %1$d)</string>
+    <string name="error_http_locked">Es ist auf dem Server gerade gesperrt. Die App versucht es bei der nächsten Synchronisierung erneut. (HTTP %1$d)</string>
+    <string name="error_http_rate_limited">Der Server erhält zu viele Anfragen. Versuche es später erneut. (HTTP %1$d)</string>
+    <string name="error_http_storage_full">Auf dem Server ist kein Speicherplatz mehr frei. (HTTP %1$d)</string>
+    <string name="error_http_server">Der Server hatte ein Problem. Die App versucht es bei der nächsten Synchronisierung erneut. (HTTP %1$d)</string>
     <string name="calendar_settings_saved_reconciliation_failed">Die Kalendereinstellung und Aktualisierung wurden abgeschlossen, aber Erinnerungen oder Widgets konnten nicht aktualisiert werden.</string>
     <string name="recently_deleted">Zuletzt gelöscht</string>
     <string name="recently_deleted_empty_title">Hier ist nichts</string>
@@ -585,7 +610,10 @@
     <string name="ics_import_action">Importieren</string>
     <string name="ics_importing">Wird importiert…</string>
     <string name="ics_open_calendar">Kalender öffnen</string>
-    <string name="ics_import_help">Prüfe %1$d Termin(e) und wähle einen lokalen oder CalDAV-Kalender. Bereits vorhandene Termine mit derselben ID werden übersprungen.</string>
+    <plurals name="ics_import_help">
+        <item quantity="one">Prüfe %1$d Termin und wähle einen lokalen oder CalDAV-Kalender. Ein bereits vorhandener Termin mit derselben ID wird übersprungen.</item>
+        <item quantity="other">Prüfe %1$d Termine und wähle einen lokalen oder CalDAV-Kalender. Bereits vorhandene Termine mit derselben ID werden übersprungen.</item>
+    </plurals>
     <string name="ics_import_destination">Zielkalender</string>
     <string name="ics_import_no_calendar">Aktiviere in KGS Calendar einen beschreibbaren lokalen oder CalDAV-Kalender, um diese Termine zu importieren.</string>
     <string name="ics_import_recurring">Terminserie einschließlich Ausnahmen</string>

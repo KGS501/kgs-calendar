@@ -174,6 +174,16 @@ class CalDavHttpClientTest {
     }
 
     @Test
+    fun skipsCalendarsInTheNextcloudTrashBin() = runTest {
+        serveDiscovery(deletedCalendarCollectionResponse())
+
+        val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
+        val collections = client.discoverCollections(discovery, "alice", "secret")
+
+        assertEquals(listOf("/calendars/alice/work/"), collections.map { it.href })
+    }
+
+    @Test
     fun calendarQueryReturnsVtodoResourceData() = runTest {
         server.enqueue(
             xmlResponse(
@@ -294,6 +304,23 @@ class CalDavHttpClientTest {
             </d:response>
         </d:multistatus>
     """.trimIndent()
+
+    // Nextcloud 34 lists a calendar deleted into its trash bin like this, with its components.
+    private fun deletedCalendarCollectionResponse() = collectionResponse().replace(
+        "</d:multistatus>",
+        """
+          <d:response>
+            <d:href>/calendars/alice/old/</d:href>
+            <d:propstat><d:prop>
+              <d:displayname>Old</d:displayname>
+              <d:resourcetype><d:collection /><nc:deleted-calendar xmlns:nc="http://nextcloud.com/ns" /></d:resourcetype>
+              <cal:supported-calendar-component-set><cal:comp name="VEVENT" /><cal:comp name="VTODO" /></cal:supported-calendar-component-set>
+              <d:sync-token>token-2</d:sync-token>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+          </d:response>
+        </d:multistatus>
+        """.trimIndent(),
+    )
 
     private fun scheduleInboxCollectionResponse() = """
         <d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">

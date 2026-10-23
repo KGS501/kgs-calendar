@@ -250,29 +250,40 @@ class CalendarSourceManager internal constructor(
     }
 
     suspend fun updateCollectionAppearance(href: String, displayName: String, customColor: Int?) {
+        updateCollectionAppearanceLocally(href, displayName, customColor)
+        pushCollectionAppearance(href)
+    }
+
+    /** Saves a calendar's name and color on this device; [pushCollectionAppearance] sends them on. */
+    suspend fun updateCollectionAppearanceLocally(href: String, displayName: String, customColor: Int?) {
         val collection = database.collectionDao().get(href) ?: return
         val normalizedName = displayName.trim().ifBlank { collection.remoteDisplayName ?: "Calendar" }
         val customDisplayName = normalizedName.takeUnless { it == collection.remoteDisplayName }
         val effectiveColor = customColor ?: collection.resolvedAutomaticColor()
-        if (collection.sourceType == SourceType.CalDav && collection.canWriteProperties()) {
-            val account = database.accountDao().get(collection.accountId)
-            val credentials = credentialsStore.get(collection.accountId)
-            if (account != null && credentials != null) {
-                calDavClient.updateCalendarProperties(
-                    serverUrl = credentials.serverUrl,
-                    collectionHref = collection.href,
-                    username = credentials.username,
-                    appPassword = credentials.appPassword,
-                    displayName = normalizedName,
-                    color = effectiveColor,
-                )
-            }
-        }
         localWrites.writeTransaction {
             database.collectionDao().updateAppearance(href, normalizedName, customDisplayName, effectiveColor, customColor)
             database.eventDao().updateColorForCollection(href, effectiveColor)
             database.taskDao().updateColorForCollection(href, effectiveColor)
         }
+    }
+
+    /**
+     * Sends a CalDAV calendar's name and color, as saved on this device, to its server so other
+     * apps show them too. Calendars the account may not change are left alone.
+     */
+    suspend fun pushCollectionAppearance(href: String) {
+        val collection = database.collectionDao().get(href) ?: return
+        if (collection.sourceType != SourceType.CalDav || !collection.canWriteProperties()) return
+        if (database.accountDao().get(collection.accountId) == null) return
+        val credentials = credentialsStore.get(collection.accountId) ?: return
+        calDavClient.updateCalendarProperties(
+            serverUrl = credentials.serverUrl,
+            collectionHref = collection.href,
+            username = credentials.username,
+            appPassword = credentials.appPassword,
+            displayName = collection.displayName,
+            color = collection.color,
+        )
     }
 
     suspend fun createCalDavCalendar(

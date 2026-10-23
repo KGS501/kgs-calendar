@@ -76,6 +76,9 @@ class CalDavHttpClient(
         responses
             .filterNot { it.href.isSameDavHref(discovery.calendarHomeUrl) }
             .mapNotNull { response ->
+                // Nextcloud keeps a deleted calendar in its trash bin and still lists it here, typed
+                // as a deleted calendar. Syncing it would bring the calendar back.
+                if (DELETED_CALENDAR_TYPE in response.resourceTypes) return@mapNotNull null
                 val isCalendar = "calendar" in response.resourceTypes
                 val isScheduleInbox = "schedule-inbox" in response.resourceTypes ||
                     discovery.scheduleInboxUrl?.let { response.href.isSameDavHref(it) } == true
@@ -949,6 +952,7 @@ class CalDavHttpClient(
         """.trimIndent()
 
         private const val TRASH_BIN_NAME = "trashbin"
+        private const val DELETED_CALENDAR_TYPE = "deleted-calendar"
         private const val MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
         /** Answers of servers without a trash bin at the probed URL. */

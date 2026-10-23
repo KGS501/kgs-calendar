@@ -100,7 +100,7 @@ internal fun TaskEditorSheet(
     var manualColor by draft.field("manualColor", DraftCodec.OptionalNumber, initialTask?.uid, transferDraft) { initialTask?.manualColor ?: transferDraft?.manualColor }
     var url by draft.field("url", DraftCodec.Text, initialTask?.uid) { initialTask?.url.orEmpty() }
     var categories by draft.field("categories", DraftCodec.Text, initialTask?.uid, transferDraft) { initialTask?.categories ?: transferDraft?.categories.orEmpty() }
-    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks) {
+    val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks, state.collections, state.categorySync) {
         state.allKnownCategoryTags()
     }
     var percentComplete by draft.field("percentComplete", DraftCodec.Number, initialTask?.uid) { initialTask?.percentComplete ?: 0 }
@@ -236,12 +236,14 @@ internal fun TaskEditorSheet(
                     onAction = {},
                     onClose = onClose,
                     actionEnabled = false,
+                    typeSwitch = {
+                        EditorTypeSwitch(
+                            eventSelected = false,
+                            onSelectEvent = { onSwitchToEvent(currentTransferDraft()) },
+                            onSelectTask = {},
+                        )
+                    },
                 ) {
-                    EditorTypeSwitch(
-                        eventSelected = false,
-                        onSelectEvent = { onSwitchToEvent(currentTransferDraft()) },
-                        onSelectTask = {},
-                    )
                     NoWritableSourceNotice(
                         title = stringResource(R.string.no_writable_task_list_title),
                         body = stringResource(R.string.no_writable_task_list_body),
@@ -281,14 +283,15 @@ internal fun TaskEditorSheet(
                     )
                 }.getOrNull() ?: return@EditorContainer
                 onSave(payload)
-            }, onClose = onClose) {
-                if (!readOnlyRemote && forcedParentTask == null) {
+            }, onClose = onClose, typeSwitch = if (readOnlyRemote || forcedParentTask != null) null else {
+                {
                     EditorTypeSwitch(
                         eventSelected = false,
                         onSelectEvent = { onSwitchToEvent(currentTransferDraft()) },
                         onSelectTask = {},
                     )
                 }
+            }) {
                 if (readOnlyRemote) {
                     EditorSection {
                         ReadOnlyEditorNotice(title = title)

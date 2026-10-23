@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.ical
 
+import com.kgs.calendar.data.SampleIcs
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.ComponentType
@@ -899,5 +900,34 @@ class IcalCodecTest {
         assertTrue(serialized, serialized.contains("ATTENDEE;CN=\"Jürgen\";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:j@example.test"))
         assertTrue(serialized, serialized.contains("ATTENDEE;CN=\"b@example.test\";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:b@example.test"))
         assertEquals(2, serialized.lines().count { it.startsWith("ATTENDEE") })
+    }
+
+    @Test
+    fun withoutAFixedZoneAllDayDatesFollowTheDevicesCurrentZone() {
+        val raw = SampleIcs.calendar(
+            "BEGIN:VEVENT",
+            "UID:day",
+            "DTSTAMP:20260901T000000Z",
+            "DTSTART;VALUE=DATE:20261010",
+            "DTEND;VALUE=DATE:20261011",
+            "SUMMARY:Holiday",
+            "END:VEVENT",
+        )
+        val codec = IcalCodec()
+        val original = java.util.TimeZone.getDefault()
+        try {
+            for (zone in listOf("Europe/Berlin", "America/New_York")) {
+                // The zone changes while the app keeps running, as after a flight.
+                java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone))
+                val event = codec.parse(raw, "/c/", "/c/day.ics", 0)!!.event!!
+                assertEquals(
+                    zone,
+                    java.time.LocalDate.of(2026, 10, 10).atStartOfDay(java.time.ZoneId.of(zone)).toInstant().toEpochMilli(),
+                    event.startsAtMillis,
+                )
+            }
+        } finally {
+            java.util.TimeZone.setDefault(original)
+        }
     }
 }

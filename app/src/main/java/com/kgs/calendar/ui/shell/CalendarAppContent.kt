@@ -282,7 +282,7 @@ internal fun CalendarAppContent(
         )
     }
 
-    ProblemsOverlay(shell = shell, problemItems = problemItems)
+    ProblemsOverlay(viewModel = viewModel, shell = shell, problemItems = problemItems)
     CreationSheetHost(
         viewModel = viewModel,
         state = state,

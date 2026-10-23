@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
@@ -49,6 +50,7 @@ internal fun EventEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId =
 }
 
 internal fun TaskEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Pair<Int, Int>? {
+    if (isTimedMultiDayMiddleOn(day, zoneId)) return null
     val startTimed = startAtMillis?.takeIf { startHasTime }
     val dueTimed = dueAtMillis?.takeIf { dueHasTime }
     if (startTimed == null && dueTimed == null) return null
@@ -69,6 +71,7 @@ internal fun TaskEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = 
 }
 
 internal fun TaskEntity.isWidgetFullDayTaskOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
+    if (isTimedMultiDayMiddleOn(day, zoneId)) return true
     if (startAtMillis == null && dueAtMillis == null) return false
     if ((startAtMillis != null && startHasTime) || (dueAtMillis != null && dueHasTime)) return false
     return day in visibleDates(day, day.plusDays(1), zoneId)

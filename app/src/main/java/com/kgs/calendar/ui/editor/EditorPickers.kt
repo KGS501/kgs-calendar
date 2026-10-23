@@ -85,6 +85,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
@@ -95,6 +96,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
 import com.kgs.calendar.R
 import com.kgs.calendar.domain.task.priorityColorArgb
+import com.kgs.calendar.ui.haptics.rememberSliderStepHaptics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -328,6 +330,11 @@ internal fun PrioritySlider(
         return (9 - (fraction * 8f).roundToInt()).coerceIn(1, 9)
     }
     val thumbFraction = (9 - priority.coerceIn(1, 9)) / 8f
+    val stepHaptics = rememberSliderStepHaptics(priority)
+    fun change(next: Int) {
+        stepHaptics(next)
+        onPriorityChange(next)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EditorRowTitle(Icons.Default.Flag, stringResource(R.string.priority)) {
             Text("$priority", color = priorityColor(priority), fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
@@ -340,7 +347,7 @@ internal fun PrioritySlider(
                 .pointerInput(widthPx) {
                     detectTapGestures { offset ->
                         val next = priorityFromX(offset.x)
-                        onPriorityChange(next)
+                        change(next)
                         onPriorityChangeFinished(next)
                     }
                 }
@@ -349,12 +356,12 @@ internal fun PrioritySlider(
                     detectDragGestures(
                         onDragStart = { offset ->
                             dragPriority = priorityFromX(offset.x)
-                            onPriorityChange(dragPriority)
+                            change(dragPriority)
                         },
                         onDrag = { change, _ ->
                             change.consume()
                             dragPriority = priorityFromX(change.position.x)
-                            onPriorityChange(dragPriority)
+                            change(dragPriority)
                         },
                         onDragEnd = { onPriorityChangeFinished(dragPriority) },
                     )
@@ -425,6 +432,11 @@ internal fun ProgressSlider(
     }
     val normalized = progress.coerceIn(0, 100)
     val fraction = normalized / 100f
+    val stepHaptics = rememberSliderStepHaptics(normalized)
+    fun change(next: Int) {
+        stepHaptics(next)
+        onProgressChange(next)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EditorRowTitle(Icons.Default.Percent, stringResource(R.string.progress)) {
             Text("$normalized%", color = WarmBrown, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
@@ -437,7 +449,7 @@ internal fun ProgressSlider(
                 .pointerInput(widthPx) {
                     detectTapGestures { offset ->
                         val next = progressFromX(offset.x)
-                        onProgressChange(next)
+                        change(next)
                         onProgressChangeFinished(next)
                     }
                 }
@@ -446,12 +458,12 @@ internal fun ProgressSlider(
                     detectDragGestures(
                         onDragStart = { offset ->
                             dragProgress = progressFromX(offset.x)
-                            onProgressChange(dragProgress)
+                            change(dragProgress)
                         },
                         onDrag = { change, _ ->
                             change.consume()
                             dragProgress = progressFromX(change.position.x)
-                            onProgressChange(dragProgress)
+                            change(dragProgress)
                         },
                         onDragEnd = { onProgressChangeFinished(dragProgress) },
                     )
@@ -499,35 +511,54 @@ internal fun ColorOverrideEditor(
     automaticColor: Int,
     onColorSelected: (Int?) -> Unit,
 ) {
-    var colorPickerOpen by remember { mutableStateOf(false) }
-    val customColorPresentation = customColorChipPresentation(selectedColor)
     EditorSection {
         EditorRowTitle(Icons.Default.Palette, stringResource(R.string.color))
-        FadedHorizontalScrollRow(
-            contentPadding = PaddingValues(horizontal = EditorSectionHorizontalPadding),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            viewportBleed = EditorSectionHorizontalPadding,
-        ) {
+        ColorChoiceRow(
+            selectedColor = selectedColor,
+            automaticColor = automaticColor,
+            onColorSelected = onColorSelected,
+        )
+    }
+}
+
+/**
+ * The one way to pick a color in the app: automatic, one of the preset colors, or any color from
+ * the color wheel behind "Custom". A null [selectedColor] is the automatic color.
+ */
+@Composable
+internal fun ColorChoiceRow(
+    selectedColor: Int?,
+    automaticColor: Int,
+    onColorSelected: (Int?) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(horizontal = EditorSectionHorizontalPadding),
+    viewportBleed: Dp = EditorSectionHorizontalPadding,
+) {
+    var colorPickerOpen by remember { mutableStateOf(false) }
+    val customColorPresentation = customColorChipPresentation(selectedColor)
+    FadedHorizontalScrollRow(
+        contentPadding = contentPadding,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        viewportBleed = viewportBleed,
+    ) {
+        ColorChoiceChip(
+            label = stringResource(R.string.auto),
+            color = Color(automaticColor),
+            selected = selectedColor == null,
+            onClick = { onColorSelected(null) },
+        )
+        ItemColorPalette.forEach { color ->
             ColorChoiceChip(
-                label = stringResource(R.string.auto),
-                color = Color(automaticColor),
-                selected = selectedColor == null,
-                onClick = { onColorSelected(null) },
-            )
-            ItemColorPalette.forEach { color ->
-                ColorChoiceChip(
-                    label = null,
-                    color = Color(color),
-                    selected = selectedColor == color,
-                    onClick = { onColorSelected(color) },
-                )
-            }
-            ColorEditChip(
-                displayedColor = customColorPresentation.displayedColor,
-                selected = customColorPresentation.selected,
-                onClick = { colorPickerOpen = true },
+                label = null,
+                color = Color(color),
+                selected = selectedColor == color,
+                onClick = { onColorSelected(color) },
             )
         }
+        ColorEditChip(
+            displayedColor = customColorPresentation.displayedColor,
+            selected = customColorPresentation.selected,
+            onClick = { colorPickerOpen = true },
+        )
     }
     if (colorPickerOpen) {
         ColorPickerDialog(
@@ -800,9 +831,11 @@ internal fun EditorContainer(
     onAction: () -> Unit,
     onClose: () -> Unit,
     actionEnabled: Boolean = true,
+    typeSwitch: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val editorScrollState = rememberScrollState()
+    val typeSlide = LocalEditorTypeSlide.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -823,7 +856,17 @@ internal fun EditorContainer(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Spacer(Modifier.height(4.dp))
-            content()
+            if (typeSwitch != null) {
+                Box(typeSlide?.run { Modifier.staysInPlace() } ?: Modifier) { typeSwitch() }
+            }
+            // Only the fields below the switch slide when it changes the editor type.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(typeSlide?.run { Modifier.slides() } ?: Modifier),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                content = content,
+            )
             Spacer(Modifier.height(56.dp))
         }
     }

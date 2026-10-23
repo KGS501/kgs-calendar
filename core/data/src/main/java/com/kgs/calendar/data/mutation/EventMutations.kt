@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.mutation
 
+import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.LocalWriteSupport
 import com.kgs.calendar.data.canCreateResources
 import com.kgs.calendar.data.canDeleteResources
@@ -39,8 +40,10 @@ class EventMutations internal constructor(
     private val icalCodec: IcalCodec,
     private val androidWriteShield: AndroidProviderWriteShield,
     private val trashSnapshots: TrashSnapshots,
-    private val zoneId: ZoneId,
+    private val fixedZoneId: ZoneId?,
 ) {
+    private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
+
     private suspend fun writableEventCollectionOrNull(requestedHref: String?): CollectionEntity? =
         requestedHref?.let { database.collectionDao().get(it) }
             ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }

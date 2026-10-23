@@ -3,6 +3,7 @@ package com.kgs.calendar.ui.layout
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
+import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis
@@ -160,6 +161,7 @@ private const val NearZeroTimedEventThresholdMillis = 1_000L
 private const val MinimumTimedEventVisualDurationMillis = 15L * 60L * 1_000L
 
 internal fun TaskEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlacement? {
+    if (isTimedMultiDayMiddleOn(day)) return null
     val startTimed = startAtMillis?.takeIf { startHasTime }
     val dueTimed = dueAtMillis?.takeIf { dueHasTime }
     if (startTimed == null && dueTimed == null) return null
