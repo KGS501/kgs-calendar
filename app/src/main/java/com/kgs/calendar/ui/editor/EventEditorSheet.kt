@@ -355,7 +355,7 @@ internal fun EventEditorSheet(
         }
     }
     if (invalidRangeDialogOpen) {
-        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false })
+        InvalidTimeRangeDialog(onDismiss = { invalidRangeDialogOpen = false }, message = R.string.invalid_event_time_range_message)
     }
 }
 

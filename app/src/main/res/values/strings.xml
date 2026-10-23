@@ -370,7 +370,7 @@
     <string name="non_participant">Non-participant</string>
     <string name="invalid_time_range_title">Invalid time range</string>
     <string name="invalid_time_range_message">The end must be after the start. Adjust the end date or time before saving.</string>
-    <string name="invalid_time_range_field_error">End must be after start</string>
+    <string name="invalid_event_time_range_message">The end can\'t be before the start. Adjust the end date or time before saving.</string>
     <string name="no_response">No response</string>
     <string name="delegated">Delegated</string>
     <string name="invitation_preparing">Preparing invitation</string>

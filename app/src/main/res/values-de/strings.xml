@@ -370,7 +370,7 @@
     <string name="non_participant">Nicht-Teilnehmer</string>
     <string name="invalid_time_range_title">Ungültiger Zeitraum</string>
     <string name="invalid_time_range_message">Das Ende muss nach dem Start liegen. Passe Enddatum oder Endzeit an, bevor du speicherst.</string>
-    <string name="invalid_time_range_field_error">Ende muss nach Start liegen</string>
+    <string name="invalid_event_time_range_message">Das Ende darf nicht vor dem Start liegen. Passe Enddatum oder Endzeit an, bevor du speicherst.</string>
     <string name="no_response">Keine Antwort</string>
     <string name="delegated">Delegiert</string>
     <string name="invitation_preparing">Einladung wird vorbereitet</string>

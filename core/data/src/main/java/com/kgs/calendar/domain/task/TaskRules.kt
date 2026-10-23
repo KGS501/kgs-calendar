@@ -66,13 +66,18 @@ fun TaskEntity.displayColor(mode: TaskColorMode): Int =
     }
 
 /**
- * A day strictly between the start and due days of a task with a time on both. The whole day
- * belongs to the task, so it shows as a full-day item, like the middle days of a timed multi-day
- * event, not as a 24-hour block.
+ * The days strictly between the start and due days of a task with a time on both, or null when
+ * there are none. The whole of each belongs to the task, so they show as a full-day item, like
+ * the middle days of a timed multi-day event, not as 24-hour blocks.
  */
-fun TaskEntity.isTimedMultiDayMiddleOn(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
-    val start = startAtMillis?.takeIf { startHasTime } ?: return false
-    val due = dueAtMillis?.takeIf { dueHasTime } ?: return false
-    if (due <= start) return false
-    return date.isAfter(start.toDate(zoneId)) && date.isBefore((due - 1).toDate(zoneId))
+fun TaskEntity.timedMultiDayMiddleDates(zoneId: ZoneId = ZoneId.systemDefault()): ClosedRange<LocalDate>? {
+    val start = startAtMillis?.takeIf { startHasTime } ?: return null
+    val due = dueAtMillis?.takeIf { dueHasTime } ?: return null
+    if (due <= start) return null
+    val first = start.toDate(zoneId).plusDays(1)
+    val last = (due - 1).toDate(zoneId).minusDays(1)
+    return if (first.isAfter(last)) null else first..last
 }
+
+fun TaskEntity.isTimedMultiDayMiddleOn(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean =
+    timedMultiDayMiddleDates(zoneId)?.contains(date) == true

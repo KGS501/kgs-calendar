@@ -88,6 +88,15 @@ class CalendarUiHelpersTest {
         )
     }
 
+    @Test
+    fun anEventMayEndWhenItStartsButNotBefore() {
+        fun invalid(end: String) = eventDateTimeRangeInvalid("2026-10-24", "2026-10-24", "15:00", end, allDay = false)
+
+        assertEquals(false, invalid("15:00"))
+        assertEquals(false, invalid("16:00"))
+        assertEquals(true, invalid("14:59"))
+    }
+
     private fun collection(href: String, readOnly: Boolean) = CollectionEntity(
         href = href,
         accountId = "account",

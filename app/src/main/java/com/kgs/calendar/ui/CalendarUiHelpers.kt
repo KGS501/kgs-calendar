@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.domain.task.timedMultiDayMiddleDates
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -1095,7 +1096,8 @@ internal fun eventDateTimeRangeInvalid(
     if (allDay) return endDate.isBefore(startDate)
     val startTime = runCatching { LocalTime.parse(startTimeText) }.getOrNull() ?: return false
     val endTime = runCatching { LocalTime.parse(endTimeText) }.getOrNull() ?: return false
-    return !endDate.atTime(endTime).isAfter(startDate.atTime(startTime))
+    // An event may end when it starts: a zero-length event, such as a deadline from another app.
+    return endDate.atTime(endTime).isBefore(startDate.atTime(startTime))
 }
 
 internal fun taskDateTimeRangeInvalid(
@@ -1490,6 +1492,26 @@ internal fun buildAllDayOverlayItems(
                     )
                 }
             }
+        // The full days in the middle of a timed task over several days, like those of events.
+        tasks.forEach { task ->
+            val middle = task.timedMultiDayMiddleDates() ?: return@forEach
+            val startPage = middle.start.toDayPage()
+            val endPage = middle.endInclusive.toDayPage()
+            if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
+                add(
+                    Candidate(
+                        id = "task-middle:${task.resourceHref}:${task.occurrenceRecurrenceIdMillis()}",
+                        title = task.title,
+                        color = task.displayColor(taskColorMode),
+                        startPage = startPage,
+                        endPage = endPage,
+                        event = null,
+                        task = task,
+                        completed = task.isCompleted,
+                    ),
+                )
+            }
+        }
     }.sortedWith(
         compareBy<Candidate> { allDayViewportPriorityTier(it.startPage, it.endPage, priorityStartPage, priorityEndPage) }
             .thenByDescending { it.endPage }
