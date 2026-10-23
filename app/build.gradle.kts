@@ -39,8 +39,8 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = 36
-        versionCode = 39
-        versionName = "V.1.4.5-4"
+        versionCode = 40
+        versionName = "V.1.4.5-5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
