@@ -79,16 +79,14 @@ class CalDavHttpClient(
                 // Nextcloud keeps a deleted calendar in its trash bin and still lists it here, typed
                 // as a deleted calendar. Syncing it would bring the calendar back.
                 if (DELETED_CALENDAR_TYPE in response.resourceTypes) return@mapNotNull null
+                // The scheduling inbox and outbox only carry invitation messages between servers.
+                // The server already files invitations into a calendar, and Nextcloud's own
+                // calendar does not show either of them.
+                if (response.isSchedulingMailbox(discovery)) return@mapNotNull null
                 val isCalendar = "calendar" in response.resourceTypes
-                val isScheduleInbox = "schedule-inbox" in response.resourceTypes ||
-                    discovery.scheduleInboxUrl?.let { response.href.isSameDavHref(it) } == true
                 val supported = response.supportedComponents
-                if (!isCalendar && !isScheduleInbox && supported.isEmpty()) return@mapNotNull null
-                val components = when {
-                    supported.isNotEmpty() -> supported
-                    isScheduleInbox -> setOf("VTODO")
-                    else -> setOf("VEVENT")
-                }
+                if (!isCalendar && supported.isEmpty()) return@mapNotNull null
+                val components = supported.ifEmpty { setOf("VEVENT") }
                 val capabilities = CalDavCollectionCapabilities(
                     privileges = response.privileges,
                     supportedReports = response.supportedReports,
@@ -100,13 +98,11 @@ class CalDavHttpClient(
                     href = stableHref(discovery.calendarHomeUrl, response.href),
                     displayName = response.displayName ?: response.href.trim('/').substringAfterLast('/'),
                     color = response.color,
-                    supportsEvents = !isScheduleInbox && "VEVENT" in components,
-                    supportsTasks = isScheduleInbox || "VTODO" in components,
+                    supportsEvents = "VEVENT" in components,
+                    supportsTasks = "VTODO" in components,
                     syncToken = response.syncToken,
                     ctag = response.ctag,
-                    readOnly = if (isScheduleInbox) {
-                        true
-                    } else if (capabilities.privilegesKnown) {
+                    readOnly = if (capabilities.privilegesKnown) {
                         !capabilities.canWriteContent
                     } else {
                         response.displayName.isLikelyReadOnlyCalendarName()
@@ -897,6 +893,10 @@ class CalDavHttpClient(
     ) {
         val successfulPropertyStatus: Boolean
             get() = statusCodes.isEmpty() || statusCodes.any { it in 200..299 }
+
+        fun isSchedulingMailbox(discovery: CalDavAccountDiscovery): Boolean =
+            "schedule-inbox" in resourceTypes || "schedule-outbox" in resourceTypes ||
+                listOfNotNull(discovery.scheduleInboxUrl, discovery.scheduleOutboxUrl).any { href.isSameDavHref(it) }
     }
 
     companion object {

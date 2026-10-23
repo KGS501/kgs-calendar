@@ -160,17 +160,13 @@ class CalDavHttpClientTest {
     }
 
     @Test
-    fun discoversScheduleInboxAsReadOnlyTaskCollection() = runTest {
-        serveDiscovery(scheduleInboxCollectionResponse())
+    fun skipsTheSchedulingInboxAndOutbox() = runTest {
+        serveDiscovery(schedulingMailboxesCollectionResponse())
 
         val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
         val collections = client.discoverCollections(discovery, "alice", "secret")
 
-        val inbox = collections.single { it.href == "/calendars/alice/inbox/" }
-        assertTrue(inbox.supportsTasks)
-        assertFalse(inbox.supportsEvents)
-        assertTrue(inbox.readOnly)
-        assertTrue(inbox.capabilities.isScheduleInbox)
+        assertEquals(listOf("/calendars/alice/work/"), collections.map { it.href })
     }
 
     @Test
@@ -322,22 +318,23 @@ class CalDavHttpClientTest {
         """.trimIndent(),
     )
 
-    private fun scheduleInboxCollectionResponse() = """
-        <d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
-          <d:response>
-            <d:href>/calendars/alice/</d:href>
-            <d:propstat><d:prop><d:resourcetype><d:collection /></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
-          </d:response>
+    private fun schedulingMailboxesCollectionResponse() = collectionResponse().replace(
+        "</d:multistatus>",
+        """
           <d:response>
             <d:href>/calendars/alice/inbox/</d:href>
             <d:propstat><d:prop>
-              <d:displayname>Schedule Inbox</d:displayname>
               <d:resourcetype><d:collection /><cal:schedule-inbox /></d:resourcetype>
-              <d:current-user-privilege-set>
-                <d:privilege><d:read /></d:privilege>
-              </d:current-user-privilege-set>
+              <cal:supported-calendar-component-set><cal:comp name="VEVENT" /><cal:comp name="VTODO" /></cal:supported-calendar-component-set>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+          </d:response>
+          <d:response>
+            <d:href>/calendars/alice/outbox/</d:href>
+            <d:propstat><d:prop>
+              <d:resourcetype><d:collection /><cal:schedule-outbox /></d:resourcetype>
             </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
           </d:response>
         </d:multistatus>
-    """.trimIndent()
+        """.trimIndent(),
+    )
 }

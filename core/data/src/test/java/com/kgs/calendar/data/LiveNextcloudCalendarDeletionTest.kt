@@ -54,6 +54,23 @@ class LiveNextcloudCalendarDeletionTest {
         }
     }
 
+    @Test fun theSchedulingInboxAndOutboxAreNotListedAsCalendars() = runBlocking {
+        val base = System.getenv("KGS_TEST_NEXTCLOUD_URL")
+        assumeTrue("Needs a disposable local Nextcloud", base != null)
+        require(URI(base!!).host in setOf("localhost", "127.0.0.1"))
+        val user = requireNotNull(System.getenv("KGS_TEST_NEXTCLOUD_USER"))
+        val password = requireNotNull(System.getenv("KGS_TEST_NEXTCLOUD_PASSWORD"))
+        RepositoryHarness().use { harness ->
+            val repository = harness.repository
+            val account = repository.saveManualAccount(base, user, password)
+            repository.syncNow()
+
+            val hrefs = harness.database.collectionDao().forAccount(account.id).map { it.href.trimEnd('/').substringAfterLast('/') }
+            assertTrue("No calendar was found: $hrefs", hrefs.isNotEmpty())
+            assertTrue("The scheduling mailboxes were listed: $hrefs", hrefs.none { it == "inbox" || it == "outbox" })
+        }
+    }
+
     private companion object {
         const val PROPFIND = """<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>"""
     }
