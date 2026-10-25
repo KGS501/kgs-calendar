@@ -173,9 +173,11 @@ internal fun TaskEditorSheet(
         }
     }
 
+    val keyboardAtSwitch = LocalEditorKeyboardAtSwitch.current
     LaunchedEffect(requestTitleFocus, initialTask?.uid) {
-        if (requestTitleFocus && initialTask == null) {
-            delay(220)
+        if ((keyboardAtSwitch ?: requestTitleFocus) && initialTask == null) {
+            // After a switch the title takes over the focus at once, so the keyboard stays up.
+            if (keyboardAtSwitch == null) delay(220)
             titleFocusRequester.requestFocus()
         }
     }

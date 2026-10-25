@@ -116,6 +116,7 @@ internal fun EventEditorSheet(
     val knownCategories = remember(state.events, state.datedTasks, state.inboxTasks, state.completedTasks, state.collections, state.categorySync) {
         state.allKnownCategoryTags()
     }
+    val keyboardAtSwitch = LocalEditorKeyboardAtSwitch.current
     var reminderMinutes by draft.field("reminderMinutes", DraftCodec.MinuteSet, initialEvent?.uid, transferDraft, state.defaultEventReminderMinutes) {
         when {
             initialEvent != null -> initialEvent.remindersCsv.parseReminderMinutes()
@@ -267,7 +268,8 @@ internal fun EventEditorSheet(
                     EventTitleField(
                         value = title,
                         onValueChange = { title = it },
-                        requestFocus = requestTitleFocus && initialEvent == null,
+                        requestFocus = (keyboardAtSwitch ?: requestTitleFocus) && initialEvent == null,
+                        focusAtOnce = keyboardAtSwitch != null,
                         modifier = Modifier.editorInset(),
                     )
                 }
@@ -360,11 +362,18 @@ internal fun EventEditorSheet(
 }
 
 @Composable
-private fun EventTitleField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier, requestFocus: Boolean = false) {
+private fun EventTitleField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    requestFocus: Boolean = false,
+    focusAtOnce: Boolean = false,
+) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(requestFocus) {
         if (requestFocus) {
-            delay(220)
+            // After a switch the title takes over the focus at once, so the keyboard stays up.
+            if (!focusAtOnce) delay(220)
             focusRequester.requestFocus()
         }
     }
