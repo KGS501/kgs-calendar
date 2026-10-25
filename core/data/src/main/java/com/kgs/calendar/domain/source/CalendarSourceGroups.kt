@@ -5,30 +5,35 @@ import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.domain.model.SourceType
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * The user's changes to how calendars are grouped in the sidebar and the source lists.
  * [assignments] moves calendars (by href) into another group; [names] renames groups by key.
- * A custom group ([CalendarSourceGroups.CUSTOM_PREFIX]) exists while a calendar is assigned to it.
- * [avatarColors] are the colors the user chose for the letter pictures of sources and groups,
- * keyed like their images (see `SourceImageKeys`).
+ * A custom group ([CalendarSourceGroups.CUSTOM_PREFIX]) exists while it has a name, until the user
+ * deletes it. [avatarColors] are the colors the user chose for the letter pictures of sources and
+ * groups, keyed like their images (see `SourceImageKeys`). [hiddenImages] are pictures a source
+ * provides that the user removed, by image key.
  */
 data class CalendarGroupSettings(
     val assignments: Map<String, String> = emptyMap(),
     val names: Map<String, String> = emptyMap(),
     val avatarColors: Map<String, Int> = emptyMap(),
+    val hiddenImages: Set<String> = emptySet(),
 ) {
     fun encode(): String = JSONObject()
         .put(KEY_ASSIGNMENTS, JSONObject(assignments))
         .put(KEY_NAMES, JSONObject(names))
         .apply { if (avatarColors.isNotEmpty()) put(KEY_AVATAR_COLORS, JSONObject(avatarColors)) }
+        .apply { if (hiddenImages.isNotEmpty()) put(KEY_HIDDEN_IMAGES, JSONArray(hiddenImages.sorted())) }
         .toString()
 
     companion object {
         private const val KEY_ASSIGNMENTS = "assignments"
         private const val KEY_NAMES = "names"
         private const val KEY_AVATAR_COLORS = "avatarColors"
+        private const val KEY_HIDDEN_IMAGES = "hiddenImages"
 
         fun decode(value: String?): CalendarGroupSettings {
             val json = value?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return CalendarGroupSettings()
@@ -36,6 +41,10 @@ data class CalendarGroupSettings(
                 assignments = json.optJSONObject(KEY_ASSIGNMENTS).toStringMap(),
                 names = json.optJSONObject(KEY_NAMES).toStringMap(),
                 avatarColors = json.optJSONObject(KEY_AVATAR_COLORS).toIntMap(),
+                hiddenImages = json.optJSONArray(KEY_HIDDEN_IMAGES)
+                    ?.let { array -> (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) } }
+                    .orEmpty()
+                    .toSet(),
             )
         }
 
@@ -60,7 +69,9 @@ enum class CalendarSourceGroupKind { Local, AndroidDevice, CalDav, ReadOnlyUrl, 
 /**
  * One top-level group of calendars. [defaultName] is the name the group gets without a user
  * rename ([customName]); null means the UI's localized name for [kind] (local, device calendars).
- * [accounts] are the sources whose calendars are shown here, in source order.
+ * [accounts] are the sources whose calendars are shown here, in source order. [owner] is the
+ * source whose own group this is: such a group has the source's name and picture, so renaming
+ * either renames both, and it has no [customName].
  */
 data class CalendarSourceGroup(
     val key: String,
@@ -69,6 +80,7 @@ data class CalendarSourceGroup(
     val customName: String?,
     val accounts: List<AccountEntity>,
     val collections: List<CollectionEntity>,
+    val owner: AccountEntity? = null,
 ) {
     val name: String? get() = customName ?: defaultName
 }
@@ -107,19 +119,39 @@ object CalendarSourceGroups {
             val assigned = settings.assignments[collection.href]?.takeIf { it.isKnownKey(automaticKeys.values) }
             order.getOrPut(assigned ?: automatic) { mutableListOf() } += collection
         }
+        // A custom group stays, even without calendars, until the user deletes it.
+        settings.names.keys.filter { isCustomKey(it) && it !in order }.forEach { order[it] = mutableListOf() }
         return order.map { (key, members) ->
             val memberAccounts = members.mapNotNull { accountsById[it.accountId] }.distinctBy { it.id }
                 .ifEmpty { accounts.filter { automaticKeys[it.id] == key } }
                 .sortedBy { accounts.indexOf(it) }
+            val owner = ownerOf(key, accountsById, accounts, automaticKeys)
             CalendarSourceGroup(
                 key = key,
                 kind = kindOf(key, memberAccounts),
                 defaultName = defaultName(key, memberAccounts, accounts, automaticKeys),
-                customName = settings.names[key]?.trim()?.takeIf { it.isNotEmpty() },
+                customName = settings.names[key]?.trim()?.takeIf { it.isNotEmpty() && owner == null },
                 accounts = memberAccounts,
                 collections = members,
+                owner = owner,
             )
         }
+    }
+
+    /**
+     * The source whose own group [key] is: the source of an account group, the local or device
+     * calendars, or a website's only subscription. Custom groups and groups of several
+     * subscriptions have none.
+     */
+    private fun ownerOf(
+        key: String,
+        accountsById: Map<String, AccountEntity>,
+        accounts: List<AccountEntity>,
+        automaticKeys: Map<String, String>,
+    ): AccountEntity? = when {
+        isCustomKey(key) -> null
+        key.startsWith(ACCOUNT_PREFIX) -> accountsById[key.removePrefix(ACCOUNT_PREFIX)]
+        else -> accounts.singleOrNull { automaticKeys[it.id] == key }
     }
 
     /** The group [account]'s calendars belong to without a user assignment. */

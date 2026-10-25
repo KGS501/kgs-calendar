@@ -507,15 +507,36 @@ class CalendarViewModelTest {
 
         val exams = feedGroup.collections.single { it.displayName == "exams.ics" }
         viewModel.sources.moveCollectionToNewGroup(exams.href, "Exams")
-        val moved = viewModel.awaitState { state -> state.calendarGroups.any { it.kind == CalendarSourceGroupKind.Custom } }
+        val moved = viewModel.awaitState { state -> state.calendarGroups.any { it.kind == CalendarSourceGroupKind.Custom && it.collections.isNotEmpty() } }
         val custom = moved.calendarGroups.single { it.kind == CalendarSourceGroupKind.Custom }
         assertEquals("Exams", custom.name)
         assertEquals(listOf(exams.href), custom.collections.map { it.href })
 
         viewModel.sources.moveCollectionToGroup(exams.href, null)
-        val back = viewModel.awaitState { state -> state.calendarGroups.none { it.kind == CalendarSourceGroupKind.Custom } }
-        assertEquals(2, back.calendarGroups.single { it.key == feedGroup.key }.collections.size)
+        val back = viewModel.awaitState { state -> state.calendarGroups.single { it.key == feedGroup.key }.collections.size == 2 }
+        // The group stays, empty, until the user deletes it.
+        assertEquals(emptyList<String>(), back.calendarGroups.single { it.kind == CalendarSourceGroupKind.Custom }.collections.map { it.href })
+
+        viewModel.sources.deleteGroup(custom.key)
+        viewModel.awaitState { state -> state.calendarGroups.none { it.kind == CalendarSourceGroupKind.Custom } }
         assertTrue(settingsStore.calendarGroupSettings.first().names.isEmpty())
+    }
+
+    @Test
+    fun aSourceAndItsSidebarGroupShareOneName() = runTest {
+        // Older versions kept a sidebar name apart from the source's name.
+        settingsStore.setCalendarGroupName("local", "Named in the sidebar")
+        harness.repository.ensureLocalCalendar()
+        val viewModel = viewModel()
+
+        val adopted = viewModel.awaitState { state -> state.accounts.singleOrNull { it.id == "local" }?.displayName == "Named in the sidebar" }
+        assertEquals("Named in the sidebar", adopted.calendarGroups.single { it.key == "local" }.name)
+        withContext(Dispatchers.Default) { withTimeout(30_000) { settingsStore.calendarGroupSettings.first { it.names.isEmpty() } } }
+
+        // Renaming the group from the sidebar renames the source shown in the settings.
+        viewModel.sources.renameGroup("local", "Home")
+        val renamed = viewModel.awaitState { state -> state.accounts.single { it.id == "local" }.displayName == "Home" }
+        assertEquals("Home", renamed.calendarGroups.single { it.key == "local" }.name)
     }
 
     private fun viewModel(

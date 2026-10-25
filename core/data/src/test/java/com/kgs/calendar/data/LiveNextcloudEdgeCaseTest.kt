@@ -131,6 +131,38 @@ class LiveNextcloudEdgeCaseTest {
         assertEquals(expected + 3_600_000, event.endsAtMillis)
     }
 
+    @Test fun aWeeklyEventAndOneMovedOnTheDayTheClocksGoBackKeepTheirClockTime() = runBlocking {
+        // Berlin goes from summer to winter time on 25 October 2026.
+        repository.createEvent(
+            eventPayload("Weekly across the change", LocalDate.of(2026, 10, 19), LocalTime.of(10, 0), LocalTime.of(11, 0), collectionHref = calendarHref, recurrenceRule = "FREQ=WEEKLY;COUNT=3"),
+        )
+        repository.createEvent(eventPayload("Moved onto the change", LocalDate.of(2026, 10, 24), collectionHref = calendarHref))
+        push()
+        val moved = harness.eventsIn(calendarHref).single { it.title == "Moved onto the change" }
+        repository.moveTimedEvent(moved.uid, LocalDate.of(2026, 10, 25), LocalTime.of(10, 0), LocalTime.of(11, 0))
+        push()
+
+        val weekly = harness.eventsIn(calendarHref).single { it.title == "Weekly across the change" }
+        val stored = get(weekly.resourceHref.substringAfterLast('/'))
+        assertTrue(stored, "DTSTART;TZID=Europe/Berlin:20261019T100000" in stored)
+        assertTrue(stored, "TZID:Europe/Berlin" in stored.substringAfter("BEGIN:VTIMEZONE").substringBefore("END:VTIMEZONE"))
+        assertTrue(get(moved.resourceHref.substringAfterLast('/')).let { "DTSTART;TZID=Europe/Berlin:20261025T100000" in it })
+
+        RepositoryHarness().use { other ->
+            other.repository.saveManualAccount(base, user, password)
+            other.repository.syncNow()
+            val seen = other.repository.eventsSnapshot(other.startOfDay(LocalDate.of(2026, 10, 19)), other.startOfDay(LocalDate.of(2026, 11, 3)))
+                .filter { it.uid == weekly.uid || it.uid == moved.uid }
+                .map { java.time.Instant.ofEpochMilli(it.startsAtMillis) }
+                .sorted()
+            // 08:00Z is 10:00 summer time, 09:00Z is 10:00 winter time.
+            assertEquals(
+                listOf("2026-10-19T08:00:00Z", "2026-10-25T09:00:00Z", "2026-10-26T09:00:00Z", "2026-11-02T09:00:00Z"),
+                seen.map { it.toString() },
+            )
+        }
+    }
+
     @Test fun aMultiDayAllDayEventStaysAllDayWhenEditedInTheApp() = runBlocking {
         put(
             "trip.ics",

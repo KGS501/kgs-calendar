@@ -393,7 +393,8 @@ internal fun calendarUiState(
         accounts = data.sources.accounts,
         collections = data.sources.collections,
         calendarGroupSettings = data.sources.groupSettings,
-        sourceImages = data.sources.sourceImages,
+        // Pictures a source provides stay hidden once the user removed them.
+        sourceImages = data.sources.sourceImages.filterKeys { it !in data.sources.groupSettings.hiddenImages },
         events = data.items.events,
         searchQuery = search.query,
         searchMode = search.mode,

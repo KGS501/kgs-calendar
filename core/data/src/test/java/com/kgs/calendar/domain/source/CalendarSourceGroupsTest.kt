@@ -79,11 +79,46 @@ class CalendarSourceGroupsTest {
     }
 
     @Test
+    fun aSourcesOwnGroupHasTheSourcesNameAndNoNameOfItsOwn() {
+        val settings = CalendarGroupSettings(
+            names = mapOf("account:primary" to "Old sidebar name", "local" to "Old local name", "domain:school.org" to "School"),
+        )
+
+        val groups = CalendarSourceGroups.group(accounts, collections, settings)
+
+        val cloud = groups.single { it.key == "account:primary" }
+        // A subscription of the same website joins the group but does not own it.
+        assertEquals(nextcloud.id, cloud.owner?.id)
+        assertEquals("anna", cloud.name)
+        assertNull(cloud.customName)
+        assertEquals(local.id, groups.single { it.key == "local" }.owner?.id)
+        assertEquals("Local calendar", groups.single { it.key == "local" }.name)
+        assertEquals(holidays.id, groups.single { it.key == "domain:holidays.co.uk" }.owner?.id)
+        // Several subscriptions of one website have no single source: their group keeps its own name.
+        val school = groups.single { it.key == "domain:school.org" }
+        assertNull(school.owner)
+        assertEquals("School", school.name)
+    }
+
+    @Test
+    fun aCustomGroupStaysWithoutCalendarsUntilItIsDeleted() {
+        val settings = CalendarGroupSettings(names = mapOf("custom:empty" to "Family"))
+
+        val family = CalendarSourceGroups.group(accounts, collections, settings).single { it.key == "custom:empty" }
+
+        assertEquals(CalendarSourceGroupKind.Custom, family.kind)
+        assertEquals("Family", family.name)
+        assertEquals(emptyList<CollectionEntity>(), family.collections)
+        assertNull(family.owner)
+    }
+
+    @Test
     fun settingsSurviveEncoding() {
         val settings = CalendarGroupSettings(
             mapOf("a" to "custom:x"),
             mapOf("custom:x" to "Ä \"quoted\""),
             avatarColors = mapOf("account:feed-1" to 0xFF4F6D9A.toInt(), "group:custom:x" to 0xFF5E8C6A.toInt()),
+            hiddenImages = setOf("account:primary"),
         )
 
         assertEquals(settings, CalendarGroupSettings.decode(settings.encode()))

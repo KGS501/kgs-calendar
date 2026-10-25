@@ -5,6 +5,8 @@ import com.kgs.calendar.R
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.data.settings.SettingsStore
+import com.kgs.calendar.data.local.entity.AccountEntity
+import com.kgs.calendar.domain.source.CalendarSourceGroup
 import com.kgs.calendar.domain.source.CalendarSourceGroups
 import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
@@ -12,6 +14,7 @@ import com.kgs.calendar.sync.CalendarStructuralMutation
 import com.kgs.calendar.sync.PostMutationStage
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.sync.StructuralMutationResult
+import com.kgs.calendar.ui.sources.DefaultLocalSourceName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -136,16 +139,7 @@ class CalendarSourceActions internal constructor(
 
     /** Moves a calendar into the sidebar group [groupKey]; null returns it to its automatic group. */
     fun moveCollectionToGroup(href: String, groupKey: String?) {
-        scope.launch {
-            val previous = settingsStore.calendarGroupSettings.first().assignments[href]
-            settingsStore.setCalendarGroup(href, groupKey)
-            // A custom group disappears with its last calendar, and its picture with it.
-            if (previous != null && CalendarSourceGroups.isCustomKey(previous) &&
-                previous !in settingsStore.calendarGroupSettings.first().assignments.values
-            ) {
-                repository.deleteSourceImage(SourceImageKeys.group(previous))
-            }
-        }
+        scope.launch { settingsStore.setCalendarGroup(href, groupKey) }
     }
 
     /** Creates the custom sidebar group [name] and moves the calendar [href] into it. */
@@ -157,12 +151,44 @@ class CalendarSourceActions internal constructor(
         }
     }
 
-    fun renameGroup(groupKey: String, name: String?) {
+    /** Creates an empty custom group named [name] and returns its key. */
+    fun createGroup(name: String): String {
+        val groupKey = CalendarSourceGroups.CUSTOM_PREFIX + UUID.randomUUID()
         scope.launch { settingsStore.setCalendarGroupName(groupKey, name) }
+        return groupKey
     }
 
+    /** Deletes the custom group [groupKey] and its picture; its calendars return to their sources' groups. */
+    fun deleteGroup(groupKey: String) {
+        if (!CalendarSourceGroups.isCustomKey(groupKey)) return
+        scope.launch {
+            settingsStore.deleteCalendarGroup(groupKey)
+            repository.deleteSourceImage(SourceImageKeys.group(groupKey))
+        }
+    }
+
+    /** A source's own group has the source's name, so renaming it renames the source. */
+    fun renameGroup(groupKey: String, name: String?) {
+        scope.launch {
+            val owner = ownerOfGroup(groupKey)
+            if (owner == null) {
+                settingsStore.setCalendarGroupName(groupKey, name)
+                return@launch
+            }
+            val trimmed = name?.trim().orEmpty()
+            when {
+                trimmed.isNotEmpty() -> repository.renameAccount(owner.id, trimmed)
+                // The local calendar's default name follows the app's language again.
+                owner.id == UiLocalAccountId -> repository.renameAccount(owner.id, DefaultLocalSourceName)
+            }
+        }
+    }
+
+    /** A source's own group shows the source's picture, so the picture is set on the source. */
     fun setGroupImage(groupKey: String, uri: Uri) {
         scope.launch {
+            val owner = ownerOfGroup(groupKey)
+            if (owner != null) return@launch setAccountImageNow(owner.id, uri)
             val bytes = pickedContentReader.read(uri)
             if (bytes == null || !repository.saveSourceImage(SourceImageKeys.group(groupKey), bytes)) {
                 message.value = strings.get(R.string.calendar_group_image_failed)
@@ -171,22 +197,70 @@ class CalendarSourceActions internal constructor(
     }
 
     fun removeGroupImage(groupKey: String) {
-        scope.launch { repository.deleteSourceImage(SourceImageKeys.group(groupKey)) }
+        scope.launch {
+            val owner = ownerOfGroup(groupKey)
+            if (owner != null) removeAccountImageNow(owner.id) else repository.deleteSourceImage(SourceImageKeys.group(groupKey))
+        }
     }
 
     /** Uses a picked picture for the source [accountId] instead of the one it provides. */
     fun setAccountImage(accountId: String, uri: Uri) {
+        scope.launch { setAccountImageNow(accountId, uri) }
+    }
+
+    /** Removes the source's picture: the one the user picked, and the one the source provides. */
+    fun removeAccountImage(accountId: String) {
+        scope.launch { removeAccountImageNow(accountId) }
+    }
+
+    /** Shows the picture the source [accountId] provides again after it was removed. */
+    fun restoreAccountImage(accountId: String) {
+        scope.launch { settingsStore.setSourceImageHidden(SourceImageKeys.account(accountId), hidden = false) }
+    }
+
+    private suspend fun setAccountImageNow(accountId: String, uri: Uri) {
+        val bytes = pickedContentReader.read(uri)
+        if (bytes == null || !repository.saveSourceImage(SourceImageKeys.accountCustom(accountId), bytes)) {
+            message.value = strings.get(R.string.calendar_group_image_failed)
+        }
+    }
+
+    private suspend fun removeAccountImageNow(accountId: String) {
+        repository.deleteSourceImage(SourceImageKeys.accountCustom(accountId))
+        val provided = SourceImageKeys.account(accountId)
+        if (provided in repository.observeSourceImages().first()) settingsStore.setSourceImageHidden(provided, hidden = true)
+    }
+
+    /**
+     * Earlier versions let a source's own group have a name, picture and color of its own, apart
+     * from the source's. Moves them to the source, so each source has one name and one picture.
+     */
+    fun adoptOwnedGroups() {
         scope.launch {
-            val bytes = pickedContentReader.read(uri)
-            if (bytes == null || !repository.saveSourceImage(SourceImageKeys.accountCustom(accountId), bytes)) {
-                message.value = strings.get(R.string.calendar_group_image_failed)
+            runCatching {
+                val settings = settingsStore.calendarGroupSettings.first()
+                val images = repository.observeSourceImages().first()
+                currentGroups().forEach { group ->
+                    val owner = group.owner ?: return@forEach
+                    val groupImage = SourceImageKeys.group(group.key)
+                    val name = settings.names[group.key]
+                    if (name == null && groupImage !in images && groupImage !in settings.avatarColors) return@forEach
+                    if (name != null) repository.renameAccount(owner.id, name)
+                    repository.moveSourceImage(groupImage, SourceImageKeys.accountCustom(owner.id))
+                    settingsStore.adoptGroupIntoSource(group.key, owner.id)
+                }
             }
         }
     }
 
-    fun removeAccountImage(accountId: String) {
-        scope.launch { repository.deleteSourceImage(SourceImageKeys.accountCustom(accountId)) }
-    }
+    private suspend fun currentGroups(): List<CalendarSourceGroup> = CalendarSourceGroups.group(
+        accounts = repository.observeAccounts().first(),
+        collections = repository.observeCollections().first(),
+        settings = settingsStore.calendarGroupSettings.first(),
+    )
+
+    private suspend fun ownerOfGroup(groupKey: String): AccountEntity? =
+        currentGroups().firstOrNull { it.key == groupKey }?.owner
 
     /** Sets the color of the letter picture of [imageKey]; null restores the automatic color. */
     fun setAvatarColor(imageKey: String, color: Int?) {

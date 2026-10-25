@@ -151,6 +151,8 @@ import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
 import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.ui.sources.AccountAvatarDialog
+import com.kgs.calendar.ui.sources.NewCalendarGroupDialog
+import com.kgs.calendar.ui.sources.groupOf
 import com.kgs.calendar.ui.sources.avatarColor
 import com.kgs.calendar.ui.sources.shownName
 import com.kgs.calendar.ui.sources.image
@@ -232,6 +234,8 @@ internal fun SettingsPage(
     onAvatarColorSelected: (String, Int?) -> Unit = { _, _ -> },
     onAddLocalCalendar: () -> Unit = {},
     onGroupSettings: (String) -> Unit = {},
+    onCreateGroup: (String) -> String = { "" },
+    onRestoreAccountImage: (String) -> Unit = {},
     trashCount: Int = 0,
     onRecentlyDeleted: () -> Unit = {},
     onClose: () -> Unit,
@@ -263,6 +267,8 @@ internal fun SettingsPage(
     var accountFieldEdit by remember { mutableStateOf<AccountFieldEdit?>(null) }
     var createServerCalendarOpen by remember { mutableStateOf(false) }
     var accountAvatarOpen by remember { mutableStateOf(false) }
+    var newGroupOpen by remember { mutableStateOf(false) }
+    var expandedSourceIds by rememberSaveable { mutableStateOf(listOf<String>()) }
     var navigatingForward by remember { mutableStateOf(true) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -332,6 +338,31 @@ internal fun SettingsPage(
                     it != null && it != ReadOnlyFeedStatus.Empty && it != ReadOnlyFeedStatus.Loading
                 }
             }
+    // A source's calendars, each with the picture of the group it is in, which may be another source's.
+    @Composable
+    fun sourceCalendars(account: AccountEntity): List<SettingsSourceCalendar> =
+        state.collections.filter { it.accountId == account.id && it.isVisibleInSettingsCalendarList() }.map { calendar ->
+            val group = state.calendarGroups.groupOf(calendar)
+            val groupName = group?.displayName()
+            val hidden = calendar.href in state.hiddenCollectionHrefs
+            // The group is named only when the calendar was moved out of its source's group.
+            val movedTo = groupName.takeIf { group?.key != CalendarSourceGroups.automaticKey(account, accounts) }
+            SettingsSourceCalendar(
+                name = calendar.displayName,
+                subtitle = listOfNotNull(
+                    movedTo,
+                    stringResource(R.string.calendar_hidden).takeIf { hidden },
+                    stringResource(R.string.calendar_inactive).takeIf { !calendar.isEnabled },
+                ).joinToString(" · "),
+                dimmed = hidden || !calendar.isEnabled,
+                avatar = {
+                    if (group != null) {
+                        SourceAvatar(groupName.orEmpty(), group.image(state.sourceImages), 28.dp, group.avatarColor(state.calendarGroupSettings))
+                    }
+                },
+                onClick = { onCollectionSettings(calendar) },
+            )
+        }
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -538,7 +569,7 @@ internal fun SettingsPage(
                                                         feedCalendarName != null -> feedCalendarName
                                                         else -> account.shownName()
                                                     }
-                                                    SettingsNavRow(
+                                                    SettingsSourceRow(
                                                         title = rowTitle,
                                                         subtitle = if (account.id == UiLocalAccountId && localCollection?.isEnabled == false) {
                                                             stringResource(R.string.calendar_inactive)
@@ -560,7 +591,14 @@ internal fun SettingsPage(
                                                             }
                                                         },
                                                         warning = account.needsAttention(),
-                                                    ) { openAccount(account) }
+                                                        calendars = sourceCalendars(account),
+                                                        expanded = account.id in expandedSourceIds,
+                                                        onExpandedChange = { open ->
+                                                            expandedSourceIds = if (open) expandedSourceIds + account.id else expandedSourceIds - account.id
+                                                        },
+                                                        onOpen = { openAccount(account) },
+                                                        calendarIndent = if (single) 0.dp else 20.dp,
+                                                    )
                                                 }
                                             }
                                         }
@@ -571,6 +609,37 @@ internal fun SettingsPage(
                                 label = stringResource(R.string.add_calendar),
                                 icon = Icons.Default.Add,
                             ) { navigateTo(SettingsDestination.AddSource) }
+                            val customGroups = state.calendarGroups.filter { it.kind == CalendarSourceGroupKind.Custom }
+                            SettingsGroup(
+                                title = stringResource(R.string.calendar_groups),
+                                footer = stringResource(R.string.calendar_groups_help).takeIf { customGroups.isEmpty() },
+                            ) {
+                                customGroups.forEach { group ->
+                                    key(group.key) {
+                                        val groupName = group.displayName()
+                                        SettingsNavRow(
+                                            title = groupName,
+                                            subtitle = pluralStringResource(R.plurals.calendar_group_calendar_count, group.collections.size, group.collections.size),
+                                            leading = {
+                                                SourceAvatar(groupName, group.image(state.sourceImages), 40.dp, group.avatarColor(state.calendarGroupSettings))
+                                            },
+                                            onClick = { onGroupSettings(group.key) },
+                                        )
+                                    }
+                                }
+                                SettingsRow(
+                                    title = stringResource(R.string.calendar_group_new_title),
+                                    titleColor = WarmBrown,
+                                    icon = Icons.Default.Add,
+                                    onClick = { newGroupOpen = true },
+                                )
+                            }
+                            if (newGroupOpen) {
+                                NewCalendarGroupDialog(
+                                    onCreate = { name -> onGroupSettings(onCreateGroup(name)) },
+                                    onDismiss = { newGroupOpen = false },
+                                )
+                            }
                             // Only calendars from elsewhere sync; the local calendar alone has nothing to sync.
                             if (externalAccounts.isNotEmpty()) SettingsGroup(
                                 title = stringResource(R.string.sync),
@@ -806,6 +875,7 @@ internal fun SettingsPage(
                                         settings = state.calendarGroupSettings,
                                         onPickImage = { uri -> onPickAccountImage(account.id, uri) },
                                         onRemoveImage = { onRemoveAccountImage(account.id) },
+                                        onRestoreImage = { onRestoreAccountImage(account.id) },
                                         onColorSelected = { color -> onAvatarColorSelected(SourceImageKeys.account(account.id), color) },
                                         onDismiss = { accountAvatarOpen = false },
                                     )
@@ -829,7 +899,8 @@ internal fun SettingsPage(
                                         }
                                     }
                                 }
-                                if (accountGroup != null) {
+                                // A source's own group is the source itself: its name and picture are edited here.
+                                if (accountGroup != null && accountGroup.owner?.id != account.id) {
                                     SettingsGroup(title = stringResource(R.string.calendar_group_choose)) {
                                         SettingsNavRow(
                                             title = accountGroupName,

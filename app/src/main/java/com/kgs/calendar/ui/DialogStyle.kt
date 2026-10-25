@@ -137,6 +137,7 @@ internal fun DialogChoiceRow(
     subtitle: String? = null,
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     leading: (@Composable () -> Unit)? = null,
+    role: Role = Role.RadioButton,
 ) {
     val container by animateColorAsState(
         targetValue = if (selected) WarmPeach else editorSectionColor(),
@@ -148,7 +149,7 @@ internal fun DialogChoiceRow(
             .fillMaxWidth()
             .heightIn(min = 52.dp)
             .background(container)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .clickable(role = role, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

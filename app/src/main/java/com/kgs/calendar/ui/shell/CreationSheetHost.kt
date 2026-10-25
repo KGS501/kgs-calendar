@@ -5,6 +5,11 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
@@ -357,6 +362,7 @@ private fun CreationSheet.isEventEditor(): Boolean = when (this) {
  * transfer draft it was opened with, so the editor sliding out does not reset its fields while
  * they are still visible.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EditorTypeTransition(
     sheet: CreationSheet,
@@ -365,6 +371,7 @@ private fun EditorTypeTransition(
 ) {
     // The editor type shown before this composition; null until the sheet has shown one.
     val previousIsEvent = remember { mutableStateOf<Boolean?>(null) }
+    val imeVisible by rememberUpdatedState(WindowInsets.isImeVisible)
     SideEffect { previousIsEvent.value = sheet.isEventEditor() }
     AnimatedContent(
         targetState = sheet,
@@ -377,9 +384,12 @@ private fun EditorTypeTransition(
         // An editor that slides in starts its switch on the other half and moves the pill over.
         val slidIn = remember { previousIsEvent.value.let { it != null && it != target.isEventEditor() } }
         val slide = remember(this, target.isEventEditor()) { EditorTypeSlide(this, target.isEventEditor()) }
+        // The editor that slides out still holds the focus here, so this is the keyboard the user left.
+        val keyboardAtSwitch = remember { imeVisible.takeIf { slidIn } }
         CompositionLocalProvider(
             LocalEditorTypeSwitchAnimates provides slidIn,
             LocalEditorTypeSlide provides slide,
+            LocalEditorKeyboardAtSwitch provides keyboardAtSwitch,
         ) {
             content(target, transferDraft)
         }

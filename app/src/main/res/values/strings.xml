@@ -623,7 +623,7 @@
     <string name="ics_import_save_error">Could not save these events. Check that the selected calendar is still writable, then try again.</string>
     <string name="calendar_group">Group</string>
     <string name="calendar_group_name">Group name</string>
-    <string name="calendar_group_reset_name">Use automatic name</string>
+    <string name="calendar_group_reset_name">Reset name</string>
     <string name="calendar_group_image">Image</string>
     <string name="calendar_group_choose_image">Choose image</string>
     <string name="calendar_group_remove_image">Remove image</string>
@@ -678,6 +678,19 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <string name="calendar_groups">Groups</string>
+    <string name="calendar_groups_help">Groups gather calendars from different sources in the sidebar.</string>
+    <string name="calendar_group_calendars">Calendars in this group</string>
+    <string name="calendar_group_delete">Delete group</string>
+    <string name="calendar_group_delete_message">Delete “%1$s”? Its calendars go back to the groups of their sources.</string>
+    <string name="calendar_group_new_title">New group</string>
+    <string name="source_image_restore">Use synced picture</string>
+    <plurals name="calendar_group_calendar_count">
+        <item quantity="one">%d calendar</item>
+        <item quantity="other">%d calendars</item>
+    </plurals>
+    <string name="source_calendars_expand">Show calendars</string>
+    <string name="source_calendars_collapse">Hide calendars</string>
     <string name="calendar_group_edit_summary">Change name and picture</string>
     <plurals name="settings_source_count">
         <item quantity="one">%1$d source</item>

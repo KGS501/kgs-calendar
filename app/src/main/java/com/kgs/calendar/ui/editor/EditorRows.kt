@@ -154,6 +154,13 @@ internal fun RoundEditorAction(
 internal val LocalEditorTypeSwitchAnimates = compositionLocalOf { false }
 
 /**
+ * Whether the keyboard was open when the user switched to this editor from the other type; null
+ * when the editor opened by itself. A switch keeps the keyboard as it was: the "show keyboard"
+ * setting only applies when the editor opens.
+ */
+internal val LocalEditorKeyboardAtSwitch = compositionLocalOf<Boolean?> { null }
+
+/**
  * Switching between the event and the task editor slides only the fields below the type switch:
  * the event editor's in from the start side, the task editor's from the end side, like the halves
  * of the switch. The top bar and the switch stay in place; the editor sliding out hides its own,

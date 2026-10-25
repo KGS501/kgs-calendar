@@ -4,6 +4,7 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
 import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
+import com.kgs.calendar.domain.time.clockMinutesOn
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis
@@ -11,7 +12,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 internal data class TimedPlacement(
     val topDp: Float,
@@ -147,8 +147,14 @@ internal fun EventEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): 
     val overlapEnd = min(effectiveEnd, visibleEnd)
     if (overlapEnd <= overlapStart) return null
 
-    val topMinutes = ((overlapStart - visibleStart) / 60_000.0).roundToInt()
-    val durationMinutes = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
+    return clockPlacementOn(day, overlapStart, overlapEnd, hourHeightDp)
+}
+
+/** Clock time, so that items line up with the hour labels on the days the clocks change. */
+private fun clockPlacementOn(day: LocalDate, overlapStart: Long, overlapEnd: Long, hourHeightDp: Float): TimedPlacement {
+    val (startMinute, endMinute) = clockMinutesOn(day, overlapStart, overlapEnd, ZoneId.systemDefault())
+    val topMinutes = startMinute - DayStartHour * 60
+    val durationMinutes = max(1, endMinute - startMinute)
     return TimedPlacement(
         topDp = topMinutes / 60f * hourHeightDp,
         heightDp = max(4f, durationMinutes / 60f * hourHeightDp),
@@ -178,12 +184,5 @@ internal fun TaskEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): T
     val overlapEnd = min(max(end, start + DefaultTaskDurationMillis), visibleEnd)
     if (overlapEnd <= overlapStart) return null
 
-    val topMinutes = ((overlapStart - visibleStart) / 60_000.0).roundToInt()
-    val durationMinutes = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
-    return TimedPlacement(
-        topDp = topMinutes / 60f * hourHeightDp,
-        heightDp = max(4f, durationMinutes / 60f * hourHeightDp),
-        startMinute = topMinutes,
-        endMinute = topMinutes + durationMinutes,
-    )
+    return clockPlacementOn(day, overlapStart, overlapEnd, hourHeightDp)
 }

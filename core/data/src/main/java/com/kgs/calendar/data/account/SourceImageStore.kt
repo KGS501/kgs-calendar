@@ -56,6 +56,15 @@ class SourceImageStore(private val directory: File?) {
         return true
     }
 
+    /** Gives the image of [from] the key [to], unless [to] already has one; [from] is removed. */
+    fun move(from: String, to: String) {
+        if (directory == null || from !in state.value) return
+        if (to !in state.value && fileFor(from).renameTo(fileFor(to))) {
+            state.update { it - from + (to to SourceImage(fileFor(to).absolutePath, System.nanoTime())) }
+        }
+        delete(from)
+    }
+
     fun delete(key: String) {
         if (directory == null) return
         fileFor(key).delete()
