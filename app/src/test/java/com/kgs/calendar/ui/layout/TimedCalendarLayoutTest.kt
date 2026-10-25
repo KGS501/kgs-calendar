@@ -102,6 +102,37 @@ class TimedCalendarLayoutTest {
         assertEquals(listOf(3, 3, 3, 1), layout.map { it.laneCount })
     }
 
+    @Test
+    fun eventsFollowTheClockOnTheDaysTheClocksChange() {
+        TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"))
+        // 25 October 2026 has 25 hours (03:00 goes back to 02:00); 29 March 2026 has 23.
+        listOf(LocalDate.of(2026, 10, 25), LocalDate.of(2026, 3, 29)).forEach { day ->
+            val event = event(start = millis(day, LocalTime.of(10, 0)), end = millis(day, LocalTime.of(11, 30)))
+            val task = task(start = null, due = millis(day, LocalTime.of(18, 0)), startHasTime = false, dueHasTime = true)
+            val lateEvening = event("late", millis(day, LocalTime.of(23, 0)), millis(day.plusDays(1), LocalTime.of(1, 0)))
+
+            assertEquals(
+                "$day",
+                TimedPlacement(topDp = 600f, heightDp = 90f, startMinute = 600, endMinute = 690),
+                event.timedPlacementOn(day, hourHeightDp = 60f),
+            )
+            assertEquals("$day", 17 * 60 + 30, task.timedPlacementOn(day, hourHeightDp = 60f)!!.startMinute)
+            assertEquals("$day", 23 * 60 to 24 * 60, lateEvening.timedPlacementOn(day, hourHeightDp = 60f)!!.let { it.startMinute to it.endMinute })
+        }
+    }
+
+    @Test
+    fun anEventInTheRepeatedHourKeepsAPositiveHeight() {
+        TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"))
+        val day = LocalDate.of(2026, 10, 25)
+        // 02:40 summer time to 02:10 winter time: 30 minutes later, yet an earlier clock time.
+        val start = java.time.ZonedDateTime.of(day, LocalTime.of(2, 40), ZoneId.of("Europe/Berlin")).withEarlierOffsetAtOverlap()
+        val end = java.time.ZonedDateTime.of(day, LocalTime.of(2, 10), ZoneId.of("Europe/Berlin")).withLaterOffsetAtOverlap()
+        val event = event(start = start.toInstant().toEpochMilli(), end = end.toInstant().toEpochMilli())
+
+        assertEquals(160 to 190, event.timedPlacementOn(day, hourHeightDp = 60f)!!.let { it.startMinute to it.endMinute })
+    }
+
     private fun millis(date: LocalDate, time: LocalTime): Long =
         date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
