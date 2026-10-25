@@ -303,7 +303,8 @@ internal fun SettingsNavRow(
 
 /**
  * A source in the source list. The row opens the source's page; its chevron shows or hides the
- * source's [calendars] below it, indented, each opening its own settings.
+ * source's [calendars] below it, indented, each opening its own settings. Only the fold-out has a
+ * chevron, so a row that opens a page is never mistaken for one that folds.
  */
 @Composable
 internal fun SettingsSourceRow(
@@ -333,14 +334,7 @@ internal fun SettingsSourceRow(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                if (calendars.isEmpty()) {
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(22.dp),
-                    )
-                } else {
+                if (calendars.isNotEmpty()) {
                     IconButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.size(40.dp)) {
                         Icon(
                             Icons.Default.ExpandMore,
@@ -365,14 +359,19 @@ internal fun SettingsSourceRow(
                         titleColor = WarmInk.copy(alpha = if (calendar.dimmed) 0.6f else 1f),
                         leading = { Box(Modifier.padding(start = calendarIndent + 8.dp)) { calendar.avatar() } },
                         onClick = calendar.onClick,
-                    ) {
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
+                        trailing = if (calendar.warning) {
+                            {
+                                Icon(
+                                    Icons.Default.WarningAmber,
+                                    contentDescription = stringResource(R.string.problems),
+                                    tint = SyncPendingOrange,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
                 }
             }
         }
@@ -384,6 +383,7 @@ internal class SettingsSourceCalendar(
     val name: String,
     val subtitle: String?,
     val dimmed: Boolean,
+    val warning: Boolean,
     val avatar: @Composable () -> Unit,
     val onClick: () -> Unit,
 )

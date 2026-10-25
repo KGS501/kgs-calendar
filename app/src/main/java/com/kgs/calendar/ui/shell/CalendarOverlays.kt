@@ -262,8 +262,8 @@ internal fun CollectionSettingsHost(
         KgsModalBottomSheet(
             onDismissRequest = shell::closeCollectionEditor,
             modifier = Modifier.zIndex(80f),
-            initialSnap = SheetSnap.Quarter,
-            initialContentHeight = collection.estimatedSettingsHeight(),
+            // The settings measure themselves: the sheet opens as far as they need, fully when they do not fit.
+            initialSnap = SheetSnap.Expanded,
         ) {
             CollectionSettingsSheet(
                 collection = collection,
