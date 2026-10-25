@@ -155,6 +155,9 @@ class CalendarRepository(
 
     suspend fun deleteSourceImage(key: String) = withContext(Dispatchers.IO) { sources.sourceImages.delete(key) }
 
+    /** Moves the image of [from] to [to] unless [to] has one; [from] is removed either way. */
+    suspend fun moveSourceImage(from: String, to: String) = withContext(Dispatchers.IO) { sources.sourceImages.move(from, to) }
+
     suspend fun reparseLocalResources() = repairs.reparseLocalResources()
 
     suspend fun reparseLocalTaskResources() = repairs.reparseLocalTaskResources()

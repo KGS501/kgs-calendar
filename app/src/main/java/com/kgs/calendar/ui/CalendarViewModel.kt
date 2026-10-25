@@ -192,6 +192,7 @@ class CalendarViewModel(
                 .onSuccess { message.value = null }
                 .onFailure { message.value = it.message ?: "Could not prepare local calendar." }
         }
+        sources.adoptOwnedGroups()
         initialCalendarLaunchTarget?.let { target ->
             launchFromCalendarTarget(target, openDetail = deliverInitialLaunchEvents)
         }

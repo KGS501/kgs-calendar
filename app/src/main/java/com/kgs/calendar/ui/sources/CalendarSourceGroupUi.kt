@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -104,20 +105,20 @@ internal fun CalendarSourceGroup.subtitle(): String = when (kind) {
     CalendarSourceGroupKind.CalDav -> stringResource(R.string.nextcloud)
 }
 
-/** The user's picture for the group, else the first picture one of its sources has. */
+/**
+ * The group's picture: a source's own group shows the source's picture; any other group only the
+ * one the user picked for it, never that of a source whose calendar was moved in.
+ */
 internal fun CalendarSourceGroup.image(images: Map<String, SourceImage>): SourceImage? =
-    images[SourceImageKeys.group(key)]
-        ?: accounts.firstNotNullOfOrNull { it.image(images) }
-
-internal fun CalendarSourceGroup.hasCustomImage(images: Map<String, SourceImage>): Boolean =
-    SourceImageKeys.group(key) in images
+    owner?.image(images) ?: images[SourceImageKeys.group(key)]
 
 /** The picture of a source: the one the user picked, else the one the source provides. */
 internal fun AccountEntity.image(images: Map<String, SourceImage>): SourceImage? =
     images[SourceImageKeys.accountCustom(id)] ?: images[SourceImageKeys.account(id)]
 
-internal fun AccountEntity.hasCustomImage(images: Map<String, SourceImage>): Boolean =
-    SourceImageKeys.accountCustom(id) in images
+/** Whether the user removed the picture this source provides, so it can be shown again. */
+internal fun AccountEntity.providedImageHidden(settings: CalendarGroupSettings): Boolean =
+    SourceImageKeys.account(id) in settings.hiddenImages
 
 /**
  * Muted colors for the letter pictures of sources and groups. Each source gets one by its key,
@@ -147,13 +148,17 @@ internal fun AccountEntity.avatarColor(settings: CalendarGroupSettings): Int =
 /** The letter-picture color of a source when the user has not picked one. */
 internal fun AccountEntity.automaticAvatarColor(): Int = defaultAvatarColor(SourceImageKeys.account(id))
 
-/** The letter-picture color of a group; a group of one source uses that source's color. */
+/** The letter-picture color of a group; a source's own group has the source's color. */
 internal fun CalendarSourceGroup.avatarColor(settings: CalendarGroupSettings): Int =
-    settings.avatarColors[SourceImageKeys.group(key)] ?: automaticAvatarColor(settings)
+    settings.avatarColors[avatarColorKey()] ?: automaticAvatarColor()
 
 /** The letter-picture color of a group when the user has not picked one for it. */
-internal fun CalendarSourceGroup.automaticAvatarColor(settings: CalendarGroupSettings): Int =
-    accounts.singleOrNull()?.avatarColor(settings) ?: defaultAvatarColor(SourceImageKeys.group(key))
+internal fun CalendarSourceGroup.automaticAvatarColor(): Int =
+    owner?.automaticAvatarColor() ?: defaultAvatarColor(SourceImageKeys.group(key))
+
+/** Where the letter-picture color of the group is kept: on its source, if it is a source's own group. */
+internal fun CalendarSourceGroup.avatarColorKey(): String =
+    owner?.let { SourceImageKeys.account(it.id) } ?: SourceImageKeys.group(key)
 
 /** The group that holds [collection], and its automatic group when the user moved it elsewhere. */
 internal fun List<CalendarSourceGroup>.groupOf(collection: CollectionEntity): CalendarSourceGroup? =
@@ -202,7 +207,8 @@ internal fun SourceAvatar(name: String, image: SourceImage?, size: Dp, color: In
 
 /**
  * A source's or group's picture with buttons to pick or remove one, and the color of the letter
- * picture shown when there is none. Changes apply right away.
+ * picture shown when there is none. [onRestoreImage] shows a removed picture of the source again.
+ * Changes apply right away.
  */
 @Composable
 internal fun AvatarAppearanceEditor(
@@ -211,10 +217,10 @@ internal fun AvatarAppearanceEditor(
     color: Int,
     automaticColor: Int,
     customColor: Int?,
-    hasCustomImage: Boolean,
     onPickImage: (Uri) -> Unit,
     onRemoveImage: () -> Unit,
     onColorSelected: (Int?) -> Unit,
+    onRestoreImage: (() -> Unit)? = null,
 ) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(onPickImage)
@@ -226,8 +232,10 @@ internal fun AvatarAppearanceEditor(
                 TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
                     Text(stringResource(R.string.calendar_group_choose_image))
                 }
-                if (hasCustomImage) {
+                if (image != null) {
                     TextButton(onClick = onRemoveImage) { Text(stringResource(R.string.calendar_group_remove_image)) }
+                } else if (onRestoreImage != null) {
+                    TextButton(onClick = onRestoreImage) { Text(stringResource(R.string.source_image_restore)) }
                 }
             }
         }
@@ -244,6 +252,10 @@ internal fun AvatarAppearanceEditor(
     }
 }
 
+/** The removed picture of this source can be shown again: the user removed it and picked none. */
+internal fun AccountEntity.canRestoreImage(images: Map<String, SourceImage>, settings: CalendarGroupSettings): Boolean =
+    providedImageHidden(settings) && SourceImageKeys.accountCustom(id) !in images
+
 /** Changes the picture and letter-picture color of one source. */
 @Composable
 internal fun AccountAvatarDialog(
@@ -253,6 +265,7 @@ internal fun AccountAvatarDialog(
     settings: CalendarGroupSettings,
     onPickImage: (Uri) -> Unit,
     onRemoveImage: () -> Unit,
+    onRestoreImage: () -> Unit,
     onColorSelected: (Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -266,17 +279,22 @@ internal fun AccountAvatarDialog(
                 color = account.avatarColor(settings),
                 automaticColor = account.automaticAvatarColor(),
                 customColor = settings.avatarColors[SourceImageKeys.account(account.id)],
-                hasCustomImage = account.hasCustomImage(images),
                 onPickImage = onPickImage,
                 onRemoveImage = onRemoveImage,
                 onColorSelected = onColorSelected,
+                onRestoreImage = onRestoreImage.takeIf { account.canRestoreImage(images, settings) },
             )
         },
         confirmButton = { DialogConfirmButton(stringResource(R.string.done), onClick = onDismiss) },
     )
 }
 
-/** Renames a group and sets or removes its picture. */
+/**
+ * Edits a group: its name and picture, and for a custom group the calendars in it and deleting
+ * it. A source's own group has the source's name and picture, so changing them changes the source.
+ * [calendars] are the calendars a custom group can hold, [groups] tell where each one is now.
+ * [onCalendarsChanged] gets the calendars added and removed when the user saves.
+ */
 @Composable
 internal fun CalendarGroupSettingsDialog(
     group: CalendarSourceGroup,
@@ -287,28 +305,40 @@ internal fun CalendarGroupSettingsDialog(
     onRemoveImage: () -> Unit,
     onColorSelected: (Int?) -> Unit,
     onDismiss: () -> Unit,
+    onRestoreImage: (() -> Unit)? = null,
+    calendars: List<CollectionEntity> = emptyList(),
+    groups: List<CalendarSourceGroup> = emptyList(),
+    onCalendarsChanged: (added: Set<String>, removed: Set<String>) -> Unit = { _, _ -> },
+    onDelete: (() -> Unit)? = null,
 ) {
     val currentName = group.displayName()
     val automaticName = group.automaticName()
+    val isCustom = group.kind == CalendarSourceGroupKind.Custom
     var name by rememberSaveable(group.key) { mutableStateOf(currentName) }
+    val initialMembers = remember(group.key) { group.collections.map { it.href }.toSet() }
+    var members by rememberSaveable(group.key) { mutableStateOf(initialMembers.toList()) }
+    var confirmDelete by rememberSaveable(group.key) { mutableStateOf(false) }
     KgsAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.calendar_group_edit)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 AvatarAppearanceEditor(
                     name = name.ifBlank { automaticName },
                     image = group.image(images),
                     color = group.avatarColor(settings),
-                    automaticColor = group.automaticAvatarColor(settings),
-                    customColor = settings.avatarColors[SourceImageKeys.group(group.key)],
-                    hasCustomImage = group.hasCustomImage(images),
+                    automaticColor = group.automaticAvatarColor(),
+                    customColor = settings.avatarColors[group.avatarColorKey()],
                     onPickImage = onPickImage,
                     onRemoveImage = onRemoveImage,
                     onColorSelected = onColorSelected,
+                    onRestoreImage = onRestoreImage,
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DialogFieldCaption(stringResource(R.string.calendar_group_name))
+                    DialogFieldCaption(stringResource(if (group.owner != null) R.string.name else R.string.calendar_group_name))
                     ClearableOutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -319,9 +349,36 @@ internal fun CalendarGroupSettingsDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (group.customName != null && group.kind != CalendarSourceGroupKind.Custom) {
+                // Only a group of several subscriptions has a name apart from its sources.
+                if (group.customName != null && group.owner == null && !isCustom) {
                     TextButton(onClick = { name = automaticName }) {
                         Text(stringResource(R.string.calendar_group_reset_name))
+                    }
+                }
+                if (isCustom && calendars.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DialogFieldCaption(stringResource(R.string.calendar_group_calendars))
+                        DialogChoiceGroup {
+                            calendars.forEach { calendar ->
+                                val inGroup = calendar.href in members
+                                val elsewhere = groups.groupOf(calendar)?.takeIf { it.key != group.key }
+                                DialogChoiceRow(
+                                    label = calendar.displayName,
+                                    selected = inGroup,
+                                    role = Role.Checkbox,
+                                    subtitle = elsewhere?.takeUnless { inGroup }?.displayName(),
+                                    leading = {
+                                        Box(Modifier.size(12.dp).clip(CircleShape).background(Color(calendar.color)))
+                                    },
+                                    onClick = { members = if (inGroup) members - calendar.href else members + calendar.href },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (onDelete != null) {
+                    TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.calendar_group_delete), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -329,15 +386,19 @@ internal fun CalendarGroupSettingsDialog(
         confirmButton = {
             DialogConfirmButton(
                 text = stringResource(R.string.save),
+                // A source's or custom group's name can be changed but not emptied.
+                enabled = name.isNotBlank() || (group.owner == null && !isCustom),
                 onClick = {
                     val trimmed = name.trim()
                     // The automatic name needs no override; a custom group always keeps a name.
                     onRename(
                         when {
-                            trimmed.isEmpty() || (trimmed == automaticName && group.kind != CalendarSourceGroupKind.Custom) -> null
+                            trimmed.isEmpty() || (trimmed == automaticName && group.owner == null && !isCustom) -> null
                             else -> trimmed
                         },
                     )
+                    val chosen = members.toSet()
+                    if (isCustom && chosen != initialMembers) onCalendarsChanged(chosen - initialMembers, initialMembers - chosen)
                     onDismiss()
                 },
             )
@@ -345,6 +406,57 @@ internal fun CalendarGroupSettingsDialog(
         dismissButton = {
             DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss)
         },
+    )
+    if (confirmDelete) {
+        KgsAlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.calendar_group_delete)) },
+            text = { Text(stringResource(R.string.calendar_group_delete_message, currentName)) },
+            confirmButton = {
+                DialogConfirmButton(
+                    text = stringResource(R.string.delete),
+                    destructive = true,
+                    onClick = {
+                        confirmDelete = false
+                        onDelete?.invoke()
+                        onDismiss()
+                    },
+                )
+            },
+            dismissButton = { DialogDismissButton(stringResource(R.string.cancel), onClick = { confirmDelete = false }) },
+        )
+    }
+}
+
+/** Asks for the name of a new custom group. */
+@Composable
+internal fun NewCalendarGroupDialog(onCreate: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    KgsAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.calendar_group_new_title)) },
+        text = {
+            ClearableOutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                placeholder = { Text(stringResource(R.string.calendar_group_new_name)) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                colors = dialogFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            DialogConfirmButton(
+                text = stringResource(R.string.create),
+                enabled = name.isNotBlank(),
+                onClick = {
+                    onCreate(name.trim())
+                    onDismiss()
+                },
+            )
+        },
+        dismissButton = { DialogDismissButton(stringResource(R.string.cancel), onClick = onDismiss) },
     )
 }
 
@@ -368,7 +480,9 @@ internal fun CalendarGroupPickerDialog(
     var creating by rememberSaveable(collection.href) { mutableStateOf(false) }
     var newName by rememberSaveable(collection.href) { mutableStateOf("") }
     val choices = remember(groups, automatic) {
-        listOfNotNull(automatic) + groups.filter { it.key != automatic?.key && it.collections.isNotEmpty() }
+        listOfNotNull(automatic) + groups.filter {
+            it.key != automatic?.key && (it.collections.isNotEmpty() || it.kind == CalendarSourceGroupKind.Custom)
+        }
     }
     KgsAlertDialog(
         onDismissRequest = onDismiss,

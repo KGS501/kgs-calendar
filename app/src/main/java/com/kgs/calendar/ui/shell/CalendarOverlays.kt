@@ -26,15 +26,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.R
-import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.CalendarShellUiState
+import com.kgs.calendar.domain.source.CalendarSourceGroupKind
 import com.kgs.calendar.ui.sources.CalendarGroupPickerDialog
+import com.kgs.calendar.ui.sources.avatarColorKey
+import com.kgs.calendar.ui.sources.canRestoreImage
 import com.kgs.calendar.ui.sources.CalendarGroupSettingsDialog
 import com.kgs.calendar.ui.sources.displayName
 import com.kgs.calendar.ui.sources.groupOf
 import com.kgs.calendar.widget.KgsWidgetKind
+import kotlinx.coroutines.delay
 
 // The full-screen pages and dialogs of the shell. KgsCalendarApp composes them in a fixed order
 // between the sheets, which decides what draws on top of what.
@@ -217,6 +220,8 @@ internal fun SettingsOverlay(
             onSyncIntervalChanged = viewModel.settings::setSyncIntervalMinutes,
             onCollectionSettings = shell::editCollection,
             onGroupSettings = shell::editGroup,
+            onCreateGroup = viewModel.sources::createGroup,
+            onRestoreAccountImage = viewModel.sources::restoreAccountImage,
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
             onDeleteLocalCalendar = viewModel.sources::deleteLocalCalendar,
@@ -324,9 +329,15 @@ internal fun CalendarGroupDialogHost(
     val groupKey = shell.editingGroupKey ?: return
     val group = state.calendarGroups.firstOrNull { it.key == groupKey }
     if (group == null) {
-        LaunchedEffect(groupKey) { shell.closeGroupEditor() }
+        // A group just created is saved a moment later; any other group is gone.
+        LaunchedEffect(groupKey) {
+            delay(1_000)
+            shell.closeGroupEditor()
+        }
         return
     }
+    val owner = group.owner
+    val isCustom = group.kind == CalendarSourceGroupKind.Custom
     CalendarGroupSettingsDialog(
         group = group,
         images = state.sourceImages,
@@ -334,7 +345,16 @@ internal fun CalendarGroupDialogHost(
         onRename = { name -> viewModel.sources.renameGroup(group.key, name) },
         onPickImage = { uri -> viewModel.sources.setGroupImage(group.key, uri) },
         onRemoveImage = { viewModel.sources.removeGroupImage(group.key) },
-        onColorSelected = { color -> viewModel.sources.setAvatarColor(SourceImageKeys.group(group.key), color) },
+        onRestoreImage = owner?.takeIf { it.canRestoreImage(state.sourceImages, state.calendarGroupSettings) }
+            ?.let { { viewModel.sources.restoreAccountImage(it.id) } },
+        onColorSelected = { color -> viewModel.sources.setAvatarColor(group.avatarColorKey(), color) },
+        calendars = if (isCustom) state.collections.filter { it.isVisibleInSettingsCalendarList() } else emptyList(),
+        groups = state.calendarGroups,
+        onCalendarsChanged = { added, removed ->
+            added.forEach { viewModel.sources.moveCollectionToGroup(it, group.key) }
+            removed.forEach { viewModel.sources.moveCollectionToGroup(it, null) }
+        },
+        onDelete = if (isCustom) ({ viewModel.sources.deleteGroup(group.key) }) else null,
         onDismiss = shell::closeGroupEditor,
     )
 }

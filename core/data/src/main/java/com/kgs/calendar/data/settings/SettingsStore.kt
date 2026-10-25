@@ -22,7 +22,7 @@ import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
 import com.kgs.calendar.domain.model.coerceMultiDayCount
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.CalendarGroupSettings
-import com.kgs.calendar.domain.source.CalendarSourceGroups
+import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.flow.Flow
@@ -358,13 +358,42 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     /** Moves the calendar [href] into [groupKey]; null returns it to its automatic group. */
     suspend fun setCalendarGroup(href: String, groupKey: String?) {
         editCalendarGroups { settings ->
-            val assignments = if (groupKey == null) settings.assignments - href else settings.assignments + (href to groupKey)
-            // A custom group lives only as long as a calendar is in it.
-            val usedKeys = assignments.values.toSet()
+            settings.copy(assignments = if (groupKey == null) settings.assignments - href else settings.assignments + (href to groupKey))
+        }
+    }
+
+    /** Deletes the custom group [groupKey]; its calendars return to their automatic groups. */
+    suspend fun deleteCalendarGroup(groupKey: String) {
+        editCalendarGroups { settings ->
             settings.copy(
-                assignments = assignments,
-                names = settings.names.filterKeys { !CalendarSourceGroups.isCustomKey(it) || it in usedKeys },
+                assignments = settings.assignments.filterValues { it != groupKey },
+                names = settings.names - groupKey,
+                avatarColors = settings.avatarColors - SourceImageKeys.group(groupKey),
             )
+        }
+    }
+
+    /**
+     * Moves what was set on the group [groupKey] itself to the source that owns it: its name, and
+     * the color of its letter picture unless the source has one. The group then follows the source.
+     */
+    suspend fun adoptGroupIntoSource(groupKey: String, accountId: String) {
+        editCalendarGroups { settings ->
+            val groupColor = settings.avatarColors[SourceImageKeys.group(groupKey)]
+            val accountColorKey = SourceImageKeys.account(accountId)
+            settings.copy(
+                names = settings.names - groupKey,
+                avatarColors = (settings.avatarColors - SourceImageKeys.group(groupKey)).let { colors ->
+                    if (groupColor != null && accountColorKey !in colors) colors + (accountColorKey to groupColor) else colors
+                },
+            )
+        }
+    }
+
+    /** Hides or shows again the picture [imageKey] a source provides. */
+    suspend fun setSourceImageHidden(imageKey: String, hidden: Boolean) {
+        editCalendarGroups { settings ->
+            settings.copy(hiddenImages = if (hidden) settings.hiddenImages + imageKey else settings.hiddenImages - imageKey)
         }
     }
 

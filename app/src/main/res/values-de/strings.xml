@@ -623,7 +623,7 @@
     <string name="ics_import_save_error">Die Termine konnten nicht gespeichert werden. Prüfe, ob der ausgewählte Kalender noch beschreibbar ist, und versuche es erneut.</string>
     <string name="calendar_group">Gruppe</string>
     <string name="calendar_group_name">Gruppenname</string>
-    <string name="calendar_group_reset_name">Automatischen Namen verwenden</string>
+    <string name="calendar_group_reset_name">Name zurücksetzen</string>
     <string name="calendar_group_image">Bild</string>
     <string name="calendar_group_choose_image">Bild auswählen</string>
     <string name="calendar_group_remove_image">Bild entfernen</string>
@@ -678,6 +678,19 @@
         <item quantity="one">%1$d Eintrag</item>
         <item quantity="other">%1$d Einträge</item>
     </plurals>
+    <string name="calendar_groups">Gruppen</string>
+    <string name="calendar_groups_help">Gruppen fassen Kalender aus verschiedenen Quellen in der Seitenleiste zusammen.</string>
+    <string name="calendar_group_calendars">Kalender in dieser Gruppe</string>
+    <string name="calendar_group_delete">Gruppe löschen</string>
+    <string name="calendar_group_delete_message">„%1$s“ löschen? Die Kalender kommen zurück in die Gruppen ihrer Quellen.</string>
+    <string name="calendar_group_new_title">Neue Gruppe</string>
+    <string name="source_image_restore">Synchronisiertes Bild verwenden</string>
+    <plurals name="calendar_group_calendar_count">
+        <item quantity="one">%d Kalender</item>
+        <item quantity="other">%d Kalender</item>
+    </plurals>
+    <string name="source_calendars_expand">Kalender anzeigen</string>
+    <string name="source_calendars_collapse">Kalender ausblenden</string>
     <string name="calendar_group_edit_summary">Name und Bild ändern</string>
     <plurals name="settings_source_count">
         <item quantity="one">%1$d Quelle</item>

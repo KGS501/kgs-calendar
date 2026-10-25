@@ -1,7 +1,13 @@
 package com.kgs.calendar.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -50,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -291,6 +300,93 @@ internal fun SettingsNavRow(
         }
     }
 }
+
+/**
+ * A source in the source list. The row opens the source's page; its chevron shows or hides the
+ * source's [calendars] below it, indented, each opening its own settings.
+ */
+@Composable
+internal fun SettingsSourceRow(
+    title: String,
+    subtitle: String?,
+    leading: @Composable () -> Unit,
+    warning: Boolean,
+    calendars: List<SettingsSourceCalendar>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onOpen: () -> Unit,
+    calendarIndent: Dp = 0.dp,
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "sourceCalendarsChevron",
+    )
+    Column {
+        SettingsRow(title = title, subtitle = subtitle, leading = leading, onClick = onOpen) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (warning) {
+                    Icon(
+                        Icons.Default.WarningAmber,
+                        contentDescription = stringResource(R.string.problems),
+                        tint = SyncPendingOrange,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                if (calendars.isEmpty()) {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(22.dp),
+                    )
+                } else {
+                    IconButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Default.ExpandMore,
+                            contentDescription = stringResource(if (expanded) R.string.source_calendars_collapse else R.string.source_calendars_expand),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp).rotate(chevronRotation),
+                        )
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = expanded && calendars.isNotEmpty(),
+            enter = expandVertically(tween(MotionMedium, easing = MotionStandard)) + fadeIn(tween(MotionMedium)),
+            exit = shrinkVertically(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
+        ) {
+            Column(Modifier.padding(top = SettingsRowGap), verticalArrangement = Arrangement.spacedBy(SettingsRowGap)) {
+                calendars.forEach { calendar ->
+                    SettingsRow(
+                        title = calendar.name,
+                        subtitle = calendar.subtitle,
+                        titleColor = WarmInk.copy(alpha = if (calendar.dimmed) 0.6f else 1f),
+                        leading = { Box(Modifier.padding(start = calendarIndent + 8.dp)) { calendar.avatar() } },
+                        onClick = calendar.onClick,
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A calendar shown under its source in [SettingsSourceRow]; [avatar] is the picture of its group. */
+internal class SettingsSourceCalendar(
+    val name: String,
+    val subtitle: String?,
+    val dimmed: Boolean,
+    val avatar: @Composable () -> Unit,
+    val onClick: () -> Unit,
+)
 
 /** A row that shows its current [value] below the title and opens a picker. */
 @Composable
