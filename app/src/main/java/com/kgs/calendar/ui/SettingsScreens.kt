@@ -268,7 +268,7 @@ internal fun SettingsPage(
     var createServerCalendarOpen by remember { mutableStateOf(false) }
     var accountAvatarOpen by remember { mutableStateOf(false) }
     var newGroupOpen by remember { mutableStateOf(false) }
-    var expandedSourceIds by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var expandedGroupKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
     var navigatingForward by remember { mutableStateOf(true) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -339,28 +339,32 @@ internal fun SettingsPage(
                 }
             }
     // A source's calendars, each with the picture of the group it is in, which may be another source's.
+    // A subscription is a single calendar and opens its source's page, which holds its URL.
     @Composable
     fun sourceCalendars(account: AccountEntity): List<SettingsSourceCalendar> =
         state.collections.filter { it.accountId == account.id && it.isVisibleInSettingsCalendarList() }.map { calendar ->
             val group = state.calendarGroups.groupOf(calendar)
             val groupName = group?.displayName()
             val hidden = calendar.href in state.hiddenCollectionHrefs
+            val feedStatus = readOnlyFeedStatus(account, calendar)?.takeIf { it != ReadOnlyFeedStatus.Empty && it != ReadOnlyFeedStatus.Loading }
             // The group is named only when the calendar was moved out of its source's group.
             val movedTo = groupName.takeIf { group?.key != CalendarSourceGroups.automaticKey(account, accounts) }
             SettingsSourceCalendar(
                 name = calendar.displayName,
                 subtitle = listOfNotNull(
                     movedTo,
+                    feedStatus?.label(),
                     stringResource(R.string.calendar_hidden).takeIf { hidden },
                     stringResource(R.string.calendar_inactive).takeIf { !calendar.isEnabled },
                 ).joinToString(" · "),
                 dimmed = hidden || !calendar.isEnabled,
+                warning = feedStatus != null,
                 avatar = {
                     if (group != null) {
                         SourceAvatar(groupName.orEmpty(), group.image(state.sourceImages), 28.dp, group.avatarColor(state.calendarGroupSettings))
                     }
                 },
-                onClick = { onCollectionSettings(calendar) },
+                onClick = { if (account.sourceType == SourceType.ReadOnlyUrl) openAccount(account) else onCollectionSettings(calendar) },
             )
         }
     Surface(
@@ -537,71 +541,35 @@ internal fun SettingsPage(
                                     val groupAccounts = accounts.filter { CalendarSourceGroups.automaticKey(it, accounts) == group.key }
                                     if (groupAccounts.isEmpty()) return@forEach
                                     key(group.key) {
-                                        run {
-                                            val groupName = group.displayName()
-                                            val groupImage = group.image(state.sourceImages)
-                                            val groupColor = group.avatarColor(state.calendarGroupSettings)
-                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                val single = groupAccounts.size == 1
-                                                if (!single) {
-                                                    SettingsRow(
-                                                        title = groupName,
-                                                        subtitle = group.subtitle(),
-                                                        leading = { SourceAvatar(groupName, groupImage, 40.dp, groupColor) },
-                                                        onClick = { onGroupSettings(group.key) },
-                                                    ) {
-                                                        Icon(
-                                                            Icons.Default.Edit,
-                                                            contentDescription = stringResource(R.string.calendar_group_edit),
-                                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            modifier = Modifier.size(20.dp),
-                                                        )
-                                                    }
-                                                }
-                                                groupAccounts.forEach { account ->
-                                                    // Feeds of one website share their host name, so they are told apart by calendar name.
-                                                    val feedCalendarName = state.collections
-                                                        .takeIf { account.sourceType == SourceType.ReadOnlyUrl }
-                                                        ?.firstOrNull { it.accountId == account.id }
-                                                        ?.displayName
-                                                    val rowTitle = when {
-                                                        single -> groupName
-                                                        feedCalendarName != null -> feedCalendarName
-                                                        else -> account.shownName()
-                                                    }
-                                                    SettingsSourceRow(
-                                                        title = rowTitle,
-                                                        subtitle = if (account.id == UiLocalAccountId && localCollection?.isEnabled == false) {
-                                                            stringResource(R.string.calendar_inactive)
-                                                        } else {
-                                                            account.sourceDescription(state.collections, single)
-                                                        },
-                                                        // Every source has its picture; those of a group are indented under it.
-                                                        leading = if (single) {
-                                                            { SourceAvatar(groupName, groupImage, 40.dp, groupColor) }
-                                                        } else {
-                                                            {
-                                                                SourceAvatar(
-                                                                    rowTitle,
-                                                                    account.image(state.sourceImages),
-                                                                    32.dp,
-                                                                    account.avatarColor(state.calendarGroupSettings),
-                                                                    modifier = Modifier.padding(start = 20.dp),
-                                                                )
-                                                            }
-                                                        },
-                                                        warning = account.needsAttention(),
-                                                        calendars = sourceCalendars(account),
-                                                        expanded = account.id in expandedSourceIds,
-                                                        onExpandedChange = { open ->
-                                                            expandedSourceIds = if (open) expandedSourceIds + account.id else expandedSourceIds - account.id
-                                                        },
-                                                        onOpen = { openAccount(account) },
-                                                        calendarIndent = if (single) 0.dp else 20.dp,
-                                                    )
-                                                }
-                                            }
+                                        val groupName = group.displayName()
+                                        val groupImage = group.image(state.sourceImages)
+                                        val groupColor = group.avatarColor(state.calendarGroupSettings)
+                                        // One row per group, folding out its calendars. A subscription is a single
+                                        // calendar: alone it is a row of its own; of a CalDAV account's website it is
+                                        // listed with that account's calendars; several of one website share a row.
+                                        val header = (group.owner?.takeIf { it in groupAccounts } ?: groupAccounts.singleOrNull())
+                                        val members = listOfNotNull(header) + groupAccounts.filter { it != header }
+                                        val calendars = if (header?.sourceType == SourceType.ReadOnlyUrl) {
+                                            emptyList()
+                                        } else {
+                                            members.flatMap { sourceCalendars(it) }
                                         }
+                                        SettingsSourceRow(
+                                            title = groupName,
+                                            subtitle = when {
+                                                header == null -> group.subtitle()
+                                                header.id == UiLocalAccountId && localCollection?.isEnabled == false -> stringResource(R.string.calendar_inactive)
+                                                else -> header.sourceDescription(state.collections, single = true)
+                                            },
+                                            leading = { SourceAvatar(groupName, groupImage, 40.dp, groupColor) },
+                                            warning = groupAccounts.any { it.needsAttention() },
+                                            calendars = calendars,
+                                            expanded = group.key in expandedGroupKeys,
+                                            onExpandedChange = { open ->
+                                                expandedGroupKeys = if (open) expandedGroupKeys + group.key else expandedGroupKeys - group.key
+                                            },
+                                            onOpen = { if (header != null) openAccount(header) else onGroupSettings(group.key) },
+                                        )
                                     }
                                 }
                             }
@@ -897,6 +865,22 @@ internal fun SettingsPage(
                                         SettingsEditRow(stringResource(R.string.password), "••••••••") {
                                             accountFieldEdit = AccountFieldEdit(AccountField.Password, "")
                                         }
+                                    }
+                                }
+                                // A subscription is a single calendar; its color, visibility and group are one tap away.
+                                val feedCalendar = state.collections.takeIf { isReadOnlySource }?.firstOrNull { it.accountId == account.id }
+                                if (feedCalendar != null) {
+                                    SettingsGroup(title = stringResource(R.string.calendar)) {
+                                        SettingsNavRow(
+                                            title = feedCalendar.displayName,
+                                            subtitle = stringResource(R.string.feed_calendar_settings_summary),
+                                            leading = {
+                                                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                                                    Box(Modifier.size(14.dp).clip(CircleShape).background(Color(feedCalendar.color)))
+                                                }
+                                            },
+                                            onClick = { onCollectionSettings(feedCalendar) },
+                                        )
                                     }
                                 }
                                 // A source's own group is the source itself: its name and picture are edited here.
@@ -2050,18 +2034,26 @@ internal fun CollectionSettingsSheet(
 
     // The sheet is as light as the cards, so its groups take the page color to stand out.
     CompositionLocalProvider(LocalSettingsRowColor provides MaterialTheme.colorScheme.background) {
+      // The top bar stays in place like the editor's; only the settings below it scroll.
+      Column(Modifier.fillMaxSize()) {
+        EditorTopBar(
+            title = stringResource(R.string.calendar),
+            onClose = onClose,
+            onSave = { onSave(name, customColor) },
+            modifier = Modifier.padding(horizontal = 24.dp).sheetContentPart("bar"),
+        )
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(scrollState),
         ) {
-            EditorTopBar(
-                title = stringResource(R.string.calendar),
-                onClose = onClose,
-                onSave = { onSave(name, customColor) },
-            )
+          Column(
+            modifier = Modifier
+                .sheetContentPart("settings")
+                .padding(start = 24.dp, end = 24.dp, top = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+          ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (collection.supportsEvents) CalendarCapabilityChip(stringResource(R.string.events), Color(0xFF2F5AEA))
                 if (collection.supportsTasks) CalendarCapabilityChip(stringResource(R.string.tasks), Color(0xFF00A86B))
@@ -2167,7 +2159,9 @@ internal fun CollectionSettingsSheet(
                 }
             }
             Spacer(Modifier.height(18.dp))
+          }
         }
+      }
     }
     if (confirmDelete) {
         KgsAlertDialog(

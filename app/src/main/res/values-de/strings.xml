@@ -678,6 +678,7 @@
         <item quantity="one">%1$d Eintrag</item>
         <item quantity="other">%1$d Einträge</item>
     </plurals>
+    <string name="feed_calendar_settings_summary">Farbe, Sichtbarkeit und Gruppe</string>
     <string name="calendar_groups">Gruppen</string>
     <string name="calendar_groups_help">Gruppen fassen Kalender aus verschiedenen Quellen in der Seitenleiste zusammen.</string>
     <string name="calendar_group_calendars">Kalender in dieser Gruppe</string>

@@ -678,6 +678,7 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <string name="feed_calendar_settings_summary">Color, visibility and group</string>
     <string name="calendar_groups">Groups</string>
     <string name="calendar_groups_help">Groups gather calendars from different sources in the sidebar.</string>
     <string name="calendar_group_calendars">Calendars in this group</string>
