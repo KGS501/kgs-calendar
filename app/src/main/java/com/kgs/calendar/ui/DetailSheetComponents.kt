@@ -729,9 +729,6 @@ private fun DetailSheet.detailPopoverHeight(): Dp = when (this) {
     }
 }
 
-internal fun CollectionEntity.estimatedSettingsHeight(): Dp =
-    392.dp
-
 private fun detailTextBlockHeight(value: String, baseWhenBlank: Int = 72): Int {
     val cleaned = value.cleanCalendarDisplayText()
     if (cleaned.isBlank()) return baseWhenBlank

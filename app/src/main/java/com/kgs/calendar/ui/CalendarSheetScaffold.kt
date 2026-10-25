@@ -50,8 +50,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,7 +72,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -163,23 +169,39 @@ internal fun KgsModalBottomSheet(
             val navigationBarInsetPx = with(density) {
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx()
             }
-            val sheetVisualBottomPx = (hiddenAnchor - navigationBarInsetPx).coerceAtLeast(expandedAnchor + 1f)
+            // While the keyboard is open the stops count from its top edge, so what a stop shows stays
+            // above the keyboard instead of disappearing under it.
+            val imeBottomPx = if (sheetInsetPolicy.respectsImeBottomInset) WindowInsets.ime.getBottom(density).toFloat() else 0f
+            val sheetVisualBottomPx = (hiddenAnchor - max(navigationBarInsetPx, imeBottomPx)).coerceAtLeast(expandedAnchor + 1f)
             val quarterAnchor = (sheetVisualBottomPx - screenHeightPx * 0.18f).coerceIn(expandedAnchor, hiddenAnchor)
-            val editorSmallAnchor = sheetVisualBottomPx - with(density) { EditorSmallVisibleHeight.toPx() }
-            val editorTinyAnchor = sheetVisualBottomPx - with(density) { EditorTinyVisibleHeight.toPx() }
-            val contentAnchor = initialContentHeight?.let { requestedHeight ->
-                val minVisibleHeight = with(density) { 148.dp.toPx() }
-                val sheetChromeAndBreathingRoom = with(density) { 104.dp.toPx() }
-                val requestedHeightPx = (with(density) { requestedHeight.toPx() } + sheetChromeAndBreathingRoom)
-                    .coerceIn(minVisibleHeight, sheetVisualBottomPx - expandedAnchor)
-                (sheetVisualBottomPx - requestedHeightPx).coerceIn(expandedAnchor, sheetVisualBottomPx - minVisibleHeight)
+            val editorSmallAnchor = (sheetVisualBottomPx - with(density) { EditorSmallVisibleHeight.toPx() }).coerceAtLeast(expandedAnchor)
+            val editorTinyAnchor = (sheetVisualBottomPx - with(density) { EditorTinyVisibleHeight.toPx() }).coerceAtLeast(expandedAnchor)
+            // Heights of the content parts that measure themselves (see [sheetContentPart]).
+            val contentParts = remember { mutableStateMapOf<String, Int>() }
+            val sheetHandlePx = with(density) { SheetHandleHeight.toPx() }
+            /** Where the sheet shows all of its content, or as much as fits. */
+            fun currentContentAnchor(): Float? {
+                if (contentParts.isNotEmpty()) {
+                    val visible = (contentParts.values.sum() + sheetHandlePx).coerceAtMost(sheetVisualBottomPx - expandedAnchor)
+                    return (sheetVisualBottomPx - visible).coerceAtLeast(expandedAnchor)
+                }
+                return initialContentHeight?.let { requestedHeight ->
+                    val minVisibleHeight = with(density) { 148.dp.toPx() }
+                    val sheetChromeAndBreathingRoom = with(density) { 104.dp.toPx() }
+                    val requestedHeightPx = (with(density) { requestedHeight.toPx() } + sheetChromeAndBreathingRoom)
+                        .coerceIn(minVisibleHeight, sheetVisualBottomPx - expandedAnchor)
+                    (sheetVisualBottomPx - requestedHeightPx).coerceIn(expandedAnchor, sheetVisualBottomPx - minVisibleHeight)
+                }
             }
+            val contentAnchor = currentContentAnchor()
             var sheetOffsetPx by remember { mutableFloatStateOf(hiddenAnchor) }
             var edgeBouncePx by remember { mutableFloatStateOf(0f) }
             var edgeBounceJob by remember { mutableStateOf<Job?>(null) }
             var shown by remember { mutableStateOf(false) }
             var lastCollapseRequest by remember { mutableStateOf(collapseRequest) }
             var lastExpandRequest by remember { mutableStateOf(expandRequest) }
+            // The stop the sheet rests at; it follows that stop when the keyboard moves it. Null while it moves.
+            var restingAt by remember { mutableStateOf<SheetRest?>(null) }
             val maxEdgeBouncePx = min(with(density) { 24.dp.toPx() }, expandedAnchor * 0.45f)
             val inTopPanel = tabletopPanelBottomPx != null
             val topPanelHeightPx = (tabletopPanelBottomPx ?: 0f).coerceIn(1f, screenHeightPx)
@@ -241,6 +263,7 @@ internal fun KgsModalBottomSheet(
 
             fun dragSheetBy(deltaY: Float): Float {
                 val previous = sheetOffsetPx
+                restingAt = null
                 edgeBouncePx = 0f
                 edgeBounceJob?.cancel()
                 sheetOffsetPx = clampedOffset(previous + deltaY)
@@ -277,6 +300,28 @@ internal fun KgsModalBottomSheet(
                 SheetSnap.EditorTiny -> editorTinyAnchor
             }
 
+            fun anchorOf(rest: SheetRest): Float = when (rest) {
+                SheetRest.Expanded -> expandedAnchor
+                SheetRest.Half -> halfAnchor
+                SheetRest.Quarter -> quarterAnchor
+                SheetRest.EditorSmall -> editorSmallAnchor
+                SheetRest.EditorTiny -> editorTinyAnchor
+                SheetRest.Content -> currentContentAnchor() ?: expandedAnchor
+            }
+
+            fun restFor(anchor: Float): SheetRest? = when {
+                abs(anchor - expandedAnchor) < 2f -> SheetRest.Expanded
+                anchorMode == SheetAnchorMode.ContentFit && contentAnchor != null && abs(anchor - contentAnchor) < 2f -> SheetRest.Content
+                anchorMode == SheetAnchorMode.Editor && abs(anchor - editorSmallAnchor) < 2f -> SheetRest.EditorSmall
+                anchorMode == SheetAnchorMode.Editor && abs(anchor - editorTinyAnchor) < 2f -> SheetRest.EditorTiny
+                abs(anchor - halfAnchor) < 2f -> SheetRest.Half
+                abs(anchor - quarterAnchor) < 2f -> SheetRest.Quarter
+                else -> null
+            }
+
+            // The stops as they are now, for animations that outlast the composition that started them.
+            val liveAnchorOf = rememberUpdatedState<(SheetRest) -> Float>(::anchorOf)
+
             fun sheetAnchors(): List<Float> =
                 when (anchorMode) {
                     SheetAnchorMode.ContentFit -> listOfNotNull(expandedAnchor, contentAnchor, hiddenAnchor)
@@ -304,19 +349,25 @@ internal fun KgsModalBottomSheet(
                 return anchors.minBy { abs(it - sheetOffsetPx) }
             }
 
-            suspend fun animateSheetTo(target: Float, dismissAfter: Boolean = false) {
+            suspend fun animateSheetTo(target: Float, dismissAfter: Boolean = false, toRest: SheetRest? = null) {
                 val clampedTarget = clampedOffset(target)
+                // Moving to a stop follows that stop, which the keyboard may move while the sheet moves.
+                val rest = if (dismissAfter || clampedTarget == hiddenAnchor) null else toRest ?: restFor(clampedTarget)
+                val start = sheetOffsetPx
+                restingAt = null
                 animate(
-                    initialValue = sheetOffsetPx,
-                    targetValue = clampedTarget,
+                    initialValue = 0f,
+                    targetValue = 1f,
                     animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                ) { value, _ ->
-                    sheetOffsetPx = clampedOffset(value)
+                ) { progress, _ ->
+                    val end = rest?.let { liveAnchorOf.value(it) } ?: clampedTarget
+                    sheetOffsetPx = clampedOffset(start + (end - start) * progress)
                 }
                 if (dismissAfter || clampedTarget == hiddenAnchor) {
                     onDismissRequest()
                 } else {
-                    onSnapChanged(snapForAnchor(clampedTarget))
+                    restingAt = rest
+                    onSnapChanged(snapForAnchor(rest?.let { liveAnchorOf.value(it) } ?: clampedTarget))
                 }
             }
 
@@ -360,7 +411,9 @@ internal fun KgsModalBottomSheet(
                 if (!shown) {
                     sheetOffsetPx = hiddenAnchor
                     shown = true
-                    animateSheetTo(contentAnchor ?: anchorFor(initialSnap))
+                    // Content that measures itself has done so after its first frame.
+                    withFrameNanos { }
+                    animateSheetTo(currentContentAnchor() ?: anchorFor(initialSnap))
                 } else {
                     sheetOffsetPx = clampedOffset(sheetOffsetPx)
                 }
@@ -382,12 +435,44 @@ internal fun KgsModalBottomSheet(
                 }
             }
 
+            // The lowest editor stop shows only the top bar; typing needs the title in view, so the
+            // keyboard opening there moves the sheet up one stop, where it stays.
+            val keyboardOpen = imeBottomPx > navigationBarInsetPx + 1f
+            val restingLowest = restingAt == SheetRest.EditorTiny
+            LaunchedEffect(keyboardOpen, restingLowest) {
+                if (keyboardOpen && restingLowest) {
+                    animateSheetTo(liveAnchorOf.value(SheetRest.EditorSmall), toRest = SheetRest.EditorSmall)
+                }
+            }
+
+            // A resting sheet follows its stop when the keyboard (or measured content) moves it.
+            val restingTarget = restingAt?.let(::anchorOf)
+            LaunchedEffect(restingTarget) {
+                if (restingTarget != null && !inPanel && abs(restingTarget - sheetOffsetPx) > 0.5f) {
+                    sheetOffsetPx = clampedOffset(restingTarget)
+                }
+            }
+
+            // Only a finger moves the sheet. Scrolls without one, such as a focused field scrolled into
+            // view when the keyboard opens, move the content and leave the sheet at its stop.
+            val fingerOnSheet = remember { FingerTracker() }
             val sheetNestedScrollConnection = remember(screenHeightPx) {
                 object : NestedScrollConnection {
+                    // Swiping up first opens the sheet fully; only then does its content scroll.
                     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        // A focused field brought into view (no finger involved) raises a sheet that is not fully
+                        // open by one stop instead of scrolling the content, so the sheet always rests at a stop.
+                        if (!fingerOnSheet.down && available.y < 0f && sheetOffsetPx > expandedAnchor + 0.5f) {
+                            val current = restingAt
+                            if (current != null) {
+                                val next = if (current == SheetRest.EditorTiny) SheetRest.EditorSmall else SheetRest.Expanded
+                                scope.launch { animateSheetTo(liveAnchorOf.value(next), toRest = next) }
+                            }
+                            return available
+                        }
                         if (
-                            anchorMode == SheetAnchorMode.Editor &&
                             source == NestedScrollSource.UserInput &&
+                            fingerOnSheet.down &&
                             available.y < 0f &&
                             sheetOffsetPx > expandedAnchor + 0.5f
                         ) {
@@ -397,7 +482,7 @@ internal fun KgsModalBottomSheet(
                     }
 
                     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                        if (source != NestedScrollSource.UserInput) return Offset.Zero
+                        if (source != NestedScrollSource.UserInput || !fingerOnSheet.down) return Offset.Zero
                         val deltaY = available.y
                         return when {
                             deltaY > 0f && sheetOffsetPx < hiddenAnchor -> Offset(x = 0f, y = dragSheetBy(deltaY))
@@ -407,7 +492,12 @@ internal fun KgsModalBottomSheet(
                         }
                     }
 
+                    // A fling up on a sheet that is not fully open opens it instead of flinging the content.
                     override suspend fun onPreFling(available: Velocity): Velocity {
+                        if (available.y < 0f && sheetOffsetPx > expandedAnchor + 0.5f) {
+                            animateSheetTo(targetAnchor(available.y))
+                            return available
+                        }
                         return Velocity.Zero
                     }
 
@@ -437,7 +527,10 @@ internal fun KgsModalBottomSheet(
             }
 
             val openProgress = ((hiddenAnchor - sheetOffsetPx) / (hiddenAnchor - quarterAnchor)).coerceIn(0f, 1f)
-            val effectiveSheetOffsetPx = (sheetOffsetPx + edgeBouncePx).coerceIn(0f, hiddenAnchor)
+            // A resting sheet takes its stop's position in the same frame, so it moves exactly with the
+            // keyboard; a frame late, a focused field would count as covered and scroll the sheet away.
+            val shownOffsetPx = restingTarget?.takeIf { !inPanel }?.let(::clampedOffset) ?: sheetOffsetPx
+            val effectiveSheetOffsetPx = (shownOffsetPx + edgeBouncePx).coerceIn(0f, hiddenAnchor)
             val sheetHeight = with(density) { (sheetBottomPx - effectiveSheetOffsetPx).coerceAtLeast(1f).toDp() }
             val cornerRadius = 28.dp
 
@@ -606,7 +699,22 @@ internal fun KgsModalBottomSheet(
                             Modifier
                         },
                     )
-                    .then(if (inPanel) Modifier else Modifier.nestedScroll(sheetNestedScrollConnection)),
+                    .then(
+                        if (inPanel) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .pointerInput(fingerOnSheet) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            fingerOnSheet.down = event.changes.any { it.pressed }
+                                        }
+                                    }
+                                }
+                                .nestedScroll(sheetNestedScrollConnection)
+                        },
+                    ),
                 shape = if (inPanel) {
                     panelShape
                 } else {
@@ -617,6 +725,7 @@ internal fun KgsModalBottomSheet(
             ) {
                 CompositionLocalProvider(LocalOverscrollFactory provides null) {
                     CompositionLocalProvider(
+                        LocalSheetContentHeights provides contentParts,
                         LocalSheetHeaderDragModifier provides when {
                             inTopPanel -> topPanelDragModifier
                             inBookPane -> bookPaneDragModifier
@@ -685,6 +794,40 @@ internal fun KgsModalBottomSheet(
 }
 
 internal const val KgsModalBottomSheetSurfaceTag = "kgs-modal-bottom-sheet"
+
+private val SheetHandleHeight = 18.dp
+
+/** Whether a finger touches the sheet; read by its scroll handling, so it is not state. */
+private class FingerTracker {
+    var down: Boolean = false
+}
+
+/** The stops a sheet can rest at; see [KgsModalBottomSheet]. */
+private enum class SheetRest { Expanded, Half, Quarter, EditorSmall, EditorTiny, Content }
+
+/** Where parts of a sheet's content report their natural heights, by part. */
+private val LocalSheetContentHeights = staticCompositionLocalOf<MutableMap<String, Int>?> { null }
+
+/**
+ * Reports this part's natural height to its sheet, which then opens just far enough to show all
+ * parts, or fully when they do not fit. Use it on fixed parts such as a top bar, and on the inner
+ * content of a scrolling part, where the height is not limited.
+ */
+internal fun Modifier.sheetContentPart(part: String): Modifier = composed {
+    val heights = LocalSheetContentHeights.current
+    if (heights == null) {
+        this
+    } else {
+        DisposableEffect(heights, part) { onDispose { heights.remove(part) } }
+        layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+            if (heights[part] != placeable.height) heights[part] = placeable.height
+            layout(placeable.width, placeable.height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+                placeable.place(0, 0)
+            }
+        }
+    }
+}
 internal const val TabletopTopPanelHandleTag = "tabletop-top-panel-handle"
 
 /**
@@ -731,7 +874,7 @@ internal fun KgsSheetHandle(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(18.dp),
+            .height(SheetHandleHeight),
         contentAlignment = Alignment.Center,
     ) {
         Box(
