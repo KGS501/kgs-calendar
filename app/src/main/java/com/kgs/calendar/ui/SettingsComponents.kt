@@ -72,6 +72,12 @@ import androidx.compose.ui.unit.sp
 import com.kgs.calendar.R
 import com.kgs.calendar.ui.haptics.rememberSliderStepHaptics
 import kotlin.math.roundToInt
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 
 /*
  * Settings are laid out as titled groups of rows. A group is one rounded card; its rows are
@@ -828,3 +834,63 @@ internal fun CalendarMetadataRow(label: String, value: String) {
         )
     }
 }
+
+/**
+ * The round warning button at the top right of the settings, shown while there are problems; it
+ * opens the Problems page. A small count sits on its edge.
+ */
+@Composable
+internal fun SettingsProblemsButton(count: Int, onClick: () -> Unit) {
+    // Keeps the last count while the button scales away after the last problem was solved.
+    val lastCount = remember { intArrayOf(count) }
+    if (count > 0) lastCount[0] = count
+    AnimatedVisibility(
+        visible = count > 0,
+        enter = scaleIn(tween(MotionMedium, easing = MotionEmphasized), initialScale = 0.6f) + fadeIn(tween(MotionShort)),
+        exit = scaleOut(tween(MotionShort, easing = MotionStandardAccelerate), targetScale = 0.6f) + fadeOut(tween(MotionShort)),
+    ) {
+        val color = SyncPendingOrange
+        val shownCount = lastCount[0]
+        val description = pluralStringResource(R.plurals.problem_count, shownCount, shownCount)
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .semantics { contentDescription = description }
+                .testTag(SettingsProblemsButtonTag),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.34f else 0.18f))
+                    .clickable(role = Role.Button, onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            }
+            Surface(
+                shape = CircleShape,
+                color = color,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 2.dp, end = 2.dp)
+                    .heightIn(min = 18.dp)
+                    .widthIn(min = 18.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        if (shownCount > 99) "99+" else shownCount.toString(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal const val SettingsProblemsButtonTag = "settings-problems-button"

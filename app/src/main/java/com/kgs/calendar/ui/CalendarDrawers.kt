@@ -111,8 +111,6 @@ internal fun CalendarDrawer(
     onCollectionSettings: (CollectionEntity) -> Unit,
     onGroupSettings: (String) -> Unit,
     onAppSettings: () -> Unit,
-    problems: List<ProblemItem>,
-    onProblems: () -> Unit,
 ) {
     val drawerProgress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -239,41 +237,8 @@ internal fun CalendarDrawer(
                 // The line only shows while calendars scroll underneath the pinned rows.
                 HorizontalDivider(color = WarmLine.copy(alpha = if (listScroll.canScrollForward) 1f else 0f))
                 Spacer(Modifier.height(6.dp))
-                if (problems.isNotEmpty()) {
-                    DrawerProblemRow(
-                        count = problems.size,
-                        onClick = onProblems,
-                    )
-                }
                 DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
             }
-        }
-    }
-}
-
-@Composable
-private fun DrawerProblemRow(count: Int, onClick: () -> Unit) {
-    val color = SyncPendingOrange
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 3.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(color.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.34f else 0.18f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(22.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Default.WarningAmber,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(23.dp),
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(stringResource(R.string.problems), color = WarmInk, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text(pluralStringResource(R.plurals.problem_count, count, count), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 13.sp)
         }
     }
 }

@@ -480,15 +480,14 @@ internal class CalendarShellUiState(
         detailBookPane = bookPaneFor(origin)
     }
 
+    /** A problem's item opens over the Problems page, which shows again when the detail closes. */
     fun openProblemEventDetail(event: EventEntity) {
-        problemsOpen = false
         detailTaskStack.clear()
         detailSheet = DetailSheet.Event(event)
         detailBookPane = bookPaneFor(SheetOrigin.Calendar)
     }
 
     fun openProblemTaskDetail(task: TaskEntity) {
-        problemsOpen = false
         detailTaskStack.clear()
         openTaskDetail(task)
     }

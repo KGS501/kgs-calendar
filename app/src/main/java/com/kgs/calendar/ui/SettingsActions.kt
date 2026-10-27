@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.ReminderPresets
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.settings.AppColorMode
@@ -272,6 +273,10 @@ class SettingsActions internal constructor(
 
     fun setMultiDaySidebarControlsEnabled(enabled: Boolean) {
         scope.launch { settingsStore.setMultiDaySidebarControlsEnabled(enabled) }
+    }
+
+    fun setReminderPresets(presets: ReminderPresets) {
+        scope.launch { settingsStore.setReminderPresets(presets) }
     }
 
     fun setDefaultEventDurationMinutes(minutes: Int) {

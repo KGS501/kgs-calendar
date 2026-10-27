@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.ReminderPresets
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -208,6 +209,7 @@ internal fun SettingsPage(
     onDefaultTaskHasTimeChanged: (Boolean) -> Unit,
     onDefaultEventRemindersChanged: (Set<Int>) -> Unit,
     onDefaultTaskRemindersChanged: (Set<Int>) -> Unit,
+    onReminderPresetsChanged: (ReminderPresets) -> Unit = {},
     onTaskStartNotificationsChanged: (Boolean) -> Unit,
     onTaskEndNotificationsChanged: (Boolean) -> Unit,
     onEventStartNotificationsChanged: (Boolean) -> Unit,
@@ -238,6 +240,10 @@ internal fun SettingsPage(
     onRestoreAccountImage: (String) -> Unit = {},
     trashCount: Int = 0,
     onRecentlyDeleted: () -> Unit = {},
+    problemCount: Int = 0,
+    onProblems: () -> Unit = {},
+    covered: Boolean = false,
+    modifier: Modifier = Modifier,
     onClose: () -> Unit,
 ) {
     val timelineVisibility = timelineSettingsVisibility(
@@ -326,7 +332,8 @@ internal fun SettingsPage(
         navigatingForward = false
         if (navigationStack.size > 1) navigationStack = navigationStack.dropLast(1) else onClose()
     }
-    BackHandler(enabled = true) {
+    // While a page covers the settings (Problems), Back belongs to that page.
+    BackHandler(enabled = !covered) {
         navigateBack()
     }
     val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
@@ -368,7 +375,7 @@ internal fun SettingsPage(
             )
         }
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .zIndex(40f),
         color = MaterialTheme.colorScheme.background,
@@ -401,7 +408,9 @@ internal fun SettingsPage(
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
+                SettingsProblemsButton(count = problemCount, onClick = onProblems)
             }
 
             AnimatedContent(
@@ -1166,6 +1175,12 @@ internal fun SettingsPage(
                                     title = stringResource(R.string.reminders),
                                     selected = state.defaultTaskReminderMinutes,
                                     onSelectedChange = onDefaultTaskRemindersChanged,
+                                )
+                            }
+                            SettingsGroup(title = stringResource(R.string.reminders)) {
+                                ReminderPresetsEditor(
+                                    presets = state.reminderPresets,
+                                    onPresetsChange = onReminderPresetsChanged,
                                 )
                             }
                             SettingsGroup(title = stringResource(R.string.settings_editor)) {

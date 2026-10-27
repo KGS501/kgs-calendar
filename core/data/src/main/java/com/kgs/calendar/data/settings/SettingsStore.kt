@@ -262,6 +262,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_DEFAULT_TASK_HAS_TIME] ?: false
     }
 
+    /** The reminders the reminder popup opens with, one per unit. */
+    val reminderPresets: Flow<ReminderPresets> = dataStore.data.map { prefs ->
+        ReminderPresets.decode(prefs[KEY_REMINDER_PRESETS])
+    }
+
     val defaultEventReminderMinutes: Flow<Set<Int>> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_EVENT_REMINDERS]?.toReminderSet()
             ?: buildSet {
@@ -605,6 +610,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] = enabled }
     }
 
+    suspend fun setReminderPresets(presets: ReminderPresets) {
+        dataStore.edit { it[KEY_REMINDER_PRESETS] = presets.encode() }
+    }
+
     suspend fun setDefaultEventDurationMinutes(minutes: Int) {
         dataStore.edit { it[KEY_DEFAULT_EVENT_DURATION] = minutes.coerceIn(15, 24 * 60) }
     }
@@ -806,6 +815,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_DEFAULT_TASK_DATES = stringPreferencesKey("default_task_dates")
         private val KEY_LOCAL_CALENDAR_REMOVED = booleanPreferencesKey("local_calendar_removed")
         private val KEY_DEFAULT_EVENT_REMINDERS = stringPreferencesKey("default_event_reminders_csv")
+        private val KEY_REMINDER_PRESETS = stringPreferencesKey("reminder_presets")
         private val KEY_DEFAULT_TASK_REMINDERS = stringPreferencesKey("default_task_reminders_csv")
         private val KEY_TASK_START_NOTIFICATIONS = booleanPreferencesKey("task_start_notifications_enabled")
         private val KEY_TASK_END_NOTIFICATIONS = booleanPreferencesKey("task_end_notifications_enabled")

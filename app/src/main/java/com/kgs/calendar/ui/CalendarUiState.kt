@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.ReminderPresets
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
@@ -65,6 +66,8 @@ data class CalendarUiState(
     val events: List<EventEntity> = emptyList(),
     val searchQuery: String = "",
     val searchMode: CalendarSearchMode = CalendarSearchMode.TextAndLabels,
+    /** The calendars search is limited to, by href; null searches all. */
+    val searchCalendars: Set<String>? = null,
     val searchOccurrenceRange: CalendarRange = CalendarRange(
         LocalDate.now().minusYears(10),
         LocalDate.now().plusYears(10).plusDays(1),
@@ -115,6 +118,8 @@ data class CalendarUiState(
     val fullWeekSwipeEnabled: Boolean = SettingsStore.DEFAULT_FULL_WEEK_SWIPE_ENABLED,
     val multiDaySidebarControlsEnabled: Boolean = true,
     val defaultEventDurationMinutes: Int = 60,
+    /** The reminders the reminder popup opens with, one per unit. */
+    val reminderPresets: ReminderPresets = ReminderPresets(),
     val defaultTaskDates: TaskDefaultDates = TaskDefaultDates.None,
     val defaultTaskHasTime: Boolean = false,
     val defaultEventReminderMinutes: Set<Int> = emptySet(),

@@ -44,7 +44,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -118,6 +117,35 @@ import java.time.YearMonth
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import com.kgs.calendar.ui.theme.calendarTextScale
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.kgs.calendar.data.local.entity.CollectionEntity
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.semantics.selected
 
 @Composable
 internal fun CalendarSearchOverlay(
@@ -131,6 +159,9 @@ internal fun CalendarSearchOverlay(
     subtasksExpandedByDefault: Boolean,
     onQueryChange: (String) -> Unit,
     onSearchModeChange: (CalendarSearchMode) -> Unit,
+    calendars: List<CollectionEntity>,
+    selectedCalendars: Set<String>?,
+    onSelectedCalendarsChange: (Set<String>?) -> Unit,
     onLoadEarlierOccurrences: () -> Unit,
     onLoadLaterOccurrences: () -> Unit,
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
@@ -140,85 +171,359 @@ internal fun CalendarSearchOverlay(
     showCalendarWeeks: Boolean = false,
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
 ) {
+    // The page whites out the app with a fade, while the header slides down from the top like a
+    // sheet; results scroll on underneath the header.
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically(animationSpec = tween(MotionLong, easing = MotionEmphasized)) { -it / 5 } +
-            scaleIn(initialScale = 0.98f, animationSpec = tween(MotionLong, easing = MotionEmphasized)) +
-            fadeIn(animationSpec = tween(MotionMedium, delayMillis = 50, easing = MotionStandard)),
-        exit = slideOutVertically(animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) { -it / 6 } +
-            scaleOut(targetScale = 0.98f, animationSpec = tween(MotionMedium, easing = MotionStandardAccelerate)) +
-            fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)),
+        enter = EnterTransition.None,
+        exit = ExitTransition.None,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface),
-        ) {
-            SearchTopBar(query = query, onQueryChange = onQueryChange, onClose = onClose)
-            SearchOptionsBar(
-                searchMode = searchMode,
-                onSearchModeChange = onSearchModeChange,
-            )
-            SearchResultsList(
-                query = query,
-                eventResults = results,
-                taskResults = taskResults,
-                allTasksForHierarchy = allTasksForHierarchy,
-                taskColorMode = taskColorMode,
-                subtasksExpandedByDefault = subtasksExpandedByDefault,
-                onEventClick = onEventClick,
-                onTaskClick = onTaskClick,
-                onTaskStatusChanged = onTaskStatusChanged,
-                onLoadEarlierOccurrences = onLoadEarlierOccurrences,
-                onLoadLaterOccurrences = onLoadLaterOccurrences,
-                agendaDateHierarchy = true,
-                showCalendarWeeks = showCalendarWeeks,
-                firstDayOfWeek = firstDayOfWeek,
-                agendaHeaderTopSpacing = 6.dp,
-            )
+        val density = LocalDensity.current
+        var headerHeightPx by remember { mutableIntStateOf(0) }
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .animateEnterExit(
+                        enter = fadeIn(tween(MotionMedium, easing = MotionStandard)),
+                        exit = fadeOut(tween(MotionMedium, easing = MotionStandardAccelerate)),
+                    )
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                SearchResultsList(
+                    query = query,
+                    eventResults = results,
+                    taskResults = taskResults,
+                    allTasksForHierarchy = allTasksForHierarchy,
+                    taskColorMode = taskColorMode,
+                    subtasksExpandedByDefault = subtasksExpandedByDefault,
+                    onEventClick = onEventClick,
+                    onTaskClick = onTaskClick,
+                    onTaskStatusChanged = onTaskStatusChanged,
+                    onLoadEarlierOccurrences = onLoadEarlierOccurrences,
+                    onLoadLaterOccurrences = onLoadLaterOccurrences,
+                    agendaDateHierarchy = true,
+                    showCalendarWeeks = showCalendarWeeks,
+                    firstDayOfWeek = firstDayOfWeek,
+                    agendaHeaderTopSpacing = 6.dp,
+                    topInset = with(density) { headerHeightPx.toDp() },
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateEnterExit(
+                        enter = slideInVertically(tween(MotionLong, easing = MotionEmphasized)) { -it } +
+                            fadeIn(tween(MotionShort, easing = MotionStandard)),
+                        exit = slideOutVertically(tween(MotionMedium, easing = MotionStandardAccelerate)) { -it } +
+                            fadeOut(tween(MotionMedium, easing = MotionStandardAccelerate)),
+                    )
+                    .onSizeChanged { headerHeightPx = it.height }
+                    .shadow(10.dp, SearchHeaderShape, ambientColor = Color.Black.copy(alpha = 0.2f), spotColor = Color.Black.copy(alpha = 0.2f))
+                    .background(MaterialTheme.colorScheme.background, SearchHeaderShape)
+                    .testTag("search-header"),
+            ) {
+                SearchTopBar(query = query, onQueryChange = onQueryChange, onClose = onClose)
+                SearchOptionsBar(
+                    searchMode = searchMode,
+                    onSearchModeChange = onSearchModeChange,
+                    calendars = calendars,
+                    selectedCalendars = selectedCalendars,
+                    onSelectedCalendarsChange = onSelectedCalendarsChange,
+                )
+            }
         }
     }
 }
 
+private val SearchHeaderShape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp)
+
+/** The order the search modes are offered in: text and labels first, as the most used. */
+private val SearchModeOrder = listOf(CalendarSearchMode.TextAndLabels, CalendarSearchMode.Text, CalendarSearchMode.LabelsOnly)
+
+private fun CalendarSearchMode.icon(): ImageVector = when (this) {
+    CalendarSearchMode.TextAndLabels -> Icons.AutoMirrored.Filled.ManageSearch
+    CalendarSearchMode.Text -> Icons.Default.TextFields
+    CalendarSearchMode.LabelsOnly -> Icons.Default.Sell
+}
+
+/**
+ * Two chips under the search field: what to search in (text, labels or both) and which calendars,
+ * each opening a menu. Calendars can be picked several at a time.
+ */
 @Composable
 private fun SearchOptionsBar(
     searchMode: CalendarSearchMode,
     onSearchModeChange: (CalendarSearchMode) -> Unit,
+    calendars: List<CollectionEntity>,
+    selectedCalendars: Set<String>?,
+    onSelectedCalendarsChange: (Set<String>?) -> Unit,
 ) {
     val labels = mapOf(
         CalendarSearchMode.Text to stringResource(R.string.search_scope_text),
         CalendarSearchMode.TextAndLabels to stringResource(R.string.search_scope_text_and_labels),
         CalendarSearchMode.LabelsOnly to stringResource(R.string.search_scope_labels_only),
     )
-    Column(
+    // A filter keeps only calendars that still exist; none left, or all of them, means all.
+    val calendarHrefs = calendars.mapTo(LinkedHashSet()) { it.href }
+    val activeCalendars = selectedCalendars?.filterTo(LinkedHashSet()) { it in calendarHrefs }?.takeIf { it.isNotEmpty() && it.size < calendarHrefs.size }
+    val pickedCalendars = calendars.filter { activeCalendars != null && it.href in activeCalendars }
+    var modeMenuOpen by remember { mutableStateOf(false) }
+    var calendarMenuOpen by remember { mutableStateOf(false) }
+    Row(
         modifier = Modifier
             .testTag("search-options-bar")
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(top = 6.dp)
             .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
-            .padding(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CalendarSearchMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = mode == searchMode,
-                    onClick = { onSearchModeChange(mode) },
-                    label = { Text(labels.getValue(mode)) },
-                    modifier = Modifier.testTag("searchMode-${mode.name}"),
-                )
+        Box {
+            SearchFilterChip(
+                label = labels.getValue(searchMode),
+                contentDescription = stringResource(R.string.search_in),
+                highlighted = searchMode != CalendarSearchMode.TextAndLabels,
+                open = modeMenuOpen,
+                onClick = { modeMenuOpen = true },
+                leading = { tint -> Icon(searchMode.icon(), contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("search-mode-button"),
+            )
+            SearchFilterMenu(expanded = modeMenuOpen, onDismiss = { modeMenuOpen = false }) {
+                SearchModeOrder.forEach { mode ->
+                    SearchMenuRow(
+                        label = labels.getValue(mode),
+                        selected = mode == searchMode,
+                        onClick = {
+                            onSearchModeChange(mode)
+                            modeMenuOpen = false
+                        },
+                        leading = { selected ->
+                            Icon(
+                                mode.icon(),
+                                contentDescription = null,
+                                tint = if (selected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        modifier = Modifier.testTag("searchMode-${mode.name}"),
+                    )
+                }
             }
         }
-        HorizontalDivider(
-            modifier = Modifier.testTag("search-options-divider"),
-            color = WarmLine,
+        if (calendars.size > 1) {
+            Box {
+                SearchFilterChip(
+                    label = when {
+                        activeCalendars == null -> stringResource(R.string.search_all_calendars)
+                        pickedCalendars.size == 1 -> pickedCalendars.single().displayName
+                        else -> pluralStringResource(R.plurals.settings_calendar_count, pickedCalendars.size, pickedCalendars.size)
+                    },
+                    contentDescription = stringResource(R.string.search_calendars),
+                    highlighted = activeCalendars != null,
+                    open = calendarMenuOpen,
+                    onClick = { calendarMenuOpen = true },
+                    leading = { tint ->
+                        if (pickedCalendars.isEmpty()) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                        } else {
+                            StackedCalendarDots(pickedCalendars.map { Color(it.color) })
+                        }
+                    },
+                    modifier = Modifier.testTag("search-calendars-button"),
+                )
+                SearchFilterMenu(expanded = calendarMenuOpen, onDismiss = { calendarMenuOpen = false }) {
+                    SearchMenuRow(
+                        label = stringResource(R.string.search_all_calendars),
+                        selected = activeCalendars == null,
+                        onClick = { onSelectedCalendarsChange(null) },
+                        leading = { selected ->
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = if (selected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        modifier = Modifier.testTag("search-calendar-all"),
+                    )
+                    HorizontalDivider(color = WarmLine.copy(alpha = 0.7f), modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp))
+                    calendars.forEach { calendar ->
+                        SearchMenuRow(
+                            label = calendar.displayName,
+                            selected = activeCalendars != null && calendar.href in activeCalendars,
+                            onClick = {
+                                onSelectedCalendarsChange(toggledSearchCalendars(activeCalendars, calendar.href, calendarHrefs))
+                            },
+                            leading = { selected -> CalendarColorDot(Color(calendar.color), filled = selected || activeCalendars == null) },
+                            modifier = Modifier.testTag("search-calendar-${calendar.href}"),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The calendars searched after tapping [href] in the calendar menu; null means all. From all
+ * calendars, a tap searches only that one; further taps add or leave out calendars. Leaving out
+ * the last one, or picking every calendar, means all again.
+ */
+internal fun toggledSearchCalendars(selected: Set<String>?, href: String, all: Set<String>): Set<String>? {
+    if (selected == null) return setOf(href).takeIf { all.size > 1 }
+    val next = if (href in selected) selected - href else selected + href
+    return next.takeIf { it.isNotEmpty() && !it.containsAll(all) }
+}
+
+/** A chip of the search header: an icon or calendar colors, a label and a turning chevron. */
+@Composable
+private fun SearchFilterChip(
+    label: String,
+    contentDescription: String,
+    highlighted: Boolean,
+    open: Boolean,
+    onClick: () -> Unit,
+    leading: @Composable (tint: Color) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // White chips sit lightly on the tinted header; a chip that narrows the search takes the accent.
+    val container by animateColorAsState(
+        targetValue = if (highlighted) WarmBrown.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "searchChipContainer",
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (highlighted) WarmBrown else WarmInk,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "searchChipIcon",
+    )
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (open) 180f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "searchChipChevron",
+    )
+    Row(
+        modifier = modifier
+            .heightIn(min = 38.dp)
+            .clip(RoundedCornerShape(19.dp))
+            .background(container)
+            .clickable(role = Role.Button, onClickLabel = contentDescription, onClick = onClick)
+            .semantics { this.contentDescription = "$contentDescription: $label" }
+            .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp)
+            .animateContentSize(tween(MotionMedium, easing = MotionStandard)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        leading(iconTint)
+        Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
+        Icon(
+            Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(18.dp)
+                .graphicsLayer { rotationZ = chevronRotation },
         )
+    }
+}
+
+/** Up to four calendar colors, overlapping like a little stack; more show as "+n". */
+@Composable
+private fun StackedCalendarDots(colors: List<Color>) {
+    val ring = MaterialTheme.colorScheme.surface
+    val shown = colors.take(4)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            shown.forEachIndexed { index, color ->
+                Box(
+                    Modifier
+                        .offset(x = (index * 9).dp)
+                        .size(16.dp)
+                        .border(1.5.dp, ring, CircleShape)
+                        .padding(1.5.dp)
+                        .clip(CircleShape)
+                        .background(color),
+                )
+            }
+            // Reserves the width of the stack.
+            Spacer(Modifier.width((16 + (shown.size - 1) * 9).dp).height(16.dp))
+        }
+        if (colors.size > shown.size) {
+            Text("+${colors.size - shown.size}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+/** A calendar's color as a circle: filled when the calendar is searched, a ring when it is not. */
+@Composable
+private fun CalendarColorDot(color: Color, filled: Boolean) {
+    val fill by animateColorAsState(
+        targetValue = if (filled) color else Color.Transparent,
+        animationSpec = tween(MotionShort, easing = MotionStandard),
+        label = "calendarDotFill",
+    )
+    Box(
+        Modifier
+            .size(18.dp)
+            .clip(CircleShape)
+            .border(2.dp, color, CircleShape)
+            .background(fill),
+    )
+}
+
+/**
+ * The menu of a search chip. It is as wide as its longest row, up to the screen's width, so
+ * long calendar names fit.
+ */
+@Composable
+private fun SearchFilterMenu(expanded: Boolean, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val maxWidth = currentCalendarWindowLayout().widthDp.dp - 32.dp
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(22.dp),
+        containerColor = popupSurfaceColor(),
+        shadowElevation = 10.dp,
+        offset = DpOffset(0.dp, 6.dp),
+        modifier = Modifier
+            .widthIn(min = 200.dp, max = maxWidth)
+            .heightIn(max = 460.dp),
+        content = content,
+    )
+}
+
+/**
+ * A row of a search chip's menu. The picked rows sit on a soft accent square and their icon takes
+ * the accent, instead of a check mark.
+ */
+@Composable
+private fun SearchMenuRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    leading: @Composable (selected: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val container by animateColorAsState(
+        targetValue = if (selected) WarmBrown.copy(alpha = 0.13f) else Color.Transparent,
+        animationSpec = tween(MotionShort, easing = MotionStandard),
+        label = "searchMenuRow",
+    )
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(container)
+            .clickable(role = Role.Checkbox, onClick = onClick)
+            .semantics { this.selected = selected }
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        leading(selected)
+        Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -334,6 +639,8 @@ internal fun SearchResultsList(
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     compositionObserver: (() -> Unit)? = null,
     agendaHeaderTopSpacing: Dp = 0.dp,
+    // Room for a header floating above the list; the results scroll on underneath it.
+    topInset: Dp = 0.dp,
 ) {
     SideEffect { compositionObserver?.invoke() }
     val resolvedEmptyMessage = emptyMessage ?: stringResource(R.string.no_results)
@@ -649,6 +956,7 @@ internal fun SearchResultsList(
     }
     val agendaInformationElementHeightPx = with(density) { 22.dp.roundToPx() }
     val agendaInformationContentTopInsetPx = with(density) { 5.dp.roundToPx() }
+    val topInsetPx = with(density) { topInset.roundToPx() }
     val displayedAgendaHeaderViewport = remember(
         listState,
         agendaHeaderSignals,
@@ -656,6 +964,7 @@ internal fun SearchResultsList(
         agendaDayElementHeightPx,
         agendaInformationElementHeightPx,
         agendaInformationContentTopInsetPx,
+        topInsetPx,
     ) {
         derivedStateOf {
             if (firstAgendaDate == null) return@derivedStateOf null
@@ -670,7 +979,8 @@ internal fun SearchResultsList(
                     )
                 },
                 firstVisibleItemIndex = layout.visibleItemsInfo.firstOrNull()?.index ?: 0,
-                viewportStartOffset = layout.viewportStartOffset,
+                // Positions count from below a floating header, where the date overlay starts.
+                viewportStartOffset = layout.viewportStartOffset + topInsetPx,
                 informationContentTopInset = agendaInformationContentTopInsetPx,
                 dayElementHeight = agendaDayElementHeightPx,
                 informationElementHeight = agendaInformationElementHeightPx,
@@ -692,7 +1002,7 @@ internal fun SearchResultsList(
             .fillMaxSize(),
         contentPadding = PaddingValues(
             start = listSidePadding,
-            top = if (agendaDateHierarchy) {
+            top = topInset + if (agendaDateHierarchy) {
                 agendaDateStackHeight + 16.dp + agendaHeaderTopSpacing
             } else {
                 20.dp
@@ -788,6 +1098,7 @@ internal fun SearchResultsList(
             topSpacing = agendaHeaderTopSpacing,
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .padding(top = topInset)
                 .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
         )
     }
@@ -1541,3 +1852,7 @@ private fun AgendaEventDateColumn(
         }
     }
 }
+
+/** The calendars the search can be limited to: the enabled ones shown in the calendar, in their order. */
+internal fun CalendarUiState.searchableCalendars(): List<CollectionEntity> =
+    collections.filter { it.isEnabled && it.href !in hiddenCollectionHrefs && (it.supportsEvents || it.supportsTasks) }

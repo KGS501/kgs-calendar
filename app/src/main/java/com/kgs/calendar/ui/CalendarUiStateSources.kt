@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.settings.ReminderPresets
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.account.SourceImage
@@ -152,6 +153,7 @@ internal data class EditorDefaults(
     val newItems: NewItemDefaults,
     val layout: EditorLayoutDefaults,
     val notifications: NotificationSettings,
+    val reminderPresets: ReminderPresets = ReminderPresets(),
 )
 
 internal data class CalendarSettingsState(
@@ -294,6 +296,7 @@ internal fun SettingsStore.editorDefaults(): Flow<EditorDefaults> = combine(
         eventEndNotificationsEnabled,
         ::NotificationSettings,
     ),
+    reminderPresets,
     ::EditorDefaults,
 )
 
@@ -398,6 +401,7 @@ internal fun calendarUiState(
         events = data.items.events,
         searchQuery = search.query,
         searchMode = search.mode,
+        searchCalendars = search.calendars,
         searchOccurrenceRange = search.occurrenceRange,
         searchResults = search.results,
         searchTaskResults = search.taskResults,
@@ -441,6 +445,7 @@ internal fun calendarUiState(
         fullWeekSwipeEnabled = timeline.fullWeekSwipeEnabled,
         multiDaySidebarControlsEnabled = timeline.multiDaySidebarControlsEnabled,
         defaultEventDurationMinutes = newItems.eventDurationMinutes,
+        reminderPresets = settings.editor.reminderPresets,
         defaultTaskDates = newItems.taskDates,
         defaultTaskHasTime = newItems.taskHasTime,
         defaultEventReminderMinutes = newItems.eventReminderMinutes,

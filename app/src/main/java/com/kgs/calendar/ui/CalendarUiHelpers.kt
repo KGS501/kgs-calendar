@@ -867,6 +867,18 @@ internal fun List<CollectionEntity>.sortedWithDefaultFirst(defaultHref: String?)
     return listOf(default) + filter { it.href != defaultHref }
 }
 
+/**
+ * The calendar an editor saves to: [chosen] when it is one of the editor's [collections] (or the
+ * item's own calendar, [ownHref]), else the default, else the first one. A new event or task can
+ * never be saved without a calendar that holds its kind, even when a draft carries over another
+ * editor's choice. Null only when there is no such calendar at all.
+ */
+internal fun List<CollectionEntity>.editorCollectionHref(chosen: String?, ownHref: String?, defaultHref: String?): String? =
+    chosen?.takeIf { href -> href == ownHref || any { it.href == href } }
+        ?: ownHref
+        ?: defaultHref?.takeIf { href -> any { it.href == href } }
+        ?: firstOrNull()?.href
+
 internal fun CollectionEntity.canDeleteFromServerForUi(): Boolean =
     sourceType == SourceType.CalDav &&
         !readOnly &&

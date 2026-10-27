@@ -89,12 +89,15 @@ internal fun EventEditorSheet(
     }
     val draft = rememberEditorDraftFields(draftStore, draftId)
     var title by draft.field("title", DraftCodec.Text, initialEvent?.uid, transferDraft) { initialEvent?.title ?: transferDraft?.title.orEmpty() }
-    var selectedCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
+    var chosenCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialEvent?.uid, eventCollections, state.defaultEventCollectionHref) {
         val preferred = state.defaultEventCollectionHref
             ?.takeIf { href -> eventCollections.any { it.href == href } }
         initialEvent?.collectionHref
             ?: preferred
             ?: eventCollections.firstOrNull()?.href
+    }
+    val selectedCollectionHref = remember(eventCollections, chosenCollectionHref, initialEvent?.collectionHref, state.defaultEventCollectionHref) {
+        eventCollections.editorCollectionHref(chosenCollectionHref, initialEvent?.collectionHref, state.defaultEventCollectionHref)
     }
     val selectedCollectionIndex = remember(eventCollections, selectedCollectionHref) {
         eventCollections.indexOfFirst { it.href == selectedCollectionHref }
@@ -221,6 +224,8 @@ internal fun EventEditorSheet(
                 title = headerTitle ?: stringResource(if (initialEvent == null) R.string.new_event else R.string.edit_event),
                 action = stringResource(R.string.save),
                 onAction = {
+                    // Never save an event without a calendar that can hold it.
+                    if (selectedCollectionHref == null) return@EditorContainer
                     if (invalidTimeRange) {
                         invalidRangeDialogOpen = true
                         return@EditorContainer
@@ -285,7 +290,7 @@ internal fun EventEditorSheet(
                             CalendarSelectorChip(
                                 collection = collection,
                                 selected = collection.href == selectedCollectionHref,
-                                onClick = { selectedCollectionHref = collection.href },
+                                onClick = { chosenCollectionHref = collection.href },
                                 hidden = collection.href in state.collectionVisibility.hrefsHidingEvents,
                             )
                         }

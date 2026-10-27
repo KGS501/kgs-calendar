@@ -46,7 +46,7 @@ class EventMutations internal constructor(
 
     private suspend fun writableEventCollectionOrNull(requestedHref: String?): CollectionEntity? =
         requestedHref?.let { database.collectionDao().get(it) }
-            ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
+            ?.takeUnless { !it.supportsEvents || it.isReadOnlyCollection() || !it.canCreateResources() }
             ?: database.collectionDao().eventCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
 
     suspend fun createEvent(payload: EventEditPayload) {
@@ -110,6 +110,7 @@ class EventMutations internal constructor(
             ?: database.collectionDao().get(existing.collectionHref)
             ?: error("Calendar not found.")
         if (targetCollection.isReadOnlyCollection()) error("Read-only calendars cannot be edited.")
+        if (targetCollection.href != existing.collectionHref && !targetCollection.supportsEvents) error("This calendar cannot hold events.")
         val moved = targetCollection.href != existing.collectionHref
         val targetIsAndroid = targetCollection.isAndroidProviderCollection()
         val existingIsAndroid = existingCollection.isAndroidProviderCollection()
@@ -214,6 +215,7 @@ class EventMutations internal constructor(
         val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
             ?: database.collectionDao().get(existing.collectionHref)
             ?: error("Calendar not found.")
+        if (targetCollection.href != existing.collectionHref && !targetCollection.supportsEvents) error("This calendar cannot hold events.")
         if (targetCollection.href != existing.collectionHref || targetCollection.isAndroidProviderCollection()) {
             deleteEventOccurrence(uid, occurrenceStartMillis)
             createEvent(payload.copy(recurrenceRule = null))

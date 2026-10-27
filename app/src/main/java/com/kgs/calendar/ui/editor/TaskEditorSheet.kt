@@ -107,12 +107,15 @@ internal fun TaskEditorSheet(
     var parentUid by draft.field("parentUid", DraftCodec.OptionalText, initialTask?.resourceHref, forcedParentTask?.resourceHref) {
         forcedParentTask?.uid ?: initialTask?.parentUid
     }
-    var selectedCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
+    var chosenCollectionHref by draft.field("collectionHref", DraftCodec.OptionalText, initialTask?.uid, taskCollections, state.defaultTaskCollectionHref) {
         val preferred = state.defaultTaskCollectionHref
             ?.takeIf { href -> taskCollections.any { it.href == href } }
         initialTask?.collectionHref
             ?: preferred
             ?: taskCollections.firstOrNull()?.href
+    }
+    val selectedCollectionHref = remember(taskCollections, chosenCollectionHref, initialTask?.collectionHref, state.defaultTaskCollectionHref) {
+        taskCollections.editorCollectionHref(chosenCollectionHref, initialTask?.collectionHref, state.defaultTaskCollectionHref)
     }
     val selectedCollectionIndex = remember(taskCollections, selectedCollectionHref) {
         taskCollections.indexOfFirst { it.href == selectedCollectionHref }
@@ -255,6 +258,8 @@ internal fun TaskEditorSheet(
                 }
             } else {
                 EditorContainer(title = headerTitle ?: stringResource(if (initialTask == null) R.string.new_task else R.string.edit_task), action = stringResource(R.string.save), onAction = {
+                // Never save a task without a task list that can hold it.
+                if (selectedCollectionHref == null) return@EditorContainer
                 if (invalidTimeRange) {
                     invalidRangeDialogOpen = true
                     return@EditorContainer
@@ -324,12 +329,6 @@ internal fun TaskEditorSheet(
                                     .focusRequester(titleFocusRequester),
                             )
                         }
-                        Text(
-                            stringResource(R.string.long_press_status_hint),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp,
-                        )
                     }
                 }
                 if (!readOnlyRemote && taskCollections.isNotEmpty()) {
@@ -344,7 +343,7 @@ internal fun TaskEditorSheet(
                             CalendarSelectorChip(
                                 collection = collection,
                                 selected = collection.href == selectedCollectionHref,
-                                onClick = { selectedCollectionHref = collection.href },
+                                onClick = { chosenCollectionHref = collection.href },
                                 hidden = collection.href in state.collectionVisibility.hrefsHidingTasks,
                             )
                         }

@@ -64,8 +64,6 @@ class SettingsLayoutInstrumentedTest {
                     onCollectionSettings = {},
                     onGroupSettings = {},
                     onAppSettings = { settingsOpened++ },
-                    problems = emptyList(),
-                    onProblems = {},
                 )
             }
         }
@@ -105,8 +103,6 @@ class SettingsLayoutInstrumentedTest {
                     onCollectionSettings = {},
                     onGroupSettings = {},
                     onAppSettings = {},
-                    problems = emptyList(),
-                    onProblems = {},
                 )
             }
         }

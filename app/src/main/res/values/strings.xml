@@ -78,6 +78,9 @@
     <string name="search_scope_text">Text</string>
     <string name="search_scope_text_and_labels">Text + labels</string>
     <string name="search_scope_labels_only">Labels only</string>
+    <string name="search_all_calendars">All calendars</string>
+    <string name="search_in">Search in</string>
+    <string name="search_calendars">Calendars to search</string>
     <string name="search_repeating_range">Repeating items: %1$s – %2$s</string>
     <string name="search_load_earlier">Earlier</string>
     <string name="search_load_later">Later</string>
@@ -109,7 +112,7 @@
     <string name="add_location">Add location</string>
     <string name="search_location">Search location</string>
     <string name="use_custom_location">Use as custom location</string>
-    <string name="location_search_privacy_notice">Location search is optional. Searches are sent to OpenStreetMap Nominatim only when you press Search. Nearby results use approximate device location only if you choose that option.</string>
+    <string name="location_search_privacy_notice">Location search is optional. Searches are sent to OpenStreetMap Nominatim only when you press the search key on the keyboard. Nearby results use approximate device location only if you choose that option.</string>
     <string name="use_nearby_location">Use nearby results</string>
     <string name="show_map_preview">Show map preview</string>
     <string name="auto_map_previews">Always show map previews</string>
@@ -130,6 +133,28 @@
     <string name="no_reminder">No reminder</string>
     <string name="at_start">At start</string>
     <string name="at_end">At end</string>
+    <string name="remove_reminder">Remove reminder</string>
+    <string name="reminder_before">before</string>
+    <string name="reminder_more">More</string>
+    <string name="reminder_less">Less</string>
+    <string name="reminder_presets">Reminder presets</string>
+    <string name="reminder_presets_help">The reminder popup offers one of each. Long-press the minus or plus button to change minutes in steps of five.</string>
+    <plurals name="reminder_unit_minutes">
+        <item quantity="one">minute</item>
+        <item quantity="other">minutes</item>
+    </plurals>
+    <plurals name="reminder_unit_hours">
+        <item quantity="one">hour</item>
+        <item quantity="other">hours</item>
+    </plurals>
+    <plurals name="reminder_unit_days">
+        <item quantity="one">day</item>
+        <item quantity="other">days</item>
+    </plurals>
+    <plurals name="reminder_unit_weeks">
+        <item quantity="one">week</item>
+        <item quantity="other">weeks</item>
+    </plurals>
     <string name="custom_reminder">Custom reminder</string>
     <string name="own_minutes_before">Custom minutes before</string>
     <string name="minutes">Minutes</string>
@@ -147,10 +172,34 @@
     <string name="does_not_repeat">This event does not repeat.</string>
     <string name="after_count">After count</string>
     <string name="until_date">Until date</string>
+    <string name="repeat_ends_after">After</string>
+    <string name="repeat_ends_on">On date</string>
+    <string name="remove_repeat">Remove repeat</string>
+    <string name="type_number">Type a number</string>
+    <plurals name="repeat_unit_days">
+        <item quantity="one">day</item>
+        <item quantity="other">days</item>
+    </plurals>
+    <plurals name="repeat_unit_weeks">
+        <item quantity="one">week</item>
+        <item quantity="other">weeks</item>
+    </plurals>
+    <plurals name="repeat_unit_months">
+        <item quantity="one">month</item>
+        <item quantity="other">months</item>
+    </plurals>
+    <plurals name="repeat_unit_years">
+        <item quantity="one">year</item>
+        <item quantity="other">years</item>
+    </plurals>
+    <plurals name="repeat_times">
+        <item quantity="one">time</item>
+        <item quantity="other">times</item>
+    </plurals>
     <string name="every_x">Every X %1$s</string>
     <string name="status">Status</string>
     <string name="event_status">Event status</string>
-    <string name="sharing_visibility">Sharing visibility</string>
+    <string name="sharing_visibility">Visibility</string>
     <string name="availability">Availability</string>
     <string name="confirmed">Confirmed</string>
     <string name="tentative">Tentative</string>
@@ -184,7 +233,6 @@
     <string name="task_no_date">This task has no date</string>
     <string name="add_field">Add %1$s</string>
     <string name="remove_field">Remove %1$s</string>
-    <string name="long_press_status_hint">Tap the circle to choose a status.</string>
     <string name="no_events_or_tasks">No events or tasks</string>
     <string name="no_unscheduled_tasks">No tasks without a date</string>
     <string name="with_date">With date</string>
@@ -285,6 +333,7 @@
     <string name="overdue_summary_priority_animation">Animate overdue summary</string>
     <string name="overdue_summary_priority_animation_help">Uses the highest priority of the overdue tasks</string>
     <string name="minimize_overdue_tasks">Minimize</string>
+    <string name="overdue">Overdue</string>
     <plurals name="overdue_tasks_short_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>
