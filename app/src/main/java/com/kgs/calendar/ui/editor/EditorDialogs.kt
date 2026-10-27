@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -318,13 +320,16 @@ internal fun ReminderChoice.localizedLabel(): String = when (this) {
 internal fun ModalEditorDialog(
     title: String,
     onDismiss: () -> Unit,
+    wide: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    // A wide popup uses nearly the whole width of a phone instead of the platform's narrow default.
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = !wide)) {
         Surface(
             modifier = Modifier
+                .then(if (wide) Modifier.widthIn(max = 520.dp) else Modifier)
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = if (wide) 16.dp else 8.dp),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
@@ -678,74 +683,6 @@ internal fun SettingsReminderEditor(
 }
 
 @Composable
-internal fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave: (Int?) -> Unit) {
-    val initialChoice = remember(initialMinutes) {
-        ReminderChoice.entries.firstOrNull { it.minutes == initialMinutes } ?: if (initialMinutes == null) ReminderChoice.None else ReminderChoice.Custom
-    }
-    val initial = remember(initialMinutes) { (initialMinutes ?: 15).toReminderAmountUnit() }
-    var selectedChoice by rememberSaveable(initialMinutes) { mutableStateOf(initialChoice) }
-    var amountText by rememberSaveable(initialMinutes) { mutableStateOf(initial.first.toString()) }
-    var unit by rememberSaveable(initialMinutes) { mutableStateOf(initial.second) }
-    val minuteUnitLabel = ReminderUnit.Minutes.localizedLabel()
-    val hourUnitLabel = ReminderUnit.Hours.localizedLabel()
-    val dayUnitLabel = ReminderUnit.Days.localizedLabel()
-    val weekUnitLabel = ReminderUnit.Weeks.localizedLabel()
-    val unitLabels = listOf(
-        ReminderUnit.Minutes to minuteUnitLabel,
-        ReminderUnit.Hours to hourUnitLabel,
-        ReminderUnit.Days to dayUnitLabel,
-        ReminderUnit.Weeks to weekUnitLabel,
-    )
-    ModalEditorDialog(title = appString(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder), onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DialogChoiceGroup {
-                ReminderChoice.entries.forEach { choice ->
-                    PresetListRow(
-                        label = choice.localizedLabel(),
-                        selected = selectedChoice == choice,
-                        onClick = {
-                            selectedChoice = choice
-                            choice.minutes?.takeIf { it > 0 }?.let { minutes ->
-                                val (amount, presetUnit) = minutes.toReminderAmountUnit()
-                                amountText = amount.toString()
-                                unit = presetUnit
-                            }
-                        },
-                    )
-                }
-            }
-            AnimatedVisibility(visible = selectedChoice == ReminderChoice.Custom) {
-                NumberUnitRow(
-                    amount = amountText,
-                    onAmountChange = {
-                        amountText = it
-                        selectedChoice = ReminderChoice.Custom
-                    },
-                    unitLabel = unitLabels.firstOrNull { it.first == unit }?.second ?: minuteUnitLabel,
-                    onUnitSelected = { label ->
-                        unitLabels.firstOrNull { it.second == label }?.let { unit = it.first }
-                        selectedChoice = ReminderChoice.Custom
-                    },
-                    unitOptions = unitLabels.map { it.second },
-                    label = stringResource(R.string.custom_reminder),
-                )
-            }
-            DialogActions(
-                onDismiss = onDismiss,
-                onSave = {
-                    when (selectedChoice) {
-                        ReminderChoice.None -> onSave(null)
-                        ReminderChoice.Custom -> amountText.toIntOrNull()?.let { onSave((it * unit.minutes).coerceIn(0, MAX_REMINDER_MINUTES)) }
-                        else -> onSave(selectedChoice.minutes)
-                    }
-                },
-                saveEnabled = selectedChoice != ReminderChoice.Custom || amountText.toIntOrNull() != null,
-            )
-        }
-    }
-}
-
-@Composable
 internal fun CompactRecurrenceEditor(recurrenceRule: String, onRecurrenceRuleChange: (String?) -> Unit) {
     var dialogOpen by remember { mutableStateOf(false) }
     EditorSection(onClick = { dialogOpen = true }) {
@@ -770,155 +707,6 @@ internal fun CompactRecurrenceEditor(recurrenceRule: String, onRecurrenceRuleCha
     }
 }
 
-@Composable
-internal fun RecurrenceDialog(
-    recurrenceRule: String,
-    onDismiss: () -> Unit,
-    onSave: (String?) -> Unit,
-) {
-    var draft by remember(recurrenceRule) { mutableStateOf(RecurrenceDraft.fromRule(recurrenceRule)) }
-    fun update(next: RecurrenceDraft) {
-        draft = next
-    }
-    val dailyUnitLabel = RecurrenceOption.Daily.localizedIntervalUnitLabel()
-    val weeklyUnitLabel = RecurrenceOption.Weekly.localizedIntervalUnitLabel()
-    val monthlyUnitLabel = RecurrenceOption.Monthly.localizedIntervalUnitLabel()
-    val yearlyUnitLabel = RecurrenceOption.Yearly.localizedIntervalUnitLabel()
-    val recurrenceUnitLabels = listOf(
-        RecurrenceOption.Daily to dailyUnitLabel,
-        RecurrenceOption.Weekly to weeklyUnitLabel,
-        RecurrenceOption.Monthly to monthlyUnitLabel,
-        RecurrenceOption.Yearly to yearlyUnitLabel,
-    )
-    ModalEditorDialog(title = appString(R.string.recurrence), onDismiss = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            RepeatModeSegmented(
-                repeated = draft.option != RecurrenceOption.Once,
-                onRepeatedChange = { repeated ->
-                    update(if (repeated) draft.copy(option = RecurrenceOption.Weekly, interval = draft.interval.coerceAtLeast(1)) else RecurrenceDraft())
-                },
-            )
-            AnimatedVisibility(visible = draft.option != RecurrenceOption.Once) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumberUnitRow(
-                        amount = draft.interval.toString(),
-                        onAmountChange = { value ->
-                            update(draft.copy(interval = value.toIntOrNull()?.coerceIn(1, 999) ?: 1))
-                        },
-                        unitLabel = draft.option.localizedIntervalUnitLabel(),
-                        onUnitSelected = { label ->
-                            val option = recurrenceUnitLabels.firstOrNull { it.second == label }?.first ?: draft.option
-                            update(draft.copy(option = option))
-                        },
-                        unitOptions = recurrenceUnitLabels.map { it.second },
-                        label = stringResource(R.string.every),
-                    )
-                    Text(stringResource(R.string.ends), color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
-                    RecurrenceEndSegmented(
-                        selected = draft.endMode,
-                        onSelected = { update(draft.copy(endMode = it)) },
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp),
-                        contentAlignment = Alignment.TopStart,
-                    ) {
-                        AnimatedContent(
-                            targetState = draft.endMode,
-                            transitionSpec = {
-                                (fadeIn(tween(MotionShort, easing = MotionStandard)) + scaleIn(tween(MotionShort, easing = MotionStandard), initialScale = 0.98f)) togetherWith
-                                    (fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) + scaleOut(tween(MotionShort, easing = MotionStandardAccelerate), targetScale = 0.98f))
-                            },
-                            label = "recurrenceEndInput",
-                        ) { endMode ->
-                            when (endMode) {
-                                RecurrenceEndMode.Never -> Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = editorSectionColor(),
-                                ) {
-                                    Text(
-                                        stringResource(R.string.repeat_never_ends),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 14.sp,
-                                        lineHeight = 17.sp,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                                    )
-                                }
-                                RecurrenceEndMode.Count -> DialogTextField(
-                                    value = draft.count?.toString().orEmpty(),
-                                    onValueChange = { value ->
-                                        update(draft.copy(count = value.filter(Char::isDigit).toIntOrNull()?.coerceIn(1, 999)))
-                                    },
-                                    label = stringResource(R.string.repeat_after_count),
-                                    numeric = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                RecurrenceEndMode.Until -> DatePickerField(
-                                    value = draft.untilDate.orEmpty(),
-                                    onValueChange = { value -> update(draft.copy(untilDate = value.take(10))) },
-                                    label = stringResource(R.string.end_date),
-                                    showLabel = true,
-                                    containerColor = editorSectionColor(),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            AnimatedVisibility(visible = draft.option == RecurrenceOption.Once) {
-                Text(
-                    stringResource(R.string.does_not_repeat),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                )
-            }
-            DialogActions(
-                onDismiss = onDismiss,
-                onSave = { onSave(draft.toRule()) },
-                saveEnabled = true,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun RepeatModeSegmented(
-    repeated: Boolean,
-    onRepeatedChange: (Boolean) -> Unit,
-) {
-    val onceLabel = stringResource(R.string.once)
-    val repeatedLabel = stringResource(R.string.multiple_times)
-    DialogSegmentedControl(
-        options = listOf(false, true),
-        selected = repeated,
-        label = { if (it) repeatedLabel else onceLabel },
-        onSelected = onRepeatedChange,
-    )
-}
-
-@Composable
-internal fun RecurrenceEndSegmented(
-    selected: RecurrenceEndMode,
-    onSelected: (RecurrenceEndMode) -> Unit,
-) {
-    DialogSegmentedControl(
-        options = RecurrenceEndMode.entries,
-        selected = selected,
-        label = { mode ->
-            when (mode) {
-                RecurrenceEndMode.Never -> stringResource(R.string.never)
-                RecurrenceEndMode.Count -> stringResource(R.string.count)
-                RecurrenceEndMode.Until -> stringResource(R.string.date)
-            }
-        },
-        onSelected = onSelected,
-    )
-}
-
 internal enum class RecurrenceEndMode(val label: String) {
     Never("Never"),
     Count("After count"),
@@ -932,18 +720,24 @@ internal fun RecurrenceEndMode.localizedLabel(): String = when (this) {
     RecurrenceEndMode.Until -> appString(R.string.until_date)
 }
 
+/**
+ * The repeat popup's draft of a recurrence rule. [extraParts] are the rule's other parts, such as
+ * BYDAY, which the popup does not edit: they stay while the frequency stays the same.
+ */
 internal data class RecurrenceDraft(
     val option: RecurrenceOption = RecurrenceOption.Once,
     val interval: Int = 1,
     val endMode: RecurrenceEndMode = RecurrenceEndMode.Never,
     val count: Int? = null,
     val untilDate: String? = null,
+    val extraParts: List<String> = emptyList(),
 ) {
     fun toRule(): String? {
         if (option == RecurrenceOption.Once) return null
         val freq = option.rule?.substringAfter("FREQ=")?.substringBefore(';') ?: return null
         val parts = mutableListOf("FREQ=$freq")
         if (interval > 1) parts += "INTERVAL=${interval.coerceAtLeast(1)}"
+        parts += extraParts
         when (endMode) {
             RecurrenceEndMode.Never -> Unit
             RecurrenceEndMode.Count -> count?.coerceAtLeast(1)?.let { parts += "COUNT=$it" }
@@ -952,7 +746,13 @@ internal data class RecurrenceDraft(
         return parts.joinToString(";")
     }
 
+    /** Repeats every [interval] of [option] from now on, without the old frequency's extra parts. */
+    fun withUnit(option: RecurrenceOption): RecurrenceDraft =
+        if (option == this.option) this else copy(option = option, extraParts = emptyList())
+
     companion object {
+        private val EditedParts = setOf("FREQ", "INTERVAL", "COUNT", "UNTIL")
+
         fun fromRule(rule: String): RecurrenceDraft {
             val freq = rule.recurrenceFrequency()
             val option = when (freq) {
@@ -970,7 +770,14 @@ internal data class RecurrenceDraft(
                 until != null -> RecurrenceEndMode.Until
                 else -> RecurrenceEndMode.Never
             }
-            return RecurrenceDraft(option = option, interval = interval, endMode = endMode, count = count, untilDate = until)
+            val extras = if (option == RecurrenceOption.Once) {
+                emptyList()
+            } else {
+                rule.removePrefix("RRULE:").split(';')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && it.substringBefore('=').uppercase() !in EditedParts }
+            }
+            return RecurrenceDraft(option = option, interval = interval, endMode = endMode, count = count, untilDate = until, extraParts = extras)
         }
     }
 }

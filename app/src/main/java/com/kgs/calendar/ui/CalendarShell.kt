@@ -75,7 +75,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -847,13 +846,19 @@ private fun CalendarToolbar(
                     enter = expandHorizontally(tween(MotionMedium, easing = MotionEmphasized)) + fadeIn(tween(MotionShort)),
                     exit = shrinkHorizontally(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort)),
                 ) {
+                    // The chevron turns over smoothly as the month overview opens and closes.
+                    val chevronRotation by animateFloatAsState(
+                        targetValue = if (monthOverviewOpen) 180f else 0f,
+                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                        label = "monthChevron",
+                    )
                     Icon(
                         Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
                         tint = WarmInk,
                         modifier = Modifier
                             .size(20.dp)
-                            .scale(scaleX = 1f, scaleY = if (monthOverviewOpen) -1f else 1f),
+                            .graphicsLayer { rotationZ = chevronRotation },
                     )
                 }
             }

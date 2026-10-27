@@ -55,6 +55,7 @@ class CalendarSearchOverlayInstrumentedTest {
             onModeChange = selectedMode::set,
         )
 
+        composeRule.onNodeWithTag("search-mode-button").performClick()
         composeRule.onNodeWithTag("searchMode-LabelsOnly").performClick()
         composeRule.waitForIdle()
 
@@ -285,6 +286,9 @@ class CalendarSearchOverlayInstrumentedTest {
                             mode = it
                             onModeChange(it)
                         },
+                        calendars = emptyList(),
+                        selectedCalendars = null,
+                        onSelectedCalendarsChange = {},
                         onLoadEarlierOccurrences = onEarlier,
                         onLoadLaterOccurrences = onLater,
                         onTaskStatusChanged = { _, _ -> },

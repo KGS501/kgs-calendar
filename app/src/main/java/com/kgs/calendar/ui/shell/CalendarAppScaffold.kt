@@ -214,8 +214,6 @@ internal fun CalendarAppScaffold(
                     onCollectionSettings = shell::editCollection,
                     onGroupSettings = shell::editGroup,
                     onAppSettings = { shell.openSettings(SettingsDestination.Main) },
-                    problems = problemItems,
-                    onProblems = shell::openProblems,
                 )
             }
             }
@@ -275,6 +273,9 @@ internal fun CalendarAppScaffold(
                 subtasksExpandedByDefault = renderState.subtasksExpandedByDefault,
                 onQueryChange = viewModel.search::setSearchQuery,
                 onSearchModeChange = viewModel.search::setSearchMode,
+                calendars = renderState.searchableCalendars(),
+                selectedCalendars = renderState.searchCalendars,
+                onSelectedCalendarsChange = viewModel.search::setSearchCalendars,
                 onLoadEarlierOccurrences = viewModel.search::loadEarlierSearchOccurrences,
                 onLoadLaterOccurrences = viewModel.search::loadLaterSearchOccurrences,
                 onTaskStatusChanged = viewModel.edits::setTaskStatus,

@@ -24,9 +24,11 @@ internal data class SearchUiState(
     val occurrenceRange: CalendarRange,
     val results: List<EventEntity>,
     val taskResults: List<TaskEntity>,
+    /** The calendars to search, by href; null searches all of them. */
+    val calendars: Set<String>? = null,
 )
 
-/** Search query, mode and occurrence window plus the results filtered by the hidden calendars and item types. */
+/** Search query, mode, calendars and occurrence window plus the results filtered by the hidden calendars and item types. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchStateHolder internal constructor(
     private val repository: CalendarRepository,
@@ -37,6 +39,7 @@ class SearchStateHolder internal constructor(
     private val searchQuery = MutableStateFlow("")
     private val searchMode = MutableStateFlow(CalendarSearchMode.TextAndLabels)
     private val searchOccurrenceRange = MutableStateFlow(initialSearchOccurrenceRange(LocalDate.now(zoneId)))
+    private val searchCalendars = MutableStateFlow<Set<String>?>(null)
 
     internal val occurrenceRange: CalendarRange
         get() = searchOccurrenceRange.value
@@ -82,14 +85,23 @@ class SearchStateHolder internal constructor(
             }
         }
 
+    private val filteredResults = combine(searchResults, searchTaskResults, searchCalendars) { events, tasks, calendars ->
+        if (calendars == null) {
+            events to tasks
+        } else {
+            events.filter { it.collectionHref in calendars } to tasks.filter { it.collectionHref in calendars }
+        }
+    }
+
     internal val state: Flow<SearchUiState> = combine(
         searchQuery,
         searchMode,
         searchOccurrenceRange,
-        searchResults,
-        searchTaskResults,
-        ::SearchUiState,
-    )
+        searchCalendars,
+        filteredResults,
+    ) { query, mode, range, calendars, (events, tasks) ->
+        SearchUiState(query, mode, range, events, tasks, calendars)
+    }
 
     fun setSearchQuery(query: String) {
         searchQuery.value = query
@@ -100,6 +112,11 @@ class SearchStateHolder internal constructor(
 
     fun setSearchMode(mode: CalendarSearchMode) {
         searchMode.value = mode
+    }
+
+    /** Limits the search to [hrefs]; null or an empty set searches every calendar. */
+    fun setSearchCalendars(hrefs: Set<String>?) {
+        searchCalendars.value = hrefs?.takeIf { it.isNotEmpty() }
     }
 
     fun loadEarlierSearchOccurrences() {

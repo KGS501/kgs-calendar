@@ -3,6 +3,17 @@
 package com.kgs.calendar.ui
 
 import android.Manifest
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,13 +49,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -169,7 +177,10 @@ internal fun LocationPickerPage(
         }
     }
 
+    // The results fill the page: a sheet resting lower would hide the last ones below the screen.
+    val expandSheet = LocalSheetExpander.current
     LaunchedEffect(Unit) {
+        expandSheet()
         delay(180)
         focusRequester.requestFocus()
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -179,8 +190,7 @@ internal fun LocationPickerPage(
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 18.dp),
+            .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(
@@ -197,7 +207,7 @@ internal fun LocationPickerPage(
                 contentColor = WarmInk,
                 onClick = onClose,
             )
-            OutlinedTextField(
+            CompactSearchField(
                 value = query,
                 onValueChange = {
                     query = it
@@ -205,34 +215,17 @@ internal fun LocationPickerPage(
                     searchedQuery = ""
                     failed = false
                 },
-                placeholder = { Text(stringResource(R.string.search_location)) },
-                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                singleLine = true,
-                shape = RoundedCornerShape(22.dp),
-                colors = dialogFieldColors(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { searchLocations() }),
+                placeholder = stringResource(R.string.search_location),
+                onSearch = { searchLocations() },
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(focusRequester),
             )
-            IconButton(
-                onClick = { searchLocations() },
-                enabled = normalizedQuery.length >= 3 && !loading,
-            ) {
-                Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search), tint = WarmBrown)
-            }
         }
         Column(
             modifier = Modifier.padding(horizontal = EditorHorizontalPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                stringResource(R.string.location_search_privacy_notice),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
-            )
             if (locationAnchor == null && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 FilledTonalButton(
                     onClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
@@ -285,6 +278,79 @@ internal fun LocationPickerPage(
                     lineHeight = 17.sp,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                 )
+            }
+            Text(
+                stringResource(R.string.location_search_privacy_notice),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp),
+            )
+            // The last result scrolls clear of the navigation bar and the keyboard.
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars.union(WindowInsets.ime)))
+        }
+    }
+}
+
+/**
+ * A search field as tall as the round back button beside it (36 dp), without a leading icon or
+ * search button: the keyboard's search key searches. It grows with large font sizes.
+ */
+@Composable
+private fun CompactSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    onSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val textStyle = TextStyle(color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
+    val focusManager = LocalFocusManager.current
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(WarmBrown),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+        modifier = modifier.heightIn(min = 36.dp),
+    ) { innerTextField ->
+        // Drawn here rather than with the Material field frame, whose icon slot is 48 dp tall.
+        Row(
+            modifier = Modifier
+                .heightIn(min = 36.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(editorSectionColor())
+                .padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 8.dp, horizontal = 0.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (value.isEmpty()) {
+                    Text(placeholder, style = textStyle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                innerTextField()
+            }
+            if (value.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClickLabel = stringResource(R.string.clear_text)) {
+                            onValueChange("")
+                            focusManager.clearFocus(force = true)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_text), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                }
+            } else {
+                Spacer(Modifier.width(12.dp))
             }
         }
     }

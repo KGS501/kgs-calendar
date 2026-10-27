@@ -113,6 +113,15 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.key
+import com.kgs.calendar.ui.model.orderedOverdueTasks
+import com.kgs.calendar.ui.model.overdueEntryKey
+import com.kgs.calendar.ui.model.effectiveOverdueAtMillis
+import java.time.ZoneId
 
 @Composable
 internal fun CompletionBurst(playKey: Int, color: Color, modifier: Modifier = Modifier) {
@@ -418,8 +427,20 @@ internal fun TaskInbox(
         }
     }
     val showDateColumn = plannedSort == PlannedTaskSort.Date
+    val calendarTime = LocalCalendarTimeSnapshot.current
+    val overdueTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, calendarTime.today, calendarTime.revision) {
+        orderedOverdueTasks(
+            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences,
+            today = calendarTime.today,
+            zoneId = ZoneId.systemDefault(),
+        )
+    }
     val inboxSectionTasks = openInboxTasks
-    val scheduledSectionTasks = scheduledTasks
+    // An overdue task is listed once, in the overdue section; a recurring series stays planned.
+    val scheduledSectionTasks = remember(scheduledTasks, overdueTasks) {
+        val overdueKeys = overdueTasks.mapTo(HashSet()) { it.overdueEntryKey() }
+        scheduledTasks.filterNot { it.overdueEntryKey() in overdueKeys }
+    }
     val inboxHierarchy = rememberTaskHierarchyPresentation(inboxSectionTasks, state.subtasksExpandedByDefault)
     val scheduledHierarchy = rememberTaskHierarchyPresentation(scheduledSectionTasks, state.subtasksExpandedByDefault)
     Box(
@@ -434,6 +455,12 @@ internal fun TaskInbox(
                 .graphicsLayer { clip = false },
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            OverdueTaskSection(
+                tasks = overdueTasks,
+                taskColorMode = state.taskColorMode,
+                onTaskStatusChanged = onTaskStatusChanged,
+                onDetail = onDetail,
+            )
             TaskInboxSectionHeader(
                 title = stringResource(R.string.no_date),
                 count = inboxSectionTasks.size,
@@ -678,6 +705,90 @@ internal fun CompletedTasksView(
         }
     }
 }
+
+/**
+ * The first section of the task list: open tasks whose date has passed, in a tinted card so that
+ * they stand out. It is only there while tasks are overdue, and folds in and out.
+ */
+@Composable
+private fun OverdueTaskSection(
+    tasks: List<TaskEntity>,
+    taskColorMode: TaskColorMode,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onDetail: (DetailSheet) -> Unit,
+) {
+    // Keeps the last tasks while the section folds away after the last one was done.
+    val lastTasks = remember { arrayOf(tasks) }
+    if (tasks.isNotEmpty()) lastTasks[0] = tasks
+    val shownTasks = lastTasks[0]
+    AnimatedVisibility(
+        visible = tasks.isNotEmpty(),
+        enter = expandVertically(tween(MotionMedium, easing = MotionEmphasized)) + fadeIn(tween(MotionMedium, easing = MotionStandard)),
+        exit = shrinkVertically(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                .testTag(OverdueTaskSectionTag),
+            shape = RoundedCornerShape(20.dp),
+            color = WarmBrown.copy(alpha = 0.12f),
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                    Text(
+                        stringResource(R.string.overdue),
+                        color = WarmInk,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Surface(shape = RoundedCornerShape(999.dp), color = WarmBrown) {
+                        Text(
+                            shownTasks.size.toString(),
+                            color = accentContainerContentColor(),
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                        )
+                    }
+                }
+                var lastDate: LocalDate? = null
+                shownTasks.forEach { task ->
+                    val date = task.effectiveOverdueAtMillis()?.toDate()
+                    key(task.overdueEntryKey()) {
+                        ScheduledTaskRow(
+                            task = task,
+                            showDateColumn = true,
+                            showDate = date != lastDate,
+                            date = date,
+                            taskColorMode = taskColorMode,
+                            onTaskStatusChanged = onTaskStatusChanged,
+                            onClick = { onDetail(DetailSheet.Task(task)) },
+                        )
+                    }
+                    lastDate = date
+                }
+            }
+        }
+    }
+}
+
+internal const val OverdueTaskSectionTag = "overdue-task-section"
 
 @Composable
 private fun TaskInboxSectionHeader(

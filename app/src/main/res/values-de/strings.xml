@@ -79,6 +79,9 @@
     <string name="search_scope_text">Text</string>
     <string name="search_scope_text_and_labels">Text + Labels</string>
     <string name="search_scope_labels_only">Nur Labels</string>
+    <string name="search_all_calendars">Alle Kalender</string>
+    <string name="search_in">Suchen in</string>
+    <string name="search_calendars">Zu durchsuchende Kalender</string>
     <string name="search_repeating_range">Wiederholungen: %1$s – %2$s</string>
     <string name="search_load_earlier">Früher</string>
     <string name="search_load_later">Später</string>
@@ -110,7 +113,7 @@
     <string name="add_location">Ort hinzufügen</string>
     <string name="search_location">Ort suchen</string>
     <string name="use_custom_location">Als eigenen Ort verwenden</string>
-    <string name="location_search_privacy_notice">Ortssuche ist optional. Suchanfragen werden nur nach Tippen auf Suchen an OpenStreetMap Nominatim gesendet. Ergebnisse in der N&#228;he verwenden den ungef&#228;hren Ger&#228;testandort nur, wenn du diese Option ausw&#228;hlst.</string>
+    <string name="location_search_privacy_notice">Ortssuche ist optional. Suchanfragen werden nur nach Tippen auf die Suchtaste der Tastatur an OpenStreetMap Nominatim gesendet. Ergebnisse in der N&#228;he verwenden den ungef&#228;hren Ger&#228;testandort nur, wenn du diese Option ausw&#228;hlst.</string>
     <string name="use_nearby_location">Ergebnisse in der N&#228;he</string>
     <string name="show_map_preview">Kartenvorschau anzeigen</string>
     <string name="auto_map_previews">Kartenvorschauen immer anzeigen</string>
@@ -131,6 +134,28 @@
     <string name="no_reminder">Keine Erinnerung</string>
     <string name="at_start">Beim Start</string>
     <string name="at_end">Am Ende</string>
+    <string name="remove_reminder">Erinnerung entfernen</string>
+    <string name="reminder_before">vorher</string>
+    <string name="reminder_more">Mehr</string>
+    <string name="reminder_less">Weniger</string>
+    <string name="reminder_presets">Vorlagen für Erinnerungen</string>
+    <string name="reminder_presets_help">Das Erinnerungsfenster bietet je eine davon an. Minus oder Plus gedrückt halten ändert Minuten in Fünferschritten.</string>
+    <plurals name="reminder_unit_minutes">
+        <item quantity="one">Minute</item>
+        <item quantity="other">Minuten</item>
+    </plurals>
+    <plurals name="reminder_unit_hours">
+        <item quantity="one">Stunde</item>
+        <item quantity="other">Stunden</item>
+    </plurals>
+    <plurals name="reminder_unit_days">
+        <item quantity="one">Tag</item>
+        <item quantity="other">Tage</item>
+    </plurals>
+    <plurals name="reminder_unit_weeks">
+        <item quantity="one">Woche</item>
+        <item quantity="other">Wochen</item>
+    </plurals>
     <string name="custom_reminder">Eigene Erinnerung</string>
     <string name="own_minutes_before">Eigene Minuten vorher</string>
     <string name="minutes">Minuten</string>
@@ -148,10 +173,34 @@
     <string name="does_not_repeat">Dieser Termin wird nicht wiederholt.</string>
     <string name="after_count">Nach Anzahl</string>
     <string name="until_date">Bis Datum</string>
+    <string name="repeat_ends_after">Nach</string>
+    <string name="repeat_ends_on">Am Datum</string>
+    <string name="remove_repeat">Wiederholung entfernen</string>
+    <string name="type_number">Zahl eingeben</string>
+    <plurals name="repeat_unit_days">
+        <item quantity="one">Tag</item>
+        <item quantity="other">Tage</item>
+    </plurals>
+    <plurals name="repeat_unit_weeks">
+        <item quantity="one">Woche</item>
+        <item quantity="other">Wochen</item>
+    </plurals>
+    <plurals name="repeat_unit_months">
+        <item quantity="one">Monat</item>
+        <item quantity="other">Monate</item>
+    </plurals>
+    <plurals name="repeat_unit_years">
+        <item quantity="one">Jahr</item>
+        <item quantity="other">Jahre</item>
+    </plurals>
+    <plurals name="repeat_times">
+        <item quantity="one">Mal</item>
+        <item quantity="other">Mal</item>
+    </plurals>
     <string name="every_x">Alle X %1$s</string>
     <string name="status">Status</string>
     <string name="event_status">Terminstatus</string>
-    <string name="sharing_visibility">Sichtbarkeit beim Teilen</string>
+    <string name="sharing_visibility">Sichtbarkeit</string>
     <string name="availability">Verfügbarkeit</string>
     <string name="confirmed">Bestätigt</string>
     <string name="tentative">Vorläufig</string>
@@ -185,7 +234,6 @@
     <string name="task_no_date">Diese Aufgabe hat kein Datum</string>
     <string name="add_field">%1$s hinzufügen</string>
     <string name="remove_field">%1$s entfernen</string>
-    <string name="long_press_status_hint">Auf den Kreis tippen, um einen Status auszuwählen.</string>
     <string name="no_events_or_tasks">Keine Termine oder Aufgaben</string>
     <string name="no_unscheduled_tasks">Keine Aufgaben ohne Datum</string>
     <string name="with_date">Mit Datum</string>
@@ -285,6 +333,7 @@
     <string name="overdue_summary_priority_animation">Überfällige Zusammenfassung animieren</string>
     <string name="overdue_summary_priority_animation_help">Nutzt die höchste Priorität der überfälligen Aufgaben</string>
     <string name="minimize_overdue_tasks">Minimieren</string>
+    <string name="overdue">Überfällig</string>
     <plurals name="overdue_tasks_short_count">
         <item quantity="one">%1$d Aufgabe</item>
         <item quantity="other">%1$d Aufgaben</item>

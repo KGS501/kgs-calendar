@@ -300,7 +300,7 @@ internal fun CalendarAppContent(
         shell = shell,
         today = today,
     )
-    SettingsOverlay(viewModel = viewModel, state = state, shell = shell)
+    SettingsOverlay(viewModel = viewModel, state = state, shell = shell, problemCount = problemItems.size)
     WelcomeOverlay(
         viewModel = viewModel,
         welcomeCompleted = state.welcomeCompleted,

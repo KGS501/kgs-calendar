@@ -597,6 +597,11 @@ internal fun KgsModalBottomSheet(
             val closeAnimator: (() -> Unit) -> Unit = { action ->
                 if (inPanel) closePanel(afterClose = action) else action()
             }
+            val expandSheet: () -> Unit = {
+                if (!inPanel && restingAt != SheetRest.Expanded) {
+                    scope.launch { animateSheetTo(liveAnchorOf.value(SheetRest.Expanded), toRest = SheetRest.Expanded) }
+                }
+            }
 
             // On tablets and unfolded foldables the sheet stays at most SheetMaxWidth wide, centred.
             // Phones, rotated ones included, keep the full window width.
@@ -732,6 +737,7 @@ internal fun KgsModalBottomSheet(
                             else -> sheetHeaderModifier
                         },
                         LocalSheetCloseAnimator provides closeAnimator,
+                        LocalSheetExpander provides expandSheet,
                     ) {
                     Column(
                         Modifier
@@ -836,6 +842,9 @@ internal const val TabletopTopPanelHandleTag = "tabletop-top-panel-handle"
  * once, exactly as before.
  */
 internal val LocalSheetCloseAnimator = compositionLocalOf<(() -> Unit) -> Unit> { { action -> action() } }
+
+/** Opens the sheet fully, for content that needs the whole height (a page with a long list). */
+internal val LocalSheetExpander = compositionLocalOf<() -> Unit> { {} }
 
 /** Counts the open fold panels per place, so a panel that replaces another one does not slide in again. */
 internal class FoldPanels {

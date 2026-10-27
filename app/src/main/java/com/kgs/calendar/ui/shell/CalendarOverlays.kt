@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import androidx.compose.ui.layout.layout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -148,11 +149,16 @@ internal fun SettingsOverlay(
     viewModel: CalendarViewModel,
     state: CalendarUiState,
     shell: CalendarShellUiState,
+    problemCount: Int,
 ) {
     // "Recently deleted" opens from the settings and covers them; closing it returns there.
     if (shell.settingsOpen && !shell.trashOpen) {
         val trash by viewModel.trash.state.collectAsStateWithLifecycle()
+        // Problems opens from the settings too. They stay composed but are not placed underneath it,
+        // so closing Problems returns to the same settings page.
+        val covered = shell.problemsOpen
         SettingsPage(
+            modifier = Modifier.hiddenWhen(covered),
             state = state,
             initialDestination = shell.settingsStartDestination,
             onViewSelected = viewModel::selectView,
@@ -197,6 +203,7 @@ internal fun SettingsOverlay(
             onDefaultTaskHasTimeChanged = viewModel.settings::setDefaultTaskHasTime,
             onDefaultEventRemindersChanged = viewModel.settings::setDefaultEventReminderMinutes,
             onDefaultTaskRemindersChanged = viewModel.settings::setDefaultTaskReminderMinutes,
+            onReminderPresetsChanged = viewModel.settings::setReminderPresets,
             onTaskStartNotificationsChanged = viewModel.settings::setTaskStartNotificationsEnabled,
             onTaskEndNotificationsChanged = viewModel.settings::setTaskEndNotificationsEnabled,
             onEventStartNotificationsChanged = viewModel.settings::setEventStartNotificationsEnabled,
@@ -224,6 +231,9 @@ internal fun SettingsOverlay(
             onRestoreAccountImage = viewModel.sources::restoreAccountImage,
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
+            problemCount = problemCount,
+            onProblems = shell::openProblems,
+            covered = covered,
             onDeleteLocalCalendar = viewModel.sources::deleteLocalCalendar,
             onPickAccountImage = viewModel.sources::setAccountImage,
             onRemoveAccountImage = viewModel.sources::removeAccountImage,
@@ -455,5 +465,13 @@ private fun StartupDataOverlay() {
                 contentScale = ContentScale.Fit,
             )
         }
+    }
+}
+
+/** Keeps the content composed, with its state, but neither draws it nor lets it take touches. */
+private fun Modifier.hiddenWhen(hidden: Boolean): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) {
+        if (!hidden) placeable.place(0, 0)
     }
 }
