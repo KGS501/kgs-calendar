@@ -1,6 +1,7 @@
 package com.kgs.calendar.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
@@ -49,7 +50,7 @@ internal fun CreationSheetHost(
             bookPane = shell.creationBookPane,
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
-            EditorTypeTransition(shell.creationSheet ?: creationSheet, shell) { target, transferDraft ->
+            EditorTypeTransition(shell.creationSheet ?: creationSheet, shell) { target, transferDraft, draftId ->
             when (target) {
                 CreationSheet.EventLow -> EventEditorSheet(
                     state = state,
@@ -58,7 +59,7 @@ internal fun CreationSheetHost(
                     expanded = false,
                     initialEvent = null,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
@@ -85,7 +86,7 @@ internal fun CreationSheetHost(
                     requestTitleFocus = state.focusTitleOnCreate,
                     initialTask = null,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
@@ -134,7 +135,7 @@ internal fun CreationSheetHost(
             },
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
-            EditorTypeTransition(currentSheet, shell) { sheet, transferDraft ->
+            EditorTypeTransition(currentSheet, shell) { sheet, transferDraft, draftId ->
             when (sheet) {
                 CreationSheet.EventLow,
                 CreationSheet.TaskLow,
@@ -147,7 +148,7 @@ internal fun CreationSheetHost(
                     expanded = sheet == CreationSheet.EventFull,
                     initialEvent = null,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
@@ -177,7 +178,7 @@ internal fun CreationSheetHost(
                     expanded = true,
                     initialEvent = sheet.event,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     readOnlyRemote = state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true,
                     transferDraft = null,
                     requestTitleFocus = false,
@@ -212,7 +213,7 @@ internal fun CreationSheetHost(
                     expanded = true,
                     initialEvent = sheet.event,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = null,
                     requestTitleFocus = state.focusTitleOnCreate,
                     headerTitle = stringResource(R.string.duplicate_event),
@@ -239,7 +240,7 @@ internal fun CreationSheetHost(
                     requestTitleFocus = state.focusTitleOnCreate,
                     initialTask = null,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
@@ -268,7 +269,7 @@ internal fun CreationSheetHost(
                     requestTitleFocus = state.focusTitleOnCreate,
                     initialTask = null,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     forcedParentTask = sheet.parent,
                     headerTitle = stringResource(R.string.add_subtask),
                     onSave = { payload ->
@@ -287,7 +288,7 @@ internal fun CreationSheetHost(
                     requestTitleFocus = false,
                     initialTask = sheet.task,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     readOnlyRemote = state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true,
                     transferDraft = null,
                     onSave = { payload ->
@@ -321,7 +322,7 @@ internal fun CreationSheetHost(
                     requestTitleFocus = state.focusTitleOnCreate,
                     initialTask = sheet.task,
                     draftStore = viewModel.editorDrafts,
-                    draftId = shell.editorDraftId,
+                    draftId = draftId,
                     transferDraft = null,
                     headerTitle = stringResource(R.string.duplicate_task),
                     onSave = { payload ->
@@ -367,7 +368,7 @@ private fun CreationSheet.isEventEditor(): Boolean = when (this) {
 private fun EditorTypeTransition(
     sheet: CreationSheet,
     shell: CalendarShellUiState,
-    content: @Composable (CreationSheet, EditorTransferDraft?) -> Unit,
+    content: @Composable (CreationSheet, EditorTransferDraft?, draftId: String?) -> Unit,
 ) {
     // The editor type shown before this composition; null until the sheet has shown one.
     val previousIsEvent = remember { mutableStateOf<Boolean?>(null) }
@@ -381,6 +382,11 @@ private fun EditorTypeTransition(
         label = "editorType",
     ) { target ->
         val transferDraft = remember(target) { shell.editorTransferDraft }
+        // The editor sliding out keeps its own draft; it must not write its calendar and fields
+        // into the draft of the editor sliding in.
+        val heldDraftId = remember { arrayOf(shell.editorDraftId) }
+        if (transition.targetState != EnterExitState.PostExit) heldDraftId[0] = shell.editorDraftId
+        val draftId = heldDraftId[0]
         // An editor that slides in starts its switch on the other half and moves the pill over.
         val slidIn = remember { previousIsEvent.value.let { it != null && it != target.isEventEditor() } }
         val slide = remember(this, target.isEventEditor()) { EditorTypeSlide(this, target.isEventEditor()) }
@@ -391,7 +397,7 @@ private fun EditorTypeTransition(
             LocalEditorTypeSlide provides slide,
             LocalEditorKeyboardAtSwitch provides keyboardAtSwitch,
         ) {
-            content(target, transferDraft)
+            content(target, transferDraft, draftId)
         }
     }
 }

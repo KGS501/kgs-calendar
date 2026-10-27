@@ -97,6 +97,19 @@ class CalendarUiHelpersTest {
         assertEquals(true, invalid("14:59"))
     }
 
+    @Test
+    fun anEditorNeverSavesToACalendarOutsideItsList() {
+        val events = listOf(collection("/work/", readOnly = false), collection("/home/", readOnly = false))
+
+        // A draft carried over from the task editor names a task list: the default is used instead.
+        assertEquals("/home/", events.editorCollectionHref("/tasks/", ownHref = null, defaultHref = "/home/"))
+        assertEquals("/work/", events.editorCollectionHref(null, ownHref = null, defaultHref = "/gone/"))
+        assertEquals("/home/", events.editorCollectionHref("/home/", ownHref = null, defaultHref = "/work/"))
+        // An item keeps its own calendar even when that calendar is not offered.
+        assertEquals("/hidden/", events.editorCollectionHref("/hidden/", ownHref = "/hidden/", defaultHref = "/work/"))
+        assertEquals(null, emptyList<CollectionEntity>().editorCollectionHref("/tasks/", ownHref = null, defaultHref = null))
+    }
+
     private fun collection(href: String, readOnly: Boolean) = CollectionEntity(
         href = href,
         accountId = "account",

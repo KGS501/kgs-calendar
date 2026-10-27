@@ -41,7 +41,7 @@ class TaskMutations internal constructor(
 
     suspend fun createTask(payload: TaskEditPayload): Unit = localWrites.writeTransaction {
         val collection = payload.collectionHref?.let { database.collectionDao().get(it) }
-            ?.takeUnless { it.isReadOnlyCollection() || !it.canCreateResources() }
+            ?.takeUnless { !it.supportsTasks || it.isReadOnlyCollection() || !it.canCreateResources() }
             ?: database.collectionDao().taskCollections().firstOrNull { !it.isReadOnlyCollection() && it.canCreateResources() }
             ?: error("No writable task list has been synced yet.")
         val uid = newUid()
@@ -95,6 +95,7 @@ class TaskMutations internal constructor(
             ?: database.collectionDao().get(existing.collectionHref)
             ?: error("Task list not found.")
         if (targetCollection.isReadOnlyCollection()) error("Read-only task lists cannot be edited.")
+        if (targetCollection.href != existing.collectionHref && !targetCollection.supportsTasks) error("This calendar cannot hold tasks.")
         val moved = targetCollection.href != existing.collectionHref
         if (moved && database.taskDao().children(existing.collectionHref, existing.uid).isNotEmpty()) {
             error("Move or detach this task's subtasks before changing its task list.")
@@ -164,6 +165,7 @@ class TaskMutations internal constructor(
         val targetCollection = payload.collectionHref?.let { database.collectionDao().get(it) }
             ?: database.collectionDao().get(existing.collectionHref)
             ?: error("Task list not found.")
+        if (targetCollection.href != existing.collectionHref && !targetCollection.supportsTasks) error("This calendar cannot hold tasks.")
         if (targetCollection.href != existing.collectionHref) {
             val resource = database.resourceDao().get(existing.resourceHref)
             val exSet = existing.exDatesCsv
