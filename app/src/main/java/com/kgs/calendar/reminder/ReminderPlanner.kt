@@ -19,6 +19,7 @@ class ReminderPlanner {
                 notificationKey = key(occurrence),
                 title = occurrence.title,
                 body = occurrence.body,
+                notifyUntilMillis = occurrence.notifyUntilMillis,
             )
         }
 
@@ -40,4 +41,25 @@ class ReminderPlanner {
         const val MILLIS_PER_MINUTE = 60_000L
         const val NOTIFICATION_TAG_PREFIX = "kgs-reminder:"
     }
+}
+
+/**
+ * Reminders whose alarm never went off: the device was off or restarting, or the item arrived by
+ * sync after its reminder time. Alarms are only replanned from now on, so these would otherwise
+ * be lost. Only recent ones are caught up, and only while their event hasn't ended.
+ */
+internal object MissedReminders {
+    const val GRACE_MILLIS = 12L * 60L * 60L * 1000L
+
+    fun select(
+        plans: List<ReminderAlarmPlan>,
+        deliveredCodes: Set<Int>,
+        nowMillis: Long,
+    ): List<ReminderAlarmPlan> =
+        plans.filter { plan ->
+            plan.triggerAtMillis < nowMillis &&
+                plan.triggerAtMillis >= nowMillis - GRACE_MILLIS &&
+                plan.alarmRequestCode !in deliveredCodes &&
+                (plan.notifyUntilMillis == null || plan.notifyUntilMillis > nowMillis)
+        }
 }

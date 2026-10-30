@@ -37,7 +37,24 @@ import com.kgs.calendar.ui.sources.SourceAvatar
 /** The field of a calendar source that is being edited in its own popup. */
 internal enum class AccountField { Name, ServerUrl, Username, Password }
 
-internal data class AccountFieldEdit(val field: AccountField, val initialValue: String)
+internal data class AccountFieldEdit(
+    val field: AccountField,
+    val initialValue: String,
+    /** Whether the address receives the account's password, so plain HTTP is worth a warning. */
+    val sendsCredentials: Boolean = true,
+)
+
+/** Warns that a plain-HTTP server address sends the password and calendar data unencrypted. */
+@Composable
+internal fun CleartextServerWarning(serverUrl: String) {
+    if (!serverUrl.trim().startsWith("http://", ignoreCase = true)) return
+    Text(
+        stringResource(R.string.cleartext_server_warning),
+        color = MaterialTheme.colorScheme.error,
+        fontSize = 13.sp,
+        lineHeight = 17.sp,
+    )
+}
 
 /** A source's picture, name and kind, centered at the top of its page. */
 @Composable
@@ -141,6 +158,7 @@ internal fun AccountFieldDialog(
                         colors = dialogFieldColors(),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (edit.field == AccountField.ServerUrl && edit.sendsCredentials) CleartextServerWarning(value)
                 }
             }
         },

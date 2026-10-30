@@ -31,6 +31,7 @@ class CalendarSourceActions internal constructor(
     private val strings: UiStrings,
     private val transient: CalendarTransientState,
     private val pickedContentReader: PickedContentReader = PickedContentReader { null },
+    private val calendarFileExporter: CalendarFileExporter = CalendarFileExporter { _, _ -> error("Export is not available.") },
 ) {
     private val busy = transient.busy
     private val manualSyncing = transient.manualSyncing
@@ -304,6 +305,22 @@ class CalendarSourceActions internal constructor(
                 settingsStore.setCalendarGroupName(groupKey, null)
                 settingsStore.setAvatarColor(SourceImageKeys.group(groupKey), null)
             }
+        }
+    }
+
+    /** Saves the account's calendars to [target] as an iCalendar file and reports how many items it holds. */
+    fun exportAccount(accountId: String, target: Uri) {
+        scope.launch {
+            busy.value = true
+            runCatching {
+                val hrefs = repository.observeCollections().first().filter { it.accountId == accountId }.map { it.href }
+                calendarFileExporter.export(hrefs, target)
+            }.onSuccess { items ->
+                message.value = strings.get(R.string.export_done).format(items)
+            }.onFailure {
+                message.value = strings.get(R.string.export_failed)
+            }
+            busy.value = false
         }
     }
 

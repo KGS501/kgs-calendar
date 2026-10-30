@@ -16,6 +16,12 @@ interface ReminderRegistryStorage {
     fun writeScheduled(records: List<ScheduledReminderRecord>)
     fun readActive(): List<ActiveReminderNotification>
     fun writeActive(records: List<ActiveReminderNotification>)
+
+    /** Alarm request codes that went off, with when; null until the first alarm was tracked. */
+    fun readDelivered(): Map<Int, Long>?
+    fun writeDelivered(delivered: Map<Int, Long>)
+    fun readSnoozed(): List<SnoozedReminder>
+    fun writeSnoozed(records: List<SnoozedReminder>)
 }
 
 class ReminderRegistry(
@@ -27,6 +33,30 @@ class ReminderRegistry(
     suspend fun replaceAllScheduled(records: List<ScheduledReminderRecord>) = mutex.withLock {
         storage.readScheduled().forEach { cancelAlarm(it.alarmRequestCode) }
         storage.writeScheduled(records.distinctBy { it.alarmRequestCode })
+    }
+
+    /** Records that an alarm went off, so it isn't caught up again as a missed reminder. */
+    suspend fun markDelivered(alarmRequestCodes: Collection<Int>, nowMillis: Long) = mutex.withLock {
+        val recent = storage.readDelivered().orEmpty().filterValues { it >= nowMillis - DELIVERED_RETENTION_MILLIS }
+        storage.writeDelivered(recent + alarmRequestCodes.associateWith { nowMillis })
+    }
+
+    /** Codes of alarms that went off, or null when nothing was ever tracked (a fresh install or update). */
+    suspend fun deliveredCodes(): Set<Int>? = mutex.withLock { storage.readDelivered()?.keys }
+
+    suspend fun addSnoozed(record: SnoozedReminder) = mutex.withLock {
+        storage.writeSnoozed(storage.readSnoozed().filterNot { it.alarmRequestCode == record.alarmRequestCode } + record)
+    }
+
+    suspend fun removeSnoozed(alarmRequestCode: Int) = mutex.withLock {
+        storage.writeSnoozed(storage.readSnoozed().filterNot { it.alarmRequestCode == alarmRequestCode })
+    }
+
+    /** Snoozed reminders still to come or missed only recently; older ones are dropped. */
+    suspend fun pendingSnoozed(nowMillis: Long): List<SnoozedReminder> = mutex.withLock {
+        val pending = storage.readSnoozed().filter { it.triggerAtMillis >= nowMillis - MissedReminders.GRACE_MILLIS }
+        storage.writeSnoozed(pending)
+        pending
     }
 
     suspend fun recordNotification(notification: ActiveReminderNotification) = mutex.withLock {
@@ -53,6 +83,8 @@ class ReminderRegistry(
     }
 
     companion object {
+        private const val DELIVERED_RETENTION_MILLIS = 2 * MissedReminders.GRACE_MILLIS
+
         fun create(context: Context): ReminderRegistry {
             val appContext = context.applicationContext
             val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -90,6 +122,44 @@ private class SharedPreferencesReminderRegistryStorage(context: Context) : Remin
     override fun writeActive(records: List<ActiveReminderNotification>) {
         preferences.edit().putString(KEY_ACTIVE, JSONArray(records.map(::activeToJson)).toString()).apply()
     }
+
+    override fun readDelivered(): Map<Int, Long>? {
+        val value = preferences.getString(KEY_DELIVERED, null) ?: return null
+        return runCatching {
+            val json = JSONObject(value)
+            json.keys().asSequence().associate { it.toInt() to json.getLong(it) }
+        }.getOrDefault(emptyMap())
+    }
+
+    override fun writeDelivered(delivered: Map<Int, Long>) {
+        val json = JSONObject()
+        delivered.forEach { (code, at) -> json.put(code.toString(), at) }
+        preferences.edit().putString(KEY_DELIVERED, json.toString()).apply()
+    }
+
+    override fun readSnoozed(): List<SnoozedReminder> =
+        parseArray(preferences.getString(KEY_SNOOZED, null), ::snoozedFromJson)
+
+    override fun writeSnoozed(records: List<SnoozedReminder>) {
+        preferences.edit().putString(KEY_SNOOZED, JSONArray(records.map(::snoozedToJson)).toString()).apply()
+    }
+
+    private fun snoozedToJson(record: SnoozedReminder): JSONObject = JSONObject()
+        .put("alarmRequestCode", record.alarmRequestCode)
+        .put("triggerAtMillis", record.triggerAtMillis)
+        .put("title", record.title)
+        .put("body", record.body)
+        .put("notification", keyToJson(record.notificationKey))
+        .put("target", record.encodedTarget)
+
+    private fun snoozedFromJson(json: JSONObject): SnoozedReminder = SnoozedReminder(
+        alarmRequestCode = json.getInt("alarmRequestCode"),
+        triggerAtMillis = json.getLong("triggerAtMillis"),
+        title = json.getString("title"),
+        body = json.optString("body").takeIf { json.has("body") && !json.isNull("body") },
+        notificationKey = keyFromJson(json.getJSONObject("notification")),
+        encodedTarget = json.getString("target"),
+    )
 
     private fun scheduledToJson(record: ScheduledReminderRecord): JSONObject = JSONObject()
         .put("alarmRequestCode", record.alarmRequestCode)
@@ -140,5 +210,7 @@ private class SharedPreferencesReminderRegistryStorage(context: Context) : Remin
         const val PREFERENCES_NAME = "kgs_reminder_registry"
         const val KEY_SCHEDULED = "scheduled"
         const val KEY_ACTIVE = "active"
+        const val KEY_DELIVERED = "delivered"
+        const val KEY_SNOOZED = "snoozed"
     }
 }

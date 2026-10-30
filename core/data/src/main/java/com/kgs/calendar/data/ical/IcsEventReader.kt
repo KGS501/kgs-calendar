@@ -3,7 +3,6 @@ package com.kgs.calendar.data.ical
 import com.kgs.calendar.data.local.entity.EventEntity
 import net.fortuna.ical4j.data.CalendarBuilder
 import java.io.StringReader
-import java.time.ZoneId
 import java.util.Locale
 
 data class IcsEvent(val event: EventEntity, val rawIcs: String)
@@ -64,6 +63,8 @@ class IcsEventReader(private val codec: IcalCodec) {
         } catch (error: Exception) {
             throw IllegalArgumentException("Invalid calendar data", error)
         }
+        // An unknown TZID would otherwise fall back to the device zone and shift the event.
+        val zones = TimeZoneResolver.forCalendar(timezones.flatten().joinToString("\r\n"))
         var totalResourceChars = 0
         return events.map { (uid, blocks) ->
             require(blocks.count { eventProperty(it, "RECURRENCE-ID") == null } == 1)
@@ -75,12 +76,33 @@ class IcsEventReader(private val codec: IcalCodec) {
             blocks.forEach { eventBlock ->
                 val parsed = codec.parse((listOf("BEGIN:VCALENDAR") + properties + timezones.flatten() + eventBlock + "END:VCALENDAR").joinToString("\r\n"), collectionHref, uid, color)?.event
                 require(parsed != null && parsed.endsAtMillis > parsed.startsAtMillis)
-                // An unknown TZID would otherwise fall back to the device zone and shift the event.
-                parsed.timezoneId?.let { require(runCatching { ZoneId.of(it) }.isSuccess) { "Unsupported time zone" } }
+                eventBlock.mapNotNull(::tzidParameter).forEach { tzid ->
+                    require(zones.resolve(tzid) != null) { "Unsupported time zone" }
+                }
             }
             val event = requireNotNull(codec.parse(raw, collectionHref, uid, color)?.event)
             IcsEvent(event, raw)
         }
+    }
+
+    /** The TZID parameter of a property line; quoted values may contain `:` and `;`. */
+    private fun tzidParameter(line: String): String? {
+        val parameters = mutableListOf<String>()
+        val current = StringBuilder()
+        var quoted = false
+        for (char in line) {
+            when {
+                char == '"' -> { quoted = !quoted; current.append(char) }
+                !quoted && char == ':' -> break
+                !quoted && char == ';' -> { parameters += current.toString(); current.clear() }
+                else -> current.append(char)
+            }
+        }
+        parameters += current.toString()
+        return parameters.drop(1)
+            .firstOrNull { it.startsWith("TZID=", ignoreCase = true) }
+            ?.substringAfter('=')
+            ?.removeSurrounding("\"")
     }
 
     private fun eventProperty(block: List<String>, property: String): String? {

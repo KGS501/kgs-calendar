@@ -293,6 +293,8 @@ class CalendarRepository(
         visibility: CollectionVisibility = CollectionVisibility(),
     ): Pair<List<EventEntity>, List<TaskEntity>> = queries.reminderCandidates(visibility)
 
+    suspend fun ownAddressesByCollection(): Map<String, Set<String>> = queries.ownAddressesByCollection()
+
     suspend fun isReminderStillVisible(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean? =
         queries.isReminderStillVisible(occurrenceId, visibility)
 

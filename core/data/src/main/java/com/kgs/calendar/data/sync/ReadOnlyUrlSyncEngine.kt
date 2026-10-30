@@ -14,6 +14,8 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.readOnlyCalendarTransportUrl
 import com.kgs.calendar.data.looksLikeHtmlResponse
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.data.remote.MAX_FEED_RESPONSE_BYTES
+import com.kgs.calendar.data.remote.textWithin
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.Dispatchers
@@ -104,7 +106,7 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 }
                 if (!body.isSuccessful) throw HttpStatusException(body.code, "URL returned HTTP ${body.code}")
                 contentType = body.header("Content-Type")
-                body.body?.string() ?: error("Empty calendar response.")
+                body.body?.textWithin(MAX_FEED_RESPONSE_BYTES) ?: error("Empty calendar response.")
             }
             if (raw.looksLikeHtmlResponse(contentType)) {
                 error("URL returned a web page instead of an iCalendar feed.")

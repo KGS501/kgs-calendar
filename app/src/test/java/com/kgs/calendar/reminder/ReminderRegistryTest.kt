@@ -57,6 +57,31 @@ class ReminderRegistryTest {
         assertEquals(emptyList<ActiveReminderNotification>(), storage.active)
     }
 
+    @Test
+    fun deliveredAlarmsAreTrackedFromTheFirstRecordAndOldOnesExpire() = runTest {
+        assertEquals(null, registry.deliveredCodes())
+
+        val now = 1_700_000_000_000
+        registry.markDelivered(listOf(11), now - 3 * MissedReminders.GRACE_MILLIS)
+        registry.markDelivered(listOf(22), now)
+
+        assertEquals(setOf(22), registry.deliveredCodes())
+    }
+
+    @Test
+    fun snoozedRemindersArePendingUntilTheyAreLongPast() = runTest {
+        val now = 1_700_000_000_000
+        val soon = SnoozedReminder(1, now + 600_000, "Soon", null, firstKey, "{}")
+        val old = SnoozedReminder(2, now - 2 * MissedReminders.GRACE_MILLIS, "Old", "Body", secondKey, "{}")
+        registry.addSnoozed(soon)
+        registry.addSnoozed(old)
+
+        assertEquals(listOf(soon), registry.pendingSnoozed(now))
+
+        registry.removeSnoozed(1)
+        assertEquals(emptyList<SnoozedReminder>(), registry.pendingSnoozed(now))
+    }
+
     private class InMemoryReminderRegistryStorage : ReminderRegistryStorage {
         var scheduled: List<ScheduledReminderRecord> = emptyList()
         var active: List<ActiveReminderNotification> = emptyList()
@@ -69,6 +94,19 @@ class ReminderRegistryTest {
         override fun readActive(): List<ActiveReminderNotification> = active
         override fun writeActive(records: List<ActiveReminderNotification>) {
             active = records
+        }
+
+        var delivered: Map<Int, Long>? = null
+        var snoozed: List<SnoozedReminder> = emptyList()
+
+        override fun readDelivered(): Map<Int, Long>? = delivered
+        override fun writeDelivered(delivered: Map<Int, Long>) {
+            this.delivered = delivered
+        }
+
+        override fun readSnoozed(): List<SnoozedReminder> = snoozed
+        override fun writeSnoozed(records: List<SnoozedReminder>) {
+            snoozed = records
         }
     }
 }

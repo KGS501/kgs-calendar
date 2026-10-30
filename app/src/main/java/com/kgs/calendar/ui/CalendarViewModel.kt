@@ -102,6 +102,7 @@ class CalendarViewModel(
     appLifecycleSignals: AppLifecycleSignals,
     uiStrings: UiStrings,
     pickedContentReader: PickedContentReader = PickedContentReader { null },
+    calendarFileExporter: CalendarFileExporter = CalendarFileExporter { _, _ -> error("Export is not available.") },
     /** Null follows the device's zone, so a zone change applies while the app runs. */
     private val fixedZoneId: ZoneId? = null,
     initialWidgetLaunchTarget: CalendarWidgetLaunchTarget? = null,
@@ -165,6 +166,7 @@ class CalendarViewModel(
         strings = uiStrings,
         transient = transient,
         pickedContentReader = pickedContentReader,
+        calendarFileExporter = calendarFileExporter,
     )
 
     val edits = CalendarEditActions(
@@ -745,6 +747,7 @@ class CalendarViewModelFactory(
             appLifecycleSignals = graph.appLifecycleSignals,
             uiStrings = graph.uiStrings,
             pickedContentReader = graph.pickedContentReader,
+            calendarFileExporter = graph.calendarFileExporter,
             initialWidgetLaunchTarget = initialWidgetLaunchTarget,
             initialCalendarLaunchTarget = initialCalendarLaunchTarget,
             initialSharedEvent = initialSharedEvent,

@@ -136,7 +136,7 @@ class TaskMutations internal constructor(
             timezoneId = if (
                 (payload.startDate != null && payload.startHasTime) ||
                 (payload.dueDate != null && payload.dueHasTime)
-            ) existing.timezoneId ?: zoneId.id else null,
+            ) existing.timedZoneId() else null,
             color = targetCollection.color,
             manualColor = payload.manualColor,
             sequence = existing.sequence + 1,
@@ -214,7 +214,7 @@ class TaskMutations internal constructor(
             timezoneId = if (
                 (payload.startDate != null && payload.startHasTime) ||
                 (payload.dueDate != null && payload.dueHasTime)
-            ) existing.timezoneId ?: zoneId.id else null,
+            ) existing.timedZoneId() else null,
         ).withValidIcalSchedule()
         val updatedMaster = existing.copy(
             exDatesCsv = exDates?.takeIf { it.isNotEmpty() }?.joinToString(","),
@@ -513,6 +513,9 @@ class TaskMutations internal constructor(
             }
         }
     }
+
+    /** A timed task keeps its zone, or stays floating; a date-only one becoming timed gets the device's. */
+    private fun TaskEntity.timedZoneId(): String? = if (startHasTime || dueHasTime) timezoneId else zoneId.id
 
     private fun LocalDate?.toTaskMillis(time: LocalTime?, hasTime: Boolean, defaultTime: LocalTime): Long? {
         val date = this ?: return null

@@ -44,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kgs.calendar.R
+import com.kgs.calendar.domain.event.isInvitationFromOthers
+import com.kgs.calendar.domain.event.ownCalendarAddresses
 import com.kgs.calendar.ui.editor.DraftCodec
 import com.kgs.calendar.ui.editor.EditorDraftStore
 import com.kgs.calendar.ui.editor.rememberEditorDraftFields
@@ -277,6 +279,20 @@ internal fun EventEditorSheet(
                         focusAtOnce = keyboardAtSwitch != null,
                         modifier = Modifier.editorInset(),
                     )
+                    val invitedByOthers = remember(initialEvent, state.accounts, state.collections) {
+                        val accountId = state.collections.firstOrNull { it.href == initialEvent?.collectionHref }?.accountId
+                        val ownAddresses = state.accounts.firstOrNull { it.id == accountId }?.ownCalendarAddresses().orEmpty()
+                        initialEvent?.isInvitationFromOthers(ownAddresses) == true
+                    }
+                    if (invitedByOthers) {
+                        Text(
+                            stringResource(R.string.invitation_edit_notice),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.editorInset(),
+                        )
+                    }
                 }
                 if (!readOnlyRemote) {
                     EditorLabel(stringResource(R.string.calendar))

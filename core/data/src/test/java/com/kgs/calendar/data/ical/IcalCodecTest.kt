@@ -159,7 +159,9 @@ class IcalCodecTest {
         assertTrue(serialized.contains("DESCRIPTION:Detailed note"))
         assertTrue(serialized.contains("CATEGORIES:Work,Music,Band,Practice"))
         assertTrue(serialized.contains("CREATED:20260606T121153Z"))
-        assertTrue(serialized.contains("LAST-MODIFIED:20260606T121158Z"))
+        // Every save marks the item as modified now.
+        assertFalse(serialized.contains("LAST-MODIFIED:20260606T121158Z"))
+        assertEquals(1, Regex("LAST-MODIFIED:").findAll(serialized).count())
     }
 
     @Test
@@ -244,6 +246,7 @@ class IcalCodecTest {
             completedAtMillis = null,
             isCompleted = false,
             priority = null,
+            timezoneId = "UTC",
             color = 0xff176b5d.toInt(),
         )
 
@@ -270,6 +273,7 @@ class IcalCodecTest {
             completedAtMillis = null,
             isCompleted = false,
             priority = null,
+            timezoneId = "UTC",
             color = 0xff176b5d.toInt(),
         )
 

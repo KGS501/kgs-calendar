@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Self-hosted CalDAV servers often use a private certificate authority. Trusting CAs the user
+    installed in the system settings lets them connect over HTTPS instead of falling back to HTTP.
+    Plain HTTP stays possible for webcal:// feeds and servers on a trusted network; the account
+    setup warns about it.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

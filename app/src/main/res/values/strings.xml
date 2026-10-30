@@ -24,6 +24,7 @@
     <string name="caldav">CalDAV</string>
     <string name="caldav_account">CalDAV account</string>
     <string name="caldav_server_url">CalDAV server URL</string>
+    <string name="cleartext_server_warning">This address uses unencrypted HTTP. Your password and calendar data can be read by anyone on the network. Use https:// unless the server is only reachable on a network you trust.</string>
     <string name="nextcloud_browser_login_help">For Nextcloud you can sign in with the browser instead of a password. Other CalDAV servers need a username and password or app password.</string>
     <string name="caldav_discovery">CalDAV discovery</string>
     <string name="caldav_principal">Principal URL</string>
@@ -243,6 +244,8 @@
     <string name="no_matches">No matches</string>
     <string name="completed_task">Completed task</string>
     <string name="mark_done">Mark done</string>
+    <string name="reminder_snooze">Snooze 10 min</string>
+    <string name="invitation_edit_notice">You were invited to this event. Changes only apply to your own copy and are replaced when the organizer updates the event.</string>
     <string name="pending_deleted">This item was deleted in the app and is still waiting to sync with the source.</string>
     <string name="pending_changed">This change is saved locally and is still waiting to sync with the source.</string>
     <string name="not_synced_yet">Not synced yet</string>
@@ -772,6 +775,16 @@
     <string name="server_section">Server</string>
     <string name="delete_local_calendar">Delete local calendar</string>
     <string name="delete_local_calendar_footer">You can add an empty local calendar again under Add calendar.</string>
+    <string name="delete_local_calendar_export_hint">Export the calendar first to keep a copy as an .ics file.</string>
+    <string name="export_first">Export first</string>
+    <string name="export_calendar">Export as .ics file</string>
+    <string name="export_calendar_footer">Saves all events and tasks of this source, including changes not yet uploaded, as one iCalendar file that other calendar apps can import.</string>
+    <string name="export_done">Saved %d items to the file.</string>
+    <string name="export_failed">The calendar could not be exported.</string>
+    <plurals name="remove_source_unsent_changes">
+        <item quantity="one">%d change made on this device hasn\'t been uploaded yet and will be lost.</item>
+        <item quantity="other">%d changes made on this device haven\'t been uploaded yet and will be lost.</item>
+    </plurals>
     <string name="delete_local_calendar_question">Delete local calendar?</string>
     <string name="delete_local_calendar_body">The local calendar and all its events and tasks are deleted from this device. This cannot be undone.</string>
     <string name="settings_task_start_date">Start date</string>

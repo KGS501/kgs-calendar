@@ -13,6 +13,7 @@ import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.event.remindsUser
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import kotlinx.coroutines.flow.first
@@ -70,6 +71,9 @@ object ReminderScheduler {
         val (events, tasks) = repository.reminderCandidates(graph.settingsStore.collectionVisibility.first())
         val now = System.currentTimeMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
+        // Recent occurrences are planned too, to catch up reminders whose alarm never went off.
+        val planFrom = now - MissedReminders.GRACE_MILLIS
+        val ownAddresses = repository.ownAddressesByCollection()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         cancelLegacySchedules(context, alarmManager)
         val planner = ReminderPlanner()
@@ -78,8 +82,11 @@ object ReminderScheduler {
         events.forEach { master ->
             val offsets = master.remindersCsv.minutes()
             if (offsets.isEmpty()) return@forEach
-            repository.expandEventReminderOccurrences(master, now, windowEnd + offsets.leadMillis()).forEach { occurrence ->
+            val addresses = ownAddresses[master.collectionHref].orEmpty()
+            repository.expandEventReminderOccurrences(master, planFrom, windowEnd + offsets.leadMillis()).forEach { occurrence ->
                 val event = occurrence.item
+                // Cancelled events and invitations the user declined stay quiet.
+                if (!event.remindsUser(addresses)) return@forEach
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
                     startAtMillis = event.startsAtMillis,
@@ -87,6 +94,7 @@ object ReminderScheduler {
                     defaultAnchorAtMillis = event.startsAtMillis,
                     title = event.title,
                     body = null,
+                    notifyUntilMillis = event.endsAtMillis,
                 )
                 plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = eventNotificationBody(event, plan.triggerAtMillis))
@@ -97,7 +105,7 @@ object ReminderScheduler {
         tasks.forEach { master ->
             val offsets = master.remindersCsv.minutes()
             if (offsets.isEmpty()) return@forEach
-            repository.expandTaskReminderOccurrences(master, now, windowEnd + offsets.leadMillis()).forEach { occurrence ->
+            repository.expandTaskReminderOccurrences(master, planFrom, windowEnd + offsets.leadMillis()).forEach { occurrence ->
                 val task = occurrence.item
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
@@ -113,15 +121,38 @@ object ReminderScheduler {
             }
         }
 
+        val registry = graph.reminderRegistry
+        val delivered = registry.deliveredCodes()
+        val missedPlans = if (delivered == null) {
+            // First run with tracking: what is already due counts as shown, rather than notifying it all again.
+            registry.markDelivered(plans.filter { it.triggerAtMillis < now }.map { it.alarmRequestCode }, now)
+            emptyList()
+        } else {
+            MissedReminders.select(plans, delivered, now).distinctBy { it.alarmRequestCode }
+        }
         val activePlans = plans
             .filter { it.triggerAtMillis in now..windowEnd }
             .distinctBy { it.alarmRequestCode }
-        graph.reminderRegistry.replaceAllScheduled(
-            activePlans.map { ScheduledReminderRecord(it.alarmRequestCode, it.occurrenceId, it.notificationKey) },
+            .filterNot { plan -> missedPlans.any { it.alarmRequestCode == plan.alarmRequestCode } }
+        registry.replaceAllScheduled(
+            (activePlans + missedPlans).map { ScheduledReminderRecord(it.alarmRequestCode, it.occurrenceId, it.notificationKey) },
         )
         activePlans.forEach { plan ->
             scheduleExactCompat(alarmManager, plan.triggerAtMillis, ReminderIntents.alarmPendingIntent(context, plan))
         }
+        // Missed reminders are shown now; the receiver records them as shown.
+        missedPlans.forEach { plan ->
+            scheduleExactCompat(alarmManager, now, ReminderIntents.alarmPendingIntent(context, plan))
+        }
+        // Snoozed reminders are set again, e.g. after a restart cleared their alarms.
+        registry.pendingSnoozed(now).forEach { record ->
+            scheduleExactCompat(alarmManager, maxOf(record.triggerAtMillis, now), ReminderIntents.snoozedAlarmPendingIntent(context, record))
+        }
+    }
+
+    fun scheduleSnoozed(context: Context, record: SnoozedReminder) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        scheduleExactCompat(alarmManager, record.triggerAtMillis, ReminderIntents.snoozedAlarmPendingIntent(context, record))
     }
 
     /**

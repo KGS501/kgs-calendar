@@ -134,6 +134,9 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE resourceHref = :resourceHref")
     suspend fun byResource(resourceHref: String): EventEntity?
 
+    @Query("SELECT * FROM events WHERE collectionHref = :collectionHref ORDER BY startsAtMillis ASC")
+    suspend fun forCollection(collectionHref: String): List<EventEntity>
+
     @Query("SELECT * FROM events WHERE collectionHref = :collectionHref AND uid = :uid LIMIT 1")
     suspend fun byUidInCollection(collectionHref: String, uid: String): EventEntity?
 

@@ -116,6 +116,7 @@ class AndroidCalendarProviderClient(
             CalendarContract.Events.ORIGINAL_ID,
             CalendarContract.Events.ORIGINAL_INSTANCE_TIME,
             CalendarContract.Events.EVENT_COLOR,
+            CalendarContract.Events.EVENT_TIMEZONE,
         )
         val rawEvents = mutableListOf<AndroidProviderEvent>()
         calendarIds.chunked(MAX_SELECTION_ARGS).forEach { chunk ->
@@ -171,6 +172,7 @@ class AndroidCalendarProviderClient(
                         originalId = cursor.getLongOrNull(15),
                         originalInstanceTime = cursor.getLongOrNull(16),
                         eventColor = cursor.getIntOrNull(17),
+                        timezoneId = cursor.getString(18),
                     )
                 }
             }
@@ -194,17 +196,22 @@ class AndroidCalendarProviderClient(
 
     suspend fun insertEvent(calendarId: Long, event: EventEntity): Long = withContext(Dispatchers.IO) {
         requirePermissions()
-        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, event.toContentValues(calendarId))
+        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, event.toContentValues(calendarId, previous = null))
             ?: error("Android calendar provider did not return an event URI.")
         val eventId = ContentUris.parseId(uri)
         replaceReminders(eventId, event.remindersCsv.toMinutes())
         eventId
     }
 
-    suspend fun updateEvent(eventId: Long, calendarId: Long, event: EventEntity) = withContext(Dispatchers.IO) {
+    /**
+     * Updates an event. Status, visibility and availability are only written when they differ from
+     * [previous], the event as last read, so values the app can't show (like the calendar's default
+     * visibility) are left alone.
+     */
+    suspend fun updateEvent(eventId: Long, calendarId: Long, event: EventEntity, previous: EventEntity?) = withContext(Dispatchers.IO) {
         requirePermissions()
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
-        val updated = resolver.update(uri, event.toContentValues(calendarId), null, null)
+        val updated = resolver.update(uri, event.toContentValues(calendarId, previous), null, null)
         if (updated <= 0) error("Android event $eventId could not be updated.")
         replaceReminders(eventId, event.remindersCsv.toMinutes())
     }
@@ -252,7 +259,7 @@ class AndroidCalendarProviderClient(
     fun calendarIdFromHref(href: String): Long? =
         href.removePrefix(ANDROID_CALENDAR_PREFIX).takeIf { href.startsWith(ANDROID_CALENDAR_PREFIX) }?.toLongOrNull()
 
-    private fun EventEntity.toContentValues(calendarId: Long): ContentValues =
+    private fun EventEntity.toContentValues(calendarId: Long, previous: EventEntity?): ContentValues =
         ContentValues().apply {
             val providerStartsAtMillis = if (allDay) androidAllDayLocalMillisToProviderMillis(startsAtMillis, zoneId) else startsAtMillis
             val providerEndsAtMillis = if (allDay) androidAllDayLocalMillisToProviderMillis(endsAtMillis, zoneId) else endsAtMillis
@@ -261,8 +268,33 @@ class AndroidCalendarProviderClient(
             put(CalendarContract.Events.DESCRIPTION, description?.ifBlank { null })
             put(CalendarContract.Events.EVENT_LOCATION, location?.ifBlank { null })
             put(CalendarContract.Events.DTSTART, providerStartsAtMillis)
-            put(CalendarContract.Events.EVENT_TIMEZONE, if (allDay) "UTC" else TimeZone.getDefault().id)
+            // A timed event keeps its own zone, so a recurring one follows that zone's daylight saving.
+            val eventZone = timezoneId?.let { id -> runCatching { ZoneId.of(id).id }.getOrNull() }
+            put(CalendarContract.Events.EVENT_TIMEZONE, if (allDay) "UTC" else eventZone ?: TimeZone.getDefault().id)
             put(CalendarContract.Events.ALL_DAY, if (allDay) 1 else 0)
+            if (previous == null) {
+                put(CalendarContract.Events.STATUS, status.toAndroidStatus())
+                // New events use the calendar's default visibility unless one was chosen.
+                put(
+                    CalendarContract.Events.ACCESS_LEVEL,
+                    if (EventClassification.from(classification) == EventClassification.Public) {
+                        CalendarContract.Events.ACCESS_DEFAULT
+                    } else {
+                        classification.toAndroidAccessLevel()
+                    },
+                )
+                put(CalendarContract.Events.AVAILABILITY, transparency.toAndroidAvailability())
+            } else {
+                if (status.toAndroidStatus() != previous.status.toAndroidStatus()) {
+                    put(CalendarContract.Events.STATUS, status.toAndroidStatus())
+                }
+                if (classification.toAndroidAccessLevel().orPublic() != previous.classification.toAndroidAccessLevel().orPublic()) {
+                    put(CalendarContract.Events.ACCESS_LEVEL, classification.toAndroidAccessLevel())
+                }
+                if (transparency.toAndroidAvailability() != previous.transparency.toAndroidAvailability()) {
+                    put(CalendarContract.Events.AVAILABILITY, transparency.toAndroidAvailability())
+                }
+            }
             val recurrence = recurrenceRule?.ifBlank { null }
             if (recurrence != null) {
                 put(CalendarContract.Events.RRULE, recurrence)
@@ -292,22 +324,44 @@ class AndroidCalendarProviderClient(
                 while (cursor.moveToNext()) {
                     val eventId = cursor.getLong(0)
                     val minutes = cursor.getInt(1)
-                    result.getOrPut(eventId) { mutableListOf() } += minutes
+                    // -1 is the provider's "calendar default", not the app's "at the end".
+                    if (minutes >= 0) result.getOrPut(eventId) { mutableListOf() } += minutes
                 }
             }
         }
         return result
     }
 
+    /**
+     * Makes the event's reminders match [minutes]. Rows that stay are left as they are, which keeps
+     * their method (e-mail, alarm, ...), and rows with the provider's default offset are kept.
+     */
     private fun replaceReminders(eventId: Long, minutes: List<Int>) {
-        resolver.delete(CalendarContract.Reminders.CONTENT_URI, "${CalendarContract.Reminders.EVENT_ID} = ?", arrayOf(eventId.toString()))
-        minutes.distinct().sorted().forEach { minute ->
+        val wanted = minutes.distinct().sorted()
+        val existing = mutableListOf<Pair<Long, Int>>()
+        resolver.query(
+            CalendarContract.Reminders.CONTENT_URI,
+            arrayOf(CalendarContract.Reminders._ID, CalendarContract.Reminders.MINUTES),
+            "${CalendarContract.Reminders.EVENT_ID} = ?",
+            arrayOf(eventId.toString()),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) existing += cursor.getLong(0) to cursor.getInt(1)
+        }
+        val kept = mutableSetOf<Int>()
+        existing.forEach { (id, minute) ->
+            if (minute < 0) return@forEach
+            if (minute in wanted && kept.add(minute)) return@forEach
+            resolver.delete(ContentUris.withAppendedId(CalendarContract.Reminders.CONTENT_URI, id), null, null)
+        }
+        wanted.filterNot { it in kept }.forEach { minute ->
             val values = ContentValues().apply {
                 put(CalendarContract.Reminders.EVENT_ID, eventId)
                 put(CalendarContract.Reminders.MINUTES, minute)
                 put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT)
             }
-            runCatching { resolver.insert(CalendarContract.Reminders.CONTENT_URI, values) }
+            resolver.insert(CalendarContract.Reminders.CONTENT_URI, values)
+                ?: error("Android calendar provider did not accept the reminder.")
         }
     }
 
@@ -505,6 +559,7 @@ data class AndroidProviderEvent(
     val originalInstanceTime: Long? = null,
     val eventColor: Int? = null,
     val reminderMinutes: List<Int> = emptyList(),
+    val timezoneId: String? = null,
 )
 
 internal fun androidProviderEventToEntity(
@@ -528,10 +583,12 @@ internal fun androidProviderEventToEntity(
         recurrenceRule = event.recurrenceRule?.ifBlank { null },
         isRecurring = !event.recurrenceRule.isNullOrBlank(),
         exDatesCsv = event.exDates.androidExDatesToEpochMillisCsv(event.allDay, zoneId),
-        remindersCsv = event.reminderMinutes.takeIf { it.isNotEmpty() }?.distinct()?.sorted()?.joinToString(","),
-        status = null,
-        classification = null,
-        transparency = null,
+        // Timed provider events always have a zone; without one they'd be written as floating times.
+        timezoneId = if (event.allDay) null else event.timezoneId?.takeIf { it.isNotBlank() } ?: zoneId.id,
+        remindersCsv = event.reminderMinutes.filter { it >= 0 }.takeIf { it.isNotEmpty() }?.distinct()?.sorted()?.joinToString(","),
+        status = event.status.toIcalStatus(),
+        classification = event.accessLevel.toIcalClass(),
+        transparency = event.availability.toIcalTransparency(),
         categories = null,
         organizerJson = null,
         attendeesJson = null,
@@ -627,6 +684,10 @@ private fun String?.toAndroidAccessLevel(): Int =
         EventClassification.Public -> CalendarContract.Events.ACCESS_PUBLIC
         else -> CalendarContract.Events.ACCESS_DEFAULT
     }
+
+/** The calendar's default visibility counts as public, which is what the app shows for it. */
+private fun Int.orPublic(): Int =
+    if (this == CalendarContract.Events.ACCESS_DEFAULT) CalendarContract.Events.ACCESS_PUBLIC else this
 
 private fun String?.toAndroidAvailability(): Int =
     when (EventTransparency.from(this)) {
