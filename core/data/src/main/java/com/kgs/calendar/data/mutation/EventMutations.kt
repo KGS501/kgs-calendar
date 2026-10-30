@@ -27,10 +27,12 @@ import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /** Local event edits, routed to the Android calendar provider or queued for CalDAV upload. */
 class EventMutations internal constructor(
@@ -120,7 +122,7 @@ class EventMutations internal constructor(
             else -> existing.resourceHref
         }
         val (start, end) = payload.timeSpanMillis()
-        val updated = existing.copy(
+        val updated = existing.withExceptionsFollowing(existing.copy(
             collectionHref = targetCollection.href,
             resourceHref = resourceHref,
             title = payload.title.ifBlank { "Untitled event" },
@@ -132,7 +134,7 @@ class EventMutations internal constructor(
             allDay = payload.allDay,
             recurrenceRule = payload.recurrenceRule?.ifBlank { null },
             isRecurring = !payload.recurrenceRule.isNullOrBlank() || !existing.rDatesCsv.isNullOrBlank(),
-            timezoneId = if (payload.allDay) null else existing.timezoneId ?: zoneId.id,
+            timezoneId = if (payload.allDay) null else existing.timedZoneId(),
             remindersCsv = payload.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
             status = payload.status?.ifBlank { null },
             classification = payload.classification?.ifBlank { null },
@@ -143,12 +145,12 @@ class EventMutations internal constructor(
             color = targetCollection.color,
             manualColor = payload.manualColor,
             sequence = existing.sequence + 1,
-        ).sanitizedFor(targetCollection)
+        )).sanitizedFor(targetCollection)
         if (existingIsAndroid && targetIsAndroid) {
             val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
                 ?: error("Android event id is missing.")
             val androidUpdated = updated.copy(resourceHref = existing.resourceHref, uid = existing.uid)
-            androidCalendarProviderClient.updateEvent(eventId, targetCollection.androidCalendarId(), androidUpdated)
+            androidCalendarProviderClient.updateEvent(eventId, targetCollection.androidCalendarId(), androidUpdated, previous = existing)
             localWrites.writeTransaction {
                 localWrites.upsertLocalResource(androidUpdated.collectionHref, androidUpdated.resourceHref, null, ComponentType.Event, androidUpdated.uid, "android-provider:$eventId")
                 database.eventDao().upsert(androidUpdated)
@@ -239,7 +241,7 @@ class EventMutations internal constructor(
             categories = payload.categories?.ifBlank { null },
             organizerJson = payload.organizerJson,
             attendeesJson = payload.attendeesJson,
-            timezoneId = if (payload.allDay) null else existing.timezoneId ?: zoneId.id,
+            timezoneId = if (payload.allDay) null else existing.timedZoneId(),
             manualColor = payload.manualColor,
         )
         val exDates = existing.exDatesCsv
@@ -353,7 +355,8 @@ class EventMutations internal constructor(
         val resource = database.resourceDao().get(existing.resourceHref)
         val updatedAttendees = ParticipantJson.withPartstat(existing.attendeesJson, attendeeEmails, partstat)
             ?: return@writeTransaction
-        val updated = existing.copy(attendeesJson = updatedAttendees, sequence = existing.sequence + 1)
+        // A reply leaves SEQUENCE alone: only the organizer revises an invitation (RFC 5546).
+        val updated = existing.copy(attendeesJson = updatedAttendees)
         val raw = icalCodec.serializeEvent(updated, resource?.rawIcs)
         localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
         database.eventDao().upsert(updated)
@@ -565,6 +568,63 @@ class EventMutations internal constructor(
         return start to validEnd
     }
 
+    /**
+     * When a whole series moves, its exclusions and changed occurrences move with it: each keeps its
+     * distance in days from the series start and takes the new time of day, so they still match an
+     * occurrence. A rule that picks its own days (BYDAY, ...) only follows a new time of day.
+     * Occurrences that were moved on their own keep their times.
+     */
+    private fun EventEntity.withExceptionsFollowing(updated: EventEntity): EventEntity {
+        if (recurrenceRule.isNullOrBlank() || recurrenceRule != updated.recurrenceRule) return updated
+        if (startsAtMillis == updated.startsAtMillis && allDay == updated.allDay) return updated
+        if (updated.exDatesCsv.isNullOrBlank() && updated.recurrenceOverridesJson.isNullOrBlank()) return updated
+        val oldZone = seriesZone()
+        val newZone = updated.seriesZone()
+        val oldStart = Instant.ofEpochMilli(startsAtMillis).atZone(oldZone).toLocalDateTime()
+        val newStart = Instant.ofEpochMilli(updated.startsAtMillis).atZone(newZone).toLocalDateTime()
+        val dayShift = ChronoUnit.DAYS.between(oldStart.toLocalDate(), newStart.toLocalDate())
+        val rulePicksDays = recurrenceRule.split(';').any { part ->
+            part.substringBefore('=').trim().uppercase(Locale.US) in DAY_PICKING_RULE_PARTS
+        }
+        if (rulePicksDays && dayShift != 0L) return updated
+        fun shifted(millis: Long): Long {
+            val date = Instant.ofEpochMilli(millis).atZone(oldZone).toLocalDate().plusDays(dayShift)
+            val moved = if (updated.allDay) date.atStartOfDay(newZone) else date.atTime(newStart.toLocalTime()).atZone(newZone)
+            return moved.toInstant().toEpochMilli()
+        }
+        val oldDuration = endsAtMillis - startsAtMillis
+        val newDuration = updated.endsAtMillis - updated.startsAtMillis
+        val exDates = updated.exDatesCsv?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.map(::shifted)
+        val overrides = RecurrenceOverrideCodec.decodeEvents(updated.recurrenceOverridesJson).map { override ->
+            val recurrenceId = shifted(override.recurrenceIdMillis)
+            val movedOnItsOwn = override.startsAtMillis != override.recurrenceIdMillis ||
+                override.endsAtMillis - override.startsAtMillis != oldDuration ||
+                override.allDay != allDay
+            if (movedOnItsOwn) {
+                override.copy(recurrenceIdMillis = recurrenceId)
+            } else {
+                override.copy(
+                    recurrenceIdMillis = recurrenceId,
+                    startsAtMillis = recurrenceId,
+                    endsAtMillis = recurrenceId + newDuration,
+                    allDay = updated.allDay,
+                    timezoneId = updated.timezoneId,
+                )
+            }
+        }
+        return updated.copy(
+            exDatesCsv = exDates?.distinct()?.sorted()?.takeIf { it.isNotEmpty() }?.joinToString(","),
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(overrides),
+        )
+    }
+
+    /** The zone a series' local times are counted in: all-day and floating ones use the device's. */
+    private fun EventEntity.seriesZone(): ZoneId =
+        timezoneId.takeUnless { allDay }?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zoneId
+
+    /** A timed event keeps its zone, or stays floating; an all-day one becoming timed gets the device's. */
+    private fun EventEntity.timedZoneId(): String? = if (allDay) zoneId.id else timezoneId
+
     private fun CollectionEntity.androidCalendarId(): Long =
         externalId?.toLongOrNull()
             ?: androidCalendarProviderClient.calendarIdFromHref(href)
@@ -587,7 +647,7 @@ class EventMutations internal constructor(
         val eventId = androidCalendarProviderClient.eventIdFromHref(event.resourceHref)
             ?: error("Android event id is missing.")
         val sanitized = event.sanitizedFor(collection)
-        androidCalendarProviderClient.updateEvent(eventId, collection.androidCalendarId(), sanitized)
+        androidCalendarProviderClient.updateEvent(eventId, collection.androidCalendarId(), sanitized, previous = database.eventDao().get(event.uid))
         localWrites.writeTransaction {
             localWrites.upsertLocalResource(sanitized.collectionHref, sanitized.resourceHref, null, ComponentType.Event, sanitized.uid, "android-provider:$eventId")
             database.eventDao().upsert(sanitized)
@@ -618,6 +678,7 @@ class EventMutations internal constructor(
     }
 
     private companion object {
+        val DAY_PICKING_RULE_PARTS = setOf("BYDAY", "BYMONTHDAY", "BYYEARDAY", "BYWEEKNO", "BYMONTH", "BYSETPOS")
         const val HOUR_MILLIS = 60L * 60L * 1000L
         val DEFAULT_START_TIME: LocalTime = LocalTime.of(9, 0)
     }

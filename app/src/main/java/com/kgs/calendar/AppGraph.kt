@@ -26,6 +26,7 @@ import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.ui.AppLifecycleSignals
 import com.kgs.calendar.ui.ReminderRescheduler
+import com.kgs.calendar.ui.CalendarFileExporter
 import com.kgs.calendar.ui.PickedContentReader
 import com.kgs.calendar.ui.UiStrings
 import com.kgs.calendar.ui.WidgetRefresher
@@ -152,6 +153,15 @@ class AppGraph(context: Context) {
     }
 
     val uiStrings = UiStrings { id -> appContext.getString(id) }
+
+    val calendarFileExporter = CalendarFileExporter { collectionHrefs, target ->
+        val result = calendarData.export.export(collectionHrefs)
+        withContext(Dispatchers.IO) {
+            val output = appContext.contentResolver.openOutputStream(target, "wt") ?: error("The file can't be written.")
+            output.use { it.write(result.rawIcs.toByteArray(Charsets.UTF_8)) }
+        }
+        result.items
+    }
 
     val pickedContentReader = PickedContentReader { uri ->
         withContext(Dispatchers.IO) {

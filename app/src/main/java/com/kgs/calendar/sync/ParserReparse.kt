@@ -5,8 +5,10 @@ import java.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlin.coroutines.cancellation.CancellationException
 
-internal const val FULL_REPARSE_VERSION = 5
-internal const val PARSER_REPARSE_VERSION = 6
+// 7: text values are no longer decoded by guesswork, alarms are read in context, and Windows,
+// prefixed and VTIMEZONE-defined zones resolve to real zones; events and tasks both changed.
+internal const val FULL_REPARSE_VERSION = 7
+internal const val PARSER_REPARSE_VERSION = 7
 
 /**
  * Re-parses the cached raw iCal once per parser version so rows synced under an older parser are

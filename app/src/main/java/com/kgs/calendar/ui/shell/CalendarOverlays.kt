@@ -235,6 +235,7 @@ internal fun SettingsOverlay(
             onProblems = shell::openProblems,
             covered = covered,
             onDeleteLocalCalendar = viewModel.sources::deleteLocalCalendar,
+            onExportAccount = viewModel.sources::exportAccount,
             onPickAccountImage = viewModel.sources::setAccountImage,
             onRemoveAccountImage = viewModel.sources::removeAccountImage,
             onAvatarColorSelected = viewModel.sources::setAvatarColor,

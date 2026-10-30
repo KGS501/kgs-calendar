@@ -23,12 +23,18 @@ class ReminderReceiver : BroadcastReceiver() {
             markTaskDone(context, intent)
             return
         }
+        if (intent.action == ACTION_SNOOZE) {
+            snooze(context, intent)
+            return
+        }
         val title = intent.getStringExtra(EXTRA_TITLE) ?: context.getString(R.string.reminder_channel_name)
         val body = intent.getStringExtra(EXTRA_BODY).orEmpty()
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, title.hashCode())
         val notificationTag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG) ?: "kgs-reminder"
         val target = CalendarLaunchTarget.readFrom(intent) ?: return
         val notificationKey = ReminderNotificationKey(notificationTag, notificationId)
+        val alarmRequestCode = intent.takeIf { it.hasExtra(EXTRA_ALARM_REQUEST_CODE) }?.getIntExtra(EXTRA_ALARM_REQUEST_CODE, 0)
+        val snoozed = intent.getBooleanExtra(EXTRA_SNOOZED, false)
 
         ReminderScheduler.ensureChannel(context)
 
@@ -47,6 +53,13 @@ class ReminderReceiver : BroadcastReceiver() {
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
         }
+        notificationBuilder.addAction(
+            NotificationCompat.Action.Builder(
+                R.drawable.ic_notification,
+                context.getString(R.string.reminder_snooze),
+                ReminderIntents.snoozeActionPendingIntent(context, title, body.takeIf { it.isNotBlank() }, notificationKey, target),
+            ).build(),
+        )
         val taskOccurrence = target.occurrence as? CalendarOccurrenceId.Task
         if (taskOccurrence != null) {
             notificationBuilder.addAction(
@@ -62,6 +75,12 @@ class ReminderReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Recorded first, so the alarm is never caught up again as a missed reminder.
+                runCatching {
+                    val registry = KgsCalendarApplication.graph(appContext).reminderRegistry
+                    alarmRequestCode?.let { registry.markDelivered(listOf(it), System.currentTimeMillis()) }
+                    if (snoozed && alarmRequestCode != null) registry.removeSnoozed(alarmRequestCode)
+                }
                 // The alarm may predate hiding or deactivating the item's calendar.
                 val occurrence = target.occurrence
                 val stillVisible = occurrence == null ||
@@ -92,6 +111,33 @@ class ReminderReceiver : BroadcastReceiver() {
         }
     }
 
+    /** Puts the reminder off by [SNOOZE_MINUTES]; the snooze is kept so a restart sets it again. */
+    private fun snooze(context: Context, intent: Intent) {
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: return
+        val encodedTarget = intent.getStringExtra(CalendarLaunchTarget.EXTRA_TARGET) ?: return
+        val notificationTag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG) ?: "kgs-reminder"
+        val notificationKey = ReminderNotificationKey(notificationTag, intent.getIntExtra(EXTRA_NOTIFICATION_ID, title.hashCode()))
+        NotificationManagerCompat.from(context).cancel(notificationKey.tag, notificationKey.id)
+        val record = SnoozedReminder(
+            alarmRequestCode = ReminderIntents.snoozedRequestCode(notificationKey),
+            triggerAtMillis = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L,
+            title = title,
+            body = intent.getStringExtra(EXTRA_BODY),
+            notificationKey = notificationKey,
+            encodedTarget = encodedTarget,
+        )
+        val appContext = context.applicationContext
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                runCatching { KgsCalendarApplication.graph(appContext).reminderRegistry.addSnoozed(record) }
+                ReminderScheduler.scheduleSnoozed(appContext, record)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
     private fun markTaskDone(context: Context, intent: Intent) {
         val occurrenceId = (CalendarLaunchTarget.readFrom(intent)?.occurrence as? CalendarOccurrenceId.Task) ?: return
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, occurrenceId.stableKey.hashCode())
@@ -114,6 +160,10 @@ class ReminderReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_MARK_TASK_DONE = "com.kgs.calendar.reminder.MARK_TASK_DONE"
+        const val ACTION_SNOOZE = "com.kgs.calendar.reminder.SNOOZE"
+        const val EXTRA_ALARM_REQUEST_CODE = "extra_alarm_request_code"
+        const val EXTRA_SNOOZED = "extra_snoozed"
+        const val SNOOZE_MINUTES = 10L
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_BODY = "extra_body"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"

@@ -200,7 +200,7 @@ class CalDavHttpClient(
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, "REPORT sync-collection $collectionHref failed: HTTP ${response.code}")
             }
-            val xml = response.body?.string().orEmpty()
+            val xml = response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty()
             val token = parseDocumentFirstText(xml, "sync-token") ?: return@withContext null
             val davResponses = parseDavResponses(xml)
             davResponses.firstOrNull { it.responseStatus != null && it.responseStatus !in 200..299 && it.responseStatus != 404 }
@@ -234,7 +234,7 @@ class CalDavHttpClient(
                 .build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw HttpStatusException(response.code, "GET $href failed: HTTP ${response.code}")
-                RemoteResourceData(href, response.header("ETag"), response.body?.string().orEmpty())
+                RemoteResourceData(href, response.header("ETag"), response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty())
             }
         }
 
@@ -275,7 +275,7 @@ class CalDavHttpClient(
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-multiget $collectionHref failed: HTTP ${response.code}")
-            parseDavResponses(response.body?.string().orEmpty()).mapNotNull { dav ->
+            parseDavResponses(response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
                     stableHref(absoluteUrl(serverUrl, collectionHref), dav.href),
@@ -317,7 +317,7 @@ class CalDavHttpClient(
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-query $collectionHref failed: HTTP ${response.code}")
-            parseDavResponses(response.body?.string().orEmpty()).mapNotNull { dav ->
+            parseDavResponses(response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
                     stableHref(absoluteUrl(serverUrl, collectionHref), dav.href),
@@ -500,7 +500,7 @@ class CalDavHttpClient(
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, "REPORT calendar-query ${trashBin.objectsUrl} failed: HTTP ${response.code}")
             }
-            parseDavResponses(response.body?.string().orEmpty())
+            parseDavResponses(response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty())
                 .filterNot { it.href.isSameDavHref(trashBin.objectsUrl) }
                 .filterNot { it.href.endsWith("/") }
                 .map { dav ->
@@ -644,7 +644,7 @@ class CalDavHttpClient(
         return runCatching {
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use username
-                val document = parseXml(response.body?.string().orEmpty())
+                val document = parseXml(response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty())
                 document.getElementsByTagName("id").item(0)?.textContent?.ifBlank { username } ?: username
             }
         }.getOrDefault(username)
@@ -665,7 +665,7 @@ class CalDavHttpClient(
         okHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "PROPFIND $url failed: HTTP ${response.code}")
             val effectiveUrl = response.request.url.toString()
-            return parseDavResponses(response.body?.string().orEmpty())
+            return parseDavResponses(response.body?.textWithin(MAX_DAV_RESPONSE_BYTES).orEmpty())
                 .map { it.copy(requestUrl = effectiveUrl) }
         }
     }

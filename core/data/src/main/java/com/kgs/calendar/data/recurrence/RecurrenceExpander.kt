@@ -74,7 +74,14 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
             ?.toMutableSet()
             ?: mutableSetOf()
         // Also tolerate exact-date EXDATE matches by normalising to start-of-day in the local zone.
-        val exDatesAsLocalDate = exDates.map { Instant.ofEpochMilli(it).atZone(eventZone).toLocalDate() }.toSet()
+        // A rule with several occurrences a day only matches whole days for date-only EXDATEs.
+        val singleOccurrencePerDay = freq in setOf("DAILY", "WEEKLY", "MONTHLY", "YEARLY") &&
+            parts.keys.none { it in setOf("BYHOUR", "BYMINUTE", "BYSECOND") }
+        val exDatesAsLocalDate = exDates
+            .map { Instant.ofEpochMilli(it).atZone(eventZone) }
+            .filter { singleOccurrencePerDay || it.toLocalTime() == java.time.LocalTime.MIDNIGHT }
+            .map { it.toLocalDate() }
+            .toSet()
 
         val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)
         val masterLdt = Instant.ofEpochMilli(master.startsAtMillis).atZone(eventZone).toLocalDateTime()

@@ -165,4 +165,48 @@ class RecurringEventRepositoryTest {
         assertNull(harness.event(single.uid))
         assertFalse(snapshot(firstDay, firstDay.plusDays(10)).any { it.title == "Once" })
     }
+
+    @Test
+    fun movingTheSeriesMovesItsExclusionsAndChangedOccurrences() = runTest {
+        repository.deleteEventOccurrence(master.uid, at(firstDay.plusDays(1)))
+        repository.updateEventOccurrence(
+            master.uid,
+            at(firstDay.plusDays(3)),
+            eventPayload("Renamed standup", firstDay.plusDays(3), standupTime, LocalTime.of(10, 15)),
+        )
+
+        // The whole series moves one day later and to 11:00.
+        repository.updateEvent(
+            master.uid,
+            eventPayload("Standup", firstDay.plusDays(1), LocalTime.of(11, 0), LocalTime.of(11, 30), recurrenceRule = "FREQ=DAILY;COUNT=5"),
+        )
+
+        val newTime = LocalTime.of(11, 0)
+        val occurrences = snapshot(firstDay, firstDay.plusDays(10))
+        assertEquals(
+            listOf(
+                "Standup" to at(firstDay.plusDays(1), newTime),
+                "Standup" to at(firstDay.plusDays(3), newTime),
+                "Renamed standup" to at(firstDay.plusDays(4), newTime),
+                "Standup" to at(firstDay.plusDays(5), newTime),
+            ),
+            occurrences.map { it.title to it.startsAtMillis },
+        )
+        assertTrue(occurrences.all { it.endsAtMillis - it.startsAtMillis == 30 * 60_000L })
+    }
+
+    @Test
+    fun replyingToAnInvitationKeepsTheSequence() = runTest {
+        val attendees = """[{"email":"me@example.com","name":"Me","partstat":"NEEDS-ACTION","role":"REQ-PARTICIPANT"}]"""
+        repository.createEvent(
+            eventPayload("Invite", firstDay, LocalTime.of(14, 0), LocalTime.of(15, 0)).copy(attendeesJson = attendees),
+        )
+        val invite = harness.eventsIn(LOCAL_COLLECTION).single { it.title == "Invite" }
+
+        repository.setEventParticipation(invite.uid, listOf("me@example.com"), "ACCEPTED")
+
+        val replied = harness.event(invite.uid)!!
+        assertEquals(invite.sequence, replied.sequence)
+        assertTrue(replied.attendeesJson!!.contains("ACCEPTED"))
+    }
 }

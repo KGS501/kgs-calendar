@@ -8,13 +8,13 @@ import com.kgs.calendar.domain.model.Attendee
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.Organizer
 import com.kgs.calendar.domain.model.ParticipantJson
+import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.REMINDER_AT_END
+import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
-import net.fortuna.ical4j.data.CalendarBuilder
 import net.fortuna.ical4j.model.TimeZoneRegistryFactory
 import java.io.ByteArrayOutputStream
-import java.io.StringReader
 import java.nio.charset.Charset
 import java.net.URLDecoder
 import java.time.Instant
@@ -38,21 +38,20 @@ class IcalCodec(
         resourceHref: String,
         collectionColor: Int,
     ): ParsedCalendarComponent? {
-        runCatching { CalendarBuilder().build(StringReader(rawIcs)) }
-
+        val zones = TimeZoneResolver.forCalendar(rawIcs)
         val components = components(rawIcs)
         val eventBlocks = components[ComponentType.Event].orEmpty()
         if (eventBlocks.isNotEmpty()) {
             val master = eventBlocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } }
                 ?: eventBlocks.first()
-            val parsedMaster = parseEvent(master, collectionHref, resourceHref, collectionColor) ?: return null
+            val parsedMaster = parseEvent(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
             val masterEvent = parsedMaster.event ?: return parsedMaster
             val overrides = eventBlocks
                 .filter { it !== master }
                 .mapNotNull { block ->
                     val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
-                    val recurrenceId = parseIcalDate(recurrenceLine)?.epochMillis ?: return@mapNotNull null
-                    val parsedOverride = parseEvent(block, collectionHref, resourceHref, collectionColor)?.event
+                    val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
+                    val parsedOverride = parseEvent(block, collectionHref, resourceHref, collectionColor, zones)?.event
                         ?: return@mapNotNull null
                     EventRecurrenceOverride.fromEvent(recurrenceId, parsedOverride)
                 }
@@ -66,14 +65,14 @@ class IcalCodec(
         if (taskBlocks.isNotEmpty()) {
             val master = taskBlocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } }
                 ?: taskBlocks.first()
-            val parsedMaster = parseTask(master, collectionHref, resourceHref, collectionColor) ?: return null
+            val parsedMaster = parseTask(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
             val masterTask = parsedMaster.task ?: return parsedMaster
             val overrides = taskBlocks
                 .filter { it !== master }
                 .mapNotNull { block ->
                     val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
-                    val recurrenceId = parseIcalDate(recurrenceLine)?.epochMillis ?: return@mapNotNull null
-                    val parsed = parseTask(block, collectionHref, resourceHref, collectionColor)?.task
+                    val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
+                    val parsed = parseTask(block, collectionHref, resourceHref, collectionColor, zones)?.task
                         ?: return@mapNotNull null
                     val names = block.lines.map { it.name }.toSet()
                     val masterAnchor = masterTask.startAtMillis ?: masterTask.dueAtMillis ?: recurrenceId
@@ -90,7 +89,7 @@ class IcalCodec(
                         dueHasTime = if ("DUE" in names) parsed.dueHasTime else masterTask.dueHasTime,
                         priority = if ("PRIORITY" in names) parsed.priority else masterTask.priority,
                         percentComplete = if ("PERCENT-COMPLETE" in names) parsed.percentComplete else masterTask.percentComplete,
-                        remindersCsv = if (block.reminderMinutes.isNotEmpty()) parsed.remindersCsv else masterTask.remindersCsv,
+                        remindersCsv = if (block.alarms.isNotEmpty()) parsed.remindersCsv else masterTask.remindersCsv,
                     )
                     TaskRecurrenceOverride.fromTask(recurrenceId, parsedOverride)
                 }
@@ -109,26 +108,33 @@ class IcalCodec(
         resourceHrefPrefix: String,
         collectionColor: Int,
     ): List<ParsedCalendarComponent> {
+        val zones = TimeZoneResolver.forCalendar(rawIcs)
         val components = components(rawIcs)
         val events = components[ComponentType.Event].orEmpty().mapNotNull { block ->
             val uid = block.lines.firstOrNull { it.name == "UID" }?.value ?: return@mapNotNull null
-            parseEvent(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor)
+            parseEvent(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor, zones)
         }
         val tasks = components[ComponentType.Task].orEmpty().mapNotNull { block ->
             val uid = block.lines.firstOrNull { it.name == "UID" }?.value ?: return@mapNotNull null
-            parseTask(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor)
+            parseTask(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor, zones)
         }
         return events + tasks
     }
 
     fun serializeEvent(event: EventEntity, originalRawIcs: String? = null): String {
         val now = utcStamp(Instant.now().toEpochMilli())
+        val overrides = RecurrenceOverrideCodec.decodeEvents(event.recurrenceOverridesJson)
         val generated = buildString {
             appendCalendarHeader()
-            appendTimezoneComponent(event.timezoneId)
+            appendTimezoneComponents(
+                zoneIds = listOf(event.timezoneId) + overrides.map { it.timezoneId },
+                earliestMillis = (listOf(event.startsAtMillis) + overrides.map { minOf(it.recurrenceIdMillis, it.startsAtMillis) }).min(),
+            )
             appendLine("BEGIN:VEVENT")
             appendLine("UID:${escape(event.uid)}")
             appendLine("DTSTAMP:$now")
+            if (originalRawIcs.isNullOrBlank()) appendLine("CREATED:$now")
+            appendLine("LAST-MODIFIED:$now")
             appendLine("SEQUENCE:${event.sequence.coerceAtLeast(0)}")
             appendDateProperty("DTSTART", event.startsAtMillis, event.allDay, event.timezoneId)
             appendDateProperty("DTEND", event.endsAtMillis, event.allDay, event.timezoneId)
@@ -153,7 +159,7 @@ class IcalCodec(
             appendAttendees(event.attendeesJson)
             appendReminders(event.remindersCsv, event.title)
             appendLine("END:VEVENT")
-            RecurrenceOverrideCodec.decodeEvents(event.recurrenceOverridesJson).forEach { override ->
+            overrides.forEach { override ->
                 appendEventOverride(event, override, now)
             }
             appendCalendarFooter()
@@ -209,12 +215,21 @@ class IcalCodec(
     fun serializeTask(task: TaskEntity, originalRawIcs: String? = null): String {
         val now = utcStamp(Instant.now().toEpochMilli())
         val normalizedTask = task.withValidIcalSchedule()
+        val overrides = RecurrenceOverrideCodec.decodeTasks(normalizedTask.recurrenceOverridesJson)
         val generated = buildString {
             appendCalendarHeader()
-            appendTimezoneComponent(normalizedTask.timezoneId)
+            appendTimezoneComponents(
+                zoneIds = listOf(normalizedTask.timezoneId) + overrides.map { it.timezoneId },
+                earliestMillis = (
+                    listOfNotNull(normalizedTask.startAtMillis, normalizedTask.dueAtMillis) +
+                        overrides.map { it.recurrenceIdMillis }
+                ).minOrNull() ?: Instant.now().toEpochMilli(),
+            )
             appendLine("BEGIN:VTODO")
             appendLine("UID:${escape(normalizedTask.uid)}")
             appendLine("DTSTAMP:$now")
+            if (originalRawIcs.isNullOrBlank()) appendLine("CREATED:$now")
+            appendLine("LAST-MODIFIED:$now")
             appendLine("SEQUENCE:${normalizedTask.sequence.coerceAtLeast(0)}")
             normalizedTask.startAtMillis?.let {
                 appendDateProperty("DTSTART", it, !normalizedTask.startHasTime, normalizedTask.timezoneId)
@@ -251,7 +266,7 @@ class IcalCodec(
                 positiveRelatedToEnd = normalizedTask.dueAtMillis != null,
             )
             appendLine("END:VTODO")
-            RecurrenceOverrideCodec.decodeTasks(normalizedTask.recurrenceOverridesJson).forEach { override ->
+            overrides.forEach { override ->
                 appendTaskOverride(normalizedTask, override, now)
             }
             appendCalendarFooter()
@@ -307,13 +322,14 @@ class IcalCodec(
         collectionHref: String,
         resourceHref: String,
         color: Int,
+        zones: TimeZoneResolver,
     ): ParsedCalendarComponent? {
         val lines = block.lines
         val values = lines.associateBy { it.name }
         val uid = values["UID"]?.value ?: return null
         val startLine = values["DTSTART"] ?: values["RECURRENCE-ID"] ?: return null
-        val start = parseIcalDate(startLine) ?: return null
-        val end = values["DTEND"]?.let { parseIcalDate(it) }
+        val start = parseIcalDate(startLine, zones) ?: return null
+        val end = values["DTEND"]?.let { parseIcalDate(it, zones) }
             ?: values["DURATION"]?.value?.let { duration ->
                 parseDurationMillis(duration)?.let { start.plusDuration(it) }
             }
@@ -325,7 +341,7 @@ class IcalCodec(
             .filter { it.name == "EXDATE" }
             .flatMap { line ->
                 line.value.split(',').asSequence().map { v ->
-                    parseIcalDate(IcalLine("EXDATE", line.params, v.trim()))?.epochMillis
+                    parseIcalDate(IcalLine("EXDATE", line.params, v.trim()), zones)?.epochMillis
                 }
             }
             .filterNotNull()
@@ -334,7 +350,7 @@ class IcalCodec(
             .filter { it.name == "RDATE" }
             .flatMap { line ->
                 line.value.split(',').asSequence().map { value ->
-                    parseIcalDate(IcalLine("RDATE", line.params, value.trim().substringBefore('/')))?.epochMillis
+                    parseIcalDate(IcalLine("RDATE", line.params, value.trim().substringBefore('/')), zones)?.epochMillis
                 }
             }
             .filterNotNull()
@@ -353,11 +369,9 @@ class IcalCodec(
             isRecurring = rrule != null || rDateMillis.isNotEmpty(),
             exDatesCsv = exDateMillis.takeIf { it.isNotEmpty() }?.joinToString(","),
             rDatesCsv = rDateMillis.takeIf { it.isNotEmpty() }?.joinToString(","),
-            timezoneId = if (!startLine.isDateOnly && startLine.value.endsWith("Z")) {
-                "UTC"
-            } else startLine.params["TZID"]?.unquoteParam()?.takeIf { it.isNotBlank() },
+            timezoneId = sourceZoneId(startLine, zones),
             sequence = values["SEQUENCE"]?.value?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
-            remindersCsv = block.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
+            remindersCsv = block.reminderOffsets(AlarmAnchor.Event),
             status = values["STATUS"]?.value?.trim()?.uppercase(Locale.US)?.takeIf { it.isNotBlank() },
             classification = values["CLASS"]?.value?.trim()?.uppercase(Locale.US)?.takeIf { it.isNotBlank() },
             transparency = values["TRANSP"]?.value?.trim()?.uppercase(Locale.US)?.takeIf { it.isNotBlank() },
@@ -377,11 +391,12 @@ class IcalCodec(
         collectionHref: String,
         resourceHref: String,
         color: Int,
+        zones: TimeZoneResolver,
     ): ParsedCalendarComponent? {
         val lines = block.lines
         val values = lines.associateBy { it.name }
         val uid = values["UID"]?.value ?: return null
-        val completedAt = values["COMPLETED"]?.let { parseIcalDate(it)?.epochMillis }
+        val completedAt = values["COMPLETED"]?.let { parseIcalDate(it, zones)?.epochMillis }
         val rawStatus = values["STATUS"]?.value?.trim()?.uppercase(Locale.US)?.takeIf { it.isNotBlank() }
         val normalizedStatus = when (rawStatus) {
             "NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED" -> rawStatus
@@ -389,13 +404,13 @@ class IcalCodec(
         }
         val statusCompleted = normalizedStatus == "COMPLETED"
         val title = values["SUMMARY"]?.textValue()?.ifBlank { "Untitled task" } ?: "Untitled task"
-        val due = values["DUE"]?.let { parseIcalDate(it) }
-        val start = values["DTSTART"]?.let { parseIcalDate(it) }
+        val due = values["DUE"]?.let { parseIcalDate(it, zones) }
+        val start = values["DTSTART"]?.let { parseIcalDate(it, zones) }
         val exDateMillis = lines.asSequence()
             .filter { it.name == "EXDATE" }
             .flatMap { line ->
                 line.value.split(',').asSequence().map { v ->
-                    parseIcalDate(IcalLine("EXDATE", line.params, v.trim()))?.epochMillis
+                    parseIcalDate(IcalLine("EXDATE", line.params, v.trim()), zones)?.epochMillis
                 }
             }
             .filterNotNull()
@@ -404,13 +419,15 @@ class IcalCodec(
             .filter { it.name == "RDATE" }
             .flatMap { line ->
                 line.value.split(',').asSequence().map { value ->
-                    parseIcalDate(IcalLine("RDATE", line.params, value.trim().substringBefore('/')))?.epochMillis
+                    parseIcalDate(IcalLine("RDATE", line.params, value.trim().substringBefore('/')), zones)?.epochMillis
                 }
             }
             .filterNotNull()
             .toList()
-        val sourceTimeZone = (values["DTSTART"] ?: values["DUE"])
-            ?.params?.get("TZID")?.unquoteParam()?.takeIf { it.isNotBlank() }
+        // A task's times share one zone; the first timed value names it.
+        val sourceTimeZone = listOfNotNull(values["DTSTART"], values["DUE"])
+            .firstOrNull { !it.isDateOnly && it.value.length != 8 }
+            ?.let { sourceZoneId(it, zones) }
         val task = TaskEntity(
             uid = uid,
             collectionHref = collectionHref,
@@ -438,7 +455,7 @@ class IcalCodec(
             rDatesCsv = rDateMillis.takeIf { it.isNotEmpty() }?.joinToString(","),
             timezoneId = sourceTimeZone,
             sequence = values["SEQUENCE"]?.value?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
-            remindersCsv = block.reminderMinutes.normalizedReminderOffsets().takeIf { it.isNotEmpty() }?.joinToString(","),
+            remindersCsv = block.reminderOffsets(if (due != null) AlarmAnchor.TaskWithDue else AlarmAnchor.TaskStartOnly),
             color = color,
         ).withValidIcalSchedule()
         return ParsedCalendarComponent(uid, ComponentType.Task, null, task)
@@ -448,43 +465,42 @@ class IcalCodec(
         val result = mutableMapOf<ComponentType, MutableList<ComponentBlock>>()
         var activeName: ComponentType? = null
         var activeLines = mutableListOf<IcalLine>()
-        var activeReminders = mutableListOf<Int>()
+        var activeAlarms = mutableListOf<List<IcalLine>>()
+        var alarm: MutableList<IcalLine>? = null
         // Depth of nested BEGIN blocks (VALARM, VTIMEZONE, STANDARD, DAYLIGHT, ...) within
         // the currently active VEVENT/VTODO. Lines inside nested blocks must not be collected
-        // and their END must not close the outer component. We do, however, peek at TRIGGER
-        // lines inside VALARM blocks to recover reminder offsets.
+        // and their END must not close the outer component. The properties of a VALARM directly
+        // inside the component are kept apart to read its reminder.
         var nestedDepth = 0
         for (line in unfold(rawIcs)) {
             val upper = line.uppercase(Locale.US)
             when {
-                activeName == null && upper == "BEGIN:VEVENT" -> {
-                    activeName = ComponentType.Event
+                activeName == null && (upper == "BEGIN:VEVENT" || upper == "BEGIN:VTODO") -> {
+                    activeName = if (upper == "BEGIN:VEVENT") ComponentType.Event else ComponentType.Task
                     activeLines = mutableListOf()
-                    activeReminders = mutableListOf()
-                    nestedDepth = 0
-                }
-                activeName == null && upper == "BEGIN:VTODO" -> {
-                    activeName = ComponentType.Task
-                    activeLines = mutableListOf()
-                    activeReminders = mutableListOf()
+                    activeAlarms = mutableListOf()
+                    alarm = null
                     nestedDepth = 0
                 }
                 activeName != null && upper.startsWith("BEGIN:") -> {
                     nestedDepth++
+                    if (nestedDepth == 1 && upper == "BEGIN:VALARM") alarm = mutableListOf()
                 }
                 activeName != null && nestedDepth > 0 && upper.startsWith("END:") -> {
+                    if (nestedDepth == 1) {
+                        alarm?.let { activeAlarms += it.toList() }
+                        alarm = null
+                    }
                     nestedDepth--
                 }
                 activeName != null && nestedDepth == 0 &&
                     (upper == "END:VEVENT" || upper == "END:VTODO") -> {
                     result.getOrPut(activeName) { mutableListOf() }
-                        .add(ComponentBlock(activeLines, activeReminders.distinct()))
+                        .add(ComponentBlock(activeLines, activeAlarms.toList()))
                     activeName = null
                 }
-                activeName != null && nestedDepth > 0 && upper.startsWith("TRIGGER") -> {
-                    parseLine(line)?.let { triggerLine ->
-                        reminderMinutesFromTrigger(triggerLine)?.let { activeReminders += it }
-                    }
+                activeName != null && nestedDepth == 1 && alarm != null -> {
+                    parseLine(line)?.let { alarm?.add(it) }
                 }
                 activeName != null && nestedDepth == 0 -> {
                     parseLine(line)?.let(activeLines::add)
@@ -496,33 +512,51 @@ class IcalCodec(
         return result
     }
 
+    /** What a VTODO's or VEVENT's relative reminders count from in the app's reminder model. */
+    private enum class AlarmAnchor { Event, TaskWithDue, TaskStartOnly }
+
+    private fun ComponentBlock.reminderOffsets(anchor: AlarmAnchor): String? =
+        alarms.mapNotNull { alarmOffset(it, anchor) }
+            .normalizedReminderOffsets()
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(",")
+
     /**
-     * Converts a VALARM TRIGGER into minutes-before-start. Handles the common relative
-     * form (e.g. -PT15M, -PT1H, -P1D, -P1DT2H). Positive (after-start) and absolute
-     * DATE-TIME triggers are ignored (returned as null) since the UI models only
-     * before-offsets.
+     * The app's reminder offset for an alarm, or null when the app can't show and write it back
+     * unchanged: e-mail alarms, absolute times, reminders after the anchor, seconds, offsets
+     * beyond the supported range, and reminders before an event's end. Such alarms are kept
+     * as they are in the stored data.
      */
-    private fun reminderMinutesFromTrigger(line: IcalLine): Int? {
-        if (line.params["VALUE"].equals("DATE-TIME", ignoreCase = true)) return null
-        val raw = line.value.trim().uppercase(Locale.US)
-        if (raw.isEmpty()) return null
-        val relatedToEnd = line.params["RELATED"].equals("END", ignoreCase = true)
+    private fun alarmOffset(alarm: List<IcalLine>, anchor: AlarmAnchor): Int? {
+        val action = alarm.firstOrNull { it.name == "ACTION" }?.value?.trim()?.uppercase(Locale.US)
+        if (action != "DISPLAY" && action != "AUDIO") return null
+        val trigger = alarm.firstOrNull { it.name == "TRIGGER" } ?: return null
+        if (trigger.params["VALUE"].equals("DATE-TIME", ignoreCase = true)) return null
+        val raw = trigger.value.trim().uppercase(Locale.US)
         val negative = raw.startsWith("-")
         val body = raw.trimStart('-', '+')
-        if (!body.startsWith("P")) return null
-        val regex = Regex("P(?:(\\d+)W)?(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?")
-        val match = regex.matchEntire(body) ?: return null
-        val (w, d, h, m, s) = match.destructured
+        val match = TRIGGER_DURATION.matchEntire(body) ?: return null
+        val (w, d, h, m, sec) = match.destructured
+        if ((sec.toLongOrNull() ?: 0L) != 0L) return null
         val minutes = (w.toLongOrNull() ?: 0) * 7 * 24 * 60 +
             (d.toLongOrNull() ?: 0) * 24 * 60 +
             (h.toLongOrNull() ?: 0) * 60 +
-            (m.toLongOrNull() ?: 0) +
-            (s.toLongOrNull() ?: 0) / 60
-        // The UI represents before-start offsets, exact start, and exact end.
-        return when {
-            relatedToEnd && minutes == 0L -> REMINDER_AT_END
-            negative || minutes == 0L -> minutes.toInt()
-            else -> null
+            (m.toLongOrNull() ?: 0)
+        if (minutes != 0L && !negative) return null
+        if (minutes > MAX_REMINDER_MINUTES) return null
+        val relatedToEnd = trigger.params["RELATED"]?.unquoteParam().equals("END", ignoreCase = true)
+        return when (anchor) {
+            // Event offsets count back from the start; only the exact end is supported.
+            AlarmAnchor.Event -> when {
+                relatedToEnd -> REMINDER_AT_END.takeIf { minutes == 0L }
+                else -> minutes.toInt()
+            }
+            // A task's offsets count back from its due time; the start is supported exactly.
+            AlarmAnchor.TaskWithDue -> when {
+                relatedToEnd -> if (minutes == 0L) REMINDER_AT_END else minutes.toInt()
+                else -> REMINDER_AT_START.takeIf { minutes == 0L }
+            }
+            AlarmAnchor.TaskStartOnly -> if (relatedToEnd) null else minutes.toInt()
         }
     }
 
@@ -590,12 +624,13 @@ class IcalCodec(
         return result
     }
 
-    private fun parseIcalDate(line: IcalLine): ParsedDate? {
+    private fun parseIcalDate(line: IcalLine, zones: TimeZoneResolver): ParsedDate? {
         val value = line.value
         val isDateOnly = line.isDateOnly || value.length == 8
+        // An unknown zone is read in the device's zone, the same zone it is then stored under.
         val sourceZone = line.params["TZID"]
             ?.unquoteParam()
-            ?.let { id -> runCatching { ZoneId.of(id) }.getOrNull() }
+            ?.let(zones::resolve)
             ?: zoneId
         val millis = runCatching {
             when {
@@ -605,6 +640,17 @@ class IcalCodec(
             }
         }.getOrNull()
         return millis?.let { ParsedDate(it, isDateOnly) }
+    }
+
+    /**
+     * The zone a timed value is stored under: UTC for UTC values, null for floating values (they
+     * follow the device), and otherwise the resolved TZID, or the device's zone it was read in.
+     */
+    private fun sourceZoneId(line: IcalLine, zones: TimeZoneResolver): String? {
+        if (line.isDateOnly || line.value.length == 8) return null
+        if (line.value.endsWith("Z")) return "UTC"
+        val tzid = line.params["TZID"]?.unquoteParam()?.takeIf { it.isNotBlank() } ?: return null
+        return (zones.resolve(tzid) ?: zoneId).id
     }
 
     private fun parseDurationMillis(value: String): Long? {
@@ -631,6 +677,10 @@ class IcalCodec(
         return ParsedDate(endMillis, isDateOnly)
     }
 
+    /**
+     * Writes a date or time. Timed values keep their kind: null zones are floating local times,
+     * UTC stays UTC, and other zones are written as local time with their TZID.
+     */
     private fun StringBuilder.appendDateProperty(
         name: String,
         epochMillis: Long,
@@ -641,26 +691,101 @@ class IcalCodec(
             appendLine("$name;VALUE=DATE:${dateValue(epochMillis)}")
             return
         }
-        val sourceZone = timezoneId?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+        if (timezoneId == null) {
+            appendLine("$name:${localStamp(epochMillis, zoneId)}")
+            return
+        }
+        val sourceZone = timezoneId.takeUnless { it.isUtcZoneId() }?.let(TimeZoneResolver::resolveKnownId)
         if (sourceZone == null) {
             appendLine("$name:${utcStamp(epochMillis)}")
         } else {
-            appendLine("$name;TZID=${escapeParamToken(timezoneId)}:${localStamp(epochMillis, sourceZone)}")
+            appendLine("$name;TZID=${escapeParamToken(sourceZone.id)}:${localStamp(epochMillis, sourceZone)}")
         }
     }
 
-    private fun StringBuilder.appendTimezoneComponent(timezoneId: String?) {
-        val id = timezoneId?.takeIf { it.isNotBlank() } ?: return
-        val component = runCatching {
-            TimeZoneRegistryFactory.getInstance()
-                .createRegistry()
-                .getTimeZone(id)
-                ?.vTimeZone
-                ?.toString()
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
-        append(component.replace("\r\n", "\n").trimEnd())
-        appendLine()
+    private fun String.isUtcZoneId(): Boolean =
+        uppercase(Locale.US) in setOf("UTC", "Z", "GMT", "UCT", "ZULU", "ETC/UTC", "ETC/GMT", "ETC/UCT", "ETC/ZULU")
+
+    /** One VTIMEZONE per zone used, reduced to the rules from about a year before [earliestMillis]. */
+    private fun StringBuilder.appendTimezoneComponents(zoneIds: List<String?>, earliestMillis: Long) {
+        zoneIds.asSequence()
+            .filterNotNull()
+            .filterNot { it.isUtcZoneId() }
+            .mapNotNull(TimeZoneResolver::resolveKnownId)
+            .map { it.id }
+            .distinct()
+            .forEach { id ->
+                val component = runCatching {
+                    TimeZoneRegistryFactory.getInstance()
+                        .createRegistry()
+                        .getTimeZone(id)
+                        ?.vTimeZone
+                        ?.toString()
+                }.getOrNull()?.takeIf { it.isNotBlank() } ?: return@forEach
+                minifyTimezone(unfold(component), earliestMillis).forEach(::appendLine)
+            }
     }
+
+    /**
+     * Drops the historic observances of a VTIMEZONE. Kept are rules still in force after the cutoff,
+     * a year before the item's first date, and the last rule that ended before it, which defines
+     * the offset at the cutoff. Returns the component unchanged when it can't be read.
+     */
+    private fun minifyTimezone(lines: List<String>, earliestMillis: Long): List<String> {
+        if (lines.size < 3) return lines
+        val cutoff = LocalDateTime.ofInstant(Instant.ofEpochMilli(earliestMillis).minus(Duration.ofDays(366)), ZoneOffset.UTC)
+        val header = mutableListOf<String>()
+        val observances = mutableListOf<List<String>>()
+        var index = 1
+        while (index < lines.lastIndex) {
+            val line = lines[index]
+            if (line.uppercase(Locale.US).startsWith("BEGIN:")) {
+                val block = mutableListOf(line)
+                var depth = 1
+                index++
+                while (index < lines.lastIndex && depth > 0) {
+                    val nested = lines[index]
+                    block += nested
+                    if (nested.uppercase(Locale.US).startsWith("BEGIN:")) depth++
+                    if (nested.uppercase(Locale.US).startsWith("END:")) depth--
+                    index++
+                }
+                observances += block
+            } else {
+                header += line
+                index++
+            }
+        }
+        data class Observance(val lines: List<String>, val keep: Boolean, val lastOnset: LocalDateTime?)
+        val parsed = observances.map { block ->
+            val start = block.firstOrNull { propertyName(it) == "DTSTART" }?.substringAfter(':')?.trim()?.let(::parseLocalStamp)
+                ?: return lines
+            val rrule = block.firstOrNull { propertyName(it) == "RRULE" }?.substringAfter(':')
+            val onsets = listOf(start) + block.filter { propertyName(it) == "RDATE" }
+                .flatMap { it.substringAfter(':').split(',') }
+                .mapNotNull { parseLocalStamp(it.trim()) }
+            if (rrule != null) {
+                val until = rrule.split(';').firstOrNull { it.startsWith("UNTIL=", true) }
+                    ?.substringAfter('=')?.let(::parseLocalStamp)
+                Observance(block, until == null || !until.isBefore(cutoff), until)
+            } else {
+                val last = onsets.max()
+                Observance(block, !last.isBefore(cutoff), last)
+            }
+        }
+        if (parsed.none { it.keep }) return lines
+        val inEffectAtCutoff = parsed
+            .filter { !it.keep && it.lastOnset != null }
+            .maxByOrNull { it.lastOnset!! }
+        return listOf(lines.first()) + header +
+            parsed.filter { it.keep || it === inEffectAtCutoff }.flatMap { it.lines } +
+            lines.last()
+    }
+
+    private fun parseLocalStamp(value: String): LocalDateTime? = runCatching {
+        val trimmed = value.trim().removeSuffix("Z")
+        if (trimmed.length == 8) LocalDate.parse(trimmed, DATE).atStartOfDay() else LocalDateTime.parse(trimmed, DATE_TIME)
+    }.getOrNull()
 
     private fun StringBuilder.appendEventOverride(
         master: EventEntity,
@@ -670,6 +795,7 @@ class IcalCodec(
         appendLine("BEGIN:VEVENT")
         appendLine("UID:${escape(master.uid)}")
         appendLine("DTSTAMP:$now")
+        appendLine("LAST-MODIFIED:$now")
         appendLine("SEQUENCE:${master.sequence.coerceAtLeast(0)}")
         appendDateProperty(
             "RECURRENCE-ID",
@@ -700,6 +826,7 @@ class IcalCodec(
         appendLine("BEGIN:VTODO")
         appendLine("UID:${escape(master.uid)}")
         appendLine("DTSTAMP:$now")
+        appendLine("LAST-MODIFIED:$now")
         appendLine("SEQUENCE:${master.sequence.coerceAtLeast(0)}")
         appendDateProperty(
             "RECURRENCE-ID",
@@ -736,6 +863,8 @@ class IcalCodec(
      * KGS only exposes a subset of RFC 5545 in its editor. Keep every property and nested
      * component it doesn't own when editing an existing resource so attachments, conference
      * links, custom X-properties, unsupported alarms and server scheduling metadata survive.
+     * Text values and alarms the edit left unchanged are written back exactly as they were, so
+     * their parameters, HTML and alarm metadata survive too.
      */
     private fun preserveUnsupportedData(
         originalRawIcs: String?,
@@ -745,16 +874,23 @@ class IcalCodec(
         if (originalRawIcs.isNullOrBlank()) return generatedRawIcs
         val originalBlocks = extractComponentBlocks(originalRawIcs, componentType.value)
         if (originalBlocks.isEmpty()) return generatedRawIcs
-        val unknownByKey = originalBlocks.associate { block ->
-            componentIdentity(block) to extractUnsupportedComponentLines(block, componentType)
+        val originalZones = TimeZoneResolver.forCalendar(originalRawIcs)
+        val originals = originalBlocks.associate { block ->
+            componentIdentity(block, originalZones) to originalComponent(block, componentType)
         }
-        var merged = injectUnsupportedComponentLines(generatedRawIcs, componentType, unknownByKey)
+        var merged = injectOriginalData(generatedRawIcs, componentType, originals)
 
-        val generatedUpper = merged.uppercase(Locale.US)
-        val originalTimeZones = extractComponentBlocks(originalRawIcs, "VTIMEZONE")
-        originalTimeZones.forEach { block ->
+        // Original time zone definitions are kept for the values that still refer to them.
+        val referencedZones = unfold(merged)
+            .mapNotNull { line -> parseLine(line)?.params?.get("TZID")?.unquoteParam()?.lowercase(Locale.US) }
+            .toSet()
+        val definedZones = extractComponentBlocks(merged, "VTIMEZONE")
+            .mapNotNull { block -> block.firstOrNull { propertyName(it) == "TZID" }?.substringAfter(':')?.trim()?.lowercase(Locale.US) }
+            .toSet()
+        extractComponentBlocks(originalRawIcs, "VTIMEZONE").forEach { block ->
             val tzid = block.firstOrNull { propertyName(it) == "TZID" }?.substringAfter(':')?.trim()
-            if (tzid != null && !generatedUpper.contains("TZID:${tzid.uppercase(Locale.US)}")) {
+                ?.removeSurrounding("\"")?.lowercase(Locale.US)
+            if (tzid != null && tzid in referencedZones && tzid !in definedZones) {
                 merged = merged.replaceFirst(
                     "BEGIN:${componentType.value}",
                     block.joinToString("\r\n", postfix = "\r\n") + "BEGIN:${componentType.value}",
@@ -800,19 +936,33 @@ class IcalCodec(
         return result
     }
 
-    private fun componentIdentity(block: List<String>): String {
-        val recurrence = block.firstOrNull { propertyName(it) == "RECURRENCE-ID" }
-        return recurrence?.substringAfter(':')?.trim()?.let { "override:$it" } ?: "master"
+    /** Master or override, by the instant of its RECURRENCE-ID whichever way it was written. */
+    private fun componentIdentity(block: List<String>, zones: TimeZoneResolver): String {
+        val recurrence = topLevelItems(block).firstOrNull { it.size == 1 && propertyName(it[0]) == "RECURRENCE-ID" }?.single()
+            ?: return "master"
+        val millis = parseLine(recurrence)?.let { parseIcalDate(it, zones) }?.epochMillis
+        return "override:${millis ?: recurrence.substringAfter(':').trim()}"
     }
 
-    private fun extractUnsupportedComponentLines(block: List<String>, componentType: ComponentType): List<String> {
-        val known = if (componentType == ComponentType.Event) KNOWN_EVENT_PROPERTIES else KNOWN_TASK_PROPERTIES
-        val result = mutableListOf<String>()
+    private class OriginalAlarm(val offset: Int, val lines: List<String>)
+
+    private class OriginalComponent(
+        val anchor: AlarmAnchor,
+        /** Properties and nested components the app doesn't model. */
+        val unsupported: List<String>,
+        /** Alarms the app models, by the reminder offset they stand for. */
+        val alarms: List<OriginalAlarm>,
+        /** The first SUMMARY, DESCRIPTION, LOCATION and URL line, by property name. */
+        val textLines: Map<String, String>,
+    )
+
+    /** A component's direct children: single property lines, and nested components as whole blocks. */
+    private fun topLevelItems(block: List<String>): List<List<String>> {
+        val items = mutableListOf<List<String>>()
         var index = 1
         while (index < block.lastIndex) {
             val line = block[index]
             if (line.uppercase(Locale.US).startsWith("BEGIN:")) {
-                val nestedName = line.substringAfter(':').uppercase(Locale.US)
                 val nested = mutableListOf(line)
                 var depth = 1
                 index++
@@ -823,28 +973,54 @@ class IcalCodec(
                     if (nestedLine.uppercase(Locale.US).startsWith("END:")) depth--
                     index++
                 }
-                if (nestedName != "VALARM" || !isRepresentedAlarm(nested)) result += nested
-                continue
+                items += nested
+            } else {
+                items += listOf(line)
+                index++
             }
-            val name = propertyName(line)
-            if (name !in known || (name == "RDATE" && line.substringAfter(':', "").contains('/'))) {
-                result += line
-            }
-            index++
         }
-        return result
+        return items
     }
 
-    private fun isRepresentedAlarm(block: List<String>): Boolean {
-        val action = block.firstOrNull { propertyName(it) == "ACTION" }?.substringAfter(':')?.trim()
-        val trigger = block.firstOrNull { propertyName(it) == "TRIGGER" }?.let(::parseLine)
-        return action.equals("DISPLAY", true) && trigger?.let(::reminderMinutesFromTrigger) != null
+    private fun alarmAnchor(block: List<String>, componentType: ComponentType): AlarmAnchor = when {
+        componentType == ComponentType.Event -> AlarmAnchor.Event
+        topLevelItems(block).any { it.size == 1 && propertyName(it[0]) == "DUE" } -> AlarmAnchor.TaskWithDue
+        else -> AlarmAnchor.TaskStartOnly
     }
 
-    private fun injectUnsupportedComponentLines(
+    private fun alarmOffsetOf(alarmBlock: List<String>, anchor: AlarmAnchor): Int? {
+        if (!alarmBlock.first().equals("BEGIN:VALARM", ignoreCase = true)) return null
+        val properties = alarmBlock.drop(1).dropLast(1)
+        if (properties.any { it.uppercase(Locale.US).startsWith("BEGIN:") }) return null
+        return alarmOffset(properties.mapNotNull(::parseLine), anchor)
+    }
+
+    private fun originalComponent(block: List<String>, componentType: ComponentType): OriginalComponent {
+        val known = if (componentType == ComponentType.Event) KNOWN_EVENT_PROPERTIES else KNOWN_TASK_PROPERTIES
+        val anchor = alarmAnchor(block, componentType)
+        val unsupported = mutableListOf<String>()
+        val alarms = mutableListOf<OriginalAlarm>()
+        val textLines = mutableMapOf<String, String>()
+        topLevelItems(block).forEach { item ->
+            if (item.size > 1 || item[0].uppercase(Locale.US).startsWith("BEGIN:")) {
+                val offset = alarmOffsetOf(item, anchor)
+                if (offset != null) alarms += OriginalAlarm(offset, item) else unsupported += item
+                return@forEach
+            }
+            val line = item[0]
+            val name = propertyName(line)
+            if (name in TEXT_PROPERTIES && name !in textLines) textLines[name] = line
+            if (name !in known || (name == "RDATE" && line.substringAfter(':', "").contains('/'))) {
+                unsupported += line
+            }
+        }
+        return OriginalComponent(anchor, unsupported, alarms, textLines)
+    }
+
+    private fun injectOriginalData(
         generated: String,
         componentType: ComponentType,
-        unknownByKey: Map<String, List<String>>,
+        originals: Map<String, OriginalComponent>,
     ): String {
         val normalized = generated.replace("\r\n", "\n").replace('\r', '\n')
         val out = mutableListOf<String>()
@@ -862,13 +1038,8 @@ class IcalCodec(
                 if (upper.startsWith("BEGIN:")) depth++
                 if (upper.startsWith("END:")) depth--
                 if (upper == "END:${componentType.value}" && depth == 0) {
-                    val identity = componentIdentity(block)
-                    val unsupported = unknownByKey[identity].orEmpty()
-                    if (unsupported.any { propertyName(it) == "RDATE" }) {
-                        block.removeAll { propertyName(it) == "RDATE" }
-                    }
-                    block.addAll(block.lastIndex, unsupported)
-                    out += block
+                    val original = originals[componentIdentity(block, TimeZoneResolver.Empty)]
+                    out += if (original == null) block else mergeComponent(block, componentType, original)
                     inComponent = false
                 }
             } else {
@@ -877,6 +1048,32 @@ class IcalCodec(
         }
         return out.joinToString("\r\n").trimEnd() + "\r\n"
     }
+
+    private fun mergeComponent(block: List<String>, componentType: ComponentType, original: OriginalComponent): List<String> {
+        val sameAnchor = alarmAnchor(block, componentType) == original.anchor
+        val unusedAlarms = original.alarms.toMutableList()
+        val unsupportedRDates = original.unsupported.any { propertyName(it) == "RDATE" }
+        val items = topLevelItems(block).mapNotNull { item ->
+            if (item.size > 1) {
+                // A reminder that is still set keeps its original alarm (sound, UID, acknowledgement).
+                val offset = if (sameAnchor) alarmOffsetOf(item, original.anchor) else null
+                val kept = offset?.let { value -> unusedAlarms.firstOrNull { it.offset == value } }
+                if (kept != null) {
+                    unusedAlarms.remove(kept)
+                    return@mapNotNull kept.lines
+                }
+                return@mapNotNull item
+            }
+            val line = item[0]
+            val name = propertyName(line)
+            if (name == "RDATE" && unsupportedRDates) return@mapNotNull null
+            val originalLine = original.textLines[name]
+            if (originalLine != null && textOf(originalLine) == textOf(line)) listOf(originalLine) else item
+        }
+        return listOf(block.first()) + items.flatten() + original.unsupported + block.last()
+    }
+
+    private fun textOf(line: String): String? = parseLine(line)?.textValue()
 
     private fun propertyName(line: String): String =
         line.substringBefore(':').substringBefore(';').uppercase(Locale.US)
@@ -1054,25 +1251,25 @@ class IcalCodec(
         return 0xFF000000.toInt() or normalized.toInt(16)
     }
 
+    /**
+     * A text property's value. Only values marked as quoted-printable are decoded that way, and only
+     * real HTML (a `data:text/html` value or recognisable tags) is flattened, so links with `?pwd=`,
+     * `%20` or addresses in angle brackets are kept exactly as written.
+     */
     private fun IcalLine.textValue(): String {
-        val decoded = if (
-            params["ENCODING"].equals("QUOTED-PRINTABLE", ignoreCase = true) ||
-            value.contains(Regex("=[0-9A-Fa-f]{2}"))
-        ) {
+        val decoded = if (params["ENCODING"].equals("QUOTED-PRINTABLE", ignoreCase = true)) {
             decodeQuotedPrintable(value, params["CHARSET"])
         } else {
             value
         }
         val unescaped = decoded.unescapeIcal()
-        return if (
-            unescaped.startsWith("data:text/html", ignoreCase = true) ||
-            unescaped.startsWith("text/html,", ignoreCase = true) ||
-            unescaped.contains(Regex("%[0-9A-Fa-f]{2}")) ||
-            ('<' in unescaped && '>' in unescaped)
-        ) {
-            unescaped.decodePercentHtmlPayload(params["CHARSET"])
-        } else {
-            unescaped
+        val trimmed = unescaped.trimStart()
+        return when {
+            trimmed.startsWith("data:text/html", ignoreCase = true) && "," in trimmed ||
+                trimmed.startsWith("text/html,", ignoreCase = true) ->
+                unescaped.decodePercentHtmlPayload(params["CHARSET"])
+            HTML_MARKUP.containsMatchIn(unescaped) -> unescaped.htmlToPlainText()
+            else -> unescaped
         }
     }
 
@@ -1083,19 +1280,21 @@ class IcalCodec(
             normalized = runCatching { URLDecoder.decode(normalized, charset.name()) }.getOrDefault(normalized)
                 .trimHtmlDataPrefix()
         }
-        if ('<' in normalized && '>' in normalized) {
-            normalized = normalized
-                .replace(Regex("(?i)<br\\s*/?>"), "\n")
-                .replace(Regex("(?i)</p\\s*>"), "\n")
-                .replace(Regex("(?s)<[^>]+>"), "")
-                .replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-        }
+        if (HTML_MARKUP.containsMatchIn(normalized)) normalized = normalized.htmlToPlainText()
         return normalized.trim()
     }
+
+    private fun String.htmlToPlainText(): String =
+        replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(p|div|li|tr|h[1-6])\\s*>"), "\n")
+            .replace(Regex("(?s)<[^>]+>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&")
+            .trim()
 
     private fun String.trimHtmlDataPrefix(): String {
         val trimmed = trim()
@@ -1145,7 +1344,8 @@ class IcalCodec(
 
     private data class ComponentBlock(
         val lines: List<IcalLine>,
-        val reminderMinutes: List<Int>,
+        /** The properties of each VALARM directly inside the component. */
+        val alarms: List<List<IcalLine>>,
     )
 
     private data class ParsedDate(
@@ -1159,17 +1359,23 @@ class IcalCodec(
         private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
         private const val HOUR_MILLIS = 60L * 60L * 1000L
         private const val ICAL_LINE_LIMIT_BYTES = 75
+        private val TRIGGER_DURATION = Regex("P(?:(\\d+)W)?(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?")
+        /** Tags that mark a value as HTML. Plain text with `<` and `>` (e-mail addresses, comparisons) stays text. */
+        private val HTML_MARKUP = Regex(
+            "(?i)</?(a|b|i|u|s|p|br|hr|div|span|font|em|strong|ul|ol|li|h[1-6]|table|tbody|thead|tr|td|th|blockquote|pre|code|img|sub|sup|strike|center|html|head|body|meta|style)(\\s[^<>]*)?/?>",
+        )
         private val KNOWN_CALENDAR_PROPERTIES = setOf("VERSION", "PRODID", "CALSCALE")
         private val KNOWN_EVENT_PROPERTIES = setOf(
             "UID", "DTSTAMP", "SEQUENCE", "RECURRENCE-ID", "DTSTART", "DTEND", "DURATION",
             "SUMMARY", "STATUS", "CLASS", "TRANSP", "DESCRIPTION", "LOCATION", "CATEGORIES",
             "COLOR", "X-APPLE-CALENDAR-COLOR", "X-COLOR", "RRULE", "EXDATE", "RDATE",
-            "ORGANIZER", "ATTENDEE",
+            "ORGANIZER", "ATTENDEE", "LAST-MODIFIED",
         )
         private val KNOWN_TASK_PROPERTIES = setOf(
             "UID", "DTSTAMP", "SEQUENCE", "RECURRENCE-ID", "DTSTART", "DUE", "DURATION",
             "COMPLETED", "STATUS", "PRIORITY", "PERCENT-COMPLETE", "SUMMARY", "DESCRIPTION",
-            "LOCATION", "URL", "CATEGORIES", "RELATED-TO", "RRULE", "EXDATE", "RDATE",
+            "LOCATION", "URL", "CATEGORIES", "RELATED-TO", "RRULE", "EXDATE", "RDATE", "LAST-MODIFIED",
         )
+        private val TEXT_PROPERTIES = setOf("SUMMARY", "DESCRIPTION", "LOCATION", "URL")
     }
 }

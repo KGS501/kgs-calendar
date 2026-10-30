@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
@@ -231,6 +232,7 @@ internal fun SettingsPage(
     onSyncIntervalChanged: (Int) -> Unit = {},
     onCollectionSettings: (CollectionEntity) -> Unit,
     onDeleteLocalCalendar: () -> Unit = {},
+    onExportAccount: (String, Uri) -> Unit = { _, _ -> },
     onPickAccountImage: (String, Uri) -> Unit = { _, _ -> },
     onRemoveAccountImage: (String) -> Unit = {},
     onAvatarColorSelected: (String, Int?) -> Unit = { _, _ -> },
@@ -307,6 +309,17 @@ internal fun SettingsPage(
         navigateTo(SettingsDestination.AccountDetail)
     }
     val context = LocalContext.current
+    var exportAccountId by rememberSaveable { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/calendar")) { uri ->
+        val accountId = exportAccountId
+        exportAccountId = null
+        if (uri != null && accountId != null) onExportAccount(accountId, uri)
+    }
+    fun exportAccount(accountId: String, name: String) {
+        exportAccountId = accountId
+        val fileName = name.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().ifBlank { "calendar" }
+        exportLauncher.launch("$fileName.ics")
+    }
     val calDavValidationFailedText = stringResource(R.string.caldav_validation_failed)
     val calendarPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val readGranted = grants[Manifest.permission.READ_CALENDAR] == true ||
@@ -725,6 +738,7 @@ internal fun SettingsPage(
                                     shape = SettingsFieldShape,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
+                                CleartextServerWarning(addServerUrl)
                                 OutlinedTextField(
                                     value = addUsername,
                                     onValueChange = {
@@ -865,7 +879,7 @@ internal fun SettingsPage(
                                         SettingsEditRow(
                                             title = stringResource(if (isReadOnlySource) R.string.ics_calendar_url else R.string.server_url),
                                             value = account.serverUrl,
-                                        ) { accountFieldEdit = AccountFieldEdit(AccountField.ServerUrl, account.serverUrl) }
+                                        ) { accountFieldEdit = AccountFieldEdit(AccountField.ServerUrl, account.serverUrl, sendsCredentials = !isReadOnlySource) }
                                     }
                                     if (isCalDavSource) {
                                         SettingsEditRow(stringResource(R.string.username), account.username) {
@@ -953,6 +967,15 @@ internal fun SettingsPage(
                                             }
                                         }
                                     }
+                                }
+                                SettingsGroup(footer = stringResource(R.string.export_calendar_footer)) {
+                                    SettingsRow(
+                                        title = stringResource(R.string.export_calendar),
+                                        leading = {
+                                            Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                                        },
+                                        onClick = { exportAccount(account.id, accountName) },
+                                    )
                                 }
                                 SettingsGroup(footer = if (isLocalSource) stringResource(R.string.delete_local_calendar_footer) else null) {
                                     SettingsRow(
@@ -1456,10 +1479,24 @@ internal fun SettingsPage(
     }
     deleteAccountCandidateId?.let { accountId ->
         val local = accountId == UiLocalAccountId
+        // Removing a source drops its changes that haven't reached the server yet.
+        val unsentChanges = state.pendingMutationItems.count { it.accountId == accountId }
+        val exportName = accounts.firstOrNull { it.id == accountId }?.shownName().orEmpty()
         KgsAlertDialog(
             onDismissRequest = { deleteAccountCandidateId = null },
             title = { Text(stringResource(if (local) R.string.delete_local_calendar_question else R.string.remove_source_question)) },
-            text = { Text(stringResource(if (local) R.string.delete_local_calendar_body else R.string.remove_source_body)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(if (local) R.string.delete_local_calendar_body else R.string.remove_source_body))
+                    if (local) Text(stringResource(R.string.delete_local_calendar_export_hint))
+                    if (!local && unsentChanges > 0) {
+                        Text(
+                            pluralStringResource(R.plurals.remove_source_unsent_changes, unsentChanges, unsentChanges),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 DialogConfirmButton(
                     text = stringResource(if (local) R.string.delete else R.string.remove),
@@ -1472,8 +1509,25 @@ internal fun SettingsPage(
                 )
             },
             dismissButton = {
-                TextButton(onClick = { deleteAccountCandidateId = null }) {
-                    Text(stringResource(R.string.cancel))
+                Row {
+                    if (local) {
+                        TextButton(onClick = {
+                            deleteAccountCandidateId = null
+                            exportAccount(accountId, exportName)
+                        }) {
+                            Text(stringResource(R.string.export_first))
+                        }
+                    } else if (unsentChanges > 0) {
+                        TextButton(onClick = {
+                            deleteAccountCandidateId = null
+                            onSync()
+                        }) {
+                            Text(stringResource(R.string.sync_now))
+                        }
+                    }
+                    TextButton(onClick = { deleteAccountCandidateId = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
                 }
             },
         )

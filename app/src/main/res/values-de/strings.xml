@@ -24,6 +24,7 @@
     <string name="caldav">CalDAV</string>
     <string name="caldav_account">CalDAV-Konto</string>
     <string name="caldav_server_url">CalDAV-Server-URL</string>
+    <string name="cleartext_server_warning">Diese Adresse nutzt unverschlüsseltes HTTP. Passwort und Kalenderdaten können im Netzwerk mitgelesen werden. Verwende https://, außer der Server ist nur in einem vertrauenswürdigen Netzwerk erreichbar.</string>
     <string name="nextcloud_browser_login_help">Bei Nextcloud kannst du dich statt mit Passwort im Browser anmelden. Andere CalDAV-Server brauchen Benutzername und Passwort oder App-Passwort.</string>
     <string name="caldav_discovery">CalDAV-Erkennung</string>
     <string name="caldav_principal">Principal-URL</string>
@@ -63,6 +64,8 @@
     <string name="remove">Entfernen</string>
     <string name="delete">Löschen</string>
     <string name="mark_done">Als erledigt markieren</string>
+    <string name="reminder_snooze">10 Min. schlummern</string>
+    <string name="invitation_edit_notice">Du wurdest zu diesem Termin eingeladen. Änderungen gelten nur für deine Kopie und werden ersetzt, wenn der Organisator den Termin aktualisiert.</string>
     <string name="menu">Menü</string>
     <string name="today">Heute</string>
     <string name="no_results">Keine Ergebnisse</string>
@@ -772,6 +775,16 @@
     <string name="server_section">Server</string>
     <string name="delete_local_calendar">Lokalen Kalender löschen</string>
     <string name="delete_local_calendar_footer">Unter Kalender hinzufügen kannst du wieder einen leeren lokalen Kalender anlegen.</string>
+    <string name="delete_local_calendar_export_hint">Exportiere den Kalender vorher, um eine Kopie als .ics-Datei zu behalten.</string>
+    <string name="export_first">Erst exportieren</string>
+    <string name="export_calendar">Als .ics-Datei exportieren</string>
+    <string name="export_calendar_footer">Speichert alle Termine und Aufgaben dieser Quelle, auch noch nicht hochgeladene Änderungen, in einer iCalendar-Datei, die andere Kalender-Apps importieren können.</string>
+    <string name="export_done">%d Einträge in die Datei gespeichert.</string>
+    <string name="export_failed">Der Kalender konnte nicht exportiert werden.</string>
+    <plurals name="remove_source_unsent_changes">
+        <item quantity="one">%d Änderung auf diesem Gerät wurde noch nicht hochgeladen und geht verloren.</item>
+        <item quantity="other">%d Änderungen auf diesem Gerät wurden noch nicht hochgeladen und gehen verloren.</item>
+    </plurals>
     <string name="delete_local_calendar_question">Lokalen Kalender löschen?</string>
     <string name="delete_local_calendar_body">Der lokale Kalender und alle seine Termine und Aufgaben werden von diesem Gerät gelöscht. Das lässt sich nicht rückgängig machen.</string>
     <string name="settings_task_start_date">Startdatum</string>

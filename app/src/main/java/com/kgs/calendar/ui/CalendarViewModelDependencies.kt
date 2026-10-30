@@ -25,6 +25,11 @@ interface AppLifecycleSignals {
     fun registerAndroidCalendarObserverIfPermitted()
 }
 
+/** Writes calendars as an iCalendar file to a document the user picked; returns the items written. */
+fun interface CalendarFileExporter {
+    suspend fun export(collectionHrefs: List<String>, target: Uri): Int
+}
+
 /** Reads a document the user picked (e.g. a photo for a group), or null when it can't be read. */
 fun interface PickedContentReader {
     suspend fun read(uri: Uri): ByteArray?

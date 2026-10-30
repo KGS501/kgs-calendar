@@ -11,6 +11,7 @@ import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import com.kgs.calendar.data.recurrence.TaskRecurrenceExpander
 import com.kgs.calendar.data.search.CalendarOccurrenceSearch
 import com.kgs.calendar.data.search.CalendarSearchMode
+import com.kgs.calendar.domain.event.ownCalendarAddresses
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.source.CollectionVisibility
 import kotlinx.coroutines.Dispatchers
@@ -195,6 +196,12 @@ class CalendarQueries(
      * only their events or tasks) are left out, so hidden items never notify. Recurrence
      * expansion for reminders is handled by the scheduler using the recurrence rule + expander.
      */
+    /** The user's own calendar addresses for each calendar, from the account that holds it. */
+    suspend fun ownAddressesByCollection(): Map<String, Set<String>> {
+        val addressesByAccount = database.accountDao().getAll().associate { it.id to it.ownCalendarAddresses() }
+        return database.collectionDao().all().associate { it.href to addressesByAccount[it.accountId].orEmpty() }
+    }
+
     suspend fun reminderCandidates(
         visibility: CollectionVisibility = CollectionVisibility(),
     ): Pair<List<EventEntity>, List<TaskEntity>> {
