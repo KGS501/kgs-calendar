@@ -136,7 +136,7 @@ internal fun AccountFieldDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (edit.field == AccountField.Password) {
-                    Text(stringResource(R.string.change_password_help), fontSize = 14.sp, lineHeight = 20.sp)
+                    if (!LocalProMode.current) Text(stringResource(R.string.change_password_help), fontSize = 14.sp, lineHeight = 20.sp)
                     SecurePasswordField(
                         value = value,
                         onValueChange = { value = it },

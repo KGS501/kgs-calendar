@@ -2,6 +2,11 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.ContentCopy
+import com.kgs.calendar.domain.source.CalendarSourceGroup
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.groupOf
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
@@ -421,6 +426,7 @@ internal fun DetailSheetContent(
     collections: List<CollectionEntity>,
     collectionVisibility: CollectionVisibility,
     accounts: List<AccountEntity>,
+    calendarGroups: List<CalendarSourceGroup> = emptyList(),
     problemResources: List<CalendarResourceEntity>,
     taskColorMode: TaskColorMode,
     eventFieldOrder: List<String>,
@@ -750,7 +756,7 @@ internal fun DetailSheetContent(
                     autoLoadMapPreviews = autoLoadMapPreviews,
                     onParticipationChanged = { partstat -> onEventParticipationChanged(detail.event.resourceHref, partstat) },
                 )
-                if (trashedItem == null) detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
+                if (trashedItem == null) detail.sourceFootnoteText(collections, accounts, calendarGroups)?.let { SourceFootnote(it) }
                 Spacer(Modifier.height(56.dp))
             }
             is DetailSheet.Task -> {
@@ -781,7 +787,7 @@ internal fun DetailSheetContent(
                         onPriorityChanged = { onTaskPriorityChanged(detail.task.resourceHref, it) },
                         onProgressChanged = { onTaskProgressChanged(detail.task.resourceHref, it) },
                     )
-                    if (trashedItem == null) detail.sourceFootnoteText(collections, accounts)?.let { SourceFootnote(it) }
+                    if (trashedItem == null) detail.sourceFootnoteText(collections, accounts, calendarGroups)?.let { SourceFootnote(it) }
                     Spacer(Modifier.height(56.dp))
                 }
             }
@@ -1154,6 +1160,7 @@ private fun SourceFootnote(text: String) {
 private fun DetailSheet.sourceFootnoteText(
     collections: List<CollectionEntity>,
     accounts: List<AccountEntity>,
+    groups: List<CalendarSourceGroup>,
 ): String? {
     val href = when (this) {
         is DetailSheet.Event -> event.collectionHref
@@ -1164,7 +1171,8 @@ private fun DetailSheet.sourceFootnoteText(
     val source = when {
         collection.href.isLocalCollectionHref() -> stringResource(R.string.local_calendar)
         collection.isAndroidProviderCollection() -> account?.displayName ?: stringResource(R.string.android_device_calendars)
-        collection.isReadOnlyCollection() -> account?.displayName ?: collection.displayName
+        // A subscription is known by its group, as in the sidebar; its own source name is not shown anywhere.
+        collection.isReadOnlyCollection() -> groups.groupOf(collection)?.displayName() ?: account?.displayName ?: collection.displayName
         else -> account?.displayName ?: account?.username ?: stringResource(R.string.source)
     }
     return stringResource(R.string.source_line, source, collection.displayName)
@@ -1189,38 +1197,55 @@ private fun DetailOverflowMenu(
     var copyExpanded by remember { mutableStateOf(false) }
     var deleteDialogOpen by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = iconTint)
-        }
-        DropdownMenu(
+        // The menu grows out of the round button, towards the sheet's start.
+        MorphingDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            shadowElevation = 8.dp,
+            buttonShape = CircleShape,
+            buttonColor = Color.Transparent,
+            onClick = { expanded = true },
+            onClickLabel = stringResource(R.string.more_options),
+            role = Role.Button,
+            alignEnd = true,
+            menuMinWidth = 180.dp,
+            button = {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = iconTint)
+                }
+            },
         ) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.duplicate)) },
+            MorphMenuRow(
+                label = stringResource(R.string.duplicate),
+                selected = false,
+                role = Role.Button,
                 onClick = {
                     expanded = false
                     onDuplicate()
                 },
+                leading = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.copy_to)) },
+            MorphMenuRow(
+                label = stringResource(R.string.copy_to),
+                selected = false,
                 enabled = copyTargets.isNotEmpty(),
+                role = Role.Button,
                 onClick = {
                     expanded = false
                     copyExpanded = true
                 },
+                leading = { Icon(Icons.Default.DriveFileMove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
             )
             if (canDelete) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                MorphMenuRow(
+                    label = stringResource(R.string.delete),
+                    selected = false,
+                    labelColor = MaterialTheme.colorScheme.error,
+                    role = Role.Button,
                     onClick = {
                         expanded = false
                         deleteDialogOpen = true
                     },
+                    leading = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
                 )
             }
         }

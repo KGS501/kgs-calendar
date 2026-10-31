@@ -81,10 +81,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.Role
 import com.kgs.calendar.ui.components.GripHandleIcon
 import com.kgs.calendar.ui.sources.shownName
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.groupOf
+import com.kgs.calendar.domain.source.CalendarSourceGroup
+import com.kgs.calendar.domain.source.isReadOnlyCollection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.Dp
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -321,6 +329,15 @@ internal fun FieldOrderList(
     val targetIndex = draggingIndex?.let { start ->
         (start + (dragOffsetPx / stepPx).roundToInt()).coerceIn(0, ordered.lastIndex)
     }
+    val autoScroll = rememberReorderAutoScrollState(rowHeightDp)
+    ReorderAutoScroll(
+        dragging = draggingIndex != null,
+        rowBounds = { autoScroll.draggedRowBounds(dragOffsetPx) },
+        onScrolled = { scrolled ->
+            dragOffsetPx += scrolled
+            autoScroll.scrolledPx += scrolled
+        },
+    )
 
     // Nothing here may clip: a lifted row's shadow reaches past the list's edges.
     Column(
@@ -343,6 +360,7 @@ internal fun FieldOrderList(
                 )
                 Box(
                     modifier = Modifier
+                        .onGloballyPositioned { autoScroll.rowTops[field] = it.positionInWindow().y }
                         .reorderLift(isDragging) { if (isDragging) dragOffsetPx else animatedDisplacement }
                         .fillMaxWidth()
                         .height(rowHeightDp)
@@ -373,6 +391,7 @@ internal fun FieldOrderList(
                                         onDragStart = {
                                             draggingIndex = index
                                             dragOffsetPx = 0f
+                                            autoScroll.start(field)
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
@@ -449,6 +468,7 @@ private fun String.settingsFieldIcon(): ImageVector = when (this) {
 internal fun CollectionReorderList(
     collections: List<CollectionEntity>,
     accounts: List<AccountEntity>,
+    calendarGroups: List<CalendarSourceGroup> = emptyList(),
     hiddenCollectionHrefs: Set<String> = emptySet(),
     onReordered: (List<String>) -> Unit,
     onCollectionClick: (CollectionEntity) -> Unit = {},
@@ -489,6 +509,15 @@ internal fun CollectionReorderList(
     val targetIndex = draggingIndex?.let { start ->
         (start + (dragOffsetPx / stepPx).roundToInt()).coerceIn(0, reorderable.lastIndex)
     }
+    val autoScroll = rememberReorderAutoScrollState(rowHeightDp)
+    ReorderAutoScroll(
+        dragging = draggingIndex != null,
+        rowBounds = { autoScroll.draggedRowBounds(dragOffsetPx) },
+        onScrolled = { scrolled ->
+            dragOffsetPx += scrolled
+            autoScroll.scrolledPx += scrolled
+        },
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(spacingDp), modifier = Modifier.fillMaxWidth()) {
         val accountNames = accounts.associate { it.id to it.shownName() }
@@ -523,6 +552,7 @@ internal fun CollectionReorderList(
                 val hidden = collection.href in hiddenCollectionHrefs
                 Box(
                     modifier = Modifier
+                        .onGloballyPositioned { autoScroll.rowTops[collection.href] = it.positionInWindow().y }
                         .fillMaxWidth()
                         .height(rowHeightDp)
                         .background(settingsControlColor())
@@ -566,7 +596,10 @@ internal fun CollectionReorderList(
                                 Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
                             }
                             Text(
-                                accountNames[collection.accountId] ?: stringResource(R.string.source),
+                                // A subscription is known by its group; its own source name is not shown anywhere.
+                                calendarGroups.takeIf { collection.isReadOnlyCollection() }?.groupOf(collection)?.displayName()
+                                    ?: accountNames[collection.accountId]
+                                    ?: stringResource(R.string.source),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 lineHeight = 16.sp,
@@ -589,6 +622,7 @@ internal fun CollectionReorderList(
                                     onDragStart = {
                                         draggingIndex = visibleIndex.takeIf { it >= 0 }
                                         dragOffsetPx = 0f
+                                        autoScroll.start(collection.href)
                                     },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
@@ -728,6 +762,33 @@ private fun InactiveCollectionOrderRow(
 private val ReorderRowHeight = 64.dp
 private val ReorderRowGap = 8.dp
 private val ReorderCardShape = RoundedCornerShape(20.dp)
+
+/**
+ * Where the rows of a reorder list are in the window, so [ReorderAutoScroll] knows where the
+ * dragged row is: its top when the drag started, moved by the finger. The drag offset also holds
+ * what the page scrolled ([scrolledPx]), which moved the row along with the page.
+ */
+private class ReorderAutoScrollState(private val rowHeightPx: Float) {
+    val rowTops = mutableMapOf<String, Float>()
+    var scrolledPx = 0f
+    private var startTop = 0f
+
+    fun start(key: String) {
+        startTop = rowTops[key] ?: 0f
+        scrolledPx = 0f
+    }
+
+    fun draggedRowBounds(dragOffsetPx: Float): Rect {
+        val top = startTop + dragOffsetPx - scrolledPx
+        return Rect(0f, top, 0f, top + rowHeightPx)
+    }
+}
+
+@Composable
+private fun rememberReorderAutoScrollState(rowHeight: Dp): ReorderAutoScrollState {
+    val rowHeightPx = with(LocalDensity.current) { rowHeight.toPx() }
+    return remember(rowHeightPx) { ReorderAutoScrollState(rowHeightPx) }
+}
 
 /**
  * Each row of a reorderable list is its own rounded card. While dragged it follows the finger

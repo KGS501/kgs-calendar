@@ -104,6 +104,7 @@ internal fun DetailSheetHost(
                                     collections = state.collections,
                                     collectionVisibility = state.collectionVisibility,
                                     accounts = state.accounts,
+                                    calendarGroups = state.calendarGroups,
                                     problemResources = state.problemResources,
                                     taskColorMode = state.taskColorMode,
                                     eventFieldOrder = state.eventFieldOrder,

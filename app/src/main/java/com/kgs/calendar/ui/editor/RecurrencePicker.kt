@@ -84,7 +84,7 @@ internal fun RecurrenceDialog(
     onSave: (String?) -> Unit,
 ) {
     var draft by remember(recurrenceRule) { mutableStateOf(initialRecurrenceDraft(recurrenceRule)) }
-    ModalEditorDialog(title = appString(R.string.recurrence), onDismiss = onDismiss, wide = true) {
+    ModalEditorDialog(title = appString(R.string.recurrence), onDismiss = onDismiss) {
         Column(
             modifier = Modifier.animateContentSize(tween(MotionMedium, easing = MotionStandard)),
             verticalArrangement = Arrangement.spacedBy(12.dp),

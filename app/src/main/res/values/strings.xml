@@ -119,6 +119,8 @@
     <string name="auto_map_previews">Always show map previews</string>
     <string name="auto_map_previews_help">Loads map images from the internet in event and task details</string>
     <string name="haptic_feedback">Haptic feedback</string>
+    <string name="pro_mode">Pro mode</string>
+    <string name="pro_mode_help">Leaves out explanations and hints, so pages are more compact.</string>
     <string name="osm_attribution">&#169; OpenStreetMap contributors</string>
     <string name="map_preview_content_description">Map preview</string>
     <string name="location_search_unavailable">Location search is currently unavailable.</string>

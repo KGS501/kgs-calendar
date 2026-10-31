@@ -2,6 +2,7 @@ package com.kgs.calendar.ui.sources
 
 import com.kgs.calendar.ui.dialogFieldColors
 import com.kgs.calendar.ui.DialogFieldCaption
+import com.kgs.calendar.ui.LocalProMode
 import com.kgs.calendar.ui.DialogDismissButton
 import com.kgs.calendar.ui.DialogConfirmButton
 import com.kgs.calendar.ui.DialogChoiceRow
@@ -492,7 +493,7 @@ internal fun CalendarGroupPickerDialog(
                 modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
+                if (!LocalProMode.current) Text(
                     stringResource(R.string.calendar_group_help),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,

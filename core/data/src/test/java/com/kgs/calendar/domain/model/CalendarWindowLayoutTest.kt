@@ -90,6 +90,15 @@ class CalendarWindowLayoutTest {
     }
 
     @Test
+    fun settingsUseTwoColumnsOnlyOnLargeScreens() {
+        assertTrue(CalendarWindowLayout(isLandscape = false, widthDp = 800, heightDp = 1280).usesTwoPaneSettings)
+        assertTrue(CalendarWindowLayout(isLandscape = true, widthDp = 1280, heightDp = 800).usesTwoPaneSettings)
+        // A rotated phone is wide, but not a large screen.
+        assertFalse(CalendarWindowLayout(isLandscape = true, widthDp = 891, heightDp = 411).usesTwoPaneSettings)
+        assertFalse(CalendarWindowLayout(isLandscape = false, widthDp = 411, heightDp = 891).usesTwoPaneSettings)
+    }
+
+    @Test
     fun multiDayCountsPickTheBucketAndClampIt() {
         val counts = MultiDayCounts(portrait = 2, landscape = 3, largePortrait = 4, largeLandscape = 99)
         assertEquals(2, counts.countFor(MultiDayCountBucket.Portrait))

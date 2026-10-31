@@ -91,6 +91,7 @@ fun KgsCalendarApp(viewModel: CalendarViewModel) {
         LocalCalendarTimeSnapshot provides calendarTime,
         LocalKgsHaptics provides rememberKgsHaptics(state.hapticFeedbackEnabled),
         LocalReminderPresets provides state.reminderPresets,
+        LocalProMode provides state.proMode,
     ) {
         KgsCalendarTheme(
             themeMode = state.themeMode,

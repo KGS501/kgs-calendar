@@ -153,6 +153,7 @@ internal fun RecentlyDeletedPage(
                         basePadding = 18.dp,
                     )
                     val taskHierarchy = rememberTaskHierarchyPresentation(emptyList(), expandedByDefault = false)
+                    val proMode = LocalProMode.current
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -182,7 +183,7 @@ internal fun RecentlyDeletedPage(
                                 }
                             }
                         }
-                        item(key = "recently-deleted-help") {
+                        if (!proMode) item(key = "recently-deleted-help") {
                             Text(
                                 stringResource(R.string.recently_deleted_help, TrashRetention.DAYS),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

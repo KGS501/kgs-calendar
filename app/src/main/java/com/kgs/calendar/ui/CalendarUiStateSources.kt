@@ -125,6 +125,7 @@ internal data class GeneralSettings(
     val timeline: TimelineSettings,
     val hapticFeedbackEnabled: Boolean,
     val syncIntervalMinutes: Int,
+    val proMode: Boolean,
 )
 
 internal data class NewItemDefaults(
@@ -268,9 +269,9 @@ internal fun generalSettings(
         ),
         ::TimelineSettings,
     ),
-    combine(settingsStore.hapticFeedbackEnabled, settingsStore.syncIntervalMinutes) { haptics, interval -> haptics to interval },
-) { appearance, display, behaviour, timeline, background ->
-    GeneralSettings(appearance, display, behaviour, timeline, background.first, background.second)
+    combine(settingsStore.hapticFeedbackEnabled, settingsStore.syncIntervalMinutes, settingsStore.proMode, ::Triple),
+) { appearance, display, behaviour, timeline, (haptics, syncInterval, proMode) ->
+    GeneralSettings(appearance, display, behaviour, timeline, haptics, syncInterval, proMode)
 }
 
 internal fun SettingsStore.editorDefaults(): Flow<EditorDefaults> = combine(
@@ -431,6 +432,7 @@ internal fun calendarUiState(
         subtasksExpandedByDefault = display.subtasksExpandedByDefault,
         autoLoadMapPreviews = display.autoLoadMapPreviews,
         hapticFeedbackEnabled = settings.general.hapticFeedbackEnabled,
+        proMode = settings.general.proMode,
         syncIntervalMinutes = settings.general.syncIntervalMinutes,
         maxVisibleAllDayItems = behaviour.maxVisibleAllDayItems,
         multiDayCount = navigation.multiDayCount,

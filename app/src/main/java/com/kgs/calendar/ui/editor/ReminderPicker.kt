@@ -180,7 +180,6 @@ internal fun ReminderDialog(initialMinutes: Int?, onDismiss: () -> Unit, onSave:
     ModalEditorDialog(
         title = appString(if (initialMinutes == null) R.string.add_reminder else R.string.edit_reminder),
         onDismiss = onDismiss,
-        wide = true,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ReminderCardUnits.chunked(2).forEach { row ->
@@ -531,7 +530,7 @@ internal fun ReminderPresetsEditor(presets: ReminderPresets, onPresetsChange: (R
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(stringResource(R.string.reminder_presets), color = WarmInk, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
-        Text(stringResource(R.string.reminder_presets_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
+        if (!LocalProMode.current) Text(stringResource(R.string.reminder_presets_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp)
         ReminderCardUnits.forEach { unit ->
             val amount = presets.amountOf(unit)
             Row(

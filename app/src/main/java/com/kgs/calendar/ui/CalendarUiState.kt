@@ -104,6 +104,7 @@ data class CalendarUiState(
     val subtasksExpandedByDefault: Boolean = true,
     val autoLoadMapPreviews: Boolean = false,
     val hapticFeedbackEnabled: Boolean = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_ENABLED,
+    val proMode: Boolean = false,
     val maxVisibleAllDayItems: Int = 3,
     val multiDayCount: Int = 3,
     val portraitMultiDayCount: Int = 3,

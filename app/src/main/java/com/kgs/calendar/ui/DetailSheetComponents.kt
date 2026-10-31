@@ -580,11 +580,11 @@ private fun TaskStatusPickerDialog(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
             shape = DialogShape,
             color = popupSurfaceColor(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.wideDialogWidth(),
         ) {
             Column(modifier = Modifier.padding(vertical = 14.dp)) {
                 Text(
