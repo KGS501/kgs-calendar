@@ -122,6 +122,8 @@
     <string name="auto_map_previews">Kartenvorschauen immer anzeigen</string>
     <string name="auto_map_previews_help">Lädt Kartenbilder aus dem Internet in Termin- und Aufgabendetails</string>
     <string name="haptic_feedback">Haptisches Feedback</string>
+    <string name="pro_mode">Profimodus</string>
+    <string name="pro_mode_help">Blendet Erklärungen und Hinweise aus, damit die Seiten kompakter sind.</string>
     <string name="osm_attribution">&#169; OpenStreetMap contributors</string>
     <string name="map_preview_content_description">Kartenvorschau</string>
     <string name="location_search_unavailable">Ortssuche aktuell nicht erreichbar.</string>

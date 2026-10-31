@@ -189,6 +189,7 @@ internal fun SettingsOverlay(
             onSubtasksExpandedByDefaultChanged = viewModel.settings::setSubtasksExpandedByDefault,
             onAutoLoadMapPreviewsChanged = viewModel.settings::setAutoLoadMapPreviews,
             onHapticFeedbackChanged = viewModel.settings::setHapticFeedbackEnabled,
+            onProModeChanged = viewModel.settings::setProMode,
             onMaxVisibleAllDayItemsChanged = viewModel.settings::setMaxVisibleAllDayItems,
             onMultiDaySidebarControlsChanged = viewModel.settings::setMultiDaySidebarControlsEnabled,
             onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
@@ -226,6 +227,9 @@ internal fun SettingsOverlay(
             onSync = viewModel.sources::syncNow,
             onSyncIntervalChanged = viewModel.settings::setSyncIntervalMinutes,
             onCollectionSettings = shell::editCollection,
+            onRenameCollection = { collection, name ->
+                viewModel.sources.updateCollectionAppearance(collection.href, name, collection.customColor)
+            },
             onGroupSettings = shell::editGroup,
             onCreateGroup = viewModel.sources::createGroup,
             onRestoreAccountImage = viewModel.sources::restoreAccountImage,

@@ -120,9 +120,10 @@ internal fun SettingsGroup(
     }
 }
 
-/** A short explanation below a group or a form. */
+/** A short explanation below a group or a form; pro mode leaves it out. */
 @Composable
 internal fun SettingsFootnote(text: String, modifier: Modifier = Modifier) {
+    if (LocalProMode.current) return
     Text(
         text,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -204,12 +205,13 @@ internal fun SettingsRow(
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     enabled: Boolean = true,
     role: Role? = null,
+    containerColor: Color = settingsControlColor(),
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
-            .settingsRowBackground(settingsControlColor())
+            .settingsRowBackground(containerColor)
             .then(if (onClick != null) Modifier.clickable(enabled = enabled, role = role, onClick = onClick) else Modifier)
             .heightIn(min = SettingsRowMinHeight)
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -274,8 +276,15 @@ internal fun SettingsNavRow(
     leading: (@Composable () -> Unit)? = null,
     warning: Boolean = false,
     trailingText: String? = null,
+    selected: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // Selected: the section open beside the main page in two-column settings.
+    val container by animateColorAsState(
+        targetValue = if (selected) accentContainerColor() else settingsControlColor(),
+        animationSpec = tween(MotionShort, easing = MotionStandard),
+        label = "settingsNavRowContainer",
+    )
     SettingsRow(
         title = title,
         subtitle = subtitle,
@@ -283,6 +292,7 @@ internal fun SettingsNavRow(
         iconColor = iconColor,
         leading = leading,
         modifier = modifier,
+        containerColor = container,
         onClick = onClick,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -410,11 +420,18 @@ internal fun SettingsValueRow(
 /** The current value of a setting as a tinted pill at the row's end, like a closed menu. */
 @Composable
 private fun SettingsValuePill(value: String) {
+    Box(Modifier.clip(SettingsValuePillShape).background(editorSectionColor())) {
+        SettingsValuePillContent(value)
+    }
+}
+
+private val SettingsValuePillShape = RoundedCornerShape(16.dp)
+
+/** The value and the up-down arrows of a value pill, without its background. */
+@Composable
+private fun SettingsValuePillContent(value: String, morphKey: Any? = null) {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(editorSectionColor())
-            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -426,7 +443,9 @@ private fun SettingsValuePill(value: String) {
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             textAlign = TextAlign.End,
-            modifier = Modifier.widthIn(max = 150.dp),
+            modifier = Modifier
+                .widthIn(max = 150.dp)
+                .then(if (morphKey != null) Modifier.morphElement(morphLabelKey(morphKey)) else Modifier),
         )
         Icon(Icons.Default.UnfoldMore, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
     }
@@ -606,52 +625,40 @@ internal fun <T> SettingsDropdownRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val labels = options.map { label(it) }
-    Box {
-        SettingsRow(
-            title = title,
-            subtitle = subtitle,
-            icon = icon,
-            role = Role.DropdownList,
-            onClick = { expanded = true },
-        ) {
-            SettingsValuePill(labels[options.indexOf(selected).coerceAtLeast(0)])
-        }
-        // Anchored at the row's end, so the menu opens right at the value pill.
-        Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp)) {
-        DropdownMenu(
+    val selectedIndex = options.indexOf(selected).coerceAtLeast(0)
+    SettingsRow(
+        title = title,
+        subtitle = subtitle,
+        icon = icon,
+        role = Role.DropdownList,
+        onClick = { expanded = true },
+    ) {
+        // The menu grows out of the value pill, from its end, and the chosen value travels to its row.
+        MorphingDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(20.dp),
-            containerColor = popupSurfaceColor(),
-            shadowElevation = 8.dp,
-            offset = DpOffset(x = 0.dp, y = (-8).dp),
+            buttonShape = SettingsValuePillShape,
+            buttonColor = editorSectionColor(),
+            alignEnd = true,
+            button = { SettingsValuePillContent(labels[selectedIndex], morphKey = selectedIndex) },
         ) {
             options.forEachIndexed { index, option ->
-                val isSelected = option == selected
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            labels[index],
-                            color = WarmInk,
-                            fontSize = 15.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    },
-                    leadingIcon = optionIcon?.invoke(option)?.let { optionIconVector ->
-                        { Icon(optionIconVector, contentDescription = null, tint = if (isSelected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant) }
-                    },
-                    trailingIcon = if (isSelected) {
-                        { Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown) }
-                    } else {
-                        null
-                    },
+                val optionIconVector = optionIcon?.invoke(option)
+                MorphMenuRow(
+                    label = labels[index],
+                    selected = option == selected,
+                    morphKey = index,
                     onClick = {
                         expanded = false
                         onSelected(option)
                     },
+                    leading = optionIconVector?.let { vector ->
+                        { isSelected ->
+                            Icon(vector, contentDescription = null, tint = if (isSelected) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
                 )
             }
-        }
         }
     }
 }

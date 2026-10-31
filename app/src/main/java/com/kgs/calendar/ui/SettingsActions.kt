@@ -205,6 +205,10 @@ class SettingsActions internal constructor(
         scope.launch { settingsStore.setAutoLoadMapPreviews(enabled) }
     }
 
+    fun setProMode(enabled: Boolean) {
+        scope.launch { settingsStore.setProMode(enabled) }
+    }
+
     fun setHapticFeedbackEnabled(enabled: Boolean) {
         scope.launch { settingsStore.setHapticFeedbackEnabled(enabled) }
     }

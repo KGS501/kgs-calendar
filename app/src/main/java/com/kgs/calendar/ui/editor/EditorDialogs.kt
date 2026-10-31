@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.AnimatedContent
@@ -255,29 +256,40 @@ internal fun ParticipantEditorRow(
                 )
                 Text(stringResource(R.string.request_response), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp)
             }
-            Box {
-                FilledTonalButton(
-                    onClick = { roleMenuOpen = true },
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(attendee.role.localizedParticipantRoleLabel(), fontSize = 13.sp, lineHeight = 16.sp)
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(17.dp))
-                }
-                DropdownMenu(
-                    expanded = roleMenuOpen,
-                    onDismissRequest = { roleMenuOpen = false },
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    ParticipantRoleOption.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.localizedLabel()) },
-                            onClick = {
-                                roleMenuOpen = false
-                                onChange(attendee.copy(role = option.value))
-                            },
+            val currentRole = ParticipantRoleOption.entries.firstOrNull { it.value.equals(attendee.role, ignoreCase = true) }
+            MorphingDropdown(
+                expanded = roleMenuOpen,
+                onDismissRequest = { roleMenuOpen = false },
+                buttonShape = RoundedCornerShape(12.dp),
+                buttonColor = MaterialTheme.colorScheme.secondaryContainer,
+                onClick = { roleMenuOpen = true },
+                button = {
+                    Row(
+                        modifier = Modifier.heightIn(min = 34.dp).padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            attendee.role.localizedParticipantRoleLabel(),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = currentRole?.let { Modifier.morphElement(morphLabelKey(it)) } ?: Modifier,
                         )
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(17.dp))
                     }
+                },
+            ) {
+                ParticipantRoleOption.entries.forEach { option ->
+                    MorphMenuRow(
+                        label = option.localizedLabel(),
+                        selected = option == currentRole,
+                        morphKey = option,
+                        onClick = {
+                            roleMenuOpen = false
+                            onChange(attendee.copy(role = option.value))
+                        },
+                    )
                 }
             }
             attendee.localizedDeliveryStatusLabel()?.let {
@@ -320,16 +332,11 @@ internal fun ReminderChoice.localizedLabel(): String = when (this) {
 internal fun ModalEditorDialog(
     title: String,
     onDismiss: () -> Unit,
-    wide: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // A wide popup uses nearly the whole width of a phone instead of the platform's narrow default.
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = !wide)) {
+    Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
-            modifier = Modifier
-                .then(if (wide) Modifier.widthIn(max = 520.dp) else Modifier)
-                .fillMaxWidth()
-                .padding(horizontal = if (wide) 16.dp else 8.dp),
+            modifier = Modifier.wideDialogWidth(),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
@@ -423,38 +430,42 @@ internal fun MetadataDropdownLine(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(label, color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
-        Box {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(15.dp))
-                    .clickable { expanded = true },
-                shape = RoundedCornerShape(15.dp),
-                color = MaterialTheme.colorScheme.surface,
-            ) {
+        MorphingDropdown(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            buttonShape = RoundedCornerShape(15.dp),
+            buttonColor = MaterialTheme.colorScheme.surface,
+            onClick = { expanded = true },
+            alignEnd = true,
+            button = {
                 Row(
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Text(current.localizedLabel(), color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(
+                        current.localizedLabel(),
+                        color = WarmInk,
+                        fontSize = 13.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.morphElement(morphLabelKey(current.value)),
+                    )
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = WarmInk, modifier = Modifier.size(17.dp))
                 }
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                shape = RoundedCornerShape(18.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.localizedLabel()) },
-                        onClick = {
-                            onSelected(option.value)
-                            expanded = false
-                        },
-                    )
-                }
+            },
+        ) {
+            options.forEach { option ->
+                MorphMenuRow(
+                    label = option.localizedLabel(),
+                    selected = option == current,
+                    morphKey = option.value,
+                    onClick = {
+                        onSelected(option.value)
+                        expanded = false
+                    },
+                )
             }
         }
     }
@@ -504,40 +515,48 @@ internal fun DropdownPill(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { expanded = true },
-            shape = RoundedCornerShape(16.dp),
-            color = editorSectionColor(),
-        ) {
+    MorphingDropdown(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        buttonShape = RoundedCornerShape(16.dp),
+        buttonColor = editorSectionColor(),
+        onClick = { expanded = true },
+        menuMinWidth = 160.dp,
+        modifier = modifier,
+        button = {
             Row(
-                modifier = Modifier.padding(horizontal = 11.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Text(label, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(
+                    label,
+                    color = WarmInk,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .morphElement(morphLabelKey(label)),
+                )
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
-                    },
-                )
-            }
+        },
+    ) {
+        options.forEach { option ->
+            MorphMenuRow(
+                label = option,
+                selected = option == label,
+                morphKey = option,
+                onClick = {
+                    onSelected(option)
+                    expanded = false
+                },
+            )
         }
     }
 }

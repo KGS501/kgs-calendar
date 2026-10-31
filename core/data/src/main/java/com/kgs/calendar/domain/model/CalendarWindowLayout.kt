@@ -57,6 +57,10 @@ data class CalendarWindowLayout(
      * (a rotated phone). On a large screen that would hide the timeline behind a mostly empty panel, so the
      * drop-down stacks above the timeline as it does upright.
      */
+    /** Settings show their main page in a left column and the chosen section beside it, as the system settings do. */
+    val usesTwoPaneSettings: Boolean
+        get() = isLargeScreen
+
     val usesSideBySideMonthOverview: Boolean
         get() = isLandscape && !isLargeScreen
 

@@ -279,7 +279,7 @@ internal fun LocationPickerPage(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                 )
             }
-            Text(
+            if (!LocalProMode.current) Text(
                 stringResource(R.string.location_search_privacy_notice),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,

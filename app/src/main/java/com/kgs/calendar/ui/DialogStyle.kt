@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 
 /*
  * Popups share one look with the settings and the editor: a plain surface with large rounding,
@@ -50,6 +52,16 @@ import androidx.compose.ui.unit.sp
  */
 
 internal val DialogShape = RoundedCornerShape(28.dp)
+
+/**
+ * Every popup uses nearly the whole width of a phone instead of the platform's narrow default,
+ * and stays at a readable width on tablets. Use with [WideDialogProperties].
+ */
+internal fun Modifier.wideDialogWidth(): Modifier = widthIn(max = WideDialogMaxWidth).fillMaxWidth().padding(horizontal = 16.dp)
+
+internal val WideDialogProperties = DialogProperties(usePlatformDefaultWidth = false)
+
+private val WideDialogMaxWidth = 520.dp
 
 /** An [AlertDialog] in the app's popup style. */
 @Composable
@@ -67,7 +79,8 @@ internal fun KgsAlertDialog(
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
-        modifier = modifier,
+        modifier = modifier.wideDialogWidth(),
+        properties = WideDialogProperties,
         dismissButton = dismissButton,
         title = title?.let { content ->
             { ProvideTextStyle(DialogTitleStyle) { content() } }

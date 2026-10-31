@@ -182,6 +182,9 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         prefs[KEY_HAPTIC_FEEDBACK_ENABLED] ?: DEFAULT_HAPTIC_FEEDBACK_ENABLED
     }
 
+    /** Pro mode hides the app's explanations and hints, for more compact pages. */
+    val proMode: Flow<Boolean> = dataStore.data.map { prefs -> prefs[KEY_PRO_MODE] ?: false }
+
     val maxVisibleAllDayItems: Flow<Int> = dataStore.data.map { prefs ->
         (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
     }
@@ -566,6 +569,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY_HAPTIC_FEEDBACK_ENABLED] = enabled }
     }
 
+    suspend fun setProMode(enabled: Boolean) {
+        dataStore.edit { it[KEY_PRO_MODE] = enabled }
+    }
+
     suspend fun setMaxVisibleAllDayItems(maxItems: Int) {
         dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
     }
@@ -796,6 +803,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
         private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
         private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
+        private val KEY_PRO_MODE = booleanPreferencesKey("pro_mode")
         private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
         private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
         private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")

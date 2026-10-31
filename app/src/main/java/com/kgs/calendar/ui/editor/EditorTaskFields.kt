@@ -2,6 +2,10 @@
 
 package com.kgs.calendar.ui
 
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -174,21 +178,51 @@ internal fun TaskParentSelector(
     LaunchedEffect(pickerOpen) {
         if (pickerOpen) query = ""
     }
+    val parentTaskLabel = stringResource(R.string.parent_task)
     EditorSection(onClick = { pickerOpen = true }) {
         EditorLine(Icons.Default.TaskAlt) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(stringResource(R.string.parent_task), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
-                    Text(
-                        selected?.title ?: stringResource(R.string.no_parent_task),
-                        color = WarmInk,
-                        fontSize = 16.sp,
-                        lineHeight = 20.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Text(parentTaskLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
+                    if (selected == null) {
+                        Text(
+                            stringResource(R.string.no_parent_task),
+                            color = WarmInk,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+        // The parent shows as its task card. It is only a picture of the task: a tap anywhere on it
+        // opens the parent picker again, and its checkbox cannot be ticked from here.
+        selected?.let { parent ->
+            Box(Modifier.fillMaxWidth()) {
+                TaskRow(
+                    task = parent,
+                    taskColorMode = taskColorMode,
+                    onTaskStatusChanged = { _, _ -> },
+                    prominent = true,
+                    outerHorizontalPadding = 0.dp,
+                    outerVerticalPadding = 0.dp,
+                    priorityMotionEnabled = false,
+                    statusToggleEnabled = false,
+                    onClick = { pickerOpen = true },
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+                // Above the card, which lifts itself by priority and depth (zIndex), so it takes every touch.
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .zIndex(ParentCardOverlayZ)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClickLabel = parentTaskLabel) { pickerOpen = true }
+                        .semantics { contentDescription = "$parentTaskLabel: ${parent.title}" },
+                )
             }
         }
     }
@@ -220,11 +254,9 @@ internal fun TaskParentPickerDialog(
 ) {
     val filteredCandidates = remember(candidates, query) { candidates.filterForParentPicker(query) }
     val hierarchy = rememberTaskHierarchyPresentation(filteredCandidates, expandedByDefault = true)
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+            modifier = Modifier.wideDialogWidth(),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
@@ -680,3 +712,5 @@ internal fun CategoryDetailLine(label: String, categories: String) {
         }
     }
 }
+
+private const val ParentCardOverlayZ = 10_000f
