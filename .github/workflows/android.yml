@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out
@@ -31,8 +31,8 @@ jobs:
 
       # Release signing is optional: without keystore.properties or KGS_RELEASE_* variables the
       # build configures normally and only the debug variant is built here.
-      - name: Build debug APK and run unit tests
-        run: ./gradlew :app:assembleDebug testDebugUnitTest --console=plain
+      - name: Build Android and verify shared and Android code
+        run: bash tools/verify-port.sh --console=plain
 
       - name: Upload unit test reports
         if: failure()
@@ -44,4 +44,8 @@ jobs:
             app/build/test-results/
             core/data/build/reports/tests/
             core/data/build/test-results/
+            core/shared/build/reports/tests/
+            core/shared/build/test-results/
+            shared/ui/build/reports/tests/
+            shared/ui/build/test-results/
           if-no-files-found: ignore

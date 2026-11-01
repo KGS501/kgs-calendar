@@ -142,14 +142,6 @@ internal fun settingsControlColor(): Color =
         ?: if (MaterialTheme.colorScheme.background.isDark()) MaterialTheme.colorScheme.surface else Color.White
 
 @Composable
-internal fun accentContainerColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) {
-        WarmBrown.blendWith(Color.White, 0.18f)
-    } else {
-        WarmBrown.blendWith(Color.White, 0.78f)
-    }
-
-@Composable
 internal fun accentContainerContentColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) {
         MaterialTheme.colorScheme.background

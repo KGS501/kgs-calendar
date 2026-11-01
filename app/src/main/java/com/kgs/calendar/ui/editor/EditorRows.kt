@@ -314,15 +314,6 @@ internal fun FadedHorizontalScrollRow(
 internal val LocalEditorGrouped = compositionLocalOf { false }
 
 /** The fill of editor cards: the page tint, so cards stand out from the sheet without outlines. */
-@Composable
-internal fun editorSectionColor(): Color =
-    // In dark mode, raised cards are a touch lighter than the sheet, as elevation reads there.
-    if (MaterialTheme.colorScheme.background.isDark()) {
-        MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.07f)
-    } else {
-        MaterialTheme.colorScheme.background
-    }
-
 private val EditorCardShape = RoundedCornerShape(24.dp)
 
 /**

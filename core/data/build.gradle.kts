@@ -47,6 +47,7 @@ kotlin {
 }
 
 dependencies {
+    api(project(":core:shared"))
     // Room entities/DAOs, Flow and OkHttpClient appear in the public API used by :app.
     api(libs.androidx.room.runtime)
     api(libs.kotlinx.coroutines.android)

@@ -1,0 +1,67 @@
+name: iOS validation host CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    # Standard Apple Silicon runner; the project targets iosSimulatorArm64.
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # Pin the Xcode generation supported by the current Kotlin/Native toolchain.
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Root Gradle configuration still includes Android modules.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # v3 defaults to the retired "tools" package; install only what we need below.
+          packages: ''
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build unsigned iOS Simulator host
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project iosApp/KgsCalendar.xcodeproj \
+            -scheme KgsCalendar \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/kgs-ios" \
+            -jobs 1 \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            build 2>&1 | tee "$RUNNER_TEMP/kgs-ios-build.log"
+
+      - name: Upload Apple build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ${{ runner.temp }}/kgs-ios-build.log
+          if-no-files-found: ignore

@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "KGS Calendar"
 include(":app")
 include(":core:data")
+
+include(":core:shared", ":shared:ui")
