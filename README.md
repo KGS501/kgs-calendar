@@ -49,9 +49,9 @@ animations from shared source. It does not create or persist calendar items.
 The existing gesture/layout characterization tests have moved into `commonTest`, making them
 available to JVM and Apple test targets. With JDK 17 and Android SDK 36 configured, run
 `bash tools/verify-port.sh` for shared tests, common metadata compilation, the Android debug
-build and Android unit tests. Android CI runs this same command, including the relocated shared
-tests. It uses one Gradle worker, two JVM processors and bounded JVM memory. The JVM target
-is for host verification; it does not establish iOS rendering or behavior parity. The initial
+build and Android unit tests. CI selects the relevant groups from this same command, including
+the relocated shared tests. It uses one Gradle worker, two JVM processors and bounded JVM memory.
+The JVM target is for host verification; it does not establish iOS rendering or behavior parity. The initial
 Linux verification passed all 54 shared tests and common-code metadata compilation. The Android
 APK built successfully, and the Android suites passed 901 tests with 20 live Nextcloud tests
 skipped. One date-dependent widget test was corrected to request a size that displays labels even
@@ -71,8 +71,8 @@ builds need no development team; physical devices need your own signing configur
 
 Shared tests on an Apple Silicon simulator: `bash gradlew :core:shared:iosSimulatorArm64Test
 :shared:ui:iosSimulatorArm64Test --max-workers=1` (one command). Intel simulator targets are
-not configured. The `iOS validation host CI` workflow builds and links the unsigned simulator
-app on an Apple Silicon macOS runner using Xcode 26.0.1. It is a compile/link gate, not a visual
+not configured. The `iOS validation host` job in the `CI` workflow builds and links the unsigned
+simulator app on an Apple Silicon macOS runner using Xcode 26.0.1. It is a compile/link gate, not a visual
 or interaction test. Apple compilation results must be checked in that workflow before merging;
 local Apple compilation and runtime validation remain unavailable on this Linux machine.
 Linux cannot run Apple's iOS Simulator; installing another Android emulator does not solve this.
@@ -91,6 +91,35 @@ Linux cannot run Apple's iOS Simulator; installing another Android emulator does
 5. Build and run on a Mac, compare the actual calendar interactions against Android, test both
    orientations, safe areas, keyboard, accessibility/font scale and real devices, then complete
    signing and distribution setup.
+
+## Continuous integration
+
+The [CI workflow](.github/workflows/ci.yml) runs on pull requests and pushes to `main`.
+Feature-branch pushes do not run a second copy alongside PR checks. A small Linux job tests
+the selection logic and checks the complete Git diff before allocating build runners:
+
+| Changed files | Build checks |
+| --- | --- |
+| Android app, resources, data layer or Android-specific shared source | Android APK and Android unit tests on Linux |
+| Swift/Xcode host or Apple-specific shared source | iOS simulator compile/link on macOS |
+| Shared production code | Android, shared JVM tests/common metadata, and iOS |
+| Shared JVM source or common/JVM tests only | Shared JVM tests and common metadata on Linux |
+| Gradle configuration (including Android module build scripts), CI configuration, or unknown paths | All checks |
+| Documentation, root README/license/privacy pages, logos, or known standalone development tools | Selection tests only; platform builds skipped |
+
+Mixed changes run the union of their checks. Renames include both old and new paths, pushes
+include every changed commit, and an unavailable diff runs all builds. The selector lives in
+[`tools/ci/select_builds.py`](tools/ci/select_builds.py); update its tests when adding modules or
+making a previously standalone file a build input. Platform skips still produce a successful
+`CI result` check; this is the check to require in branch protection. A failed selection or
+selected build fails that check.
+
+Gradle caching remains enabled, and macOS also caches the Kotlin/Native toolchain. Main-branch
+builds verify integration and refresh caches used by PRs. Superseded runs are cancelled.
+Use **Actions → CI → Run workflow** to force `all`, `android`, `shared`, or `ios` checks.
+Locally, `bash tools/verify-port.sh` still runs all Linux checks; `--android-only` and
+`--shared-only` select a group. Test CI selection without an SDK using
+`python3 -m unittest discover -s tools/ci -p 'test_*.py' -v`.
 
 ## Privacy
 
