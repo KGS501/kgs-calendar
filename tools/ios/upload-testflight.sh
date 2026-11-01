@@ -6,6 +6,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 : "${RUNNER_TEMP:?}" "${APPLE_TEAM_ID:?}" "${ASC_KEY_ID:?}" "${ASC_ISSUER_ID:?}"
 : "${APPLE_DISTRIBUTION_P12_BASE64:?}" "${APPLE_PROFILE_BASE64:?}" "${APPLE_P12_PASSWORD:?}"
 : "${ASC_PRIVATE_KEY:?}" "${KGS_BUILD_NUMBER:?}"
+: "${ASC_APP_ID:?}" "${TESTFLIGHT_GROUP_ID:?}"
 
 signing_dir=$(mktemp -d "$RUNNER_TEMP/kgs-signing.XXXXXX")
 keychain_path="$signing_dir/signing.keychain-db"
@@ -20,6 +21,15 @@ cleanup() {
 trap cleanup EXIT
 
 python3 tools/ios/package_app.py prepare "$signing_dir"
+mkdir -p "$RUNNER_TEMP/kgs-testflight"
+export ASC_KEY_PATH="$signing_dir/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+# Verify the credentials actually supplied by CI before spending time compiling.
+python3 tools/ios/app_store.py verify-access --app-id "$ASC_APP_ID" \
+  --group-id "$TESTFLIGHT_GROUP_ID" 2>&1 | tee "$RUNNER_TEMP/kgs-testflight/access.log"
+API_PRIVATE_KEYS_DIR="$signing_dir/private_keys" xcrun altool --list-providers \
+  --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format json \
+  > "$RUNNER_TEMP/kgs-testflight/uploader-auth.log" 2>&1
+echo 'Verified Apple upload authentication.'
 profile_uuid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["uuid"])' "$signing_dir/settings.json")
 profile_name=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["profile_name"])' "$signing_dir/settings.json")
 keychain_password=$(openssl rand -base64 32)
@@ -54,9 +64,13 @@ xcodebuild -project iosApp/KgsCalendar.xcodeproj -scheme KgsCalendar \
 python3 tools/ios/package_app.py validate "$archive_path" --build-number "$KGS_BUILD_NUMBER"
 codesign --verify --strict "$archive_path/Products/Applications/KgsCalendar.app"
 
-# Xcode exports, signs for App Store Connect, and uploads using the API key.
+# Export using the installed signing identity. Xcode's account-based upload path
+# rejected an otherwise valid team key; use Apple's dedicated uploader instead.
 xcodebuild -exportArchive -archivePath "$archive_path" \
   -exportPath "$RUNNER_TEMP/kgs-testflight/export" -exportOptionsPlist "$signing_dir/ExportOptions.plist" \
-  -authenticationKeyPath "$signing_dir/AuthKey.p8" -authenticationKeyID "$ASC_KEY_ID" \
-  -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-  -allowProvisioningUpdates 2>&1 | tee "$RUNNER_TEMP/kgs-testflight/upload.log"
+  2>&1 | tee "$RUNNER_TEMP/kgs-testflight/export.log"
+
+ipa_path="$RUNNER_TEMP/kgs-testflight/export/KgsCalendar.ipa"
+[[ -f "$ipa_path" ]] || { echo 'Export did not produce KgsCalendar.ipa.' >&2; exit 1; }
+API_PRIVATE_KEYS_DIR="$signing_dir/private_keys" xcrun altool --upload-app -f "$ipa_path" -t ios \
+  --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/kgs-testflight/upload.log"

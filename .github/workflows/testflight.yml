@@ -77,6 +77,8 @@ jobs:
 
       - name: Archive, sign, and upload to TestFlight
         env:
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          TESTFLIGHT_GROUP_ID: ${{ vars.TESTFLIGHT_GROUP_ID }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           ASC_KEY_ID: ${{ vars.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ vars.ASC_ISSUER_ID }}
@@ -93,7 +95,10 @@ jobs:
         with:
           name: testflight-build-logs
           path: |
+            ${{ runner.temp }}/kgs-testflight/access.log
+            ${{ runner.temp }}/kgs-testflight/uploader-auth.log
             ${{ runner.temp }}/kgs-testflight/archive.log
+            ${{ runner.temp }}/kgs-testflight/export.log
             ${{ runner.temp }}/kgs-testflight/upload.log
           if-no-files-found: ignore
           retention-days: 7

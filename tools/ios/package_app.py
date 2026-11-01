@@ -14,7 +14,7 @@ import uuid
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-from app_store import BUNDLE_ID, private_write
+from app_store import BUNDLE_ID, api_token, private_write
 
 
 def check_build_number(value):
@@ -42,6 +42,21 @@ def validate_profile(profile, certificate_der, team_id, now=None):
         raise ValueError("Provisioning profile does not include the signing certificate")
 
 
+def prepare_api_key(directory):
+    key_id = os.environ["ASC_KEY_ID"]
+    if not re.fullmatch(r"[A-Z0-9]{10}", key_id):
+        raise ValueError("Invalid App Store Connect Key ID")
+    # Apple's upload tools search ./private_keys for this exact filename.
+    keys = Path(directory) / "private_keys"
+    keys.mkdir(mode=0o700, parents=True, exist_ok=True)
+    keys.chmod(0o700)
+    path = keys / f"AuthKey_{key_id}.p8"
+    private_write(path, os.environ["ASC_PRIVATE_KEY"].strip().encode() + b"\n")
+    # Validate the PEM/key type and issuer without logging a token or the key.
+    api_token(path, key_id, os.environ["ASC_ISSUER_ID"])
+    return path
+
+
 def prepare_inputs(directory):
     check_build_number(os.environ["KGS_BUILD_NUMBER"])
     directory = Path(directory)
@@ -50,7 +65,7 @@ def prepare_inputs(directory):
     for variable, filename in [("APPLE_DISTRIBUTION_P12_BASE64", "distribution.p12"),
                                 ("APPLE_PROFILE_BASE64", "profile.mobileprovision")]:
         private_write(directory / filename, base64.b64decode(os.environ[variable], validate=True))
-    private_write(directory / "AuthKey.p8", os.environ["ASC_PRIVATE_KEY"].encode())
+    prepare_api_key(directory)
     key, cert, _ = pkcs12.load_key_and_certificates((directory / "distribution.p12").read_bytes(),
                                                 os.environ["APPLE_P12_PASSWORD"].encode())
     if key is None or cert is None:
@@ -68,7 +83,7 @@ def prepare_inputs(directory):
         "uuid": profile["UUID"], "profile_name": profile["Name"], "team_id": team_id,
     }).encode())
     private_write(directory / "ExportOptions.plist", plistlib.dumps({
-        "method": "app-store-connect", "destination": "upload", "teamID": team_id,
+        "method": "app-store-connect", "destination": "export", "teamID": team_id,
         "signingStyle": "manual", "signingCertificate": "Apple Distribution",
         "provisioningProfiles": {BUNDLE_ID: profile["Name"]},
         "manageAppVersionAndBuildNumber": False, "uploadSymbols": True,
