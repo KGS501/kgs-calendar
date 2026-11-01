@@ -26,7 +26,9 @@ export ASC_KEY_PATH="$signing_dir/private_keys/AuthKey_${ASC_KEY_ID}.p8"
 # Verify the credentials actually supplied by CI before spending time compiling.
 python3 tools/ios/app_store.py verify-access --app-id "$ASC_APP_ID" \
   --group-id "$TESTFLIGHT_GROUP_ID" 2>&1 | tee "$RUNNER_TEMP/kgs-testflight/access.log"
-API_PRIVATE_KEYS_DIR="$signing_dir/private_keys" xcrun altool --list-providers \
+# list-providers requires account/password authentication in current altool.
+# list-apps supports the same team API key used for the upload.
+API_PRIVATE_KEYS_DIR="$signing_dir/private_keys" xcrun altool --list-apps \
   --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format json \
   > "$RUNNER_TEMP/kgs-testflight/uploader-auth.log" 2>&1
 echo 'Verified Apple upload authentication.'
