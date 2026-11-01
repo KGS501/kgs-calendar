@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
@@ -304,8 +306,13 @@ private fun writeSynced(file: File, text: String) {
 }
 
 /** Replaces [target] in one step; on failure it keeps its previous contents. */
+/** Replaces [target] in one step. `File.renameTo` can't replace an existing file on Windows; this can. */
 private fun replaceAtomically(source: File, target: File) {
-    if (!source.renameTo(target)) throw IOException("Failed to rename ${source.name} to ${target.name}")
+    try {
+        Files.move(source.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    } catch (error: Exception) {
+        throw IOException("Failed to rename ${source.name} to ${target.name}", error)
+    }
 }
 
 private fun Any?.toJson(): Any = when (this) {

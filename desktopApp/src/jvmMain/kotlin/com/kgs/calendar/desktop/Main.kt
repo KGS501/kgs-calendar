@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -22,16 +25,20 @@ import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
-import androidx.compose.ui.window.rememberWindowState
+import com.kgs.calendar.res.AppStrings
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.KgsCalendarApp
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
+import com.kgs.calendar.ui.platform.DesktopShortcuts
 import com.kgs.calendar.ui.platform.LocalBackDispatcher
+import com.kgs.calendar.ui.platform.LocalDesktopShortcuts
 import com.kgs.calendar.ui.platform.LocalWindowChrome
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.util.Locale
 
 /** `--data-dir <folder>` keeps a separate profile, e.g. for testing; otherwise `%LOCALAPPDATA%\KGS Calendar`. */
 private fun dataDirectory(args: Array<String>): File {
@@ -45,6 +52,7 @@ private fun dataDirectory(args: Array<String>): File {
 fun main(args: Array<String>) {
     DesktopAppVersion = System.getProperty("kgs.version") ?: "V.1.4.6-3"
     val graph = DesktopGraph(dataDirectory(args))
+    val placementStore = WindowPlacementStore(File(graph.dataDirectory, "window.properties"))
     // Demo items only ever go into a separate, empty profile.
     if ("--demo" in args && "--data-dir" in args) {
         runBlocking {
@@ -54,22 +62,50 @@ fun main(args: Array<String>) {
     application {
         val viewModel = remember { graph.createViewModel() }
         val backDispatcher = remember { BackDispatcher() }
+        val shortcuts = remember { DesktopShortcuts() }
         val trayState = rememberTrayState()
-        val windowState = rememberWindowState(width = 1280.dp, height = 860.dp)
+        val windowState = remember { placementStore.restore() }
         val icon = painterResource("kgs_logo.png")
         LaunchedEffect(Unit) {
             graph.reminders.notifier = { title, body -> trayState.sendNotification(Notification(title, body.orEmpty())) }
             graph.start(this)
         }
-        Tray(icon = icon, state = trayState, tooltip = "KGS Calendar")
+        var windowVisible by remember { mutableStateOf(true) }
+        var trayHintShown by remember { mutableStateOf(false) }
+        fun showWindow() {
+            windowVisible = true
+        }
+        fun quit() {
+            placementStore.save(windowState)
+            exitApplication()
+        }
+        Tray(
+            icon = icon,
+            state = trayState,
+            tooltip = "KGS Calendar",
+            onAction = ::showWindow,
+            menu = {
+                Item(AppStrings.get(R.string.open, Locale.getDefault()), onClick = ::showWindow)
+                Item(AppStrings.get(R.string.desktop_quit, Locale.getDefault()), onClick = ::quit)
+            },
+        )
         Window(
-            onCloseRequest = ::exitApplication,
+            visible = windowVisible,
+            // Closing keeps the app in the notification area, so reminders still appear, as on Android.
+            onCloseRequest = {
+                placementStore.save(windowState)
+                windowVisible = false
+                if (!trayHintShown) {
+                    trayHintShown = true
+                    trayState.sendNotification(Notification("KGS Calendar", AppStrings.get(R.string.desktop_running_in_tray, Locale.getDefault())))
+                }
+            },
             title = "KGS Calendar",
             icon = icon,
             state = windowState,
             // After dialogs and popups had their chance, like Android's back: the topmost layer goes first.
             onKeyEvent = { event ->
-                event.type == KeyEventType.KeyDown && event.key == Key.Escape && backDispatcher.back()
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) backDispatcher.back() else shortcuts.handle(event)
             },
         ) {
             DisposableEffect(window) {
@@ -90,6 +126,7 @@ fun main(args: Array<String>) {
             CompositionLocalProvider(
                 LocalBackDispatcher provides backDispatcher,
                 LocalWindowChrome provides windowChrome,
+                LocalDesktopShortcuts provides shortcuts,
             ) {
                 Box(
                     Modifier

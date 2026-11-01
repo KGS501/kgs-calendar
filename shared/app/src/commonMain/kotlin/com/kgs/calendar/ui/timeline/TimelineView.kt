@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.platform.mouseDragScroll
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -1082,6 +1083,7 @@ internal fun TimelineView(
                 LocalMorphItemDay provides itemMorphDay,
                 LocalTimedDragReporter provides timedDragReporter,
             ) {
+            val pagerFlingBehavior = if (fullWeekPagingEnabled) fullWeekFlingBehavior else fallbackPagerFlingBehavior
             HorizontalPager(
                 state = pagerState,
                 // Calculate from this measure pass, not the previous onSizeChanged callback.
@@ -1096,11 +1098,7 @@ internal fun TimelineView(
                     }
                 },
                 pageSpacing = DayColumnSpacing,
-                flingBehavior = if (fullWeekPagingEnabled) {
-                    fullWeekFlingBehavior
-                } else {
-                    fallbackPagerFlingBehavior
-                },
+                flingBehavior = pagerFlingBehavior,
                 // Keep both neighbours composed so they're ready to slide in when the 1-day
                 // view widens out to 3-day, instead of popping in once they reach the viewport.
                 beyondViewportPageCount = multiDayCount.coerceAtLeast(2),
@@ -1109,7 +1107,8 @@ internal fun TimelineView(
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(1f)
-                    .alpha(if (morphContext != null) 0f else 1f),
+                    .alpha(if (morphContext != null) 0f else 1f)
+                    .mouseDragScroll(pagerState, Orientation.Horizontal, pagerFlingBehavior),
             ) { page ->
                 val day = page.toDayDate()
                 val containsTimedDraft = draftEvent?.let { !it.allDay && it.date == day } == true

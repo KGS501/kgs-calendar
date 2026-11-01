@@ -798,4 +798,6 @@
     <string name="source_full_sync">Full sync</string>
     <string name="source_read_only">Read only</string>
     <string name="source_device_only">Only on this device</string>
+    <string name="desktop_quit">Quit</string>
+    <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
 </resources>

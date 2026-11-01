@@ -798,4 +798,6 @@
     <string name="source_full_sync">Voller Sync</string>
     <string name="source_read_only">Nur lesen</string>
     <string name="source_device_only">Nur auf diesem Gerät</string>
+    <string name="desktop_quit">Beenden</string>
+    <string name="desktop_running_in_tray">KGS Calendar läuft im Infobereich weiter, damit deine Erinnerungen weiter erscheinen. Über das Symbol dort kannst du es beenden.</string>
 </resources>
