@@ -1,4 +1,6 @@
+import base64
 import datetime as dt
+import os
 from pathlib import Path
 import plistlib
 import struct
@@ -6,8 +8,64 @@ import tempfile
 import unittest
 from unittest import mock
 
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.x509.oid import NameOID
+
 import app_store as asc
 import package_app as package
+
+
+class SigningInputsTest(unittest.TestCase):
+    def setUp(self):
+        key = ec.generate_private_key(ec.SECP256R1())
+        self.api_pem = key.private_bytes(serialization.Encoding.PEM,
+                                       serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+        self.environment = {
+            "ASC_KEY_ID": "ABCDEFGHIJ", "ASC_ISSUER_ID": "12345678-1234-1234-1234-123456789012",
+            "ASC_PRIVATE_KEY": self.api_pem.decode(), "KGS_BUILD_NUMBER": "2.1",
+        }
+
+    def test_upload_key_uses_apple_search_directory_and_filename_with_private_permissions(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, self.environment):
+            path = package.prepare_api_key(directory)
+            self.assertEqual(path, Path(directory) / "private_keys/AuthKey_ABCDEFGHIJ.p8")
+            self.assertEqual(path.read_bytes(), self.api_pem)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+
+    def test_invalid_key_id_or_malformed_secret_is_rejected(self):
+        for variable, value in [("ASC_KEY_ID", "../outside"), ("ASC_PRIVATE_KEY", "not a PEM key"),
+                                ("ASC_ISSUER_ID", "not-an-issuer")]:
+            with self.subTest(variable=variable), tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.dict(os.environ, {**self.environment, variable: value}):
+                with self.assertRaises((ValueError, asc.AppleError)):
+                    package.prepare_api_key(directory)
+
+    def test_prepared_identity_exports_locally_with_manual_profile(self):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test Distribution")])
+        now = dt.datetime.now(dt.timezone.utc)
+        cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+                .public_key(key.public_key()).serial_number(1).not_valid_before(now - dt.timedelta(days=1))
+                .not_valid_after(now + dt.timedelta(days=30)).sign(key, hashes.SHA256()))
+        p12 = pkcs12.serialize_key_and_certificates(b"test", key, cert, None,
+                                                  serialization.BestAvailableEncryption(b"test-password"))
+        profile = ProfileTest().profile()
+        profile.update(Name="KGS Calendar TestFlight", DeveloperCertificates=[cert.public_bytes(serialization.Encoding.DER)])
+        env = {**self.environment, "APPLE_TEAM_ID": "TEAM123456", "APPLE_P12_PASSWORD": "test-password",
+               "APPLE_DISTRIBUTION_P12_BASE64": base64.b64encode(p12).decode(),
+               "APPLE_PROFILE_BASE64": base64.b64encode(b"test-cms-profile").decode()}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, env), \
+                mock.patch.object(package.subprocess, "check_output", return_value=plistlib.dumps(profile)):
+            package.prepare_inputs(directory)
+            options = plistlib.loads((Path(directory) / "ExportOptions.plist").read_bytes())
+            self.assertEqual(options["destination"], "export")
+            self.assertEqual(options["signingStyle"], "manual")
+            self.assertEqual(options["provisioningProfiles"], {asc.BUNDLE_ID: profile["Name"]})
+            self.assertFalse(options["manageAppVersionAndBuildNumber"])
 
 
 class ProfileTest(unittest.TestCase):

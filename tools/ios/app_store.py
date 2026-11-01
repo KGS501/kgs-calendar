@@ -256,7 +256,7 @@ def configure_testflight(client, email=None):
     return {"app_id": app["id"], "group_id": group["id"], "tester_email": email}
 
 
-def check_build(client, app_id, group_id, version):
+def verify_access(client, app_id, group_id):
     app = find_app(client)
     if app["id"] != app_id:
         raise AppleError("Configured App Store Connect app does not match this bundle ID")
@@ -266,6 +266,10 @@ def check_build(client, app_id, group_id, version):
     group_app = client.request("GET", f"/v1/betaGroups/{group_id}/app")["data"]
     if group_app["id"] != app_id:
         raise AppleError("TestFlight group belongs to another app")
+
+
+def check_build(client, app_id, group_id, version):
+    verify_access(client, app_id, group_id)
     builds = client.list("/v1/builds", {"filter[app]": app_id, "filter[version]": version})
     if not builds:
         return False
@@ -312,6 +316,9 @@ def main():
     signing.add_argument("--directory", required=True)
     configure = commands.add_parser("configure-testflight")
     configure.add_argument("--email")
+    verify = commands.add_parser("verify-access")
+    verify.add_argument("--app-id", required=True)
+    verify.add_argument("--group-id", required=True)
     check = commands.add_parser("check-build")
     check.add_argument("--app-id", required=True)
     check.add_argument("--group-id", required=True)
@@ -328,6 +335,9 @@ def main():
             prepare_signing(client, args.directory)
         elif args.command == "configure-testflight":
             print(json.dumps(configure_testflight(client, args.email), indent=2))
+        elif args.command == "verify-access":
+            verify_access(client, args.app_id, args.group_id)
+            print("Verified App Store Connect access to this app and internal tester group.")
         elif args.command == "check-build":
             return 0 if check_build(client, args.app_id, args.group_id, args.version) else 2
     except (AppleError, ValueError) as error:
