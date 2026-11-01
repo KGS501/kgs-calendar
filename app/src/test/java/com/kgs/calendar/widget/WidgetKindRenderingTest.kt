@@ -1,6 +1,7 @@
 package com.kgs.calendar.widget
 
 import android.content.Context
+import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -128,9 +129,18 @@ class WidgetKindRenderingTest {
     @Test
     fun monthWidgetPlacesItemsOnToday() = runBlocking {
         val renderer = widgets.renderer()
-        val prepared = renderer.prepareMonthUpdate(appWidgetId, Bundle())
+        // The default 320-dp height uses dots in six-row months. This test checks labels,
+        // so provide enough space for text independently of the current month and orientation.
+        val options = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 360)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 360)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 560)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 560)
+        }
+        val prepared = renderer.prepareMonthUpdate(appWidgetId, options)
 
         assertEquals(YearMonth.from(today), prepared.page.month)
+        assertFalse(prepared.renderSpec.usesDotCells)
         assertTrue(prepared.page.rowCount in 4..6)
         assertEquals(3, prepared.itemCount)
         val todayCell = prepared.page.cells.single { it.date == today }

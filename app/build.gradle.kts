@@ -112,6 +112,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":shared:ui"))
     implementation(project(":core:data"))
 
     implementation(libs.androidx.core.ktx)

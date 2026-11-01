@@ -462,14 +462,6 @@ internal fun PickerPopupTheme(content: @Composable () -> Unit) {
     )
 }
 
-@Composable
-internal fun popupSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF202124) else Color.White
-
-@Composable
-internal fun popupControlSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF303134) else Color(0xFFF1F3F4)
-
 /** A date or time as a tappable chip on the editor card; [label] names it for screen readers. */
 @Composable
 internal fun PickerOutlinedField(

@@ -6,6 +6,7 @@ agp = "9.2.0"
 kotlin = "2.3.0"
 ksp = "2.3.8"
 composeBom = "2026.04.01"
+composeMultiplatform = "1.10.3"
 core = "1.18.0"
 activityCompose = "1.13.0"
 lifecycle = "2.10.0"
@@ -67,6 +68,9 @@ androidx-window = { module = "androidx.window:window", version.ref = "window" }
 androidx-window-testing = { module = "androidx.window:window-testing", version.ref = "window" }
 
 [plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+android-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

@@ -34,3 +34,8 @@ artifacts/
 *.db
 *.db-shm
 *.db-wal
+
+# Apple build and user-specific IDE artifacts
+DerivedData/
+**/xcuserdata/
+*.xcuserstate

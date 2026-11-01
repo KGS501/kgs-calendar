@@ -1609,18 +1609,3 @@ internal fun TaskEntity.localizedTaskTimeLabel(): String {
         else -> "$dateText, ${stringResource(R.string.all_day)}"
     }
 }
-
-internal fun Color.isDark(): Boolean {
-    val luminance = 0.299f * red + 0.587f * green + 0.114f * blue
-    return luminance < 0.55f
-}
-
-internal fun Color.blendWith(target: Color, amount: Float): Color {
-    val t = amount.coerceIn(0f, 1f)
-    return Color(
-        red = red + (target.red - red) * t,
-        green = green + (target.green - green) * t,
-        blue = blue + (target.blue - blue) * t,
-        alpha = alpha + (target.alpha - alpha) * t,
-    )
-}

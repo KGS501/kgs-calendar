@@ -5,53 +5,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import com.kgs.calendar.ui.theme.CalendarUiTokens
-import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import java.util.Locale
 
-internal val DefaultUiTokens = CalendarUiTokens.Default
-internal val WarmBrown: Color @Composable get() = LocalCalendarUiTokens.current.warmBrown
-internal val WarmPeach: Color @Composable get() = LocalCalendarUiTokens.current.warmPeach
-internal val WarmGrid: Color @Composable get() = LocalCalendarUiTokens.current.warmGrid
-internal val WarmLine: Color @Composable get() = LocalCalendarUiTokens.current.warmLine
-internal val TaskHierarchyLine: Color @Composable get() = LocalCalendarUiTokens.current.taskHierarchyLine
-internal val WarmInk: Color @Composable get() = LocalCalendarUiTokens.current.warmInk
-internal val CurrentDarkPalette: Boolean @Composable get() = LocalCalendarUiTokens.current.darkPalette
-internal val PriorityAnimationsEnabled: Boolean @Composable get() = LocalCalendarUiTokens.current.priorityAnimationsEnabled
-internal val SyncPendingOrange = DefaultUiTokens.syncPendingOrange
-internal val DraftAccent = DefaultUiTokens.draftAccent
-internal val ItemColorPalette = DefaultUiTokens.itemColorPalette
-internal val MotionStandard = DefaultUiTokens.motionStandard
-internal val MotionStandardAccelerate = DefaultUiTokens.motionStandardAccelerate
-internal val MotionEmphasized = DefaultUiTokens.motionEmphasized
-internal val MorphEasing = DefaultUiTokens.morphEasing
-internal val MotionShort = DefaultUiTokens.motionShortMillis
-internal val MotionMedium = DefaultUiTokens.motionMediumMillis
-internal val MotionLong = DefaultUiTokens.motionLongMillis
-internal val PENDING_BADGE_DELAY_MILLIS = DefaultUiTokens.pendingBadgeDelayMillis
-internal val DefaultHourRowHeightDp = DefaultUiTokens.defaultHourRowHeightDp
-internal val AbsoluteMinHourRowHeightDp = DefaultUiTokens.absoluteMinHourRowHeightDp
-internal val MaxHourRowHeightDp = DefaultUiTokens.maxHourRowHeightDp
-internal val DraftSnapMinutes = DefaultUiTokens.draftSnapMinutes
-internal val DraftMinDurationMinutes = DefaultUiTokens.draftMinDurationMinutes
-internal val TimeSidebarWidth = DefaultUiTokens.timeSidebarWidth
-internal val DayHeaderHeight = DefaultUiTokens.dayHeaderHeight
-internal val DayColumnSpacing = DefaultUiTokens.dayColumnSpacing
-internal val HourCellGap = DefaultUiTokens.hourCellGap
-internal val EditorHorizontalPadding = DefaultUiTokens.editorHorizontalPadding
-internal val EditorSectionHorizontalPadding = DefaultUiTokens.editorSectionHorizontalPadding
-internal val UniversalControlHeight = DefaultUiTokens.universalControlHeight
-internal val SettingsControlHeight = DefaultUiTokens.settingsControlHeight
-internal val SettingsControlShape = DefaultUiTokens.settingsControlShape
-internal val EditorTinyVisibleHeight = DefaultUiTokens.editorTinyVisibleHeight
-internal val EditorSmallVisibleHeight = DefaultUiTokens.editorSmallVisibleHeight
-internal const val UiLocalAccountId = "local"
-internal const val UiLocalCollectionPrefix = "local://"
 internal val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
 
 @Composable
