@@ -66,7 +66,8 @@ Requires an Apple Silicon Mac, Xcode 26.0.x with an iOS Simulator runtime, JDK 1
 or configure the SDK in local, untracked `local.properties`. Open
 `iosApp/KgsCalendar.xcodeproj`, select the `KgsCalendar` scheme and an iPhone simulator, and
 build/run. The Xcode build phase compiles the Kotlin framework automatically through
-`tools/build-apple-framework.sh`, which locates JDK 17 when `JAVA_HOME` is unset. Simulator
+`tools/build-apple-framework.sh`, which locates JDK 17 when `JAVA_HOME` is unset and limits
+the build to one worker, two JVM processors and a 3 GiB heap for Native release optimization. Simulator
 builds need no development team; physical devices need your own signing configuration.
 
 Shared tests on an Apple Silicon simulator: `bash gradlew :core:shared:iosSimulatorArm64Test
