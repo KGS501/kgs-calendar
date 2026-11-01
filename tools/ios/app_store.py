@@ -25,7 +25,7 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 
 
-BUNDLE_ID = "com.kgs501.kgscalendar.portvalidation"
+BUNDLE_ID = "com.kgs501.kgscalendar"
 GROUP_NAME = "KGS iOS Development"
 API = "https://api.appstoreconnect.apple.com"
 TEST_NOTES = (
@@ -108,17 +108,22 @@ class Client:
 
 def ensure_bundle(client):
     bundles = client.list("/v1/bundleIds", {"filter[identifier]": BUNDLE_ID})
+    # Apple can return prefix matches; require the exact app identity.
+    bundles = [b for b in bundles if b["attributes"]["identifier"] == BUNDLE_ID]
+    if len(bundles) > 1:
+        raise AppleError("Multiple exact bundle IDs matched; inspect the developer account")
     if bundles:
         return bundles[0]
     return client.request("POST", "/v1/bundleIds", {"data": {
         "type": "bundleIds", "attributes": {
-            "identifier": BUNDLE_ID, "name": "KGS Port Validation", "platform": "IOS",
+            "identifier": BUNDLE_ID, "name": "KGS Calendar", "platform": "IOS",
         },
     }})["data"]
 
 
 def find_app(client):
     apps = client.list("/v1/apps", {"filter[bundleId]": BUNDLE_ID})
+    apps = [app for app in apps if app["attributes"]["bundleId"] == BUNDLE_ID]
     if len(apps) != 1:
         raise AppleError(f"Create the iOS app record at https://appstoreconnect.apple.com/apps "
                          f"with bundle ID {BUNDLE_ID}, then retry. No App Store release is needed.")
@@ -169,9 +174,11 @@ def prepare_signing(client, directory):
     team_id = cert.subject.get_attributes_for_oid(NameOID.ORGANIZATIONAL_UNIT_NAME)[0].value
     if not re.fullmatch(r"[A-Z0-9]{10}", team_id):
         raise AppleError("Could not identify the Apple developer team from its certificate")
-    profile_name = "KGS Port Validation TestFlight " + state["certificate_id"]
-    profiles = client.list("/v1/profiles", {"filter[name]": profile_name})
-    active = [p for p in profiles if p["attributes"]["profileState"] == "ACTIVE"]
+    profile_name = "KGS Calendar TestFlight " + state["certificate_id"]
+    profiles = client.list("/v1/profiles", {"filter[name]": profile_name, "filter[profileType]": "IOS_APP_STORE"})
+    active = [p for p in profiles if p["attributes"]["profileState"] == "ACTIVE"
+              and p["attributes"]["name"] == profile_name
+              and p["attributes"]["profileType"] == "IOS_APP_STORE"]
     if active:
         profile = client.request("GET", "/v1/profiles/" + active[0]["id"])["data"]
     else:
@@ -219,6 +226,7 @@ def configure_testflight(client, email=None):
             raise AppleError("The selected tester needs access to this app in App Store Connect")
     email = user["username"]
     groups = client.list("/v1/betaGroups", {"filter[app]": app["id"], "filter[name]": GROUP_NAME})
+    groups = [g for g in groups if g["attributes"]["name"] == GROUP_NAME]
     if groups:
         if len(groups) != 1:
             raise AppleError("Multiple development groups match; inspect App Store Connect")
@@ -232,6 +240,7 @@ def configure_testflight(client, email=None):
             "relationships": {"app": {"data": {"type": "apps", "id": app["id"]}}},
         }})["data"]
     testers = client.list("/v1/betaTesters", {"filter[email]": email})
+    testers = [t for t in testers if t["attributes"]["email"].casefold() == email.casefold()]
     if testers:
         tester = testers[0]
         members = client.list(f"/v1/betaGroups/{group['id']}/betaTesters")

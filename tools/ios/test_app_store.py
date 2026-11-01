@@ -76,15 +76,41 @@ class TokenTest(unittest.TestCase):
             self.assertNotIn("test-token", str(caught.exception))
 
 
+class AppIdentityTest(unittest.TestCase):
+    def test_prefix_bundle_match_does_not_reuse_the_validation_identifier(self):
+        client = mock.Mock()
+        client.list.return_value = [{"id": "old", "attributes": {"identifier": asc.BUNDLE_ID + ".portvalidation"}}]
+        client.request.return_value = {"data": {"id": "new"}}
+        self.assertEqual(asc.ensure_bundle(client)["id"], "new")
+        body = client.request.call_args.args[2]
+        self.assertEqual(body["data"]["attributes"]["identifier"], asc.BUNDLE_ID)
+
+    def test_exact_bundle_match_is_reused_alongside_prefix_matches(self):
+        client = mock.Mock()
+        client.list.return_value = [
+            {"id": "old", "attributes": {"identifier": asc.BUNDLE_ID + ".portvalidation"}},
+            {"id": "new", "attributes": {"identifier": asc.BUNDLE_ID}},
+        ]
+        self.assertEqual(asc.ensure_bundle(client)["id"], "new")
+        client.request.assert_not_called()
+
+    def test_app_lookup_requires_the_exact_bundle_id(self):
+        client = mock.Mock()
+        client.list.return_value = [{"id": "old", "attributes": {"bundleId": asc.BUNDLE_ID + ".portvalidation"}}]
+        with self.assertRaises(asc.AppleError):
+            asc.find_app(client)
+
+
 class SigningTest(unittest.TestCase):
     @mock.patch("builtins.print")
     def test_signing_identity_is_reused_without_revoking_or_creating_another_certificate(self, log):
         client = mock.Mock()
         certificates = {}
         profile = {"id": "profile", "attributes": {"profileState": "ACTIVE",
+                   "name": "KGS Calendar TestFlight cert", "profileType": "IOS_APP_STORE",
                    "profileContent": base64.b64encode(b"test-profile").decode()}}
         client.list.side_effect = lambda path, query=None: (
-            [{"id": "bundle"}] if path == "/v1/bundleIds" else [profile])
+            [{"id": "bundle", "attributes": {"identifier": asc.BUNDLE_ID}}] if path == "/v1/bundleIds" else [profile])
         def request(method, path, body=None):
             if method == "POST" and path == "/v1/certificates":
                 csr = x509.load_pem_x509_csr(body["data"]["attributes"]["csrContent"].encode())
@@ -123,7 +149,7 @@ class SigningTest(unittest.TestCase):
 
     def test_interrupted_setup_does_not_discard_an_existing_private_key(self):
         client = mock.Mock()
-        client.list.return_value = [{"id": "bundle"}]
+        client.list.return_value = [{"id": "bundle", "attributes": {"identifier": asc.BUNDLE_ID}}]
         with tempfile.TemporaryDirectory() as directory:
             key = Path(directory) / "distribution.key"
             key.write_text("keep me")
@@ -138,12 +164,12 @@ class TesterSetupTest(unittest.TestCase):
         client = mock.Mock()
         def listing(path, query=None):
             return {
-                "/v1/apps": [{"id": "app"}],
+                "/v1/apps": [{"id": "app", "attributes": {"bundleId": asc.BUNDLE_ID}}],
                 "/v1/users": [{"id": "owner", "attributes": {"username": "owner@example.test",
                               "roles": roles or ["ACCOUNT_HOLDER"], "allAppsVisible": visible}}],
                 "/v1/users/owner/visibleApps": [],
-                "/v1/betaGroups": [{"id": "group", "attributes": {"isInternalGroup": internal}}],
-                "/v1/betaTesters": [{"id": "tester"}],
+                "/v1/betaGroups": [{"id": "group", "attributes": {"name": asc.GROUP_NAME, "isInternalGroup": internal}}],
+                "/v1/betaTesters": [{"id": "tester", "attributes": {"email": "owner@example.test"}}],
                 "/v1/betaGroups/group/betaTesters": [{"id": "tester"}] if member else [],
             }[path]
         client.list.side_effect = listing
@@ -195,7 +221,7 @@ class DistributionTest(unittest.TestCase):
         client = mock.Mock()
         def listing(path, query=None):
             if path == "/v1/apps":
-                return [{"id": "app"}]
+                return [{"id": "app", "attributes": {"bundleId": asc.BUNDLE_ID}}]
             if path == "/v1/builds":
                 return [{"id": "build", "attributes": {"processingState": state}}]
             if path.endswith("/relationships/builds"):

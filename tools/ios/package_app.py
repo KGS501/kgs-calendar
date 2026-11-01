@@ -72,7 +72,9 @@ def prepare_inputs(directory):
         "signingStyle": "manual", "signingCertificate": "Apple Distribution",
         "provisioningProfiles": {BUNDLE_ID: profile["Name"]},
         "manageAppVersionAndBuildNumber": False, "uploadSymbols": True,
-        "stripSwiftSymbols": True, "testFlightInternalTestingOnly": True,
+        # Keep a tested release candidate eligible for a later App Store submission.
+        # Uploading does not submit for review; tester access is configured separately.
+        "stripSwiftSymbols": True, "testFlightInternalTestingOnly": False,
     }))
 
 

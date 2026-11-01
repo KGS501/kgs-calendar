@@ -36,7 +36,7 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 ## iOS port (in progress)
 
 The iOS port is **not a functional calendar app yet**. `iosApp/KgsCalendar.xcodeproj` is a
-component validation host, with an intentionally separate bundle ID and display name.
+component validation host using the permanent KGS Calendar app name and bundle ID.
 It exercises the existing Android theme palettes, morphing dropdown, dialogs and create-menu
 animations from shared source. It does not create or persist calendar items.
 
@@ -80,9 +80,13 @@ Linux cannot run Apple's iOS Simulator; installing another Android emulator does
 
 ### TestFlight development builds
 
-The [TestFlight workflow](.github/workflows/testflight.yml) uploads the **KGS Port Validation**
+The [TestFlight workflow](.github/workflows/testflight.yml) uploads the **KGS Calendar**
 component host for internal testing on iPhone and iPad. It does not deliver the full calendar
-features listed below. Builds are manually triggered from `main` via **Actions → TestFlight →
+features listed below. The app record and bundle ID `com.kgs501.kgscalendar` are also used for
+the eventual App Store release. Uploads use standard App Store Connect distribution, so a
+tested release candidate can later be submitted to App Review. This workflow only distributes
+to the internal tester group; it does not submit for review or publish an App Store release.
+Builds are manually triggered from `main` via **Actions → TestFlight →
 Run workflow**; PRs and ordinary pushes do not trigger signing or uploads. The workflow assigns
 build numbers from its run number and attempt, uploads on macOS, then checks Apple's processing
 and internal tester availability on Linux. If Apple processing times out, rerun only the failed
@@ -95,10 +99,10 @@ and signing files outside the repository. With Python 3.12+ and
 `ASC_ISSUER_ID`, then:
 
 1. Run `python3 tools/ios/app_store.py register-bundle` to register
-   `com.kgs501.kgscalendar.portvalidation`.
+   `com.kgs501.kgscalendar`.
 2. Create an iOS app record in [App Store Connect](https://appstoreconnect.apple.com/apps) using
-   that bundle ID, the name **KGS Port Validation**, English (U.S.), and SKU
-   `kgs-calendar-ios-validation`. Apple's public API cannot create the initial app record.
+   that bundle ID, the name **KGS Calendar**, English (U.S.), and SKU
+   `kgs-calendar-ios`. Apple's public API cannot create the initial app record.
 3. Run `python3 tools/ios/app_store.py prepare-signing --directory /private/path/kgs-signing`.
    This creates one distribution certificate and App Store provisioning profile and reuses
    that identity on subsequent runs. It does not revoke existing certificates. The directory
