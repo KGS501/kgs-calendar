@@ -39,3 +39,8 @@ artifacts/
 DerivedData/
 **/xcuserdata/
 *.xcuserstate
+*.xcarchive/
+*.ipa
+*.p8
+*.p12
+*.mobileprovision

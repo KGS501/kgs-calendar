@@ -71,11 +71,66 @@ builds need no development team; physical devices need your own signing configur
 
 Shared tests on an Apple Silicon simulator: `bash gradlew :core:shared:iosSimulatorArm64Test
 :shared:ui:iosSimulatorArm64Test --max-workers=1` (one command). Intel simulator targets are
-not configured. The `iOS validation host` job in the `CI` workflow builds and links the unsigned
-simulator app on an Apple Silicon macOS runner using Xcode 26.0.1. It is a compile/link gate, not a visual
-or interaction test. Apple compilation results must be checked in that workflow before merging;
+not configured. The `iOS device archive` job in the `CI` workflow builds an unsigned Release
+archive for physical iPhone/iPad devices on an Apple Silicon macOS runner using Xcode 26.0.1.
+It validates the packaged icon, privacy manifest, device support and app identity. It is a build
+and packaging gate, not a visual or interaction test. Check that workflow before merging;
 local Apple compilation and runtime validation remain unavailable on this Linux machine.
 Linux cannot run Apple's iOS Simulator; installing another Android emulator does not solve this.
+
+### TestFlight development builds
+
+The [TestFlight workflow](.github/workflows/testflight.yml) uploads the **KGS Port Validation**
+component host for internal testing on iPhone and iPad. It does not deliver the full calendar
+features listed below. Builds are manually triggered from `main` via **Actions → TestFlight →
+Run workflow**; PRs and ordinary pushes do not trigger signing or uploads. The workflow assigns
+build numbers from its run number and attempt, uploads on macOS, then checks Apple's processing
+and internal tester availability on Linux. If Apple processing times out, rerun only the failed
+availability job to avoid rebuilding or uploading again.
+
+One-time account setup requires an Apple Developer membership and an App Store Connect **team**
+API key with Admin access, including its Key ID, Issuer ID and downloaded `.p8` file. Keep the key
+and signing files outside the repository. With Python 3.12+ and
+`python3 -m pip install -r tools/ios/requirements.txt`, set `ASC_KEY_PATH`, `ASC_KEY_ID` and
+`ASC_ISSUER_ID`, then:
+
+1. Run `python3 tools/ios/app_store.py register-bundle` to register
+   `com.kgs501.kgscalendar.portvalidation`.
+2. Create an iOS app record in [App Store Connect](https://appstoreconnect.apple.com/apps) using
+   that bundle ID, the name **KGS Port Validation**, English (U.S.), and SKU
+   `kgs-calendar-ios-validation`. Apple's public API cannot create the initial app record.
+3. Run `python3 tools/ios/app_store.py prepare-signing --directory /private/path/kgs-signing`.
+   This creates one distribution certificate and App Store provisioning profile and reuses
+   that identity on subsequent runs. It does not revoke existing certificates. The directory
+   contains the private key, encrypted `.p12`, password, profile and non-secret signing metadata.
+4. Run `python3 tools/ios/app_store.py configure-testflight --email your-apple-account-email`.
+   The email must belong to an eligible App Store Connect user with access to this app. If
+   omitted, the unique account holder is selected. This creates/reuses the internal
+   **KGS iOS Development** group and adds that user as a tester.
+5. Create a GitHub environment named `testflight`, restrict deployments to `main`, and configure:
+
+   | Environment variables | Value |
+   | --- | --- |
+   | `ASC_KEY_ID`, `ASC_ISSUER_ID` | From the App Store Connect team key page |
+   | `APPLE_TEAM_ID` | `team_id` from the signing directory's `signing.json` |
+   | `ASC_APP_ID`, `TESTFLIGHT_GROUP_ID` | `app_id`, `group_id` from tester setup |
+
+   | Environment secrets | Value |
+   | --- | --- |
+   | `ASC_PRIVATE_KEY` | Contents of the `.p8` file |
+   | `APPLE_DISTRIBUTION_P12_BASE64` | Base64-encoded `distribution.p12` |
+   | `APPLE_P12_PASSWORD` | Contents of `p12-password` |
+   | `APPLE_PROFILE_BASE64` | Base64-encoded `profile.mobileprovision` |
+
+Pass secret values via GitHub's encrypted secret UI or CLI standard input, not command-line
+arguments, commits or logs. Signing uses a temporary macOS keychain and removes signing files
+after the job. Only failure logs are retained as artifacts. Renew expired certificates/profiles
+before future uploads and update the environment secrets together.
+
+After successful delivery, accept Apple's invitation on the iPad and install the build in
+[TestFlight](https://testflight.apple.com/). Internal builds are available for 90 days and do not
+require an external beta review. Tooling tests can run without Apple credentials or Xcode:
+`python3 -m unittest discover -s tools/ios -p 'test_*.py' -v`.
 
 ### Remaining work before an iOS release
 
@@ -101,7 +156,7 @@ the selection logic and checks the complete Git diff before allocating build run
 | Changed files | Build checks |
 | --- | --- |
 | Android app, resources, data layer or Android-specific shared source | Android APK and Android unit tests on Linux |
-| Swift/Xcode host or Apple-specific shared source | iOS simulator compile/link on macOS |
+| Swift/Xcode host, TestFlight tooling, or Apple-specific shared source | iOS Release device archive and packaging validation on macOS |
 | Shared production code | Android, shared JVM tests/common metadata, and iOS |
 | Shared JVM source or common/JVM tests only | Shared JVM tests and common metadata on Linux |
 | Gradle configuration (including Android module build scripts), CI configuration, or unknown paths | All checks |

@@ -24,7 +24,7 @@ def builds_for_path(path):
         return ALL
     if path.startswith(("app/", "core/data/")):
         return {"android"}
-    if path.startswith("iosApp/") or path == "tools/build-apple-framework.sh":
+    if path.startswith(("iosApp/", "tools/ios/")) or path == "tools/build-apple-framework.sh":
         return {"ios"}
     if path == "tools/verify-port.sh":
         return {"android", "shared"}

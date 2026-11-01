@@ -90,10 +90,10 @@ jobs:
           if-no-files-found: ignore
 
   build-ios:
-    name: iOS validation host
+    name: iOS device archive
     needs: changes
     if: needs.changes.outputs.ios == 'true'
-    # Standard Apple Silicon runner; the project targets iosSimulatorArm64.
+    # Validate the same Release device archive used by TestFlight, without signing secrets.
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -101,6 +101,17 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/ios/requirements.txt
+
+      - name: Verify TestFlight tooling
+        run: |
+          python3 -m pip install -r tools/ios/requirements.txt
+          python3 -m unittest discover -s tools/ios -p 'test_*.py' -v
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -128,19 +139,21 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build unsigned iOS Simulator host
+      - name: Build unsigned iOS device archive
         run: |
           set -o pipefail
           xcodebuild \
             -project iosApp/KgsCalendar.xcodeproj \
             -scheme KgsCalendar \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/kgs-ios/KgsCalendar.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/kgs-ios" \
             -jobs 1 \
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
-            build 2>&1 | tee "$RUNNER_TEMP/kgs-ios-build.log"
+            archive 2>&1 | tee "$RUNNER_TEMP/kgs-ios-build.log"
+          python3 tools/ios/package_app.py validate "$RUNNER_TEMP/kgs-ios/KgsCalendar.xcarchive"
 
       - name: Upload Apple build log
         if: failure()
