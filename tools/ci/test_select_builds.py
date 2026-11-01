@@ -18,6 +18,7 @@ class SelectionTest(unittest.TestCase):
             "iosApp/KgsCalendar/ContentView.swift": {"ios"},
             "iosApp/KgsCalendar.xcodeproj/project.pbxproj": {"ios"},
             "tools/build-apple-framework.sh": {"ios"},
+            "tools/ios/upload-testflight.sh": {"ios"},
             "tools/verify-port.sh": {"android", "shared"},
         }
         for path, expected in cases.items():
