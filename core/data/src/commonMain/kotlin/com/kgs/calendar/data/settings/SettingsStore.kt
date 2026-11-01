@@ -1,0 +1,890 @@
+package com.kgs.calendar.data.settings
+
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.domain.model.REMINDER_AT_END
+import com.kgs.calendar.domain.model.REMINDER_AT_START
+import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.DEFAULT_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.normalizedReminderOffsets
+import com.kgs.calendar.domain.source.CalendarGroupSettings
+import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.domain.source.CategorySync
+import com.kgs.calendar.domain.source.CollectionVisibility
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import java.time.DayOfWeek
+import java.time.LocalDate
+
+class SettingsStore(private val dataStore: DataStore<Preferences>) {
+    val lastBackgroundedAtMillis: Flow<Long?> = dataStore.data.map { prefs ->
+        prefs[KEY_LAST_BACKGROUNDED_AT_MILLIS]
+    }
+
+    suspend fun setLastBackgroundedAtMillis(value: Long?) {
+        dataStore.edit { prefs ->
+            if (value == null) {
+                prefs.remove(KEY_LAST_BACKGROUNDED_AT_MILLIS)
+            } else {
+                prefs[KEY_LAST_BACKGROUNDED_AT_MILLIS] = value
+            }
+        }
+    }
+
+    private inline fun <reified T : Enum<T>> enumFlow(
+        key: Preferences.Key<String>,
+        default: T,
+    ): Flow<T> = dataStore.data.map { prefs ->
+        runCatching { enumValueOf<T>(prefs[key] ?: default.name) }.getOrDefault(default)
+    }
+
+    val syncIntervalMinutes: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_SYNC_INTERVAL_MINUTES] ?: 15).takeIf { it in SYNC_INTERVAL_MINUTES } ?: 15
+    }
+
+    suspend fun setSyncIntervalMinutes(minutes: Int) {
+        require(minutes in SYNC_INTERVAL_MINUTES)
+        dataStore.edit { it[KEY_SYNC_INTERVAL_MINUTES] = minutes }
+    }
+
+    val selectedView: Flow<CalendarViewMode> = dataStore.data.map { prefs ->
+        if (prefs[KEY_VIEW] == "Week") return@map CalendarViewMode.ThreeDay
+        runCatching {
+            CalendarViewMode.valueOf(prefs[KEY_VIEW] ?: CalendarViewMode.ThreeDay.name)
+        }.getOrDefault(CalendarViewMode.ThreeDay)
+    }
+
+    val selectedDate: Flow<LocalDate> = dataStore.data.map { prefs ->
+        runCatching {
+            LocalDate.parse(prefs[KEY_DATE] ?: LocalDate.now().toString())
+        }.getOrDefault(LocalDate.now())
+    }
+
+    val themeMode: Flow<AppThemeMode> = enumFlow(KEY_THEME, AppThemeMode.KgsBlue)
+
+    val colorMode: Flow<AppColorMode> = enumFlow(KEY_COLOR_MODE, AppColorMode.Auto)
+
+    val monthWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_MONTH_WIDGET_THEME, WidgetThemeMode.FollowApp)
+
+    val monthWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MONTH_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
+
+    val agendaWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_AGENDA_WIDGET_THEME, WidgetThemeMode.FollowApp)
+
+    val agendaWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_AGENDA_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
+
+    val tasksWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_TASKS_WIDGET_THEME, WidgetThemeMode.FollowApp)
+
+    val tasksWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_TASKS_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
+
+    val dayWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_DAY_WIDGET_THEME, WidgetThemeMode.FollowApp)
+
+    val dayWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_DAY_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
+
+    val multiWidgetThemeMode: Flow<WidgetThemeMode> = enumFlow(KEY_MULTI_WIDGET_THEME, WidgetThemeMode.FollowApp)
+
+    val multiWidgetColorMode: Flow<WidgetColorMode> = enumFlow(KEY_MULTI_WIDGET_COLOR_MODE, WidgetColorMode.FollowApp)
+
+    val multiWidgetMonthPercent: Flow<Int> = dataStore.data.map { prefs ->
+        normalizeMultiWidgetMonthPercent(
+            prefs[KEY_MULTI_WIDGET_MONTH_PERCENT] ?: DEFAULT_MULTI_WIDGET_MONTH_PERCENT,
+        )
+    }
+
+    val tasksWidgetDisplayMode: Flow<WidgetTaskDisplayMode> =
+        enumFlow(KEY_TASKS_WIDGET_DISPLAY_MODE, WidgetTaskDisplayMode.Planned)
+
+    val tasksWidgetIncludeOverdue: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] ?: true
+    }
+
+    val tasksWidgetSortMode: Flow<WidgetTaskSortMode> = enumFlow(KEY_TASKS_WIDGET_SORT_MODE, WidgetTaskSortMode.Date)
+
+    val tasksWidgetCreateMode: Flow<WidgetTaskCreateMode> = enumFlow(KEY_TASKS_WIDGET_CREATE_MODE, WidgetTaskCreateMode.Today)
+
+    val tasksWidgetSubtaskDefaultMode: Flow<WidgetTaskSubtaskDefaultMode> =
+        enumFlow(KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE, WidgetTaskSubtaskDefaultMode.FollowApp)
+
+    val dayWidgetScalePercent: Flow<Int> = dataStore.data.map { prefs ->
+        normalizeDayWidgetScalePercent(
+            prefs[KEY_DAY_WIDGET_SCALE_PERCENT] ?: DEFAULT_DAY_WIDGET_SCALE_PERCENT,
+        )
+    }
+
+    val dayWidgetStartHour: Flow<Int> = dataStore.data.map { prefs ->
+        normalizeDayWidgetStartHour(
+            prefs[KEY_DAY_WIDGET_START_HOUR] ?: DEFAULT_DAY_WIDGET_START_HOUR,
+        )
+    }
+
+    val dayWidgetStartAtCurrentHour: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] ?: DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR
+    }
+
+    val languageMode: Flow<AppLanguageMode> = enumFlow(KEY_LANGUAGE_MODE, AppLanguageMode.System)
+
+    val taskColorMode: Flow<TaskColorMode> = enumFlow(KEY_TASK_COLOR_MODE, TaskColorMode.Collection)
+
+    val focusTitleOnCreate: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_FOCUS_TITLE_ON_CREATE] ?: false
+    }
+
+    val firstDayOfWeek: Flow<DayOfWeek> = dataStore.data.map { prefs ->
+        runCatching {
+            DayOfWeek.of((prefs[KEY_FIRST_DAY_OF_WEEK] ?: DayOfWeek.MONDAY.value).coerceIn(1, 7))
+        }.getOrDefault(DayOfWeek.MONDAY)
+    }
+
+    val showCompletedTasksInCalendar: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SHOW_COMPLETED_TASKS] ?: true
+    }
+
+    val showCalendarWeeks: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SHOW_CALENDAR_WEEKS] ?: DEFAULT_SHOW_CALENDAR_WEEKS
+    }
+
+    val priorityAnimationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_PRIORITY_ANIMATIONS_ENABLED] ?: true
+    }
+
+    val overdueSummaryPriorityAnimationEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] ?: true
+    }
+
+    val subtasksExpandedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] ?: true
+    }
+
+    val autoLoadMapPreviews: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_AUTO_LOAD_MAP_PREVIEWS] ?: false
+    }
+
+    /** Subtle haptic cues for drags and task toggles; the system touch-feedback setting still applies. */
+    val hapticFeedbackEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_HAPTIC_FEEDBACK_ENABLED] ?: DEFAULT_HAPTIC_FEEDBACK_ENABLED
+    }
+
+    /** Pro mode hides the app's explanations and hints, for more compact pages. */
+    val proMode: Flow<Boolean> = dataStore.data.map { prefs -> prefs[KEY_PRO_MODE] ?: false }
+
+    val maxVisibleAllDayItems: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] ?: 3).coerceIn(0, 10)
+    }
+
+    val portraitMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_PORTRAIT_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    val landscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LANDSCAPE_MULTI_DAY_COUNT] ?: prefs[KEY_MULTI_DAY_COUNT] ?: DEFAULT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on an upright large screen (tablet, unfolded foldable); separate from the phone value. */
+    val largePortraitMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_PORTRAIT_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    /** Multiple days count on a rotated large screen; separate from the phone value. */
+    val largeLandscapeMultiDayCount: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] ?: DEFAULT_LARGE_LANDSCAPE_MULTI_DAY_COUNT)
+            .coerceMultiDayCount()
+    }
+
+    val portraitTimelineHourHeightDp: Flow<Float> = dataStore.data.map { prefs ->
+        normalizeTimelineHourHeightDp(
+            prefs[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+        )
+    }
+
+    val landscapeTimelineHourHeightDp: Flow<Float> = dataStore.data.map { prefs ->
+        normalizeTimelineHourHeightDp(
+            prefs[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] ?: DEFAULT_TIMELINE_HOUR_HEIGHT_DP,
+        )
+    }
+
+    /** One landscape all-day visibility preference, shared by phone and large-screen layouts. */
+    val landscapeTimelineCompact: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_LANDSCAPE_TIMELINE_COMPACT] ?: false
+    }
+
+    suspend fun setLandscapeTimelineCompact(compact: Boolean) {
+        dataStore.edit { it[KEY_LANDSCAPE_TIMELINE_COMPACT] = compact }
+    }
+
+    val weekViewEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_WEEK_VIEW_ENABLED] ?: DEFAULT_WEEK_VIEW_ENABLED
+    }
+
+    val fullWeekSwipeEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_FULL_WEEK_SWIPE_ENABLED] ?: DEFAULT_FULL_WEEK_SWIPE_ENABLED
+    }
+
+    val multiDaySidebarControlsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] ?: true
+    }
+
+    val defaultEventDurationMinutes: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_DEFAULT_EVENT_DURATION] ?: 60).coerceIn(15, 24 * 60)
+    }
+
+    /**
+     * The dates a new task starts with. Settings from before this choice existed had only
+     * "date" (a start date) and "date and time" (start and due with times).
+     */
+    val defaultTaskDates: Flow<TaskDefaultDates> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_TASK_DATES]?.let { stored -> TaskDefaultDates.entries.firstOrNull { it.name == stored } }
+            ?: when {
+                prefs[KEY_DEFAULT_TASK_HAS_DATE] != true -> TaskDefaultDates.None
+                prefs[KEY_DEFAULT_TASK_HAS_TIME] == true -> TaskDefaultDates.StartAndDue
+                else -> TaskDefaultDates.Start
+            }
+    }
+
+    val defaultTaskHasTime: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_TASK_HAS_TIME] ?: false
+    }
+
+    /** The reminders the reminder popup opens with, one per unit. */
+    val reminderPresets: Flow<ReminderPresets> = dataStore.data.map { prefs ->
+        ReminderPresets.decode(prefs[KEY_REMINDER_PRESETS])
+    }
+
+    val defaultEventReminderMinutes: Flow<Set<Int>> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_EVENT_REMINDERS]?.toReminderSet()
+            ?: buildSet {
+                if (prefs[KEY_EVENT_START_NOTIFICATIONS] == true) add(REMINDER_AT_START)
+                if (prefs[KEY_EVENT_END_NOTIFICATIONS] == true) add(REMINDER_AT_END)
+            }
+    }
+
+    val defaultTaskReminderMinutes: Flow<Set<Int>> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_TASK_REMINDERS]?.toReminderSet()
+            ?: buildSet {
+                if (prefs[KEY_TASK_START_NOTIFICATIONS] ?: true) add(REMINDER_AT_START)
+                if (prefs[KEY_TASK_END_NOTIFICATIONS] == true) add(REMINDER_AT_END)
+            }
+    }
+
+    val taskStartNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_TASK_START_NOTIFICATIONS] ?: true
+    }
+
+    val taskEndNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_TASK_END_NOTIFICATIONS] ?: false
+    }
+
+    val eventStartNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_EVENT_START_NOTIFICATIONS] ?: false
+    }
+
+    val eventEndNotificationsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_EVENT_END_NOTIFICATIONS] ?: false
+    }
+
+    val eventFieldOrder: Flow<List<String>> = dataStore.data.map { prefs ->
+        prefs[KEY_EVENT_FIELD_ORDER].toFieldOrder(DEFAULT_EVENT_FIELD_ORDER)
+    }
+
+    val taskFieldOrder: Flow<List<String>> = dataStore.data.map { prefs ->
+        prefs[KEY_TASK_FIELD_ORDER].toFieldOrder(DEFAULT_TASK_FIELD_ORDER)
+    }
+
+    /** True after the user deleted the local calendar; it is then not created again on start. */
+    val localCalendarRemoved: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_LOCAL_CALENDAR_REMOVED] ?: false
+    }
+
+    suspend fun setLocalCalendarRemoved(removed: Boolean) {
+        dataStore.edit { it[KEY_LOCAL_CALENDAR_REMOVED] = removed }
+    }
+
+    val welcomeCompleted: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_WELCOME_COMPLETED] ?: false
+    }
+
+    val showDisabledAndroidProviderCalendars: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS] ?: false
+    }
+
+    val hiddenCollectionHrefs: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty()
+            .toSet()
+    }
+
+    /** Whole hidden calendars plus the calendars that hide only their events or only their tasks. */
+    val collectionVisibility: Flow<CollectionVisibility> = dataStore.data.map { prefs ->
+        CollectionVisibility(
+            hiddenCollectionHrefs = prefs[KEY_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            eventsHiddenIn = prefs[KEY_EVENTS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+            tasksHiddenIn = prefs[KEY_TASKS_HIDDEN_COLLECTION_HREFS].orEmpty(),
+        )
+    }.distinctUntilChanged()
+
+    /** The calendars whose categories join the user's own, beyond the defaults (see [CategorySync]). */
+    val categorySync: Flow<CategorySync> = dataStore.data.map { prefs ->
+        CategorySync(
+            enabledIn = prefs[KEY_CATEGORY_SYNC_ENABLED_HREFS].orEmpty(),
+            disabledIn = prefs[KEY_CATEGORY_SYNC_DISABLED_HREFS].orEmpty(),
+        )
+    }.distinctUntilChanged()
+
+    /** Stores whether [collection]'s categories join the user's own; its default is not stored. */
+    suspend fun setCategorySync(collection: CollectionEntity, synced: Boolean) {
+        val isDefault = synced == CategorySync.usesCategoriesByDefault(collection)
+        dataStore.edit { prefs ->
+            prefs.setHref(KEY_CATEGORY_SYNC_ENABLED_HREFS, collection.href, included = synced && !isDefault)
+            prefs.setHref(KEY_CATEGORY_SYNC_DISABLED_HREFS, collection.href, included = !synced && !isDefault)
+        }
+    }
+
+    /** How calendars are grouped in the sidebar and the source lists, beyond the automatic grouping. */
+    val calendarGroupSettings: Flow<CalendarGroupSettings> = dataStore.data.map { prefs ->
+        CalendarGroupSettings.decode(prefs[KEY_CALENDAR_GROUPS])
+    }.distinctUntilChanged()
+
+    /** Moves the calendar [href] into [groupKey]; null returns it to its automatic group. */
+    suspend fun setCalendarGroup(href: String, groupKey: String?) {
+        editCalendarGroups { settings ->
+            settings.copy(assignments = if (groupKey == null) settings.assignments - href else settings.assignments + (href to groupKey))
+        }
+    }
+
+    /** Deletes the custom group [groupKey]; its calendars return to their automatic groups. */
+    suspend fun deleteCalendarGroup(groupKey: String) {
+        editCalendarGroups { settings ->
+            settings.copy(
+                assignments = settings.assignments.filterValues { it != groupKey },
+                names = settings.names - groupKey,
+                avatarColors = settings.avatarColors - SourceImageKeys.group(groupKey),
+            )
+        }
+    }
+
+    /**
+     * Moves what was set on the group [groupKey] itself to the source that owns it: its name, and
+     * the color of its letter picture unless the source has one. The group then follows the source.
+     */
+    suspend fun adoptGroupIntoSource(groupKey: String, accountId: String) {
+        editCalendarGroups { settings ->
+            val groupColor = settings.avatarColors[SourceImageKeys.group(groupKey)]
+            val accountColorKey = SourceImageKeys.account(accountId)
+            settings.copy(
+                names = settings.names - groupKey,
+                avatarColors = (settings.avatarColors - SourceImageKeys.group(groupKey)).let { colors ->
+                    if (groupColor != null && accountColorKey !in colors) colors + (accountColorKey to groupColor) else colors
+                },
+            )
+        }
+    }
+
+    /** Hides or shows again the picture [imageKey] a source provides. */
+    suspend fun setSourceImageHidden(imageKey: String, hidden: Boolean) {
+        editCalendarGroups { settings ->
+            settings.copy(hiddenImages = if (hidden) settings.hiddenImages + imageKey else settings.hiddenImages - imageKey)
+        }
+    }
+
+    /** Renames the group [groupKey]; a blank [name] restores its automatic name. */
+    suspend fun setCalendarGroupName(groupKey: String, name: String?) {
+        editCalendarGroups { settings ->
+            val trimmed = name?.trim().orEmpty()
+            settings.copy(names = if (trimmed.isEmpty()) settings.names - groupKey else settings.names + (groupKey to trimmed))
+        }
+    }
+
+    /** Sets the color of the letter picture of [key] (a source or group image key); null restores the automatic one. */
+    suspend fun setAvatarColor(key: String, color: Int?) {
+        editCalendarGroups { settings ->
+            settings.copy(avatarColors = if (color == null) settings.avatarColors - key else settings.avatarColors + (key to color))
+        }
+    }
+
+    private suspend fun editCalendarGroups(transform: (CalendarGroupSettings) -> CalendarGroupSettings) {
+        dataStore.edit { prefs ->
+            val next = transform(CalendarGroupSettings.decode(prefs[KEY_CALENDAR_GROUPS]))
+            if (next == CalendarGroupSettings()) prefs.remove(KEY_CALENDAR_GROUPS) else prefs[KEY_CALENDAR_GROUPS] = next.encode()
+        }
+    }
+
+    suspend fun setSelectedView(viewMode: CalendarViewMode) {
+        dataStore.edit { it[KEY_VIEW] = viewMode.name }
+    }
+
+    suspend fun setSelectedDate(date: LocalDate) {
+        dataStore.edit { it[KEY_DATE] = date.toString() }
+    }
+
+    suspend fun setThemeMode(mode: AppThemeMode) {
+        dataStore.edit { it[KEY_THEME] = mode.name }
+    }
+
+    suspend fun setColorMode(mode: AppColorMode) {
+        dataStore.edit { it[KEY_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMonthWidgetThemeMode(mode: WidgetThemeMode) {
+        dataStore.edit { it[KEY_MONTH_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setMonthWidgetColorMode(mode: WidgetColorMode) {
+        dataStore.edit { it[KEY_MONTH_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setAgendaWidgetThemeMode(mode: WidgetThemeMode) {
+        dataStore.edit { it[KEY_AGENDA_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setAgendaWidgetColorMode(mode: WidgetColorMode) {
+        dataStore.edit { it[KEY_AGENDA_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetThemeMode(mode: WidgetThemeMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setTasksWidgetColorMode(mode: WidgetColorMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setDayWidgetThemeMode(mode: WidgetThemeMode) {
+        dataStore.edit { it[KEY_DAY_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setDayWidgetColorMode(mode: WidgetColorMode) {
+        dataStore.edit { it[KEY_DAY_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMultiWidgetThemeMode(mode: WidgetThemeMode) {
+        dataStore.edit { it[KEY_MULTI_WIDGET_THEME] = mode.name }
+    }
+
+    suspend fun setMultiWidgetColorMode(mode: WidgetColorMode) {
+        dataStore.edit { it[KEY_MULTI_WIDGET_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setMultiWidgetMonthPercent(monthPercent: Int) {
+        dataStore.edit {
+            it[KEY_MULTI_WIDGET_MONTH_PERCENT] = normalizeMultiWidgetMonthPercent(monthPercent)
+        }
+    }
+
+    suspend fun setTasksWidgetDisplayMode(mode: WidgetTaskDisplayMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_DISPLAY_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetIncludeOverdue(include: Boolean) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_INCLUDE_OVERDUE] = include }
+    }
+
+    suspend fun setTasksWidgetSortMode(mode: WidgetTaskSortMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_SORT_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetCreateMode(mode: WidgetTaskCreateMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_CREATE_MODE] = mode.name }
+    }
+
+    suspend fun setTasksWidgetSubtaskDefaultMode(mode: WidgetTaskSubtaskDefaultMode) {
+        dataStore.edit { it[KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE] = mode.name }
+    }
+
+    suspend fun setDayWidgetScalePercent(scalePercent: Int) {
+        dataStore.edit {
+            it[KEY_DAY_WIDGET_SCALE_PERCENT] = normalizeDayWidgetScalePercent(scalePercent)
+        }
+    }
+
+    suspend fun setDayWidgetStartHour(startHour: Int) {
+        dataStore.edit {
+            it[KEY_DAY_WIDGET_START_HOUR] = normalizeDayWidgetStartHour(startHour)
+        }
+    }
+
+    suspend fun setDayWidgetStartAtCurrentHour(enabled: Boolean) {
+        dataStore.edit { it[KEY_DAY_WIDGET_START_AT_CURRENT_HOUR] = enabled }
+    }
+
+    suspend fun setLanguageMode(mode: AppLanguageMode) {
+        dataStore.edit { it[KEY_LANGUAGE_MODE] = mode.name }
+    }
+
+    suspend fun setTaskColorMode(mode: TaskColorMode) {
+        dataStore.edit { it[KEY_TASK_COLOR_MODE] = mode.name }
+    }
+
+    suspend fun setFocusTitleOnCreate(enabled: Boolean) {
+        dataStore.edit { it[KEY_FOCUS_TITLE_ON_CREATE] = enabled }
+    }
+
+    suspend fun setFirstDayOfWeek(dayOfWeek: DayOfWeek) {
+        dataStore.edit { it[KEY_FIRST_DAY_OF_WEEK] = dayOfWeek.value }
+    }
+
+    suspend fun setShowCompletedTasksInCalendar(show: Boolean) {
+        dataStore.edit { it[KEY_SHOW_COMPLETED_TASKS] = show }
+    }
+
+    suspend fun setShowCalendarWeeks(show: Boolean) {
+        dataStore.edit { it[KEY_SHOW_CALENDAR_WEEKS] = show }
+    }
+
+    suspend fun setPriorityAnimationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_PRIORITY_ANIMATIONS_ENABLED] = enabled }
+    }
+
+    suspend fun setOverdueSummaryPriorityAnimationEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED] = enabled }
+    }
+
+    suspend fun setSubtasksExpandedByDefault(expanded: Boolean) {
+        dataStore.edit { it[KEY_SUBTASKS_EXPANDED_BY_DEFAULT] = expanded }
+    }
+
+    suspend fun setAutoLoadMapPreviews(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTO_LOAD_MAP_PREVIEWS] = enabled }
+    }
+
+    suspend fun setHapticFeedbackEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_HAPTIC_FEEDBACK_ENABLED] = enabled }
+    }
+
+    suspend fun setProMode(enabled: Boolean) {
+        dataStore.edit { it[KEY_PRO_MODE] = enabled }
+    }
+
+    suspend fun setMaxVisibleAllDayItems(maxItems: Int) {
+        dataStore.edit { it[KEY_MAX_VISIBLE_ALL_DAY_ITEMS] = maxItems.coerceIn(0, 10) }
+    }
+
+    suspend fun setPortraitMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLandscapeMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLargePortraitMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setLargeLandscapeMultiDayCount(count: Int) {
+        dataStore.edit { it[KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT] = count.coerceMultiDayCount() }
+    }
+
+    suspend fun setPortraitTimelineHourHeightDp(hourHeightDp: Float) {
+        dataStore.edit {
+            it[KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
+        }
+    }
+
+    suspend fun setLandscapeTimelineHourHeightDp(hourHeightDp: Float) {
+        dataStore.edit {
+            it[KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP] = normalizeTimelineHourHeightDp(hourHeightDp)
+        }
+    }
+
+    suspend fun setWeekViewEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_WEEK_VIEW_ENABLED] = enabled }
+    }
+
+    suspend fun setFullWeekSwipeEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_FULL_WEEK_SWIPE_ENABLED] = enabled }
+    }
+
+    suspend fun setMultiDaySidebarControlsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED] = enabled }
+    }
+
+    suspend fun setReminderPresets(presets: ReminderPresets) {
+        dataStore.edit { it[KEY_REMINDER_PRESETS] = presets.encode() }
+    }
+
+    suspend fun setDefaultEventDurationMinutes(minutes: Int) {
+        dataStore.edit { it[KEY_DEFAULT_EVENT_DURATION] = minutes.coerceIn(15, 24 * 60) }
+    }
+
+    suspend fun setDefaultTaskDates(dates: TaskDefaultDates) {
+        dataStore.edit { it[KEY_DEFAULT_TASK_DATES] = dates.name }
+    }
+
+    suspend fun setDefaultTaskHasTime(hasTime: Boolean) {
+        dataStore.edit { it[KEY_DEFAULT_TASK_HAS_TIME] = hasTime }
+    }
+
+    suspend fun setDefaultEventReminderMinutes(reminders: Set<Int>) {
+        dataStore.edit { it[KEY_DEFAULT_EVENT_REMINDERS] = reminders.toReminderCsv() }
+    }
+
+    suspend fun setDefaultTaskReminderMinutes(reminders: Set<Int>) {
+        dataStore.edit { it[KEY_DEFAULT_TASK_REMINDERS] = reminders.toReminderCsv() }
+    }
+
+    suspend fun setTaskStartNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_TASK_START_NOTIFICATIONS] = enabled }
+    }
+
+    suspend fun setTaskEndNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_TASK_END_NOTIFICATIONS] = enabled }
+    }
+
+    suspend fun setEventStartNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_EVENT_START_NOTIFICATIONS] = enabled }
+    }
+
+    suspend fun setEventEndNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_EVENT_END_NOTIFICATIONS] = enabled }
+    }
+
+    suspend fun setEventFieldOrder(order: List<String>) {
+        dataStore.edit { it[KEY_EVENT_FIELD_ORDER] = order.joinToString(",") }
+    }
+
+    suspend fun setTaskFieldOrder(order: List<String>) {
+        dataStore.edit { it[KEY_TASK_FIELD_ORDER] = order.joinToString(",") }
+    }
+
+    suspend fun setWelcomeCompleted(completed: Boolean) {
+        dataStore.edit { it[KEY_WELCOME_COMPLETED] = completed }
+    }
+
+    suspend fun setShowDisabledAndroidProviderCalendars(show: Boolean) {
+        dataStore.edit { it[KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS] = show }
+    }
+
+    suspend fun setCollectionHiddenInViews(href: String, hidden: Boolean) {
+        setHrefInSet(KEY_HIDDEN_COLLECTION_HREFS, href, hidden)
+    }
+
+    /** Hides only the events of a calendar; its tasks stay visible unless hidden separately. */
+    suspend fun setCollectionEventsHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_EVENTS_HIDDEN_COLLECTION_HREFS, KEY_TASKS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /** Hides only the tasks of a calendar; its events stay visible unless hidden separately. */
+    suspend fun setCollectionTasksHidden(href: String, hidden: Boolean) {
+        setCollectionTypeHidden(href, hidden, KEY_TASKS_HIDDEN_COLLECTION_HREFS, KEY_EVENTS_HIDDEN_COLLECTION_HREFS)
+    }
+
+    /**
+     * Hiding the last visible item type hides the whole calendar instead, so the sidebar checkbox
+     * always tells whether anything of a calendar is shown.
+     */
+    private suspend fun setCollectionTypeHidden(
+        href: String,
+        hidden: Boolean,
+        typeKey: Preferences.Key<Set<String>>,
+        otherTypeKey: Preferences.Key<Set<String>>,
+    ) {
+        dataStore.edit { prefs ->
+            if (hidden && href in prefs[otherTypeKey].orEmpty()) {
+                prefs.setHref(otherTypeKey, href, included = false)
+                prefs.setHref(KEY_HIDDEN_COLLECTION_HREFS, href, included = true)
+            } else {
+                prefs.setHref(typeKey, href, included = hidden)
+            }
+        }
+    }
+
+    private suspend fun setHrefInSet(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        dataStore.edit { prefs -> prefs.setHref(key, href, included) }
+    }
+
+    private fun MutablePreferences.setHref(key: Preferences.Key<Set<String>>, href: String, included: Boolean) {
+        val current = this[key].orEmpty()
+        val next = if (included) current + href else current - href
+        if (next.isEmpty()) remove(key) else this[key] = next
+    }
+
+    /** The time zone the cached calendar data was last read in; null before the first check. */
+    val parsedZoneId: Flow<String?> = dataStore.data.map { prefs -> prefs[KEY_PARSED_ZONE_ID] }
+
+    suspend fun setParsedZoneId(zoneId: String) {
+        dataStore.edit { it[KEY_PARSED_ZONE_ID] = zoneId }
+    }
+
+    val parserReparseVersion: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[KEY_PARSER_REPARSE_VERSION] ?: 0
+    }
+
+    suspend fun setParserReparseVersion(version: Int) {
+        dataStore.edit { it[KEY_PARSER_REPARSE_VERSION] = version }
+    }
+
+    /**
+     * Records that the exact alarm settings screen has been offered. Returns true only for the
+     * first caller, so the prompt is shown at most once per install.
+     */
+    suspend fun markExactAlarmPromptShown(): Boolean {
+        var firstPrompt = false
+        dataStore.edit { prefs ->
+            firstPrompt = prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] != true
+            prefs[KEY_EXACT_ALARM_PROMPT_SHOWN] = true
+        }
+        return firstPrompt
+    }
+
+    val defaultEventCollectionHref: Flow<String?> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_EVENT_COLLECTION]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setDefaultEventCollectionHref(href: String?) {
+        dataStore.edit { prefs ->
+            if (href.isNullOrBlank()) prefs.remove(KEY_DEFAULT_EVENT_COLLECTION) else prefs[KEY_DEFAULT_EVENT_COLLECTION] = href
+        }
+    }
+
+    val defaultTaskCollectionHref: Flow<String?> = dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_TASK_COLLECTION]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setDefaultTaskCollectionHref(href: String?) {
+        dataStore.edit { prefs ->
+            if (href.isNullOrBlank()) prefs.remove(KEY_DEFAULT_TASK_COLLECTION) else prefs[KEY_DEFAULT_TASK_COLLECTION] = href
+        }
+    }
+
+    companion object {
+        val SYNC_INTERVAL_MINUTES = listOf(15, 30, 60, 120, 360, 720, 1440)
+        private val KEY_SYNC_INTERVAL_MINUTES = intPreferencesKey("sync_interval_minutes")
+        private val KEY_VIEW = stringPreferencesKey("selected_view")
+        private val KEY_LAST_BACKGROUNDED_AT_MILLIS = longPreferencesKey("last_backgrounded_at_millis")
+        private val KEY_DATE = stringPreferencesKey("selected_date")
+        private val KEY_THEME = stringPreferencesKey("theme_mode")
+        private val KEY_COLOR_MODE = stringPreferencesKey("color_mode")
+        private val KEY_MONTH_WIDGET_THEME = stringPreferencesKey("month_widget_theme_mode")
+        private val KEY_MONTH_WIDGET_COLOR_MODE = stringPreferencesKey("month_widget_color_mode")
+        private val KEY_AGENDA_WIDGET_THEME = stringPreferencesKey("agenda_widget_theme_mode")
+        private val KEY_AGENDA_WIDGET_COLOR_MODE = stringPreferencesKey("agenda_widget_color_mode")
+        private val KEY_TASKS_WIDGET_THEME = stringPreferencesKey("tasks_widget_theme_mode")
+        private val KEY_TASKS_WIDGET_COLOR_MODE = stringPreferencesKey("tasks_widget_color_mode")
+        private val KEY_DAY_WIDGET_THEME = stringPreferencesKey("day_widget_theme_mode")
+        private val KEY_DAY_WIDGET_COLOR_MODE = stringPreferencesKey("day_widget_color_mode")
+        private val KEY_MULTI_WIDGET_THEME = stringPreferencesKey("multi_widget_theme_mode")
+        private val KEY_MULTI_WIDGET_COLOR_MODE = stringPreferencesKey("multi_widget_color_mode")
+        private val KEY_MULTI_WIDGET_MONTH_PERCENT = intPreferencesKey("multi_widget_month_percent")
+        private val KEY_TASKS_WIDGET_DISPLAY_MODE = stringPreferencesKey("tasks_widget_display_mode")
+        private val KEY_TASKS_WIDGET_INCLUDE_OVERDUE = booleanPreferencesKey("tasks_widget_include_overdue")
+        private val KEY_TASKS_WIDGET_SORT_MODE = stringPreferencesKey("tasks_widget_sort_mode")
+        private val KEY_TASKS_WIDGET_CREATE_MODE = stringPreferencesKey("tasks_widget_create_mode")
+        private val KEY_TASKS_WIDGET_SUBTASK_DEFAULT_MODE = stringPreferencesKey("tasks_widget_subtask_default_mode")
+        private val KEY_DAY_WIDGET_SCALE_PERCENT = intPreferencesKey("day_widget_scale_percent")
+        private val KEY_DAY_WIDGET_START_HOUR = intPreferencesKey("day_widget_start_hour_v2")
+        private val KEY_DAY_WIDGET_START_AT_CURRENT_HOUR = booleanPreferencesKey("day_widget_start_at_current_hour")
+        private val KEY_LANGUAGE_MODE = stringPreferencesKey("language_mode")
+        private val KEY_TASK_COLOR_MODE = stringPreferencesKey("task_color_mode")
+        private val KEY_FOCUS_TITLE_ON_CREATE = booleanPreferencesKey("focus_title_on_create")
+        private val KEY_FIRST_DAY_OF_WEEK = intPreferencesKey("first_day_of_week")
+        private val KEY_SHOW_COMPLETED_TASKS = booleanPreferencesKey("show_completed_tasks_in_calendar")
+        private val KEY_SHOW_CALENDAR_WEEKS = booleanPreferencesKey("show_calendar_weeks")
+        private val KEY_PRIORITY_ANIMATIONS_ENABLED = booleanPreferencesKey("priority_animations_enabled")
+        private val KEY_OVERDUE_SUMMARY_PRIORITY_ANIMATION_ENABLED = booleanPreferencesKey("overdue_summary_priority_animation_enabled")
+        private val KEY_SUBTASKS_EXPANDED_BY_DEFAULT = booleanPreferencesKey("subtasks_expanded_by_default")
+        private val KEY_AUTO_LOAD_MAP_PREVIEWS = booleanPreferencesKey("auto_load_map_previews")
+        private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
+        private val KEY_PRO_MODE = booleanPreferencesKey("pro_mode")
+        private val KEY_MAX_VISIBLE_ALL_DAY_ITEMS = intPreferencesKey("max_visible_all_day_items")
+        private val KEY_MULTI_DAY_COUNT = intPreferencesKey("multi_day_count")
+        private val KEY_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("portrait_multi_day_count")
+        private val KEY_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("landscape_multi_day_count")
+        private val KEY_LARGE_PORTRAIT_MULTI_DAY_COUNT = intPreferencesKey("large_portrait_multi_day_count")
+        private val KEY_LARGE_LANDSCAPE_MULTI_DAY_COUNT = intPreferencesKey("large_landscape_multi_day_count")
+        private val KEY_PORTRAIT_TIMELINE_HOUR_HEIGHT_DP =
+            floatPreferencesKey("portrait_timeline_hour_height_dp")
+        private val KEY_LANDSCAPE_TIMELINE_HOUR_HEIGHT_DP =
+            floatPreferencesKey("landscape_timeline_hour_height_dp")
+        private val KEY_WEEK_VIEW_ENABLED = booleanPreferencesKey("week_view_enabled")
+        private val KEY_FULL_WEEK_SWIPE_ENABLED = booleanPreferencesKey("full_week_swipe_enabled")
+        private val KEY_MULTI_DAY_SIDEBAR_CONTROLS_ENABLED = booleanPreferencesKey("multi_day_sidebar_controls_enabled")
+        private val KEY_DEFAULT_EVENT_DURATION = intPreferencesKey("default_event_duration_minutes")
+        private val KEY_DEFAULT_TASK_HAS_DATE = booleanPreferencesKey("default_task_has_date")
+        private val KEY_DEFAULT_TASK_HAS_TIME = booleanPreferencesKey("default_task_has_time")
+        private val KEY_DEFAULT_TASK_DATES = stringPreferencesKey("default_task_dates")
+        private val KEY_LOCAL_CALENDAR_REMOVED = booleanPreferencesKey("local_calendar_removed")
+        private val KEY_DEFAULT_EVENT_REMINDERS = stringPreferencesKey("default_event_reminders_csv")
+        private val KEY_REMINDER_PRESETS = stringPreferencesKey("reminder_presets")
+        private val KEY_DEFAULT_TASK_REMINDERS = stringPreferencesKey("default_task_reminders_csv")
+        private val KEY_TASK_START_NOTIFICATIONS = booleanPreferencesKey("task_start_notifications_enabled")
+        private val KEY_TASK_END_NOTIFICATIONS = booleanPreferencesKey("task_end_notifications_enabled")
+        private val KEY_EVENT_START_NOTIFICATIONS = booleanPreferencesKey("event_start_notifications_enabled")
+        private val KEY_EVENT_END_NOTIFICATIONS = booleanPreferencesKey("event_end_notifications_enabled")
+        private val KEY_EVENT_FIELD_ORDER = stringPreferencesKey("event_field_order")
+        private val KEY_TASK_FIELD_ORDER = stringPreferencesKey("task_field_order")
+        private val KEY_WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
+        private val KEY_SHOW_DISABLED_ANDROID_PROVIDER_CALENDARS = booleanPreferencesKey("show_disabled_android_provider_calendars")
+        private val KEY_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("hidden_collection_hrefs")
+        private val KEY_CATEGORY_SYNC_ENABLED_HREFS = stringSetPreferencesKey("category_sync_enabled_hrefs")
+        private val KEY_CATEGORY_SYNC_DISABLED_HREFS = stringSetPreferencesKey("category_sync_disabled_hrefs")
+        private val KEY_CALENDAR_GROUPS = stringPreferencesKey("calendar_groups")
+        private val KEY_EVENTS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("events_hidden_collection_hrefs")
+        private val KEY_TASKS_HIDDEN_COLLECTION_HREFS = stringSetPreferencesKey("tasks_hidden_collection_hrefs")
+        private val KEY_PARSER_REPARSE_VERSION = intPreferencesKey("parser_reparse_version")
+        private val KEY_PARSED_ZONE_ID = stringPreferencesKey("parsed_zone_id")
+        private val KEY_EXACT_ALARM_PROMPT_SHOWN = booleanPreferencesKey("exact_alarm_prompt_shown")
+        private val KEY_DEFAULT_EVENT_COLLECTION = stringPreferencesKey("default_event_collection_href")
+        private val KEY_DEFAULT_TASK_COLLECTION = stringPreferencesKey("default_task_collection_href")
+        val DEFAULT_EVENT_FIELD_ORDER = listOf("time", "recurrence", "reminders", "location", "notes", "status", "categories", "color", "participants")
+        val DEFAULT_TASK_FIELD_ORDER = listOf("status", "time", "recurrence", "reminders", "location", "notes", "url", "priority", "progress", "color", "tags")
+        const val DEFAULT_DAY_WIDGET_SCALE_PERCENT = 100
+        const val MIN_DAY_WIDGET_SCALE_PERCENT = 50
+        const val MAX_DAY_WIDGET_SCALE_PERCENT = 200
+        const val DEFAULT_DAY_WIDGET_START_HOUR = 7
+        const val DEFAULT_DAY_WIDGET_START_AT_CURRENT_HOUR = false
+        const val DEFAULT_MULTI_WIDGET_MONTH_PERCENT = 50
+        const val MIN_MULTI_WIDGET_MONTH_PERCENT = 30
+        const val MAX_MULTI_WIDGET_MONTH_PERCENT = 70
+        const val DEFAULT_WEEK_VIEW_ENABLED = false
+        const val DEFAULT_FULL_WEEK_SWIPE_ENABLED = true
+        const val DEFAULT_SHOW_CALENDAR_WEEKS = false
+        const val DEFAULT_HAPTIC_FEEDBACK_ENABLED = true
+        const val DEFAULT_TIMELINE_HOUR_HEIGHT_DP = 46f
+        private val KEY_LANDSCAPE_TIMELINE_COMPACT = booleanPreferencesKey("landscape_timeline_compact")
+        const val MIN_TIMELINE_HOUR_HEIGHT_DP = 18f
+        const val MAX_TIMELINE_HOUR_HEIGHT_DP = 92f
+
+        fun normalizeDayWidgetScalePercent(scalePercent: Int): Int =
+            scalePercent.coerceIn(MIN_DAY_WIDGET_SCALE_PERCENT, MAX_DAY_WIDGET_SCALE_PERCENT)
+
+        fun normalizeDayWidgetStartHour(startHour: Int): Int =
+            startHour.coerceIn(0, 23)
+
+        fun normalizeMultiWidgetMonthPercent(monthPercent: Int): Int =
+            monthPercent.coerceIn(MIN_MULTI_WIDGET_MONTH_PERCENT, MAX_MULTI_WIDGET_MONTH_PERCENT)
+
+        fun normalizeTimelineHourHeightDp(hourHeightDp: Float): Float =
+            if (hourHeightDp.isFinite()) {
+                hourHeightDp.coerceIn(MIN_TIMELINE_HOUR_HEIGHT_DP, MAX_TIMELINE_HOUR_HEIGHT_DP)
+            } else {
+                DEFAULT_TIMELINE_HOUR_HEIGHT_DP
+            }
+    }
+}
+
+private fun String?.toFieldOrder(defaultOrder: List<String>): List<String> {
+    val saved = this?.split(',')?.map(String::trim)?.filter(String::isNotBlank).orEmpty()
+    return (saved.filter { it in defaultOrder } + defaultOrder.filterNot { it in saved }).distinct()
+}
+
+private fun String.toReminderSet(): Set<Int> =
+    split(',')
+        .mapNotNull { it.trim().toIntOrNull() }
+        .normalizedReminderOffsets()
+        .toSet()
+
+private fun Set<Int>.toReminderCsv(): String =
+    normalizedReminderOffsets().joinToString(",")

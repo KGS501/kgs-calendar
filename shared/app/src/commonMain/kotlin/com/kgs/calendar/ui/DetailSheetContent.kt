@@ -1,0 +1,1932 @@
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+
+package com.kgs.calendar.ui
+
+import com.kgs.calendar.ui.platform.rememberPlatformServices
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.ContentCopy
+import com.kgs.calendar.domain.source.CalendarSourceGroup
+import com.kgs.calendar.ui.sources.displayName
+import com.kgs.calendar.ui.sources.groupOf
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.StrokeCap
+import com.kgs.calendar.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import com.kgs.calendar.res.R
+import com.kgs.calendar.data.local.entity.AccountEntity
+import com.kgs.calendar.data.local.entity.CalendarResourceEntity
+import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.local.entity.PendingMutationEntity
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.trashRetentionDays
+import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.domain.event.displayColor
+import com.kgs.calendar.domain.source.CollectionVisibility
+import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.domain.source.isAndroidProviderCollection
+import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.source.isReadOnlyCollection
+import com.kgs.calendar.domain.task.displayColor
+import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.task.isInactive
+import com.kgs.calendar.domain.task.taskPriorityIntensity
+import com.kgs.calendar.domain.task.treeParents
+import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
+import com.kgs.calendar.domain.time.toDate
+import com.kgs.calendar.ui.model.occurrenceStartForEdit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import java.util.Locale
+import kotlin.math.max
+import kotlin.math.roundToInt
+
+@Composable
+private fun ParentTaskPeek(
+    parentTask: TaskEntity,
+    taskColorMode: TaskColorMode,
+    onClick: () -> Unit,
+) {
+    val hierarchyLineColor = TaskHierarchyLine
+    val morphProgress = rememberTaskDetailMorphProgress()
+    val morphCornerRadius = rememberTaskDetailMorphCornerRadius(
+        enabled = true,
+        ownRadius = 14.dp,
+        counterpartRadius = 18.dp,
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .zIndex(201f)
+            .clipToBounds()
+            .taskDetailMorph(taskDetailMorphKey(parentTask), morphCornerRadius),
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .zIndex(0f)
+                .drawBehind {
+                    val x = TaskHierarchyStemInset.toPx()
+                    val overlap = TaskHierarchyLineOverlap.toPx()
+                    drawLine(
+                        color = hierarchyLineColor,
+                        start = Offset(x, size.height - 16.dp.toPx() * morphProgress),
+                        end = Offset(x, size.height + overlap),
+                        strokeWidth = 1.65.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                },
+        )
+        TaskRow(
+            task = parentTask,
+            taskColorMode = taskColorMode,
+            onTaskStatusChanged = { _, _ -> onClick() },
+            prominent = true,
+            modifier = Modifier
+                .offset(y = (-15).dp),
+            outerHorizontalPadding = 0.dp,
+            outerVerticalPadding = 0.dp,
+            fixedCardHeight = 64.dp,
+            fadeTextAtBottom = true,
+            priorityMotionEnabled = false,
+            detailMorphFromHeader = true,
+            onClick = onClick,
+        )
+    }
+}
+
+@Composable
+private fun TaskDetailTopFadeOverlay(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val morphProgress = rememberTaskDetailMorphProgress()
+    val fadeAlpha = if (visible) {
+        phasedProgress(morphProgress, start = 0f, end = 0.34f)
+    } else {
+        0f
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(20.dp)
+            .zIndex(1000f)
+            .taskDetailFadeOverlay()
+            .background(
+                Brush.verticalGradient(
+                    0f to MaterialTheme.colorScheme.surface.copy(alpha = fadeAlpha),
+                    1f to Color.Transparent,
+                ),
+            ),
+    )
+}
+
+@Composable
+private fun TaskDetailHeaderCard(
+    task: TaskEntity,
+    taskColorMode: TaskColorMode,
+    hasSubtasks: Boolean,
+    collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String>,
+    readOnlySource: Boolean,
+    burstKey: Int,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onEditTask: (TaskEntity) -> Unit,
+    onDuplicateTask: (TaskEntity) -> Unit,
+    onCopyTaskTo: (TaskEntity, String) -> Unit,
+    onDeleteTask: (String) -> Unit,
+    morphGeneration: Int,
+    trashRetentionDays: Int?,
+    /** False for a trashed task: no edit or overflow actions and no status toggle. */
+    editable: Boolean = true,
+) {
+    val cardColor = Color(task.displayColor(taskColorMode))
+    val contentColor = if (cardColor.isDark()) Color.White else Color(0xFF1C1A18)
+    val morphCornerRadius = rememberTaskDetailMorphCornerRadius(
+        enabled = true,
+        ownRadius = 18.dp,
+        counterpartRadius = 14.dp,
+    )
+    val morphProgress = rememberTaskDetailMorphProgress()
+    val titleFontSize = lerpFloat(13f, 22f, morphProgress).sp
+    val titleLineHeight = lerpFloat(16f, 26f, morphProgress).sp
+    val subtitleFontSize = lerpFloat(11f, 12f, morphProgress).sp
+    val subtitleLineHeight = lerpFloat(14f, 14f, morphProgress).sp
+    val checkboxBoxSize = lerpFloat(30f, 42f, morphProgress).dp
+    val checkboxIconSize = lerpFloat(20f, 28f, morphProgress).dp
+    val checkboxContainerSize = lerpFloat(30f, 42f, morphProgress).dp
+    val rowStartPadding = lerpFloat(9f, 14f, morphProgress).dp
+    val rowEndPadding = lerpFloat(9f, 6f, morphProgress).dp
+    val rowVerticalPadding = lerpFloat(7f, 12f, morphProgress).dp
+    val actionSpaceWidth = lerpFloat(if (hasSubtasks) 30f else 0f, if (editable) 96f else 0f, morphProgress).dp
+    val titleFontWeight = FontWeight(lerpFloat(500f, 600f, morphProgress).roundToInt())
+    val subtitleText = if (morphProgress < 0.52f) {
+        task.localizedTaskTimeLabel()
+    } else {
+        stringResource(if (task.isCompleted) R.string.completed_task else R.string.task)
+    }
+    var controlsVisible by remember(task.resourceHref) { mutableStateOf(morphGeneration == 0) }
+    LaunchedEffect(task.resourceHref, morphGeneration) {
+        if (morphGeneration == 0) {
+            controlsVisible = true
+        } else {
+            controlsVisible = false
+            delay(TaskDetailControlsRevealDelayMs.toLong())
+            controlsVisible = true
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .taskDetailMorph(taskDetailMorphKey(task), morphCornerRadius)
+            .zIndex(200f)
+            .graphicsLayer { clip = false }
+            .background(cardColor, RoundedCornerShape(morphCornerRadius)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { clip = false }
+                .padding(start = rowStartPadding, end = rowEndPadding, top = rowVerticalPadding, bottom = rowVerticalPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(checkboxContainerSize), contentAlignment = Alignment.Center) {
+                CompletionBurst(burstKey, color = contentColor, modifier = Modifier.size(56.dp))
+                TaskStatusCheckbox(
+                    status = task.effectiveStatus(),
+                    tint = contentColor,
+                    onStatusChange = { onTaskStatusChanged(task, it) },
+                    boxSize = checkboxBoxSize,
+                    iconSize = checkboxIconSize,
+                    enabled = editable,
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SelectionContainer {
+                    Text(
+                        task.title,
+                        color = contentColor,
+                        fontSize = titleFontSize,
+                        lineHeight = titleLineHeight,
+                        fontWeight = titleFontWeight,
+                    )
+                }
+                AnimatedContent(
+                    targetState = subtitleText,
+                    transitionSpec = {
+                        fadeIn(tween(110, easing = MotionStandard)) togetherWith
+                            fadeOut(tween(110, easing = MotionStandardAccelerate))
+                    },
+                    label = "taskHeaderMorphSubtitle",
+                ) { text ->
+                    Text(
+                        text,
+                        color = contentColor.copy(alpha = 0.74f),
+                        fontSize = subtitleFontSize,
+                        lineHeight = subtitleLineHeight,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier.width(actionSpaceWidth),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                if (hasSubtasks && morphProgress < 1f) {
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(20.dp)
+                            .alpha(1f - phasedProgress(morphProgress, 0.18f, 0.68f)),
+                    )
+                }
+                TaskDetailHeaderActions(
+                    visible = controlsVisible && editable,
+                    task = task,
+                    collections = collections,
+                    hiddenCollectionHrefs = hiddenCollectionHrefs,
+                    readOnlySource = readOnlySource,
+                    contentColor = contentColor,
+                    trashRetentionDays = trashRetentionDays,
+                    onEditTask = onEditTask,
+                    onDuplicateTask = onDuplicateTask,
+                    onCopyTaskTo = onCopyTaskTo,
+                    onDeleteTask = onDeleteTask,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskDetailHeaderActions(
+    visible: Boolean,
+    task: TaskEntity,
+    collections: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String>,
+    readOnlySource: Boolean,
+    contentColor: Color,
+    trashRetentionDays: Int?,
+    onEditTask: (TaskEntity) -> Unit,
+    onDuplicateTask: (TaskEntity) -> Unit,
+    onCopyTaskTo: (TaskEntity, String) -> Unit,
+    onDeleteTask: (String) -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(MotionShort, easing = MotionStandard)) +
+            scaleIn(initialScale = 0.9f, animationSpec = tween(MotionShort, easing = MotionEmphasized)),
+        exit = fadeOut(tween(90, easing = MotionStandardAccelerate)),
+    ) {
+        Row {
+            IconButton(onClick = { onEditTask(task) }) {
+                Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = contentColor)
+            }
+            DetailOverflowMenu(
+                copyTargets = collections.filter { it.supportsTasks && it.href != task.collectionHref && !it.isReadOnlyCollection() },
+                hiddenCollectionHrefs = hiddenCollectionHrefs,
+                recurringScopes = false,
+                itemLabel = stringResource(R.string.task),
+                canDelete = !readOnlySource,
+                iconTint = contentColor,
+                trashRetentionDays = trashRetentionDays,
+                onDuplicate = { onDuplicateTask(task) },
+                onCopyTo = { onCopyTaskTo(task, it) },
+                onDeleteThis = {},
+                onDeleteFollowing = {},
+                onDeleteAll = { onDeleteTask(task.resourceHref) },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun DetailSheetContent(
+    detail: DetailSheet,
+    collections: List<CollectionEntity>,
+    collectionVisibility: CollectionVisibility,
+    accounts: List<AccountEntity>,
+    calendarGroups: List<CalendarSourceGroup> = emptyList(),
+    problemResources: List<CalendarResourceEntity>,
+    taskColorMode: TaskColorMode,
+    eventFieldOrder: List<String>,
+    taskFieldOrder: List<String>,
+    autoLoadMapPreviews: Boolean,
+    accountEmails: List<String>,
+    allTasks: List<TaskEntity>,
+    showCompletedTasks: Boolean,
+    taskMorphGeneration: Int,
+    taskMorphSourceHref: String?,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onTaskPriorityChanged: (String, Int) -> Unit,
+    onTaskProgressChanged: (String, Int) -> Unit,
+    onEventParticipationChanged: (String, String) -> Unit,
+    onEditEvent: (EventEntity) -> Unit,
+    onDuplicateEvent: (EventEntity) -> Unit,
+    onCopyEventTo: (EventEntity, String) -> Unit,
+    onDeleteEvent: (String, EventDeleteScope, Long) -> Unit,
+    onEditTask: (TaskEntity) -> Unit,
+    onDuplicateTask: (TaskEntity) -> Unit,
+    onCopyTaskTo: (TaskEntity, String) -> Unit,
+    onDeleteTask: (String) -> Unit,
+    onOpenSubtask: (TaskEntity, TaskEntity) -> Unit,
+    onOpenParentTask: (TaskEntity) -> Unit,
+    onAddSubtask: (TaskEntity) -> Unit,
+    onClose: () -> Unit,
+    onRestoreTrashed: (TrashedItemEntity) -> Unit = {},
+    onDeleteTrashedPermanently: (TrashedItemEntity) -> Unit = {},
+) {
+    // An item from "Recently deleted" is shown read-only, as it was deleted, without its live relatives.
+    val trashedItem = detail.trashedItem
+    val task = (detail as? DetailSheet.Task)?.task
+    val taskInactive = task?.isInactive() == true
+    val descendantTasks = remember(task?.resourceHref, allTasks, showCompletedTasks, taskInactive) {
+        task?.takeIf { trashedItem == null }?.let { current ->
+            val descendants = allTasks.descendantsOf(current)
+            // A done task's own detail keeps all of its subtasks; open tasks follow the setting.
+            if (taskInactive) {
+                descendants
+            } else {
+                (listOf(current) + descendants).withoutHiddenClosedSubtasks(showCompletedTasks).drop(1)
+            }
+        }.orEmpty()
+    }
+    val descendantTasksByUid = remember(descendantTasks) {
+        descendantTasks.associateBy { it.collectionHref to it.uid }
+    }
+    val directSubtaskHasFollowing = remember(task?.uid, descendantTasks) {
+        val directChildren = task?.let { current ->
+            descendantTasks.filter { it.collectionHref == current.collectionHref && it.parentUid == current.uid }
+        }.orEmpty()
+        directChildren.mapIndexed { index, child -> child.uid to (index != directChildren.lastIndex) }.toMap()
+    }
+    fun directRootUidFor(descendant: TaskEntity): String {
+        val currentTask = task ?: return descendant.uid
+        var cursor = descendant
+        val seen = mutableSetOf(descendant.uid)
+        while (!cursor.parentUid.isNullOrBlank() && cursor.parentUid != currentTask.uid) {
+            val parent = descendantTasksByUid[cursor.collectionHref to cursor.parentUid] ?: break
+            if (!seen.add(parent.uid)) break
+            cursor = parent
+        }
+        return cursor.uid
+    }
+    val parentTask = remember(task?.parentUid, task?.collectionHref, allTasks) {
+        task?.parentUid?.takeIf { it.isNotBlank() && trashedItem == null }?.let { parentUid ->
+            allTasks.firstOrNull { it.collectionHref == task.collectionHref && it.uid == parentUid }
+        }
+    }
+    // Detail sheets always start with only the current task's direct children visible.
+    // Nested descendants can be expanded explicitly and ignore the app-wide list default.
+    val subtaskHierarchy = rememberTaskHierarchyPresentation(descendantTasks, expandedByDefault = false)
+    val sourceCollection = remember(detail, collections) {
+        collections.firstOrNull { collection ->
+            when (detail) {
+                is DetailSheet.Event -> collection.href == detail.event.collectionHref
+                is DetailSheet.Task -> collection.href == detail.task.collectionHref
+            }
+        }
+    }
+    val readOnlySource = trashedItem != null || sourceCollection?.isReadOnlyCollection() == true
+    val trashRetentionDays = remember(sourceCollection, accounts) {
+        trashRetentionDays(sourceCollection, accounts.firstOrNull { it.id == sourceCollection?.accountId })
+    }
+    val eventDetailCapabilities = sourceCollection?.eventEditorCapabilities() ?: EventEditorCapabilities.Full
+    var lastCompleted by remember(task?.resourceHref) { mutableStateOf(task?.isCompleted ?: false) }
+    var burstKey by remember(task?.resourceHref) { mutableStateOf(0) }
+    LaunchedEffect(task?.isCompleted) {
+        val current = task?.isCompleted ?: false
+        if (current && !lastCompleted) burstKey++
+        lastCompleted = current
+    }
+    val detailResourceHref = when (detail) {
+        is DetailSheet.Event -> detail.event.resourceHref
+        is DetailSheet.Task -> detail.task.resourceHref
+    }
+    val pendingMutation = when (detail) {
+        is DetailSheet.Event -> pendingMutationFor(detail.event)
+        is DetailSheet.Task -> pendingMutationFor(detail.task)
+    }?.takeIf { trashedItem == null }
+    val problemResource = remember(detailResourceHref, problemResources) {
+        if (trashedItem != null) return@remember null
+        problemResources.firstOrNull {
+            it.href == detailResourceHref && !it.syncError.isNullOrBlank()
+        }
+    }
+    val sheetScrollState = rememberScrollState()
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(sheetScrollState)
+            .padding(horizontal = 22.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        when {
+            trashedItem != null -> TrashedItemDetailBanner(
+                item = trashedItem,
+                onRestore = { onRestoreTrashed(trashedItem) },
+                onDeletePermanently = { onDeleteTrashedPermanently(trashedItem) },
+            )
+            pendingMutation != null -> PendingSyncDetailBanner(pendingMutation)
+            problemResource != null -> SyncIssueDetailBanner(problemResource.syncError.orEmpty())
+        }
+        when (detail) {
+            is DetailSheet.Event -> {
+                // The event's color as a slim bar beside its title; the actions sit at the end.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .width(6.dp)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color(detail.event.displayColor())),
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            stringResource(R.string.event),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        SelectionContainer {
+                            Text(
+                                detail.event.title,
+                                color = WarmInk,
+                                fontSize = 24.sp,
+                                lineHeight = 30.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                    val ev = detail.event
+                    val recurring = ev.isRecurring || !ev.recurrenceRule.isNullOrBlank()
+                    if (trashedItem == null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DetailActionButton(Icons.Default.Edit, stringResource(R.string.edit)) { onEditEvent(ev) }
+                            Box(
+                                Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(editorSectionColor()),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                DetailOverflowMenu(
+                                    copyTargets = collections.filter { it.supportsEvents && it.href != ev.collectionHref && !it.isReadOnlyCollection() },
+                                    hiddenCollectionHrefs = collectionVisibility.hrefsHidingEvents,
+                                    recurringScopes = recurring,
+                                    itemLabel = stringResource(R.string.event),
+                                    canDelete = !readOnlySource,
+                                    trashRetentionDays = trashRetentionDays,
+                                    onDuplicate = { onDuplicateEvent(ev) },
+                                    onCopyTo = { onCopyEventTo(ev, it) },
+                                    onDeleteThis = { onDeleteEvent(ev.resourceHref, EventDeleteScope.This, ev.occurrenceStartForEdit()) },
+                                    onDeleteFollowing = { onDeleteEvent(ev.resourceHref, EventDeleteScope.ThisAndFollowing, ev.occurrenceStartForEdit()) },
+                                    onDeleteAll = { onDeleteEvent(ev.resourceHref, EventDeleteScope.All, ev.occurrenceStartForEdit()) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            is DetailSheet.Task -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { clip = false },
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { clip = false },
+                    ) {
+                        if (parentTask != null) {
+                        ParentTaskPeek(
+                            parentTask = parentTask,
+                            taskColorMode = taskColorMode,
+                            onClick = { onOpenParentTask(parentTask) },
+                        )
+                        TaskHierarchyConnectorStrip(
+                            stemInset = TaskHierarchyStemInset,
+                            modifier = Modifier.offset(y = (-3).dp),
+                            height = 3.dp,
+                            progress = rememberTaskDetailMorphProgress(),
+                        )
+                        }
+                        TaskDetailHeaderCard(
+                            task = detail.task,
+                            taskColorMode = taskColorMode,
+                            hasSubtasks = descendantTasks.any { it.parentUid == detail.task.uid },
+                            collections = collections,
+                            hiddenCollectionHrefs = collectionVisibility.hrefsHidingTasks,
+                            readOnlySource = readOnlySource,
+                            burstKey = burstKey,
+                            onTaskStatusChanged = onTaskStatusChanged,
+                            onEditTask = onEditTask,
+                            onDuplicateTask = onDuplicateTask,
+                            onCopyTaskTo = onCopyTaskTo,
+                            onDeleteTask = onDeleteTask,
+                            morphGeneration = taskMorphGeneration,
+                            trashRetentionDays = trashRetentionDays,
+                            editable = trashedItem == null,
+                        )
+                        val detailMorphProgress = rememberTaskDetailMorphProgress()
+                        val hierarchyProgress = if (taskMorphGeneration > 0) {
+                            phasedProgress(detailMorphProgress, start = 0f, end = 0.82f)
+                        } else {
+                            1f
+                        }
+                        val hierarchyAlpha = if (taskMorphGeneration > 0) {
+                            phasedProgress(detailMorphProgress, start = 0f, end = 0.38f)
+                        } else {
+                            1f
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zIndex(150f)
+                                .taskDetailRevealLayout(
+                                    progress = hierarchyProgress,
+                                    offsetY = 18.dp,
+                                    alphaProgress = hierarchyAlpha,
+                                ),
+                        ) {
+                            if (subtaskHierarchy.entries.any { it.visible }) {
+                                TaskHierarchyConnectorStrip(
+                                    stemInset = TaskHierarchyStemInset,
+                                    progress = hierarchyProgress,
+                                )
+                            }
+                            subtaskHierarchy.entries.forEachIndexed { entryIndex, entry ->
+                                val virtualParentContinuation = if (directSubtaskHasFollowing[directRootUidFor(entry.task)] == true) {
+                                    setOf(0)
+                                } else {
+                                    emptySet()
+                                }
+                                val shiftedContinuationLevels = entry.continuationLevels.map { it + 1 }.toSet() + virtualParentContinuation
+                                val entryProgress = if (taskMorphGeneration > 0) {
+                                    phasedProgress(
+                                        detailMorphProgress,
+                                        start = 0.03f + entryIndex * 0.025f,
+                                        end = 0.42f + entryIndex * 0.025f,
+                                    )
+                                } else {
+                                    1f
+                                }
+                                AnimatedTaskHierarchyEntry(
+                                    entry = entry,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = entryProgress
+                                        translationY = -12.dp.toPx() * (1f - entryProgress)
+                                        clip = false
+                                    },
+                                ) {
+                                    TaskRow(
+                                        task = entry.task,
+                                        taskColorMode = taskColorMode,
+                                        onTaskStatusChanged = onTaskStatusChanged,
+                                        prominent = true,
+                                        hierarchyDepth = entry.depth + 1,
+                                        hierarchyContinuationLevels = shiftedContinuationLevels,
+                                        hierarchyLastSibling = entry.lastSibling,
+                                        hasSubtasks = entry.hasChildren,
+                                        subtasksExpanded = entry.expanded,
+                                        onToggleSubtasks = { subtaskHierarchy.toggle(entry.task) },
+                                        outerHorizontalPadding = 0.dp,
+                                        outerVerticalPadding = 3.dp,
+                                        connectorStemInset = TaskHierarchyStemInset,
+                                        detailMorphKey = taskDetailMorphKey(entry.task),
+                                        detailMorphFromHeader = entry.task.resourceHref == taskMorphSourceHref,
+                                        onClick = { onOpenSubtask(detail.task, entry.task) },
+                                    )
+                                }
+                            }
+                            if (!readOnlySource) {
+                                TextButton(
+                                    onClick = { onAddSubtask(detail.task) },
+                                    modifier = Modifier
+                                        .align(Alignment.End)
+                                        .padding(top = 6.dp),
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.add_subtask))
+                                }
+                            }
+                        }
+                    }
+                    TaskDetailTopFadeOverlay(
+                        visible = parentTask != null,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
+                }
+            }
+        }
+        when (detail) {
+            is DetailSheet.Event -> {
+                EventMetadata(
+                    event = detail.event,
+                    accountEmails = accountEmails,
+                    fieldOrder = eventFieldOrder.filter { eventDetailCapabilities.allows(it) },
+                    readOnlySource = readOnlySource,
+                    autoLoadMapPreviews = autoLoadMapPreviews,
+                    onParticipationChanged = { partstat -> onEventParticipationChanged(detail.event.resourceHref, partstat) },
+                )
+                if (trashedItem == null) detail.sourceFootnoteText(collections, accounts, calendarGroups)?.let { SourceFootnote(it) }
+                Spacer(Modifier.height(56.dp))
+            }
+            is DetailSheet.Task -> {
+                val detailMorphProgress = rememberTaskDetailMorphProgress()
+                val supportingProgress = if (taskMorphGeneration > 0) {
+                    phasedProgress(detailMorphProgress, start = 0.04f, end = 0.88f)
+                } else {
+                    1f
+                }
+                val supportingAlpha = if (taskMorphGeneration > 0) {
+                    phasedProgress(detailMorphProgress, start = 0.42f, end = 0.82f)
+                } else {
+                    1f
+                }
+                Column(
+                    modifier = Modifier.graphicsLayer {
+                        alpha = supportingAlpha
+                        translationY = 22.dp.toPx() * (1f - supportingProgress)
+                        clip = false
+                    },
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    TaskMetadata(
+                        task = detail.task,
+                        fieldOrder = taskFieldOrder,
+                        autoLoadMapPreviews = autoLoadMapPreviews,
+                        editable = !readOnlySource,
+                        onPriorityChanged = { onTaskPriorityChanged(detail.task.resourceHref, it) },
+                        onProgressChanged = { onTaskProgressChanged(detail.task.resourceHref, it) },
+                    )
+                    if (trashedItem == null) detail.sourceFootnoteText(collections, accounts, calendarGroups)?.let { SourceFootnote(it) }
+                    Spacer(Modifier.height(56.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncIssueDetailBanner(syncError: String) {
+    val container = if (MaterialTheme.colorScheme.background.isDark()) {
+        SyncPendingOrange.copy(alpha = 0.22f)
+    } else {
+        SyncPendingOrange.copy(alpha = 0.18f)
+    }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = container,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = SyncPendingOrange, modifier = Modifier.size(19.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    stringResource(R.string.sync_issue_title),
+                    color = WarmInk,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.sync_issue_item_body),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                )
+                syncError.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal data class TaskHierarchyEntry(
+    val identityKey: String,
+    val task: TaskEntity,
+    val depth: Int,
+    val hasChildren: Boolean,
+    val expanded: Boolean,
+    val visible: Boolean,
+    val continuationLevels: Set<Int>,
+    val lastSibling: Boolean,
+)
+
+internal data class TaskHierarchyPresentation(
+    val entries: List<TaskHierarchyEntry>,
+    val toggle: (TaskEntity) -> Unit,
+)
+
+internal val TaskHierarchyStemInset = 10.dp
+private val TaskHierarchyLineOverlap = 4.dp
+
+internal fun taskHierarchyLayerZ(depth: Int): Float = 100f - depth.coerceAtLeast(0)
+
+internal fun taskPriorityLayerZ(task: TaskEntity, animationsEnabled: Boolean): Float {
+    if (!animationsEnabled || task.isInactive()) return 0f
+    val intensity = taskPriorityIntensity(task.priority)
+    return if (intensity > 0f) 1_000f + intensity * 100f else 0f
+}
+
+@Composable
+internal fun rememberTaskHierarchyPresentation(
+    tasks: List<TaskEntity>,
+    expandedByDefault: Boolean,
+    defaultExpandedResourceHrefs: Set<String> = emptySet(),
+    distinguishOccurrences: Boolean = false,
+): TaskHierarchyPresentation {
+    fun identity(task: TaskEntity): String =
+        if (distinguishOccurrences) task.smoothRemovalKey() else task.resourceHref
+
+    val expansionOverrides = remember(tasks.map(::identity).toSet(), expandedByDefault, defaultExpandedResourceHrefs) {
+        mutableStateMapOf<String, Boolean>()
+    }
+    val entries = remember(tasks, expandedByDefault, defaultExpandedResourceHrefs, expansionOverrides.toMap()) {
+        val distinctTasks = tasks.distinctBy(::identity)
+        val position = distinctTasks.withIndex().associate { identity(it.value) to it.index }
+        val parentByIdentity = distinctTasks.treeParents(::identity)
+        val childrenByParent = distinctTasks
+            .mapNotNull { child -> parentByIdentity[identity(child)]?.let { identity(it) to child } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, children) -> children.sortedBy { position[identity(it)] } }
+        val roots = distinctTasks.filter { parentByIdentity[identity(it)] == null }
+        val out = mutableListOf<TaskHierarchyEntry>()
+        val emitted = mutableSetOf<String>()
+
+        fun append(
+            task: TaskEntity,
+            depth: Int,
+            visible: Boolean,
+            continuationLevels: Set<Int>,
+            lastSibling: Boolean,
+        ) {
+            val taskIdentity = identity(task)
+            if (!emitted.add(taskIdentity)) return
+            val children = childrenByParent[taskIdentity].orEmpty()
+            val expanded = expansionOverrides[taskIdentity]
+                ?: if (task.resourceHref in defaultExpandedResourceHrefs) true else expandedByDefault
+            out += TaskHierarchyEntry(
+                identityKey = taskIdentity,
+                task = task,
+                depth = depth,
+                hasChildren = children.isNotEmpty(),
+                expanded = expanded,
+                visible = visible,
+                continuationLevels = continuationLevels,
+                lastSibling = lastSibling,
+            )
+            children.forEachIndexed { index, child ->
+                val childLast = index == children.lastIndex
+                val childContinuationLevels = if (childLast) continuationLevels else continuationLevels + depth
+                append(
+                    task = child,
+                    depth = depth + 1,
+                    visible = visible && expanded,
+                    continuationLevels = childContinuationLevels,
+                    lastSibling = childLast,
+                )
+            }
+        }
+        roots.forEachIndexed { index, root ->
+            append(
+                task = root,
+                depth = 0,
+                visible = true,
+                continuationLevels = emptySet(),
+                lastSibling = index == roots.lastIndex,
+            )
+        }
+        distinctTasks.filterNot { identity(it) in emitted }.forEach {
+            append(it, 0, visible = true, continuationLevels = emptySet(), lastSibling = true)
+        }
+        out
+    }
+    return TaskHierarchyPresentation(
+        entries = entries,
+        toggle = { task ->
+            val taskIdentity = identity(task)
+            val current = expansionOverrides[taskIdentity]
+                ?: if (task.resourceHref in defaultExpandedResourceHrefs) true else expandedByDefault
+            expansionOverrides[taskIdentity] = !current
+        },
+    )
+}
+
+internal fun Modifier.taskHierarchyConnector(
+    depth: Int,
+    continuationLevels: Set<Int>,
+    lastSibling: Boolean,
+    branchEndInset: Dp = 0.dp,
+    stemInset: Dp = 9.dp,
+    progress: Float = 1f,
+    lineColor: Color,
+): Modifier {
+    if (depth <= 0 || progress <= 0.001f) return this
+    return drawBehind {
+        val indent = 18.dp.toPx()
+        val stemInsetPx = stemInset.toPx()
+        val resolvedProgress = progress.coerceIn(0f, 1f)
+        val overlapPx = TaskHierarchyLineOverlap.toPx() * resolvedProgress
+        val centerY = size.height / 2f
+        val color = lineColor.copy(alpha = resolvedProgress)
+        val stroke = 1.65.dp.toPx()
+        continuationLevels.forEach { level ->
+            val x = (level * indent) + stemInsetPx
+            drawLine(
+                color,
+                Offset(x, centerY + (-overlapPx - centerY) * resolvedProgress),
+                Offset(x, centerY + (size.height + overlapPx - centerY) * resolvedProgress),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+        }
+        val branchLevel = depth - 1
+        val branchX = (branchLevel * indent) + stemInsetPx
+        val branchBottom = if (lastSibling) centerY else size.height + overlapPx
+        drawLine(
+            color,
+            Offset(branchX, centerY + (-overlapPx - centerY) * resolvedProgress),
+            Offset(branchX, centerY + (branchBottom - centerY) * resolvedProgress),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
+        val branchEndX = depth * indent + branchEndInset.toPx() + overlapPx
+        drawLine(
+            color,
+            Offset(branchX, centerY),
+            Offset(branchX + (branchEndX - branchX) * resolvedProgress, centerY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+internal fun Modifier.taskHierarchyParentTail(
+    depth: Int,
+    stemInset: Dp,
+    verticalPadding: Dp,
+    progress: Float,
+    lineColor: Color,
+): Modifier {
+    if (progress <= 0.001f) return this
+    return drawBehind {
+        val indent = 18.dp.toPx()
+        val x = depth * indent + stemInset.toPx()
+        val stroke = 1.65.dp.toPx()
+        val resolvedProgress = progress.coerceIn(0f, 1f)
+        val startY = (size.height - verticalPadding.toPx() - TaskHierarchyLineOverlap.toPx()).coerceIn(0f, size.height)
+        val endY = startY + (size.height - startY) * resolvedProgress
+        drawLine(
+            lineColor.copy(alpha = resolvedProgress),
+            Offset(x, startY),
+            Offset(x, endY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+@Composable
+private fun TaskHierarchyConnectorStrip(
+    stemInset: Dp,
+    modifier: Modifier = Modifier,
+    height: Dp = 3.dp,
+    progress: Float = 1f,
+) {
+    val lineColor = TaskHierarchyLine
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .drawBehind {
+                val x = stemInset.toPx()
+                val overlapPx = TaskHierarchyLineOverlap.toPx()
+                val stroke = 1.65.dp.toPx()
+                drawLine(
+                    lineColor,
+                    Offset(x, size.height + overlapPx - (size.height + overlapPx * 2f) * progress.coerceIn(0f, 1f)),
+                    Offset(x, size.height + overlapPx),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            },
+    )
+}
+
+@Composable
+internal fun AnimatedTaskHierarchyEntry(
+    entry: TaskHierarchyEntry,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val visibilityState = remember(entry.identityKey) {
+        MutableTransitionState(entry.visible)
+    }
+    visibilityState.targetState = entry.visible
+    val exiting = visibilityState.currentState && !visibilityState.targetState
+    AnimatedVisibility(
+        visibleState = visibilityState,
+        enter = expandVertically(
+            expandFrom = Alignment.Top,
+            clip = false,
+            animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        ) + fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)),
+        exit = slideOutVertically(
+            animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        ) { -it / 6 } + shrinkVertically(
+            shrinkTowards = Alignment.Top,
+            clip = false,
+            animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        ),
+        modifier = modifier
+            .zIndex(
+                if (exiting) {
+                    -1f + entry.depth * 0.01f
+                } else {
+                    taskHierarchyLayerZ(entry.depth) + taskPriorityLayerZ(entry.task, PriorityAnimationsEnabled)
+                },
+            )
+            .graphicsLayer {
+                clip = false
+            },
+    ) {
+        val hierarchyExitProgress by transition.animateFloat(
+            transitionSpec = { tween(MotionMedium, easing = MotionEmphasized) },
+            label = "taskHierarchyExitProgress",
+        ) { state ->
+            if (state == EnterExitState.PostExit) 1f else 0f
+        }
+        CompositionLocalProvider(LocalTaskHierarchyExitProgress provides hierarchyExitProgress) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PendingSyncDetailBanner(mutation: PendingMutationEntity) {
+    val container = if (MaterialTheme.colorScheme.background.isDark()) {
+        SyncPendingOrange.copy(alpha = 0.22f)
+    } else {
+        SyncPendingOrange.copy(alpha = 0.18f)
+    }
+    val body = when (mutation.action) {
+        MutationAction.Delete -> stringResource(R.string.pending_deleted)
+        MutationAction.Put -> stringResource(R.string.pending_changed)
+        else -> stringResource(R.string.pending_changed)
+    }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = container,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = SyncPendingOrange, modifier = Modifier.size(19.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    stringResource(R.string.not_synced_yet),
+                    color = WarmInk,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    body,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceFootnote(text: String) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 2.dp),
+    )
+}
+
+@Composable
+private fun DetailSheet.sourceFootnoteText(
+    collections: List<CollectionEntity>,
+    accounts: List<AccountEntity>,
+    groups: List<CalendarSourceGroup>,
+): String? {
+    val href = when (this) {
+        is DetailSheet.Event -> event.collectionHref
+        is DetailSheet.Task -> task.collectionHref
+    }
+    val collection = collections.firstOrNull { it.href == href } ?: return null
+    val account = accounts.firstOrNull { it.id == collection.accountId }
+    val source = when {
+        collection.href.isLocalCollectionHref() -> stringResource(R.string.local_calendar)
+        collection.isAndroidProviderCollection() -> account?.displayName ?: stringResource(R.string.android_device_calendars)
+        // A subscription is known by its group, as in the sidebar; its own source name is not shown anywhere.
+        collection.isReadOnlyCollection() -> groups.groupOf(collection)?.displayName() ?: account?.displayName ?: collection.displayName
+        else -> account?.displayName ?: account?.username ?: stringResource(R.string.source)
+    }
+    return stringResource(R.string.source_line, source, collection.displayName)
+}
+
+@Composable
+private fun DetailOverflowMenu(
+    copyTargets: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
+    recurringScopes: Boolean,
+    itemLabel: String,
+    canDelete: Boolean = true,
+    iconTint: Color = WarmInk,
+    trashRetentionDays: Int?,
+    onDuplicate: () -> Unit,
+    onCopyTo: (String) -> Unit,
+    onDeleteThis: () -> Unit,
+    onDeleteFollowing: () -> Unit,
+    onDeleteAll: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var copyExpanded by remember { mutableStateOf(false) }
+    var deleteDialogOpen by remember { mutableStateOf(false) }
+    Box {
+        // The menu grows out of the round button, towards the sheet's start.
+        MorphingDropdown(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            buttonShape = CircleShape,
+            buttonColor = Color.Transparent,
+            onClick = { expanded = true },
+            onClickLabel = stringResource(R.string.more_options),
+            role = Role.Button,
+            alignEnd = true,
+            menuMinWidth = 180.dp,
+            button = {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = iconTint)
+                }
+            },
+        ) {
+            MorphMenuRow(
+                label = stringResource(R.string.duplicate),
+                selected = false,
+                role = Role.Button,
+                onClick = {
+                    expanded = false
+                    onDuplicate()
+                },
+                leading = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+            )
+            MorphMenuRow(
+                label = stringResource(R.string.copy_to),
+                selected = false,
+                enabled = copyTargets.isNotEmpty(),
+                role = Role.Button,
+                onClick = {
+                    expanded = false
+                    copyExpanded = true
+                },
+                leading = { Icon(Icons.Default.DriveFileMove, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
+            )
+            if (canDelete) {
+                MorphMenuRow(
+                    label = stringResource(R.string.delete),
+                    selected = false,
+                    labelColor = MaterialTheme.colorScheme.error,
+                    role = Role.Button,
+                    onClick = {
+                        expanded = false
+                        deleteDialogOpen = true
+                    },
+                    leading = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
+                )
+            }
+        }
+        if (copyExpanded) {
+            CopyTargetDialog(
+                copyTargets = copyTargets,
+                hiddenCollectionHrefs = hiddenCollectionHrefs,
+                onDismiss = { copyExpanded = false },
+                onCopyTo = { href ->
+                    copyExpanded = false
+                    onCopyTo(href)
+                },
+            )
+        }
+        if (deleteDialogOpen) {
+            DeleteConfirmationDialog(
+                itemLabel = itemLabel,
+                recurringScopes = recurringScopes,
+                trashRetentionDays = trashRetentionDays,
+                onDismiss = { deleteDialogOpen = false },
+                onDeleteThis = {
+                    deleteDialogOpen = false
+                    onDeleteThis()
+                },
+                onDeleteFollowing = {
+                    deleteDialogOpen = false
+                    onDeleteFollowing()
+                },
+                onDeleteAll = {
+                    deleteDialogOpen = false
+                    onDeleteAll()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CopyTargetDialog(
+    copyTargets: List<CollectionEntity>,
+    hiddenCollectionHrefs: Set<String> = emptySet(),
+    onDismiss: () -> Unit,
+    onCopyTo: (String) -> Unit,
+) {
+    KgsAlertDialog(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.copy_to), color = WarmInk, fontWeight = FontWeight.SemiBold)
+        },
+        text = {
+            DialogChoiceGroup(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                copyTargets.forEach { collection ->
+                    val hidden = collection.href in hiddenCollectionHrefs
+                    DialogChoiceRow(
+                        label = collection.displayName,
+                        subtitle = if (hidden) appString(R.string.calendar_hidden) else null,
+                        subtitleColor = SyncPendingOrange,
+                        selected = false,
+                        leading = { Box(Modifier.size(14.dp).clip(CircleShape).background(Color(collection.color))) },
+                        onClick = { onCopyTo(collection.href) },
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { DialogDismissButton(appString(R.string.cancel), onClick = onDismiss) },
+    )
+}
+
+/** Which slice of a recurring event a delete action targets. */
+internal enum class EventDeleteScope { This, ThisAndFollowing, All }
+
+@Composable
+internal fun RecurringSaveScopeDialog(
+    itemLabel: String,
+    onDismiss: () -> Unit,
+    onSaveThis: () -> Unit,
+    onSaveFollowing: () -> Unit,
+    onSaveAll: () -> Unit,
+) {
+    KgsAlertDialog(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        onDismissRequest = onDismiss,
+        titleContentColor = WarmInk,
+        textContentColor = WarmInk,
+        title = { Text(appString(R.string.edit_repeat_question), fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    appString(R.string.edit_series_body, itemLabel),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                )
+                Spacer(Modifier.height(2.dp))
+                DeleteScopeButton(appString(R.string.only_this_repeat), onClick = onSaveThis)
+                DeleteScopeButton(appString(R.string.this_and_following), onClick = onSaveFollowing)
+                DeleteScopeButton(appString(R.string.all_repeats), onClick = onSaveAll)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun DeleteConfirmationDialog(
+    itemLabel: String,
+    recurringScopes: Boolean,
+    /** How long the deleted item can be restored; null when that isn't known yet. */
+    trashRetentionDays: Int?,
+    onDismiss: () -> Unit,
+    onDeleteThis: () -> Unit,
+    onDeleteFollowing: () -> Unit,
+    onDeleteAll: () -> Unit,
+) {
+    if (recurringScopes) {
+        // Step 1: pick a scope. Step 2: confirm that choice before anything is deleted.
+        var pending by remember { mutableStateOf<EventDeleteScope?>(null) }
+        val pendingScope = pending
+        if (pendingScope == null) {
+            // A recurring event offers three choices, laid out as a clean vertical stack of
+            // full-width buttons instead of cramming them into the dialog's button row.
+            KgsAlertDialog(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                onDismissRequest = onDismiss,
+                titleContentColor = WarmInk,
+                textContentColor = WarmInk,
+                title = { Text(appString(R.string.delete_repeat_question), fontWeight = FontWeight.SemiBold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            appString(R.string.event_belongs_to_series_delete),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        DeleteScopeButton(appString(R.string.only_this_event), onClick = { pending = EventDeleteScope.This })
+                        DeleteScopeButton(appString(R.string.this_and_following_events), onClick = { pending = EventDeleteScope.ThisAndFollowing })
+                        DeleteScopeButton(appString(R.string.all_events_in_series), destructive = true, onClick = { pending = EventDeleteScope.All })
+                    }
+                },
+                confirmButton = {},
+                dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
+            )
+        } else {
+            KgsAlertDialog(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                onDismissRequest = { pending = null },
+                titleContentColor = WarmInk,
+                textContentColor = WarmInk,
+                title = { Text(appString(R.string.truly_delete), fontWeight = FontWeight.SemiBold) },
+                text = {
+                    Text(
+                        when (pendingScope) {
+                            EventDeleteScope.This -> appString(R.string.only_this_deleted)
+                            EventDeleteScope.ThisAndFollowing -> appString(R.string.this_and_following_deleted)
+                            EventDeleteScope.All -> trashRetentionDays
+                                ?.let { appPluralString(R.plurals.all_series_deleted_recoverable_days, it, it) }
+                                ?: appString(R.string.all_series_deleted_recoverable)
+                        },
+                    )
+                },
+                confirmButton = {
+                    DialogConfirmButton(
+                        text = appString(R.string.delete),
+                        destructive = true,
+                        onClick = {
+                            when (pendingScope) {
+                                EventDeleteScope.This -> onDeleteThis()
+                                EventDeleteScope.ThisAndFollowing -> onDeleteFollowing()
+                                EventDeleteScope.All -> onDeleteAll()
+                            }
+                        },
+                    )
+                },
+                dismissButton = { TextButton(onClick = { pending = null }) { Text(appString(R.string.cancel)) } },
+            )
+        }
+    } else {
+        KgsAlertDialog(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            onDismissRequest = onDismiss,
+            titleContentColor = WarmInk,
+            textContentColor = WarmInk,
+            title = { Text(appString(R.string.delete_confirm_question, itemLabel), fontWeight = FontWeight.SemiBold) },
+            text = {
+                Text(
+                    trashRetentionDays
+                        ?.let { appPluralString(R.plurals.delete_recoverable_days, it, it) }
+                        ?: appString(R.string.delete_recoverable),
+                )
+            },
+            confirmButton = {
+                DialogConfirmButton(text = appString(R.string.delete), destructive = true, onClick = onDeleteAll)
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(appString(R.string.cancel)) } },
+        )
+    }
+}
+
+/** A scope choice in the delete and save dialogs: a filled row, red for the widest scope. */
+@Composable
+private fun DeleteScopeButton(text: String, destructive: Boolean = false, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (destructive) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else editorSectionColor(),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            color = if (destructive) MaterialTheme.colorScheme.error else WarmInk,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun EventMetadata(
+    event: EventEntity,
+    accountEmails: List<String>,
+    fieldOrder: List<String>,
+    readOnlySource: Boolean,
+    autoLoadMapPreviews: Boolean,
+    onParticipationChanged: (String) -> Unit,
+) {
+    val organizer = remember(event.organizerJson) { event.organizerJson.toCalendarParticipant() }
+    val attendees = remember(event.attendeesJson) { event.attendeesJson.toCalendarParticipants() }
+    val accountEmailSet = remember(accountEmails) { accountEmails.map { it.lowercase(Locale.ROOT) }.toSet() }
+    val ownAttendee = attendees.firstOrNull { it.email.lowercase(Locale.ROOT) in accountEmailSet }
+    // All fields form one card of icon rows, in the order chosen in the settings.
+    CardGroup {
+        fieldOrder.forEach { field ->
+            when (field) {
+                "time" -> DetailLine(stringResource(R.string.time), event.localizedFullTimeLabel(), Icons.Default.AccessTime)
+                "location" -> event.location?.takeIf { it.isNotBlank() }?.let { LocationDetailLine(it, event.locationMapVerified, autoLoadMapPreviews) }
+                "participants" -> if (organizer != null || attendees.isNotEmpty()) {
+                    SharedEventDetail(
+                        organizer = organizer,
+                        attendees = attendees,
+                        ownAttendee = ownAttendee,
+                        onParticipationChanged = onParticipationChanged,
+                    )
+                }
+                "notes" -> event.description?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.notes), it, Icons.AutoMirrored.Filled.Notes) }
+                "categories" -> event.categories?.takeIf { it.isNotBlank() }?.let { CategoryDetailLine(stringResource(R.string.categories), it) }
+                "status" -> if (!readOnlySource) {
+                    DetailFactsLine(
+                        icon = Icons.Default.Info,
+                        facts = listOf(
+                            stringResource(R.string.event_status) to event.statusLabelText(),
+                            stringResource(R.string.sharing_visibility) to event.classLabelText(),
+                            stringResource(R.string.availability) to event.transparencyLabelText(),
+                        ),
+                    )
+                }
+                "recurrence" -> event.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "reminders" -> event.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it, Icons.Default.Notifications) }
+            }
+        }
+        event.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it, Icons.Default.WarningAmber, showLabel = true) }
+    }
+}
+
+@Composable
+private fun SharedEventDetail(
+    organizer: CalendarParticipant?,
+    attendees: List<CalendarParticipant>,
+    ownAttendee: CalendarParticipant?,
+    onParticipationChanged: (String) -> Unit,
+) {
+    EditorSection {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            EditorRowTitle(Icons.Default.Group, stringResource(R.string.participants))
+            organizer?.let {
+                Text(stringResource(R.string.organized_by, it.displayName), color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium)
+            }
+            attendees.forEach { attendee ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ParticipantCircle(
+                        label = attendee.initials(),
+                        color = attendee.avatarColor(),
+                        contentColor = Color.White,
+                        borderColor = attendee.displayParticipationColor(),
+                        modifier = Modifier.size(34.dp),
+                    )
+                    Column(Modifier.weight(1f)) {
+                        SelectionContainer {
+                            Text(attendee.displayName, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(attendee.email, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text(attendee.localizedDisplayParticipationLabel(), color = attendee.displayParticipationColor(), fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            ownAttendee?.let {
+                Text(stringResource(R.string.my_participation), color = WarmInk, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                val answers = listOf("ACCEPTED" to stringResource(R.string.accept), "TENTATIVE" to stringResource(R.string.tentative), "DECLINED" to stringResource(R.string.decline))
+                DialogSegmentedControl(
+                    options = answers.map { answer -> answer.first },
+                    // No answer yet selects nothing.
+                    selected = answers.firstOrNull { answer -> it.partstat.equals(answer.first, ignoreCase = true) }?.first.orEmpty(),
+                    label = { value -> answers.first { answer -> answer.first == value }.second },
+                    onSelected = onParticipationChanged,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskMetadata(
+    task: TaskEntity,
+    fieldOrder: List<String>,
+    autoLoadMapPreviews: Boolean,
+    editable: Boolean,
+    onPriorityChanged: (Int) -> Unit,
+    onProgressChanged: (Int) -> Unit,
+) {
+    // All fields form one card of icon rows, in the order chosen in the settings.
+    CardGroup {
+        fieldOrder.forEach { field ->
+            when (field) {
+                "status" -> DetailLine(stringResource(R.string.status), task.localizedStatusLabel(), Icons.Default.TaskAlt, showLabel = true)
+                "time" -> DetailLine(stringResource(R.string.time), task.localizedTaskTimeLabel(), Icons.Default.AccessTime)
+                "location" -> task.location?.takeIf { it.isNotBlank() }?.let { LocationDetailLine(it, task.locationMapVerified, autoLoadMapPreviews) }
+                "notes" -> task.notes?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.note), it, Icons.AutoMirrored.Filled.Notes) }
+                "url" -> task.url?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.url), it, Icons.Default.Link) }
+                "priority" -> task.priority?.let {
+                    if (editable) EditablePriorityLine(it, onPriorityChanged) else ReadOnlyPriorityLine(it)
+                }
+                "progress" -> {
+                    val progress = task.displayProgress()
+                    if (editable) EditableProgressLine(progress, onProgressChanged) else ReadOnlyProgressLine(progress)
+                }
+                "tags" -> task.categories?.takeIf { it.isNotBlank() }?.let { CategoryDetailLine(stringResource(R.string.categories), it) }
+                "recurrence" -> task.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "reminders" -> task.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(R.string.reminders), it, Icons.Default.Notifications) }
+            }
+        }
+        task.completedAtMillis?.let { DetailLine(stringResource(R.string.completed_on), it.toDate().toString(), Icons.Default.CheckCircle, showLabel = true) }
+        task.syncError?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(R.string.sync), it, Icons.Default.WarningAmber, showLabel = true) }
+    }
+}
+
+@Composable
+private fun EditablePriorityLine(priority: Int, onPriorityChanged: (Int) -> Unit) {
+    var draftPriority by remember(priority) { mutableStateOf(priority.coerceIn(1, 9)) }
+    // The slider brings its own heading and value.
+    EditorSection {
+        PrioritySlider(
+            priority = draftPriority,
+            onPriorityChange = { draftPriority = it },
+            onPriorityChangeFinished = onPriorityChanged,
+        )
+    }
+}
+
+@Composable
+private fun EditableProgressLine(progress: Int, onProgressChanged: (Int) -> Unit) {
+    var draftProgress by remember(progress) { mutableStateOf(progress.coerceIn(0, 100)) }
+    EditorSection {
+        ProgressSlider(
+            progress = draftProgress,
+            onProgressChange = { draftProgress = it },
+            onProgressChangeFinished = onProgressChanged,
+        )
+    }
+}
+
+/**
+ * One field of the detail card: its icon, then the value. The label is only shown where the icon
+ * alone would not say what the value is; otherwise it is read out with the icon.
+ */
+@Composable
+private fun DetailLine(label: String, value: String, icon: ImageVector, showLabel: Boolean = false) {
+    val displayValue = remember(value) { value.cleanCalendarDisplayText() }
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorLine(icon, verticalAlignment = Alignment.Top, iconDescription = label) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (showLabel) {
+                    Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
+                }
+                LinkableSelectableText(displayValue)
+            }
+        }
+    }
+}
+
+/** Several short facts, such as an event's status and visibility, as label and value lines. */
+@Composable
+private fun DetailFactsLine(icon: ImageVector, facts: List<Pair<String, String>>) {
+    EditorSection {
+        EditorLine(icon, verticalAlignment = Alignment.Top) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                facts.forEach { (label, value) ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp, lineHeight = 20.sp, modifier = Modifier.weight(1f))
+                        Text(value, color = WarmInk, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A round, tinted icon button in the detail header. */
+@Composable
+private fun DetailActionButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(editorSectionColor())
+            .clickable(role = Role.Button, onClickLabel = description, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = WarmInk, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun ReadOnlyProgressLine(progress: Int) {
+    DetailMetricLine(icon = Icons.Default.Percent, label = stringResource(R.string.progress), value = "${progress.coerceIn(0, 100)}%") {
+        ReadOnlyProgressBar(progress = progress, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun ReadOnlyPriorityLine(priority: Int) {
+    DetailMetricLine(icon = Icons.Default.Flag, label = stringResource(R.string.priority), value = priority.coerceIn(1, 9).toString()) {
+        ReadOnlyPriorityBar(priority = priority, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun DetailMetricLine(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorRowTitle(icon, label) {
+            Text(value, color = WarmBrown, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        content()
+    }
+}
+
+@Composable
+private fun ReadOnlyProgressBar(progress: Int, modifier: Modifier = Modifier) {
+    val normalized = progress.coerceIn(0, 100)
+    val animated by animateFloatAsState(
+        targetValue = normalized / 100f,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "readonlyProgress",
+    )
+    Box(
+        modifier = modifier
+            .height(12.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(WarmLine.copy(alpha = 0.68f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(animated)
+                .background(WarmBrown.copy(alpha = 0.68f)),
+        )
+    }
+}
+
+@Composable
+private fun ReadOnlyPriorityBar(priority: Int, modifier: Modifier = Modifier) {
+    val normalizedPriority = priority.coerceIn(1, 9)
+    val thumbFraction = (9 - normalizedPriority) / 8f
+    val trackColor = WarmLine
+    Canvas(
+        modifier = modifier
+            .height(34.dp)
+            .padding(vertical = 8.dp),
+    ) {
+        val barHeight = 12.dp.toPx()
+        val radius = barHeight / 2f
+        val centerY = size.height / 2f
+        // Inset the dots by the bar's corner radius so the first/last dot sit inside the rounded
+        // caps rather than poking past them.
+        val dotSpanStart = radius
+        val dotSpanWidth = (size.width - radius * 2f).coerceAtLeast(1f)
+        val fillEnd = dotSpanStart + dotSpanWidth * thumbFraction
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.62f),
+            topLeft = Offset(0f, centerY - barHeight / 2f),
+            size = Size(size.width, barHeight),
+            cornerRadius = CornerRadius(radius, radius),
+        )
+        (1..9).forEach { level ->
+            val x = dotSpanStart + dotSpanWidth * ((9 - level) / 8f)
+            drawCircle(
+                color = priorityColor(level),
+                radius = 4.dp.toPx(),
+                center = Offset(x, centerY),
+            )
+        }
+        // Solid active fill drawn OVER the lower-priority (higher-number) dots, like the editor
+        // slider — replaces the old faint fill that sat under the dots.
+        drawRoundRect(
+            color = priorityColor(normalizedPriority),
+            topLeft = Offset(0f, centerY - barHeight / 2f),
+            size = Size(fillEnd, barHeight),
+            cornerRadius = CornerRadius(radius, radius),
+        )
+        // Current-value marker on top of the fill so it stays visible at the fill's leading edge.
+        drawCircle(color = Color.White, radius = 5.5.dp.toPx(), center = Offset(fillEnd, centerY))
+        drawCircle(color = priorityColor(normalizedPriority), radius = 3.6.dp.toPx(), center = Offset(fillEnd, centerY))
+    }
+}
+
+@Composable
+private fun LocationDetailLine(location: String, mapVerified: Boolean?, autoLoadMapPreviews: Boolean) {
+    val platform = rememberPlatformServices()
+    val displayValue = remember(location) { location.cleanCalendarDisplayText() }
+    val label = stringResource(R.string.location)
+    EditorSection(modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))) {
+        EditorLine(Icons.Default.LocationOn, verticalAlignment = Alignment.Top, iconDescription = label) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinkableSelectableText(displayValue, onClick = { platform.openMapSearch(displayValue) })
+                LocationMapPreview(displayValue, mapVerified, autoLoadMapPreviews)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationMapPreview(location: String, mapVerified: Boolean?, autoLoadMapPreviews: Boolean) {
+    if (!location.shouldAttemptMapPreview(mapVerified)) return
+    var suggestion by remember(location) { mutableStateOf<LocationSuggestion?>(null) }
+    var previewRequested by remember(location, autoLoadMapPreviews) { mutableStateOf(autoLoadMapPreviews) }
+    var resolved by remember(location) { mutableStateOf(false) }
+
+    if (!previewRequested) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilledTonalButton(
+                onClick = { previewRequested = true },
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = WarmBrown),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.show_map_preview))
+            }
+            Text(
+                stringResource(R.string.osm_attribution),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+        return
+    }
+
+    LaunchedEffect(location, previewRequested) {
+        if (previewRequested) {
+            resolved = false
+            suggestion = runCatching { LocationLookup.search(location, limit = 1, allowAliases = false).firstOrNull() }.getOrNull()
+            resolved = true
+        }
+    }
+
+    val resolvedSuggestion = suggestion ?: return
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(128.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = WarmLine.copy(alpha = if (resolved) 0.35f else 0.18f),
+    ) {
+        OpenStreetMapPreview(
+            suggestion = resolvedSuggestion,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun OpenStreetMapPreview(suggestion: LocationSuggestion, modifier: Modifier = Modifier) {
+    val platform = rememberPlatformServices()
+    val mapModifier = modifier.clickable { platform.openMap(suggestion) }
+    var imageBitmap by remember(suggestion.latitude, suggestion.longitude) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var failed by remember(suggestion.latitude, suggestion.longitude) { mutableStateOf(false) }
+    LaunchedEffect(suggestion.latitude, suggestion.longitude) {
+        failed = false
+        imageBitmap = runCatching {
+            withContext(Dispatchers.IO) {
+                LocationLookup.mapPreviewBitmap(suggestion)
+            }
+        }.getOrNull()
+        failed = imageBitmap == null
+    }
+    Box(mapModifier.clipToBounds()) {
+        when {
+            imageBitmap != null -> Image(
+                bitmap = imageBitmap!!,
+                contentDescription = stringResource(R.string.map_preview_content_description),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            failed -> Box(Modifier.fillMaxSize().background(WarmLine.copy(alpha = 0.32f)))
+            else -> Box(Modifier.fillMaxSize().background(WarmLine.copy(alpha = 0.18f)))
+        }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(6.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.osm_attribution),
+                color = WarmInk,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LinkableSelectableText(value: String, onClick: (() -> Unit)? = null) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val linkedText = remember(value, linkColor) { value.withLinks(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) }
+    val selectionColors = TextSelectionColors(handleColor = linkColor, backgroundColor = WarmPeach.copy(alpha = 0.64f))
+    CompositionLocalProvider(LocalTextSelectionColors provides selectionColors) {
+        SelectionContainer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        ) {
+            Text(linkedText, color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
+        }
+    }
+}
+
+private val WebOrEmailPattern = Regex(
+    """(?i)\b(?:https?://[^\s<>"]+|www\.[^\s<>"]+|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})""",
+)
+
+/** Web addresses and e-mail addresses in [this] as tappable links, like Android's Linkify. */
+private fun String.withLinks(style: SpanStyle): AnnotatedString = buildAnnotatedString {
+    var last = 0
+    WebOrEmailPattern.findAll(this@withLinks).forEach { match ->
+        val text = match.value.trimEnd('.', ',', ';', ':', ')', '!', '?')
+        val start = match.range.first
+        append(this@withLinks.substring(last, start))
+        val url = when {
+            '@' in text && !text.contains("://") -> "mailto:$text"
+            text.startsWith("www.", ignoreCase = true) -> "https://$text"
+            else -> text
+        }
+        withLink(LinkAnnotation.Url(url, TextLinkStyles(style = style))) { append(text) }
+        last = start + text.length
+    }
+    append(this@withLinks.substring(last))
+}

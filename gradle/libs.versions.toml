@@ -26,6 +26,10 @@ turbine = "1.2.1"
 json = "20240303"
 robolectric = "4.16.1"
 window = "1.5.0"
+sqlite = "2.6.2"
+jna = "5.17.0"
+jetbrainsLifecycle = "2.10.0"
+androidxAnnotation = "1.9.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
@@ -45,6 +49,10 @@ androidx-compose-material-icons = { module = "androidx.compose.material:material
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jetbrainsLifecycle" }
+jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrainsLifecycle" }
+androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidxAnnotation" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
@@ -53,6 +61,9 @@ androidx-security-crypto = { module = "androidx.security:security-crypto", versi
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
 ical4j = { module = "org.mnode.ical4j:ical4j", version.ref = "ical4j" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

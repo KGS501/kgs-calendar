@@ -1,6 +1,8 @@
 package com.kgs.calendar
 
 import android.content.Context
+import android.net.Uri
+import com.kgs.calendar.res.AppStrings
 import androidx.room.Room
 import com.kgs.calendar.data.CalendarDataComponents
 import com.kgs.calendar.data.CalendarRepository
@@ -30,7 +32,6 @@ import com.kgs.calendar.ui.CalendarFileExporter
 import com.kgs.calendar.ui.PickedContentReader
 import com.kgs.calendar.ui.UiStrings
 import com.kgs.calendar.ui.WidgetRefresher
-import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WidgetDependencies
 import kotlinx.coroutines.flow.Flow
@@ -56,7 +57,6 @@ class AppGraph(context: Context) {
         .build()
 
     val settingsStore = SettingsStore(appContext)
-    internal val timelineViewportMemory = TimelineOrientationViewportMemory()
     private val credentialsStore: CredentialsStore = EncryptedCredentialsStore(appContext)
     private val loginFlowClient = NextcloudLoginFlowClient(okHttpClient)
     private val calDavHttpClient = CalDavHttpClient(okHttpClient)
@@ -152,12 +152,14 @@ class AppGraph(context: Context) {
         }
     }
 
-    val uiStrings = UiStrings { id -> appContext.getString(id) }
+    val uiStrings = UiStrings { id ->
+        AppStrings.get(id, appContext.resources.configuration.locales[0] ?: java.util.Locale.getDefault())
+    }
 
     val calendarFileExporter = CalendarFileExporter { collectionHrefs, target ->
         val result = calendarData.export.export(collectionHrefs)
         withContext(Dispatchers.IO) {
-            val output = appContext.contentResolver.openOutputStream(target, "wt") ?: error("The file can't be written.")
+            val output = appContext.contentResolver.openOutputStream(Uri.parse(target), "wt") ?: error("The file can't be written.")
             output.use { it.write(result.rawIcs.toByteArray(Charsets.UTF_8)) }
         }
         result.items
@@ -166,7 +168,7 @@ class AppGraph(context: Context) {
     val pickedContentReader = PickedContentReader { uri ->
         withContext(Dispatchers.IO) {
             runCatching {
-                appContext.contentResolver.openInputStream(uri)?.use { input ->
+                appContext.contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
                     // Large photos are scaled down anyway; refuse anything unreasonably big.
                     val bytes = input.readBytes()
                     bytes.takeIf { it.size <= MAX_PICKED_IMAGE_BYTES }

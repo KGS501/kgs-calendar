@@ -1,5 +1,7 @@
 package com.kgs.calendar
 
+import com.kgs.calendar.navigation.writeTo
+import com.kgs.calendar.navigation.fromShareIntent
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle

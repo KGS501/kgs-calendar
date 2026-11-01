@@ -79,6 +79,13 @@ android {
         compose = true
     }
 
+    sourceSets {
+        // The strings are shared with the desktop app (see shared/strings/README.md).
+        getByName("main") {
+            res.srcDir("../shared/strings/res")
+        }
+    }
+
     testOptions {
         unitTests {
             // Robolectric widget rendering tests resolve app strings and layouts.
@@ -113,6 +120,7 @@ kotlin {
 
 dependencies {
     implementation(project(":shared:ui"))
+    implementation(project(":shared:app"))
     implementation(project(":core:data"))
 
     implementation(libs.androidx.core.ktx)
@@ -136,7 +144,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
 
-    testImplementation(testFixtures(project(":core:data")))
+    testImplementation(project(":core:data-testing"))
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.junit)
@@ -148,7 +156,7 @@ dependencies {
     testImplementation(libs.androidx.test.core)
 
     androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(testFixtures(project(":core:data")))
+    androidTestImplementation(project(":core:data-testing"))
     androidTestImplementation(libs.mockwebserver)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)

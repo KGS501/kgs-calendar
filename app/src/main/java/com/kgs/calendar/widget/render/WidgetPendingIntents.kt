@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.providerClass
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context

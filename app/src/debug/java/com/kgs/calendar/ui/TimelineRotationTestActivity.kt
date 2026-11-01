@@ -16,7 +16,7 @@ import java.time.LocalTime
 
 class TimelineRotationTestActivity : ComponentActivity() {
     private val viewportMemory
-        get() = (application as KgsCalendarApplication).appGraph.timelineViewportMemory
+        get() = processViewportMemory
 
     internal fun rememberedTopMinute(isLandscape: Boolean): Float =
         viewportMemory.topMinute(isLandscape)
@@ -71,3 +71,6 @@ class TimelineRotationTestActivity : ComponentActivity() {
         }
     }
 }
+
+/** Outlives the activity, so the remembered viewport survives a rotation like the view model's does. */
+private val processViewportMemory = com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory()

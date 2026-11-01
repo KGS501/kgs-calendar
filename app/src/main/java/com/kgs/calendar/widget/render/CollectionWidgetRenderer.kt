@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.title
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.os.Bundle
