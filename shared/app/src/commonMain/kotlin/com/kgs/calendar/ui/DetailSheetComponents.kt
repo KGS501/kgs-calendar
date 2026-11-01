@@ -64,7 +64,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.window.Dialog
 import com.kgs.calendar.ui.haptics.LocalKgsHaptics
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity

@@ -99,7 +99,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.task.priorityColorArgb
 import com.kgs.calendar.ui.haptics.rememberSliderStepHaptics
 import kotlinx.coroutines.delay

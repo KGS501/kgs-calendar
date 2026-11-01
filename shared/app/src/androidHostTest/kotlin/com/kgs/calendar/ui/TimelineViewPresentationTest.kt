@@ -1,6 +1,6 @@
 package com.kgs.calendar.ui
 
-import com.kgs.calendar.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.model.CalendarViewMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

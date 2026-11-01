@@ -67,7 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.layout.WelcomeContentMaxWidth
 import com.kgs.calendar.ui.layout.centeredMaxWidth
 import com.kgs.calendar.ui.layout.largeScreenMaxWidth

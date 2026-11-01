@@ -10,7 +10,7 @@ import com.kgs.calendar.reminder.ReminderAlarmPlan
 import com.kgs.calendar.reminder.ReminderOccurrence
 import com.kgs.calendar.reminder.ReminderPlanner
 import com.kgs.calendar.res.AppStrings
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.cleanCalendarDisplayText
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import kotlinx.coroutines.CoroutineScope

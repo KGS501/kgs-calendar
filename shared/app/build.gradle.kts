@@ -9,7 +9,7 @@ plugins {
 }
 
 /**
- * Generates `com.kgs.calendar.res.R` (string and plural ids) and the string tables of every
+ * Generates `com.kgs.calendar.res.SharedR` (string and plural ids) and the string tables of every
  * language from the shared Android string resources, applying Android's escaping rules.
  */
 @CacheableTask
@@ -36,13 +36,14 @@ abstract class GenerateStringTables : DefaultTask() {
             mkdirs()
         }
 
-        directory.resolve("R.kt").writeText(buildString {
+        directory.resolve("SharedR.kt").writeText(buildString {
             appendLine("// Generated from shared/strings. Do not edit.")
             appendLine("@file:Suppress(\"ClassName\", \"ObjectPropertyName\", \"unused\")")
             appendLine()
             appendLine("package com.kgs.calendar.res")
             appendLine()
-            appendLine("object R {")
+            appendLine("/** The shared string ids. Import it as `R` (`import com.kgs.calendar.res.SharedR as R`); a class named R would be stripped from Android libraries. */")
+            appendLine("object SharedR {")
             appendLine("    object string {")
             stringNames.forEachIndexed { index, name -> appendLine("        const val $name: Int = $index") }
             appendLine("    }")
@@ -222,6 +223,17 @@ kotlin {
             implementation(compose.desktop.common)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.jna.platform)
+        }
+        getByName("androidHostTest").dependencies {
+            implementation(project(":core:data-testing"))
+            implementation(libs.junit)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.androidx.datastore.preferences)
+            implementation(libs.mockwebserver)
+            implementation(libs.turbine)
+            implementation(libs.json)
+            implementation(libs.robolectric)
+            implementation(libs.androidx.test.core)
         }
     }
 }

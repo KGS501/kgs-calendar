@@ -82,7 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarViewMode

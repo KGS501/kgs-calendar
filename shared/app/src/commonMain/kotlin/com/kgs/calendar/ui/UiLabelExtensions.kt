@@ -18,7 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.kgs.calendar.res.stringResource
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.settings.AppColorMode
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.CollectionEntity

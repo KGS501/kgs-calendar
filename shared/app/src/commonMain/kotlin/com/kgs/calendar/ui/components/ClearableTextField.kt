@@ -23,7 +23,7 @@ import androidx.compose.ui.platform.testTag
 import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 
 @Composable
 internal fun ClearTextButton(onClick: () -> Unit, modifier: Modifier = Modifier) {

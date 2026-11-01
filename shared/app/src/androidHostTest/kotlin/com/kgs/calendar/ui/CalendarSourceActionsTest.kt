@@ -1,7 +1,7 @@
 package com.kgs.calendar.ui
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import com.kgs.calendar.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.SourceType

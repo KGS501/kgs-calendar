@@ -83,6 +83,8 @@ android {
         // The strings are shared with the desktop app (see shared/strings/README.md).
         getByName("main") {
             res.srcDir("../shared/strings/res")
+            // Drawables shared with the desktop app, e.g. the logo the launcher icon is drawn from.
+            res.srcDir("../shared/app/src/commonMain/composeResources")
         }
     }
 

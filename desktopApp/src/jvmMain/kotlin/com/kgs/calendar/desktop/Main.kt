@@ -27,8 +27,10 @@ import com.kgs.calendar.ui.KgsCalendarApp
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
 import com.kgs.calendar.ui.platform.LocalBackDispatcher
+import com.kgs.calendar.ui.platform.LocalWindowChrome
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /** `--data-dir <folder>` keeps a separate profile, e.g. for testing; otherwise `%LOCALAPPDATA%\KGS Calendar`. */
@@ -43,6 +45,12 @@ private fun dataDirectory(args: Array<String>): File {
 fun main(args: Array<String>) {
     DesktopAppVersion = System.getProperty("kgs.version") ?: "V.1.4.6-3"
     val graph = DesktopGraph(dataDirectory(args))
+    // Demo items only ever go into a separate, empty profile.
+    if ("--demo" in args && "--data-dir" in args) {
+        runBlocking {
+            if (graph.database.accountDao().getAll().isEmpty()) seedDemoData(graph.repository)
+        }
+    }
     application {
         val viewModel = remember { graph.createViewModel() }
         val backDispatcher = remember { BackDispatcher() }
@@ -59,7 +67,8 @@ fun main(args: Array<String>) {
             title = "KGS Calendar",
             icon = icon,
             state = windowState,
-            onPreviewKeyEvent = { event ->
+            // After dialogs and popups had their chance, like Android's back: the topmost layer goes first.
+            onKeyEvent = { event ->
                 event.type == KeyEventType.KeyDown && event.key == Key.Escape && backDispatcher.back()
             },
         ) {
@@ -73,7 +82,15 @@ fun main(args: Array<String>) {
                 window.minimumSize = java.awt.Dimension(420, 560)
                 onDispose { window.removeWindowListener(listener) }
             }
-            CompositionLocalProvider(LocalBackDispatcher provides backDispatcher) {
+            val windowChrome = remember(window) {
+                { background: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color, dark: Boolean ->
+                    WindowsChrome.apply(window, background, content, dark)
+                }
+            }
+            CompositionLocalProvider(
+                LocalBackDispatcher provides backDispatcher,
+                LocalWindowChrome provides windowChrome,
+            ) {
                 Box(
                     Modifier
                         .fillMaxSize()

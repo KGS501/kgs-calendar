@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.account.SourceImage
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField
 import com.kgs.calendar.ui.sources.SourceAvatar

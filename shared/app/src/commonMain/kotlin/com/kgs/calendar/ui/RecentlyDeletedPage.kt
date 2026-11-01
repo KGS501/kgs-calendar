@@ -54,7 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.trash.TrashedItemPreview

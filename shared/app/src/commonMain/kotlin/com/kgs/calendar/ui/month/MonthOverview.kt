@@ -67,7 +67,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.zIndex
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import com.kgs.calendar.ui.calendar.MonthStripPageCount
 import com.kgs.calendar.ui.calendar.YearStripBase

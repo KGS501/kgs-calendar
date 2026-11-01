@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.labels.RecurrenceOption
 
 private val RecurrenceUnits = listOf(RecurrenceOption.Daily, RecurrenceOption.Weekly, RecurrenceOption.Monthly, RecurrenceOption.Yearly)

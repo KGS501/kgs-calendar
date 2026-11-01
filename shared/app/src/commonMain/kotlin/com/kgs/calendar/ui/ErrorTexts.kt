@@ -2,7 +2,7 @@ package com.kgs.calendar.ui
 
 import androidx.compose.runtime.Composable
 import com.kgs.calendar.res.stringResource
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 
 /**
  * Sync and save errors are recorded as technical English text, such as `PUT … failed: HTTP 403`.

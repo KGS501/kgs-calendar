@@ -63,7 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.settings.ReminderPresets
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.REMINDER_AT_END

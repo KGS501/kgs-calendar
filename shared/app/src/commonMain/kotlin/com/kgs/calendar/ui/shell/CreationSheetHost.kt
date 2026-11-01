@@ -18,7 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import com.kgs.calendar.res.stringResource
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.ui.shell.CalendarShellUiState
 import java.time.LocalDate

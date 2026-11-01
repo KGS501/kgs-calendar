@@ -70,7 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.haptics.rememberSliderStepHaptics
 import kotlin.math.roundToInt
 import androidx.compose.animation.scaleIn
@@ -272,9 +272,15 @@ internal fun SettingsNavRow(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
-    // Selected: the section open beside the main page in two-column settings.
+    // Selected: the section open beside the main page in two-column settings. In dark mode the
+    // accent container is light, so the row is tinted instead to keep its light text readable.
+    val selectedContainer = if (MaterialTheme.colorScheme.background.isDark()) {
+        settingsControlColor().blendWith(WarmBrown, 0.28f)
+    } else {
+        accentContainerColor()
+    }
     val container by animateColorAsState(
-        targetValue = if (selected) accentContainerColor() else settingsControlColor(),
+        targetValue = if (selected) selectedContainer else settingsControlColor(),
         animationSpec = tween(MotionShort, easing = MotionStandard),
         label = "settingsNavRowContainer",
     )

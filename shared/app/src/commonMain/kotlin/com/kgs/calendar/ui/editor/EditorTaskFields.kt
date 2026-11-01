@@ -73,7 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.domain.task.TaskParentLookup

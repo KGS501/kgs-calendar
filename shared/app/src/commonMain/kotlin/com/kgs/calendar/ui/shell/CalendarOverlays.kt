@@ -28,7 +28,7 @@ import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.source.isLocalCollectionHref
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.shell.CalendarShellUiState

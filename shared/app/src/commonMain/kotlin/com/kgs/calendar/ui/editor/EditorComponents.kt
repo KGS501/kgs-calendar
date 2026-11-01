@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerLayoutType
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -59,7 +60,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.editor.EditorScheduleState
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import java.time.Instant
@@ -387,6 +388,8 @@ internal fun TimePickerField(
                         val onAccentContainer = if (accentContainer.isDark()) Color.White else Color(0xFF1C1A18)
                         TimePicker(
                             state = pickerState,
+                            // The dialog is narrow; the side-by-side layout of wide or landscape windows doesn't fit.
+                            layoutType = TimePickerLayoutType.Vertical,
                             colors = TimePickerDefaults.colors(
                                 clockDialColor = popupControlSurfaceColor(),
                                 selectorColor = accent,

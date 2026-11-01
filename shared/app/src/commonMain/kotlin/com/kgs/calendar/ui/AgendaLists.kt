@@ -89,7 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.TaskColorMode

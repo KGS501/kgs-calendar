@@ -11,7 +11,7 @@ import java.util.Locale
 val LocalAppLocale = compositionLocalOf { Locale.getDefault() }
 
 /**
- * The shared strings ([R]) in a language. Formatting and plural selection follow Android's
+ * The shared strings ([SharedR]) in a language. Formatting and plural selection follow Android's
  * `Resources.getString` and `getQuantityString`, so a text reads the same on every platform.
  */
 object AppStrings {

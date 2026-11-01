@@ -26,7 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.compose.resources.painterResource
 import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.PI

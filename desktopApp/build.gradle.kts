@@ -22,6 +22,7 @@ compose.desktop {
     application {
         mainClass = "com.kgs.calendar.desktop.MainKt"
         System.getenv("KGS_DESKTOP_DATA_DIR")?.let { args += listOf("--data-dir", it) }
+        if (System.getenv("KGS_DESKTOP_DEMO") == "1") args += "--demo"
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "KGS Calendar"

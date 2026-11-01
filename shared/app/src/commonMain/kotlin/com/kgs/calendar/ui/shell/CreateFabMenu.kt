@@ -2,7 +2,7 @@ package com.kgs.calendar.ui
 
 import androidx.compose.runtime.Composable
 import com.kgs.calendar.res.stringResource
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 
 @Composable
 internal fun CreateFabMenu(

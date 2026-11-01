@@ -111,7 +111,7 @@ import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.zIndex
 import com.kgs.calendar.ui.haptics.DragSnapHaptics
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.TaskColorMode

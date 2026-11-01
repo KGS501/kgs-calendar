@@ -1,7 +1,7 @@
 package com.kgs.calendar.ui
 
 import androidx.annotation.StringRes
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.model.CalendarViewMode
 
 @StringRes

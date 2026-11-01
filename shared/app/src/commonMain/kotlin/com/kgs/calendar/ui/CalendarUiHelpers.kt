@@ -72,7 +72,7 @@ import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.source.CategorySync
 import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
 import com.kgs.calendar.domain.source.readOnlyFeedStatus
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.settings.AppLanguageMode
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity

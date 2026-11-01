@@ -94,7 +94,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Dp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.settings.AppThemeMode

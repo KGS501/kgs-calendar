@@ -1,6 +1,6 @@
 package com.kgs.calendar.ui
 
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.data.settings.SettingsStore

@@ -17,7 +17,7 @@ import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.model.CalendarViewMode
 import java.time.DayOfWeek
 import java.time.LocalDate

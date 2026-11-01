@@ -86,7 +86,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.window.Dialog
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.model.MAX_REMINDER_MINUTES
 import com.kgs.calendar.domain.model.REMINDER_AT_END
 import com.kgs.calendar.domain.model.REMINDER_AT_START

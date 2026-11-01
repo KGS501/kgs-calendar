@@ -123,7 +123,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.kgs.calendar.res.R
+import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.data.isSupportedReadOnlyCalendarUrl
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
