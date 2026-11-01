@@ -36,6 +36,10 @@ jobs:
       # Root Gradle configuration still includes Android modules.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # v3 defaults to the retired "tools" package; install only what we need below.
+          packages: ''
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
