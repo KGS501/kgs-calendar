@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
@@ -806,11 +808,27 @@ internal fun MonthRowPillChip(
             textDecoration = if (cancelled) TextDecoration.LineThrough else null,
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = titleStartPadding, end = textPadding),
+                .padding(start = titleStartPadding, end = textPadding)
+                // Where the pill fades into the next day (a following item, or the row's end), the
+                // title fades out before that point instead of running into what comes next.
+                .then(if (rightSolidEnd < 0.995f) Modifier.fadeTextBefore(maxWidth * rightSolidEnd - titleStartPadding) else Modifier),
         )
         PendingMutationBadge(candidate.event, candidate.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
     }
 }
+
+/** Fades content out over the [fadeWidth] before [end] (measured from its start) and hides it after. */
+private fun Modifier.fadeTextBefore(end: Dp, fadeWidth: Dp = 14.dp): Modifier =
+    graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val endPx = end.toPx().coerceAtLeast(0f)
+            val startPx = (endPx - fadeWidth.toPx()).coerceAtLeast(0f)
+            drawRect(
+                Brush.horizontalGradient(0f to Color.Black, 1f to Color.Transparent, startX = startPx, endX = endPx.coerceAtLeast(startPx + 1f)),
+                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+            )
+        }
 
 private data class MonthPill(
     val uid: String?,

@@ -125,7 +125,8 @@ fun SharedCalendarTheme(
         CalendarUiTokens.forTheme(colors, themeMode, priorityAnimationsEnabled)
     }
     val fontFamily = LocalAppFontFamily.current
-    val typography = remember(fontFamily) { Typography().withFontFamily(fontFamily) }
+    val platformStyle = LocalAppPlatformTextStyle.current
+    val typography = remember(fontFamily, platformStyle) { Typography().withFontFamily(fontFamily, platformStyle) }
     MaterialTheme(colorScheme = colors, typography = typography) {
         CompositionLocalProvider(LocalCalendarUiTokens provides tokens, content = content)
     }
@@ -137,24 +138,37 @@ fun SharedCalendarTheme(
  */
 val LocalAppFontFamily = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.font.FontFamily?> { null }
 
-private fun Typography.withFontFamily(family: androidx.compose.ui.text.font.FontFamily?): Typography {
-    if (family == null) return this
+/**
+ * How the platform draws the app's text, where its default isn't the best fit: the desktop asks
+ * for subpixel smoothing, which reads as sharply as the system's own text. Null keeps the default.
+ */
+val LocalAppPlatformTextStyle = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.PlatformTextStyle?> { null }
+
+private fun Typography.withFontFamily(
+    family: androidx.compose.ui.text.font.FontFamily?,
+    platformStyle: androidx.compose.ui.text.PlatformTextStyle?,
+): Typography {
+    if (family == null && platformStyle == null) return this
+    fun androidx.compose.ui.text.TextStyle.adjusted() = copy(
+        fontFamily = family ?: fontFamily,
+        platformStyle = platformStyle ?: this.platformStyle,
+    )
     return Typography(
-        displayLarge = displayLarge.copy(fontFamily = family),
-        displayMedium = displayMedium.copy(fontFamily = family),
-        displaySmall = displaySmall.copy(fontFamily = family),
-        headlineLarge = headlineLarge.copy(fontFamily = family),
-        headlineMedium = headlineMedium.copy(fontFamily = family),
-        headlineSmall = headlineSmall.copy(fontFamily = family),
-        titleLarge = titleLarge.copy(fontFamily = family),
-        titleMedium = titleMedium.copy(fontFamily = family),
-        titleSmall = titleSmall.copy(fontFamily = family),
-        bodyLarge = bodyLarge.copy(fontFamily = family),
-        bodyMedium = bodyMedium.copy(fontFamily = family),
-        bodySmall = bodySmall.copy(fontFamily = family),
-        labelLarge = labelLarge.copy(fontFamily = family),
-        labelMedium = labelMedium.copy(fontFamily = family),
-        labelSmall = labelSmall.copy(fontFamily = family),
+        displayLarge = displayLarge.adjusted(),
+        displayMedium = displayMedium.adjusted(),
+        displaySmall = displaySmall.adjusted(),
+        headlineLarge = headlineLarge.adjusted(),
+        headlineMedium = headlineMedium.adjusted(),
+        headlineSmall = headlineSmall.adjusted(),
+        titleLarge = titleLarge.adjusted(),
+        titleMedium = titleMedium.adjusted(),
+        titleSmall = titleSmall.adjusted(),
+        bodyLarge = bodyLarge.adjusted(),
+        bodyMedium = bodyMedium.adjusted(),
+        bodySmall = bodySmall.adjusted(),
+        labelLarge = labelLarge.adjusted(),
+        labelMedium = labelMedium.adjusted(),
+        labelSmall = labelSmall.adjusted(),
     )
 }
 

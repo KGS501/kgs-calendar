@@ -33,6 +33,7 @@ import com.kgs.calendar.ui.desktop.CalendarChrome
 import com.kgs.calendar.ui.desktop.LocalCalendarChrome
 import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import com.kgs.calendar.ui.theme.LocalAppFontFamily
+import com.kgs.calendar.ui.theme.LocalAppPlatformTextStyle
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
 import com.kgs.calendar.ui.platform.DesktopShortcuts
@@ -124,6 +125,7 @@ fun main(args: Array<String>) {
                 }
                 window.addWindowListener(listener)
                 window.minimumSize = java.awt.Dimension(420, 560)
+                println("KGS renderer: ${window.renderApi}")
                 onDispose { window.removeWindowListener(listener) }
             }
             val windowChrome = remember(window) {
@@ -138,6 +140,7 @@ fun main(args: Array<String>) {
                 LocalCalendarChrome provides CalendarChrome.Desktop,
                 LocalPaneLayout provides paneLayout,
                 LocalAppFontFamily provides RobotoFontFamily,
+                LocalAppPlatformTextStyle provides DesktopPlatformTextStyle,
                 LocalShortcutBindings provides shortcutBindings,
             ) {
                 Box(

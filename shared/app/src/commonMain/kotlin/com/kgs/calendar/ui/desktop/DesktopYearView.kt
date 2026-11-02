@@ -68,6 +68,8 @@ import com.kgs.calendar.ui.MonthRowPillCandidate
 import com.kgs.calendar.ui.MonthRowPillChip
 import com.kgs.calendar.ui.MorphCellEnter
 import com.kgs.calendar.ui.MorphCellExit
+import com.kgs.calendar.ui.MotionMedium
+import com.kgs.calendar.ui.MotionEmphasized
 import com.kgs.calendar.ui.WarmBrown
 import com.kgs.calendar.ui.WarmInk
 import com.kgs.calendar.ui.blendWith
@@ -174,7 +176,13 @@ internal fun DesktopYearView(
         // The rows are as tall as the user sets them: low enough for a whole year on screen, or
         // tall enough for more items before they turn into dots. The list scrolls through the years.
         val panes = LocalPaneLayout.current
-        val rowHeight = panes.yearRowHeightDp.dp
+        val targetRowHeight = panes.yearRowHeightDp.dp
+        // Zooming glides between heights instead of jumping.
+        val rowHeight by androidx.compose.animation.core.animateDpAsState(
+            targetValue = targetRowHeight,
+            animationSpec = androidx.compose.animation.core.tween(MotionMedium, easing = MotionEmphasized),
+            label = "yearRowHeight",
+        )
         val rowHeightPx = with(density) { rowHeight.toPx() }
         var handledScrollStep by remember { mutableStateOf(scrollStep?.serial) }
         LaunchedEffect(scrollStep) {
@@ -183,7 +191,10 @@ internal fun DesktopYearView(
             handledScrollStep = request.serial
             listState.animateScrollBy(rowHeightPx * request.direction)
         }
-        val lanes = ((rowHeight - YearPillTop - YearDotsHeight + YearPillGap) / YearPillStep).toInt().coerceAtLeast(0)
+        // Growing rows gain lanes as the room appears; shrinking rows give them up at once, so no
+        // card ever spills into the next month while the rows move.
+        val laneHeight = minOf(rowHeight, targetRowHeight)
+        val lanes = ((laneHeight - YearPillTop - YearDotsHeight + YearPillGap) / YearPillStep).toInt().coerceAtLeast(0)
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.height(YearWeekdayHeaderHeight)) {
                 YearRowHeightControl(

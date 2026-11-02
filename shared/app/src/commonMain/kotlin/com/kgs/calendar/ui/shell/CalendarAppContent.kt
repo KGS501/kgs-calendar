@@ -307,7 +307,8 @@ internal fun CalendarAppContent(
             },
             refresh = viewModel.sources::syncNow,
         ),
-        enabled = !shell.canNavigateBack,
+        // Only while nothing covers the calendar; a view switch (which back can undo) keeps them on.
+        enabled = !shell.anyOverlayOpen,
     )
 
     CompositionLocalProvider(
