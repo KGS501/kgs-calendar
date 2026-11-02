@@ -32,6 +32,7 @@ internal enum class SettingsDestination {
     RecentlyDeleted,
     /** The desktop's keyboard shortcuts. */
     KeyboardShortcuts,
+    GoodToKnow,
 }
 
 internal sealed interface CreationSheet {

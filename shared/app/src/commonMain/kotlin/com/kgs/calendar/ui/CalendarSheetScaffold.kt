@@ -59,6 +59,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
@@ -595,37 +599,17 @@ internal fun KgsModalBottomSheet(
             // Phones, rotated ones included, keep the full window width.
             val sheetMaxWidth = largeScreenMaxWidth(SheetMaxWidth)
             val separationShadowDark = MaterialTheme.colorScheme.background.isDark()
-            if (separationShadow && !inPanel) {
-                val shadowHeight = if (separationShadowDark) 42.dp else 34.dp
-                val shadowHeightPx = with(density) { shadowHeight.toPx() }
-                val cornerRadiusPx = with(density) { cornerRadius.toPx() }
-                val topAlpha = if (separationShadowDark) 0.2f else 0.075f
-                val bottomAlpha = if (separationShadowDark) 0.36f else 0.15f
-                Canvas(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .widthIn(max = sheetMaxWidth)
-                        .fillMaxWidth()
-                        .height(shadowHeight + cornerRadius)
-                        .offset {
-                            IntOffset(
-                                x = 0,
-                                y = (effectiveSheetOffsetPx - shadowHeightPx).roundToInt(),
-                            )
-                        },
-                ) {
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.42f to Color.Black.copy(alpha = topAlpha),
-                            1f to Color.Black.copy(alpha = bottomAlpha),
-                        ),
-                        topLeft = Offset.Zero,
-                        size = Size(width = size.width, height = size.height + cornerRadiusPx),
-                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                    )
-                }
+            // On screens wider than a sheet, the sheet sits where the user last put it (dragging its
+            // handle sideways); every sheet opens there.
+            val paneLayout = LocalPaneLayout.current
+            val sheetWidthPx = if (sheetMaxWidth == Dp.Unspecified) {
+                constraints.maxWidth.toFloat()
+            } else {
+                min(constraints.maxWidth.toFloat(), with(density) { sheetMaxWidth.toPx() })
             }
+            val sheetFreeWidthPx = (constraints.maxWidth - sheetWidthPx).coerceAtLeast(0f)
+            val sheetMovable = !inPanel && sheetFreeWidthPx > 1f
+            val sheetXPx = if (sheetMovable) sheetFreeWidthPx * paneLayout.sheetPosition else 0f
 
             // Fold panels round only the corners next to the hinge.
             val panelShape = when {
@@ -646,6 +630,11 @@ internal fun KgsModalBottomSheet(
                                     )
                                 }
                                 .width(bookPaneWidth)
+                        } else if (sheetMovable) {
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .offset { IntOffset(x = sheetXPx.roundToInt(), y = 0) }
+                                .width(with(density) { sheetWidthPx.toDp() })
                         } else {
                             Modifier
                                 .align(Alignment.TopCenter)
@@ -680,13 +669,22 @@ internal fun KgsModalBottomSheet(
                         },
                     )
                     .then(
-                        if (separationShadow && !inPanel) {
-                            Modifier.shadow(
-                                elevation = if (separationShadowDark) 30.dp else 18.dp,
+                        if (!inPanel) {
+                            // A soft, blurred shadow around the whole sheet: no edge where it ends, also
+                            // beside a sheet narrower than the screen.
+                            Modifier.dropShadow(
                                 shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
-                                clip = false,
-                                ambientColor = Color.Black.copy(alpha = if (separationShadowDark) 0.24f else 0.13f),
-                                spotColor = Color.Black.copy(alpha = if (separationShadowDark) 0.28f else 0.17f),
+                                shadow = Shadow(
+                                    radius = if (separationShadow) 34.dp else 26.dp,
+                                    spread = 2.dp,
+                                    color = Color.Black,
+                                    alpha = when {
+                                        separationShadow && separationShadowDark -> 0.42f
+                                        separationShadow -> 0.2f
+                                        separationShadowDark -> 0.3f
+                                        else -> 0.14f
+                                    },
+                                ),
                             )
                         } else {
                             Modifier
@@ -749,7 +747,41 @@ internal fun KgsModalBottomSheet(
                     ) {
                         if (!inPanel) {
                             KgsSheetHandle(
-                                modifier = sheetHeaderModifier,
+                                modifier = if (sheetMovable) {
+                                    // Up and down as everywhere, and sideways where the screen is wider than the sheet.
+                                    Modifier
+                                        .pointerInput(screenHeightPx) {
+                                            detectTapGestures(onTap = { scope.launch { animateSheetTo(expandedAnchor) } })
+                                        }
+                                        .pointerInput(sheetFreeWidthPx) {
+                                            var velocityY = 0f
+                                            var lastNanos = 0L
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    velocityY = 0f
+                                                    lastNanos = System.nanoTime()
+                                                },
+                                                onDragEnd = {
+                                                    settleSheet(velocityY)
+                                                    paneLayout.commit()
+                                                },
+                                                onDragCancel = {
+                                                    settleSheet(0f)
+                                                    paneLayout.commit()
+                                                },
+                                            ) { change, amount ->
+                                                change.consume()
+                                                val now = System.nanoTime()
+                                                val seconds = ((now - lastNanos) / 1_000_000_000f).coerceAtLeast(0.001f)
+                                                lastNanos = now
+                                                velocityY = velocityY * 0.6f + (amount.y / seconds) * 0.4f
+                                                dragSheetBy(amount.y)
+                                                paneLayout.dragSheet(amount.x, sheetFreeWidthPx)
+                                            }
+                                        }
+                                } else {
+                                    sheetHeaderModifier
+                                },
                             )
                         }
                         Column(

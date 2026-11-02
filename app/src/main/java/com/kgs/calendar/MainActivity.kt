@@ -18,6 +18,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -77,8 +80,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Jetpack WindowManager reports the fold; the tabletop and book layouts read it as LocalFoldPosture.
             val foldFeatures by rememberWindowFoldFeatures()
+            val paneLayout = remember { paneLayoutPreferences() }
             ProvideFoldPosture(foldFeatures) {
-                KgsCalendarApp(viewModel = calendarViewModel)
+                CompositionLocalProvider(LocalPaneLayout provides paneLayout) {
+                    KgsCalendarApp(viewModel = calendarViewModel)
+                }
             }
         }
     }

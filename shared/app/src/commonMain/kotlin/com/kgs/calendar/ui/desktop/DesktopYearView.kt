@@ -73,6 +73,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import java.time.DayOfWeek
+import kotlin.math.roundToInt
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle as JavaTextStyle
@@ -445,6 +446,7 @@ private fun HiddenItemDots(hidden: List<MonthRowPillCandidate>, modifier: Modifi
         fontWeight = FontWeight.SemiBold,
     )
     val countColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val inkCenter = rememberCountInkCenter(measurer, countStyle)
     // Dots and count are drawn on one center line, so the count sits level with the dots.
     androidx.compose.foundation.Canvas(modifier) {
         val dot = YearDotSize.toPx()
@@ -452,7 +454,18 @@ private fun HiddenItemDots(hidden: List<MonthRowPillCandidate>, modifier: Modifi
         val (dots, rest) = hiddenDotLayout(hidden.size, size.width, dot, step) { count ->
             measurer.measure("+$count", countStyle).size.width.toFloat()
         }
-        val centerY = size.height / 2f
+        // The count is drawn at a whole-pixel offset, and the dots take the center of the ink it
+        // actually leaves there (measured once, see rememberCountInkCenter): one center line.
+        val layout = if (rest > 0) measurer.measure("+$rest", countStyle.copy(color = countColor)) else null
+        val textTop: Float
+        val centerY: Float
+        if (layout != null) {
+            textTop = (size.height / 2f - inkCenter).roundToInt().toFloat()
+            centerY = textTop + inkCenter
+        } else {
+            textTop = 0f
+            centerY = size.height / 2f
+        }
         hidden.take(dots).forEachIndexed { index, item ->
             val color = Color(item.color)
             val center = androidx.compose.ui.geometry.Offset(index * step + dot / 2f, centerY)
@@ -462,12 +475,42 @@ private fun HiddenItemDots(hidden: List<MonthRowPillCandidate>, modifier: Modifi
                 drawCircle(color, radius = dot / 2f, center = center)
             }
         }
-        if (rest > 0) {
-            val layout = measurer.measure("+$rest", countStyle.copy(color = countColor))
-            // Digits and "+" are centered on about half their cap height above the baseline.
-            val visualCenter = layout.firstBaseline - 8.sp.toPx() * 0.36f
-            drawText(layout, topLeft = androidx.compose.ui.geometry.Offset(dots * step, centerY - visualCenter))
+        if (layout != null) {
+            drawText(layout, topLeft = androidx.compose.ui.geometry.Offset((dots * step).roundToInt().toFloat(), textTop))
         }
+    }
+}
+
+/**
+ * How far below the top of its layout the ink of a count ("+8": the digits' full height) is
+ * centered, measured by drawing it once: font metrics alone don't say where the renderer puts it.
+ */
+@Composable
+private fun rememberCountInkCenter(measurer: androidx.compose.ui.text.TextMeasurer, style: TextStyle): Float {
+    val density = LocalDensity.current
+    return remember(style, density) {
+        val layout = measurer.measure("+8", style.copy(color = Color.Black))
+        val width = layout.size.width.coerceAtLeast(1)
+        val height = layout.size.height.coerceAtLeast(1)
+        val bitmap = androidx.compose.ui.graphics.ImageBitmap(width, height)
+        androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+            density,
+            androidx.compose.ui.unit.LayoutDirection.Ltr,
+            androidx.compose.ui.graphics.Canvas(bitmap),
+            androidx.compose.ui.geometry.Size(width.toFloat(), height.toFloat()),
+        ) { drawText(layout) }
+        val pixels = IntArray(width * height)
+        bitmap.readPixels(pixels)
+        var top = -1
+        var bottom = -1
+        for (y in 0 until height) {
+            val inked = (0 until width).any { x -> (pixels[y * width + x] ushr 24) > 110 }
+            if (inked) {
+                if (top < 0) top = y
+                bottom = y
+            }
+        }
+        if (top < 0) layout.firstBaseline - layout.size.height / 4f else (top + bottom + 1) / 2f
     }
 }
 

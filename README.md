@@ -69,7 +69,9 @@ years and lays out each month like a row of the month view. The seams between si
 task pane and the settings' two columns can be dragged; the sizes are kept in `layout.properties`
 in the data folder. Narrower windows use the phone layout.
 
-Search opens over the calendar's column, growing out of the toolbar's search field. The desktop
+Search opens over the calendar's column, growing out of the toolbar's search field. On screens
+wider than a sheet (desktop, tablets), sheets can be dragged sideways by their handle and open where
+they were left. Settings → Good to know explains such gestures with small animations. The desktop
 bundles Roboto (`desktopApp/src/jvmMain/resources/fonts`, SIL OFL), the Android app's font.
 
 Keyboard: Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, T today, Page Up/Down previous

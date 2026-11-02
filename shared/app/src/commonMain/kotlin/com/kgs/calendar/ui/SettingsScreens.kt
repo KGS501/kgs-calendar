@@ -102,6 +102,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Lightbulb
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
@@ -477,6 +478,13 @@ internal fun SettingsPage(
                     ) { openSection(SettingsDestination.Widgets) }
                 }
                 SettingsGroup {
+                    SettingsNavRow(
+                        title = stringResource(R.string.settings_good_to_know),
+                        subtitle = explanation(R.string.settings_good_to_know_summary),
+                        icon = Icons.Default.Lightbulb,
+                        iconColor = SettingsColors.GoodToKnow,
+                        selected = twoPane && openSectionDestination == SettingsDestination.GoodToKnow,
+                    ) { openSection(SettingsDestination.GoodToKnow) }
                     SettingsNavRow(
                         title = stringResource(R.string.recently_deleted),
                         subtitle = if (trashCount > 0) {
@@ -1429,6 +1437,7 @@ internal fun SettingsPage(
             // Its own list, see SettingsSubpages.
             SettingsDestination.RecentlyDeleted -> Unit
             SettingsDestination.KeyboardShortcuts -> shortcutBindings?.let { KeyboardShortcutsSettings(it) }
+            SettingsDestination.GoodToKnow -> GoodToKnowSettings()
         }
     }
     @Composable
@@ -1976,6 +1985,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
     SettingsDestination.RecentlyDeleted -> stringResource(R.string.recently_deleted)
     SettingsDestination.KeyboardShortcuts -> stringResource(R.string.settings_shortcuts)
+    SettingsDestination.GoodToKnow -> stringResource(R.string.settings_good_to_know)
 }
 
 @Composable
@@ -2029,6 +2039,7 @@ private object SettingsColors {
     val Bug = Color(0xFFA08A4E)
     val Privacy = Color(0xFF4E8A8C)
     val Shortcuts = Color(0xFF5A7CA0)
+    val GoodToKnow = Color(0xFFB8892E)
 }
 
 

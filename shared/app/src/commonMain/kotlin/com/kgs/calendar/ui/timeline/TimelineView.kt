@@ -293,7 +293,7 @@ internal fun TimelineView(
     val calendarWeekFontSize = headerPresentation.weekLabelFontSize
     var timelineRootOffset by remember { mutableStateOf(Offset.Zero) }
     var activeTimedDrag by remember { mutableStateOf<ActiveTimelineTimedDrag?>(null) }
-    var dayViewportWidthPx by remember { mutableStateOf(0) }
+    var rawDayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
     var timelineViewportHeightPx by remember { mutableStateOf(0) }
     val currentOnTimeScrollChanged = rememberUpdatedState(onTimeScrollChanged)
@@ -336,7 +336,6 @@ internal fun TimelineView(
     )
     val targetDayCount = if (isDayMode) 1 else multiDayCount
     val dayEndGutterPx = daySpacingPx
-    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
     // Animate the column COUNT as a float between 1 and the configured multi-day count. The pager's fixed page size is
     // derived from it for the steady states and the back-button morph; the header-tap morph
     // instead uses [morphContext] + the overlay so the tapped day can expand from ANY column
@@ -356,11 +355,22 @@ internal fun TimelineView(
     // the all-day band reflect the slide — e.g. a neighbour day's all-day chips stay rendered
     // while it slides out, instead of snapping to the destination count the instant the morph
     // starts.
+    // The days' area as wide as the pager: whole-pixel days rarely add up to the measured width,
+    // and the spare pixels (fewer than one per day) stay empty instead of showing the next day.
+    val dayViewportWidthPx = if (rawDayViewportWidthPx <= 0) {
+        0
+    } else {
+        val spacing = daySpacingPx.roundToInt()
+        val page = floor(rawDayViewportWidthPx / animatedDayCount - spacing).toInt().coerceAtLeast(with(density) { 32.dp.roundToPx() })
+        ceil(animatedDayCount * (page + spacing)).toInt().coerceAtMost(rawDayViewportWidthPx)
+    }
+    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
     val clampedDayCount = ceil(animatedDayCount).roundToInt().coerceIn(1, MAX_MULTI_DAY_COUNT)
     val dayWidthPx = ((dayGeometryViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
         .coerceAtLeast(with(density) { 32.dp.toPx() })
     val dayWidthDp = with(density) { dayWidthPx.toDp() }
-    val pagerDayWidthPx = with(density) { dayWidthDp.roundToPx().toFloat() }
+    // Whole pixels, rounded down like the pager's pages, so the days fill the pager exactly.
+    val pagerDayWidthPx = floor(dayWidthPx).coerceAtLeast(with(density) { 32.dp.toPx() })
     val pagerDayStepPx = pagerDayWidthPx + with(density) { DayColumnSpacing.roundToPx().toFloat() }
     // Derive the pager anchor from the active timeline policy, not visibleRange.startDate. The
     // loaded range is intentionally wider than the displayed window for morphs, so its start may
@@ -609,8 +619,10 @@ internal fun TimelineView(
             programmaticTargetPage = null
             return@LaunchedEffect
         }
-        if (selectedView == CalendarViewMode.Day &&
-            pagerState.currentPage == selectedPage &&
+        // A resized viewport (e.g. a desktop pane dragged wider) keeps the pager's offset as a
+        // fraction of the old page: snap back, so no sliver of the neighbouring day shows.
+        if (pagerState.currentPage == selectedPage &&
+            !pagerState.isScrollInProgress &&
             abs(pagerState.currentPageOffsetFraction) > 0.001f
         ) {
             programmaticTargetPage = selectedPage
@@ -865,12 +877,13 @@ internal fun TimelineView(
     }
     val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Unit>(
         newValue = dragStart@ { start ->
-            if (morphContext != null || dayWidthPx <= 0f) return@dragStart
+            if (morphContext != null || pagerDayWidthPx <= 0f) return@dragStart
             val firstPage = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
             val anchorPage = firstPage?.index ?: pagerState.currentPage
             val anchorOffsetPx = firstPage?.offset?.toFloat() ?: 0f
             val sidebarWidthPx = with(density) { TimeSidebarWidth.toPx() }
-            val dayStepPx = dayWidthPx + daySpacingPx
+            // The pager's whole-pixel days, so a dragged card stays on the columns it crosses.
+            val dayStepPx = pagerDayStepPx
             val rootOrigin = TimelineDragPoint(timelineRootOffset.x, timelineRootOffset.y)
             val sourcePageLeft = sidebarWidthPx + anchorOffsetPx +
                 (start.item.sourceDate.toDayPage() - anchorPage) * dayStepPx
@@ -879,7 +892,7 @@ internal fun TimelineView(
                 rootOrigin = rootOrigin,
                 anchorPage = anchorPage,
                 anchorOffsetPx = anchorOffsetPx,
-                dayWidthPx = dayWidthPx,
+                dayWidthPx = pagerDayWidthPx,
                 dayStepPx = dayStepPx,
                 sidebarWidthPx = sidebarWidthPx,
                 dayHeaderHeightPx = with(density) { animatedDayHeaderHeight.toPx() },
@@ -1070,7 +1083,7 @@ internal fun TimelineView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .onSizeChanged { dayViewportWidthPx = it.width },
+                    .onSizeChanged { rawDayViewportWidthPx = it.width },
             ) {
             // Enable per-item (event/task) morphs out of the month cell only for the real pager in
             // 1-day mode and only when NOT doing the 3-day affine morph — so the selected day's
@@ -1091,7 +1104,7 @@ internal fun TimelineView(
                 pageSize = remember(animatedDayCount) {
                     object : PageSize {
                         override fun Density.calculateMainAxisPageSize(availableSpace: Int, pageSpacing: Int): Int =
-                            (availableSpace / animatedDayCount - pageSpacing).roundToInt()
+                            floor(availableSpace / animatedDayCount - pageSpacing).toInt()
                                 .coerceAtLeast(32.dp.roundToPx())
                     }
                 },
@@ -1104,6 +1117,16 @@ internal fun TimelineView(
                 // morph plays — the affine overlay below renders that transition instead.
                 modifier = Modifier
                     .fillMaxSize()
+                    // Whole-pixel pages rarely add up to the viewport: the pager is exactly as wide
+                    // as its days, so no sliver of the next day shows; the few spare pixels stay empty.
+                    .layout { measurable, constraints ->
+                        val spacing = DayColumnSpacing.roundToPx()
+                        val page = floor(constraints.maxWidth / animatedDayCount - spacing).toInt()
+                            .coerceAtLeast(32.dp.roundToPx())
+                        val width = ceil(animatedDayCount * (page + spacing)).toInt().coerceAtMost(constraints.maxWidth)
+                        val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+                        layout(constraints.maxWidth, placeable.height) { placeable.place(0, 0) }
+                    }
                     .zIndex(1f)
                     .alpha(if (morphContext != null) 0f else 1f)
                     .mouseDragScroll(pagerState, Orientation.Horizontal, pagerFlingBehavior),

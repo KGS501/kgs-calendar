@@ -14,6 +14,7 @@ class PaneLayoutStore(private val file: File) {
             tasksPaneWidthDp = float("tasksPaneWidth", PaneLayoutPreferences.DefaultTasksPaneWidthDp),
             tasksPanePinned = values.getProperty("tasksPanePinned") == "true",
             settingsListFraction = float("settingsListFraction", PaneLayoutPreferences.DefaultSettingsListFraction),
+            sheetPosition = float("sheetPosition", PaneLayoutPreferences.DefaultSheetPosition),
             onChanged = ::save,
         )
     }
@@ -24,6 +25,7 @@ class PaneLayoutStore(private val file: File) {
         values["tasksPaneWidth"] = layout.tasksPaneWidthDp.toString()
         values["tasksPanePinned"] = layout.tasksPanePinned.toString()
         values["settingsListFraction"] = layout.settingsListFraction.toString()
+        values["sheetPosition"] = layout.sheetPosition.toString()
         runCatching {
             file.parentFile?.mkdirs()
             file.outputStream().use { values.store(it, null) }

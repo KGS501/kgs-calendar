@@ -1321,9 +1321,11 @@ private fun AgendaDynamicTopHeader(
                     background.copy(alpha = calendarInformationChrome.agendaStickyHeaderAlpha),
                 ),
         )
+        // Covers only the date column: the gap before the cards stays open, so a pulsing
+        // priority card can grow and glow past its left edge without being cut.
         Box(
             modifier = Modifier
-                .width(informationStart)
+                .width(18.dp + agendaChronologyPresentation.eventGutterWidth)
                 .fillMaxHeight()
                 .background(
                     background.copy(alpha = calendarInformationChrome.agendaStickyHeaderAlpha),

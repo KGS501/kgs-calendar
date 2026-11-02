@@ -47,6 +47,7 @@ class PaneLayoutPreferences(
     tasksPaneWidthDp: Float = DefaultTasksPaneWidthDp,
     tasksPanePinned: Boolean = false,
     settingsListFraction: Float = DefaultSettingsListFraction,
+    sheetPosition: Float = DefaultSheetPosition,
     private val onChanged: (PaneLayoutPreferences) -> Unit = {},
 ) {
     var sidebarWidthDp by mutableFloatStateOf(sidebarWidthDp.coerceIn(SidebarWidthRangeDp))
@@ -54,6 +55,17 @@ class PaneLayoutPreferences(
     var tasksPanePinned by mutableStateOf(tasksPanePinned)
         private set
     var settingsListFraction by mutableFloatStateOf(settingsListFraction.coerceIn(SettingsListFractionRange))
+
+    /**
+     * Where bottom sheets sit on screens wider than a sheet: 0 at the left edge, 1 at the right,
+     * 0.5 centered. Dragging a sheet's handle sideways moves it; every sheet opens there.
+     */
+    var sheetPosition by mutableFloatStateOf(sheetPosition.coerceIn(0f, 1f))
+
+    fun dragSheet(deltaPx: Float, freeWidthPx: Float) {
+        if (freeWidthPx <= 0f) return
+        sheetPosition = (sheetPosition + deltaPx / freeWidthPx).coerceIn(0f, 1f)
+    }
 
     fun dragSidebar(deltaDp: Float) {
         sidebarWidthDp = (sidebarWidthDp + deltaDp).coerceIn(SidebarWidthRangeDp)
@@ -81,6 +93,7 @@ class PaneLayoutPreferences(
         const val DefaultSidebarWidthDp = 296f
         const val DefaultTasksPaneWidthDp = 336f
         const val DefaultSettingsListFraction = 0.4f
+        const val DefaultSheetPosition = 0.5f
         val SidebarWidthRangeDp = 248f..420f
         val TasksPaneWidthRangeDp = 280f..520f
         val SettingsListFractionRange = 0.28f..0.6f

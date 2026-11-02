@@ -146,8 +146,11 @@ fun MorphingDropdown(
             popupDrawsButton = false
         }
     }
+    // The popup lives inside the button's box: as a sibling it would be one more item in the
+    // button's row, and a row with spacing would move the button aside while the menu is open.
+    Box(modifier = modifier, propagateMinConstraints = true) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .onGloballyPositioned { coordinates ->
                 val topLeft = coordinates.positionOnScreen()
                 buttonBounds = Rect(topLeft, Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()))
@@ -186,6 +189,7 @@ fun MorphingDropdown(
                 menu = menu,
             )
         }
+    }
     }
 }
 

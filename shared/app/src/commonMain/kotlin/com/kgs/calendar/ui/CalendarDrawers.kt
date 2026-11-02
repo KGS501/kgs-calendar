@@ -7,6 +7,8 @@ import com.kgs.calendar.ui.theme.LocalAppFontFamily
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -817,10 +819,19 @@ private fun TaskSidebarContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
-            }
+            // One word that shrinks to fit a narrow sidebar rather than breaking.
+            BasicText(
+                stringResource(R.string.tasks),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    color = WarmInk,
+                    fontSize = 21.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 21.sp, stepSize = 0.5.sp),
+                modifier = Modifier.weight(1f),
+            )
             if (onPinnedChange != null) {
                 // Pinned, the sidebar stays beside the calendar like the left one.
                 // Active, only the pin itself takes the accent color.
