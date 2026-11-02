@@ -2,8 +2,17 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -197,7 +206,7 @@ internal fun CalendarDrawer(
                             fontSize = 22.sp,
                             lineHeight = 25.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.SansSerif,
+                            fontFamily = LocalAppFontFamily.current ?: FontFamily.SansSerif,
                             color = WarmInk,
                         )
                     }
@@ -630,6 +639,7 @@ internal fun TaskDrawer(
     onCreateTask: () -> Unit,
     /** Pins the sidebar as a permanent pane (the desktop); null where it can't be pinned. */
     onPin: (() -> Unit)? = null,
+    completedInline: Boolean = false,
 ) {
     val drawerProgress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -702,6 +712,7 @@ internal fun TaskDrawer(
                 onCreateTask = onCreateTask,
                 pinned = false,
                 onPinnedChange = onPin?.let { pin -> { pinned: Boolean -> if (pinned) pin() } },
+                completedInline = completedInline,
             )
         }
     }
@@ -723,6 +734,7 @@ internal fun TaskPane(
     showDivider: Boolean = true,
     pinned: Boolean = false,
     onPinnedChange: ((Boolean) -> Unit)? = null,
+    completedInline: Boolean = false,
 ) {
     Surface(
         modifier = modifier
@@ -740,6 +752,7 @@ internal fun TaskPane(
                 onCreateTask = onCreateTask,
                 pinned = pinned,
                 onPinnedChange = onPinnedChange,
+                completedInline = completedInline,
             )
             if (showDivider) Box(
                 modifier = Modifier
@@ -764,8 +777,34 @@ private fun TaskSidebarContent(
     onCreateTask: () -> Unit,
     pinned: Boolean = false,
     onPinnedChange: ((Boolean) -> Unit)? = null,
+    /** The completed tasks open inside the sidebar (the desktop) instead of as their own page. */
+    completedInline: Boolean = false,
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var showingCompleted by remember { mutableStateOf(false) }
+    AnimatedContent(
+        targetState = completedInline && showingCompleted,
+        transitionSpec = {
+            val forward = targetState
+            (slideInHorizontally(tween(MotionMedium, easing = MotionEmphasized)) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(MotionMedium))) togetherWith
+                (slideOutHorizontally(tween(MotionShort, easing = MotionStandardAccelerate)) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(MotionShort)))
+        },
+        label = "taskSidebarCompleted",
+    ) { completed ->
+    if (completed) {
+        CompletedTasksView(
+            tasks = remember(state.taskHierarchyTasks) {
+                state.taskHierarchyTasks.partitionByRootActivity().inactiveRootTasks
+            },
+            taskColorMode = state.taskColorMode,
+            subtasksExpandedByDefault = state.subtasksExpandedByDefault,
+            onTaskStatusChanged = onTaskStatusChanged,
+            onTaskClick = onTaskClick,
+            onClose = { showingCompleted = false },
+            embedded = true,
+        )
+        return@AnimatedContent
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -784,17 +823,20 @@ private fun TaskSidebarContent(
             }
             if (onPinnedChange != null) {
                 // Pinned, the sidebar stays beside the calendar like the left one.
+                // Active, only the pin itself takes the accent color.
+                val pinTint by animateColorAsState(
+                    targetValue = if (pinned) WarmBrown else WarmInk,
+                    animationSpec = tween(MotionMedium, easing = MotionStandard),
+                    label = "taskPinTint",
+                )
                 IconButton(
                     onClick = { onPinnedChange(!pinned) },
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(if (pinned) accentContainerColor() else Color.Transparent),
+                    modifier = Modifier.size(38.dp),
                 ) {
                     Icon(
                         if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                         contentDescription = stringResource(if (pinned) R.string.desktop_unpin_tasks else R.string.desktop_pin_tasks),
-                        tint = if (pinned) accentContainerContentColor() else WarmInk,
+                        tint = pinTint,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -820,7 +862,12 @@ private fun TaskSidebarContent(
             onDetail = { detail ->
                 if (detail is DetailSheet.Task) onTaskClick(detail.task)
             },
-            onShowCompleted = onShowCompleted,
+            onShowCompleted = if (completedInline) {
+                { showingCompleted = true }
+            } else {
+                onShowCompleted
+            },
         )
+    }
     }
 }

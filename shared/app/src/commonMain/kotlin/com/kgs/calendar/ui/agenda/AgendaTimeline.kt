@@ -1,9 +1,12 @@
 package com.kgs.calendar.ui.agenda
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import java.time.ZoneId
 import com.kgs.calendar.ui.model.isOngoingOn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -263,13 +266,15 @@ internal fun AgendaTimeline(
     }
     val taskHierarchy = rememberTaskHierarchyPresentation(emptyList(), expandedByDefault = false)
 
-    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    val listMaxWidth = largeScreenMaxWidth(ListContentMaxWidth)
+    // The list spans its pane so it scrolls from anywhere; its content stays centred on wide screens.
+    // The pane can be narrower than the window (the desktop's sidebars), so it measures itself.
+    BoxWithConstraints(modifier.fillMaxSize()) {
     val listSidePadding = centeredContentPadding(
-        availableWidth = currentCalendarWindowLayout().widthDp.dp,
-        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+        availableWidth = maxWidth,
+        maxWidth = listMaxWidth,
         basePadding = 18.dp,
     )
-    Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -310,6 +315,7 @@ internal fun AgendaTimeline(
                                     .heightIn(min = agendaDateStackHeight)
                                     .padding(start = 62.dp, top = 18.dp),
                                 style = androidx.compose.ui.text.TextStyle(
+                                    fontFamily = LocalAppFontFamily.current,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 16.sp,
                                     lineHeight = 20.sp,
@@ -343,7 +349,7 @@ internal fun AgendaTimeline(
             topSpacing = headerTopSpacing,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
+                .centeredMaxWidth(listMaxWidth),
         )
     }
 }

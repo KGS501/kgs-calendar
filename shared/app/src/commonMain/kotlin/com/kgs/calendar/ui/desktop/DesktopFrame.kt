@@ -6,6 +6,12 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -45,10 +51,12 @@ internal fun DesktopFrame(
     onCreateEvent: () -> Unit,
     onCreateTask: () -> Unit,
     onCreateTaskInPane: () -> Unit,
+    onCloseSearch: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val panes = LocalPaneLayout.current
     val yearViewOpen = shell.yearViewOpen
+    var searchAnchor by remember { mutableStateOf<Rect?>(null) }
     fun showDate(date: LocalDate) {
         viewModel.selectDate(date)
         shell.requestDate(date)
@@ -70,12 +78,15 @@ internal fun DesktopFrame(
             modifier = Modifier.width(panes.sidebarWidthDp.dp),
         )
         PaneSeam(onDrag = panes::dragSidebar, onDragEnd = panes::commit)
-        Column(Modifier.weight(1f)) {
+        Box(Modifier.weight(1f)) {
+        Column(Modifier.fillMaxSize()) {
             DesktopToolbar(
                 state = state,
                 yearViewOpen = yearViewOpen,
                 tasksNeedAttention = tasksNeedAttention,
                 tasksPinned = panes.tasksPanePinned,
+                searchOpen = shell.searchOpen,
+                onSearchBounds = { searchAnchor = it },
                 onStep = { direction -> showDate(state.steppedDate(direction, yearViewOpen)) },
                 onToday = {
                     viewModel.today()
@@ -99,6 +110,16 @@ internal fun DesktopFrame(
             )
             content()
         }
+            // The search covers the calendar's column; the sidebars stay usable beside it.
+            DesktopSearchPanel(
+                visible = shell.searchOpen,
+                anchor = searchAnchor,
+                viewModel = viewModel,
+                state = state,
+                shell = shell,
+                onClose = onCloseSearch,
+            )
+        }
         AnimatedVisibility(
             visible = panes.tasksPanePinned,
             enter = expandHorizontally(tween(MotionMedium, easing = MotionEmphasized), expandFrom = Alignment.Start) + fadeIn(tween(MotionMedium)),
@@ -115,6 +136,7 @@ internal fun DesktopFrame(
                     showDivider = false,
                     pinned = true,
                     onPinnedChange = panes::pinTasksPane,
+                    completedInline = true,
                     modifier = Modifier.width(panes.tasksPaneWidthDp.dp),
                 )
             }

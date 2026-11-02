@@ -124,9 +124,38 @@ fun SharedCalendarTheme(
     val tokens = remember(colors, themeMode, priorityAnimationsEnabled) {
         CalendarUiTokens.forTheme(colors, themeMode, priorityAnimationsEnabled)
     }
-    MaterialTheme(colorScheme = colors, typography = Typography()) {
+    val fontFamily = LocalAppFontFamily.current
+    val typography = remember(fontFamily) { Typography().withFontFamily(fontFamily) }
+    MaterialTheme(colorScheme = colors, typography = typography) {
         CompositionLocalProvider(LocalCalendarUiTokens provides tokens, content = content)
     }
+}
+
+/**
+ * The app's typeface where the platform's own is not the one the app is designed with: the desktop
+ * brings Roboto, the font of the Android app. Null keeps the platform's default font.
+ */
+val LocalAppFontFamily = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.font.FontFamily?> { null }
+
+private fun Typography.withFontFamily(family: androidx.compose.ui.text.font.FontFamily?): Typography {
+    if (family == null) return this
+    return Typography(
+        displayLarge = displayLarge.copy(fontFamily = family),
+        displayMedium = displayMedium.copy(fontFamily = family),
+        displaySmall = displaySmall.copy(fontFamily = family),
+        headlineLarge = headlineLarge.copy(fontFamily = family),
+        headlineMedium = headlineMedium.copy(fontFamily = family),
+        headlineSmall = headlineSmall.copy(fontFamily = family),
+        titleLarge = titleLarge.copy(fontFamily = family),
+        titleMedium = titleMedium.copy(fontFamily = family),
+        titleSmall = titleSmall.copy(fontFamily = family),
+        bodyLarge = bodyLarge.copy(fontFamily = family),
+        bodyMedium = bodyMedium.copy(fontFamily = family),
+        bodySmall = bodySmall.copy(fontFamily = family),
+        labelLarge = labelLarge.copy(fontFamily = family),
+        labelMedium = labelMedium.copy(fontFamily = family),
+        labelSmall = labelSmall.copy(fontFamily = family),
+    )
 }
 
 fun calendarColorScheme(themeMode: AppThemeMode, darkTheme: Boolean, dynamicColors: ColorScheme? = null): ColorScheme =

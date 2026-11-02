@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import com.kgs.calendar.ui.platform.colorToHsv
 import com.kgs.calendar.ui.platform.rememberPlatformServices
 import com.kgs.calendar.ui.platform.rememberLocationPermissionRequest
@@ -299,7 +301,7 @@ private fun CompactSearchField(
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val textStyle = TextStyle(color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
+    val textStyle = TextStyle(fontFamily = LocalAppFontFamily.current, color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
     val focusManager = LocalFocusManager.current
     BasicTextField(
         value = value,

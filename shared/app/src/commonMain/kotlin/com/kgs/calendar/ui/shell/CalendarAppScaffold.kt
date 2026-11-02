@@ -214,6 +214,7 @@ internal fun CalendarAppScaffold(
                         onCreateEvent = { onCreateEvent(state.defaultFabCreationDate()) },
                         onCreateTask = { onCreateTask(state.defaultFabCreationDate(), true, SheetOrigin.Calendar) },
                         onCreateTaskInPane = { onCreateTask(today, false, SheetOrigin.Calendar) },
+                        onCloseSearch = onCloseSearch,
                         content = calendarShell,
                     )
                 } else {
@@ -308,6 +309,7 @@ internal fun CalendarAppScaffold(
                 onCreateTask = {
                     onCreateTask(today, false, SheetOrigin.Calendar)
                 },
+                completedInline = desktop,
                 onPin = if (desktop) {
                     {
                         shell.closeTaskDrawer()
@@ -317,7 +319,8 @@ internal fun CalendarAppScaffold(
                     null
                 },
             )
-            CalendarSearchOverlay(
+            // The desktop searches in the calendar's column (DesktopSearchPanel).
+            if (!desktop) CalendarSearchOverlay(
                 visible = shell.searchOpen,
                 query = renderState.searchQuery,
                 searchMode = renderState.searchMode,

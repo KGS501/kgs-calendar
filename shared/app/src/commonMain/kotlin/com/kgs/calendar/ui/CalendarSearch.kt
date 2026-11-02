@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -83,6 +84,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
@@ -253,12 +255,13 @@ private fun CalendarSearchMode.icon(): ImageVector = when (this) {
  * each opening a menu. Calendars can be picked several at a time.
  */
 @Composable
-private fun SearchOptionsBar(
+internal fun SearchOptionsBar(
     searchMode: CalendarSearchMode,
     onSearchModeChange: (CalendarSearchMode) -> Unit,
     calendars: List<CollectionEntity>,
     selectedCalendars: Set<String>?,
     onSelectedCalendarsChange: (Set<String>?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val labels = mapOf(
         CalendarSearchMode.Text to stringResource(R.string.search_scope_text),
@@ -273,7 +276,7 @@ private fun SearchOptionsBar(
     var calendarMenuOpen by remember { mutableStateOf(false) }
     // The chips share one line: the calendar chip shrinks, with its label shortened, to fit.
     Row(
-        modifier = Modifier
+        modifier = modifier
             .testTag("search-options-bar")
             .fillMaxWidth()
             .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
@@ -520,33 +523,7 @@ private fun CalendarColorDot(color: Color, filled: Boolean) {
 
 @Composable
 private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    val focusRequester = remember { FocusRequester() }
-    var focused by remember { mutableStateOf(false) }
-    var editorValue by remember {
-        mutableStateOf(
-            TextFieldValue(
-                text = query,
-                selection = TextRange(query.length),
-            ),
-        )
-    }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-    LaunchedEffect(query, focused) {
-        if (!focused && query.isEmpty() && editorValue.text.isNotEmpty()) {
-            editorValue = TextFieldValue("")
-        }
-    }
-    LaunchedEffect(editorValue.text) {
-        delay(searchTypingDelayMillis(editorValue.text))
-        if (editorValue.text != query) {
-            onQueryChange(editorValue.text)
-        }
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -561,6 +538,51 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
         IconButton(onClick = onClose, modifier = Modifier.size(38.dp)) {
             Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
         }
+        SearchQueryField(query = query, onQueryChange = onQueryChange, fontSize = 22.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * The search's text field, focused when it appears, with a clear button while it holds text. It
+ * hands the text on after a short typing pause.
+ */
+@Composable
+internal fun SearchQueryField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    fontSize: TextUnit,
+    modifier: Modifier = Modifier,
+    clearButtonSize: Dp = 38.dp,
+    /** Whether "Search" stays in the empty field while the cursor is in it. */
+    placeholderWhileFocused: Boolean = false,
+) {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
+    var editorValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = query,
+                selection = TextRange(query.length),
+            ),
+        )
+    }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    LaunchedEffect(query, focused) {
+        if (!focused && query.isEmpty() && editorValue.text.isNotEmpty()) {
+            editorValue = TextFieldValue("")
+        }
+    }
+    LaunchedEffect(editorValue.text) {
+        delay(searchTypingDelayMillis(editorValue.text))
+        if (editorValue.text != query) {
+            onQueryChange(editorValue.text)
+        }
+    }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         BasicTextField(
             value = editorValue,
             onValueChange = { changed ->
@@ -569,21 +591,26 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             singleLine = true,
             textStyle = MaterialTheme.typography.headlineSmall.copy(
                 color = WarmInk,
-                fontSize = 22.sp,
-                lineHeight = 26.sp,
+                fontSize = fontSize,
+                lineHeight = fontSize * 1.2f,
                 fontWeight = FontWeight.Normal,
             ),
             modifier = Modifier
                 .testTag("search-query-field")
                 .weight(1f)
-                .fillMaxWidth()
                 .focusRequester(focusRequester)
                 .onFocusChanged { focused = it.isFocused },
             cursorBrush = SolidColor(WarmBrown),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (editorValue.text.isBlank() && !focused) {
-                        Text(stringResource(R.string.search), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 22.sp, lineHeight = 26.sp)
+                    if (editorValue.text.isBlank() && (placeholderWhileFocused || !focused)) {
+                        Text(
+                            stringResource(R.string.search),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = fontSize,
+                            lineHeight = fontSize * 1.2f,
+                            maxLines = 1,
+                        )
                     }
                     innerTextField()
                 }
@@ -591,7 +618,7 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
         )
         if (editorValue.text.isNotEmpty()) {
             ClearTextButton(
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(clearButtonSize),
                 onClick = {
                     editorValue = TextFieldValue("")
                     onQueryChange("")
@@ -979,14 +1006,15 @@ internal fun SearchResultsList(
         }
     }
 
-    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    // The list spans its pane so it scrolls from anywhere; its content stays centred on wide screens.
+    val listMaxWidth = largeScreenMaxWidth(ListContentMaxWidth)
+    val proMode = LocalProMode.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
     val listSidePadding = centeredContentPadding(
-        availableWidth = currentCalendarWindowLayout().widthDp.dp,
-        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+        availableWidth = maxWidth,
+        maxWidth = listMaxWidth,
         basePadding = 18.dp,
     )
-    val proMode = LocalProMode.current
-    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
         modifier = Modifier

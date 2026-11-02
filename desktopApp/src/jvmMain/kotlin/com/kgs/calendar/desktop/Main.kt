@@ -31,11 +31,13 @@ import com.kgs.calendar.ui.KgsCalendarApp
 import com.kgs.calendar.ui.desktop.CalendarChrome
 import com.kgs.calendar.ui.desktop.LocalCalendarChrome
 import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
 import com.kgs.calendar.ui.platform.DesktopShortcuts
 import com.kgs.calendar.ui.platform.LocalBackDispatcher
 import com.kgs.calendar.ui.platform.LocalDesktopShortcuts
+import com.kgs.calendar.ui.platform.LocalShortcutBindings
 import com.kgs.calendar.ui.platform.LocalWindowChrome
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
@@ -57,6 +59,7 @@ fun main(args: Array<String>) {
     val graph = DesktopGraph(dataDirectory(args))
     val placementStore = WindowPlacementStore(File(graph.dataDirectory, "window.properties"))
     val paneLayout = PaneLayoutStore(File(graph.dataDirectory, "layout.properties")).restore()
+    val shortcutBindings = ShortcutStore(File(graph.dataDirectory, "shortcuts.properties")).restore()
     // Demo items only ever go into a separate, empty profile.
     if ("--demo" in args && "--data-dir" in args) {
         runBlocking {
@@ -66,7 +69,7 @@ fun main(args: Array<String>) {
     application {
         val viewModel = remember { graph.createViewModel() }
         val backDispatcher = remember { BackDispatcher() }
-        val shortcuts = remember { DesktopShortcuts() }
+        val shortcuts = remember { DesktopShortcuts(shortcutBindings) }
         val trayState = rememberTrayState()
         val windowState = remember { placementStore.restore() }
         val icon = painterResource("kgs_logo.png")
@@ -133,6 +136,8 @@ fun main(args: Array<String>) {
                 LocalDesktopShortcuts provides shortcuts,
                 LocalCalendarChrome provides CalendarChrome.Desktop,
                 LocalPaneLayout provides paneLayout,
+                LocalAppFontFamily provides RobotoFontFamily,
+                LocalShortcutBindings provides shortcutBindings,
             ) {
                 Box(
                     Modifier

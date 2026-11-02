@@ -30,6 +30,8 @@ internal enum class SettingsDestination {
     TaskFieldOrder,
     /** "Recently deleted" beside the main page in two columns; on its own it is a page of its own. */
     RecentlyDeleted,
+    /** The desktop's keyboard shortcuts. */
+    KeyboardShortcuts,
 }
 
 internal sealed interface CreationSheet {

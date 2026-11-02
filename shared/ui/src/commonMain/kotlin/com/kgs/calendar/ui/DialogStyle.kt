@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -83,7 +85,7 @@ fun KgsAlertDialog(
         properties = WideDialogProperties,
         dismissButton = dismissButton,
         title = title?.let { content ->
-            { ProvideTextStyle(DialogTitleStyle) { content() } }
+            { ProvideTextStyle(DialogTitleStyle.copy(fontFamily = LocalAppFontFamily.current)) { content() } }
         },
         text = text,
         shape = DialogShape,

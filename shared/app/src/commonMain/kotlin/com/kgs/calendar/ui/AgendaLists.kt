@@ -608,6 +608,8 @@ internal fun CompletedTasksView(
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    /** Inside the task sidebar rather than a page of its own. */
+    embedded: Boolean = false,
 ) {
     BackHandler(enabled = true) { onClose() }
     var query by rememberSaveable { mutableStateOf("") }
@@ -633,7 +635,7 @@ internal fun CompletedTasksView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = statusTop),
+                .padding(top = if (embedded) statusTop + 18.dp else statusTop),
         ) {
             Row(
                 modifier = Modifier

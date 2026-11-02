@@ -69,10 +69,14 @@ years and lays out each month like a row of the month view. The seams between si
 task pane and the settings' two columns can be dragged; the sizes are kept in `layout.properties`
 in the data folder. Narrower windows use the phone layout.
 
+Search opens over the calendar's column, growing out of the toolbar's search field. The desktop
+bundles Roboto (`desktopApp/src/jvmMain/resources/fonts`, SIL OFL), the Android app's font.
+
 Keyboard: Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, T today, Page Up/Down previous
 and next range, ←/→ a day in the multi-day view (a range elsewhere), ↑/↓ a row in the month and
 year views, D/W/M/Y/A day, multi-day, month, year and agenda, +/− days shown, F5 refresh,
-Escape back.
+Escape back. All but the arrows and Escape can be changed under Settings → Keyboard shortcuts
+(kept in `shortcuts.properties`).
 
 On Windows, a few host tests fail on `main` as well: the DataStore tests that open a second
 store on the same file (Windows can't rename over an open file) and a DNS-timing outage test.

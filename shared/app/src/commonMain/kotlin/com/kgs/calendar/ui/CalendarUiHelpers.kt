@@ -1243,7 +1243,18 @@ internal fun monthMarkersFor(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     taskColorMode: TaskColorMode,
-): Map<LocalDate, MonthDayMarkers> {
+): Map<LocalDate, MonthDayMarkers> =
+    monthMarkerColors(month, events, tasks, taskColorMode).mapValues { (_, colors) ->
+        MonthDayMarkers(colors = colors.take(3), hasMore = colors.size > 3)
+    }
+
+/** The colors of every item of each day of [month], events first, in their order. */
+internal fun monthMarkerColors(
+    month: YearMonth,
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+    taskColorMode: TaskColorMode,
+): Map<LocalDate, List<Int>> {
     val first = month.atDay(1)
     val last = month.atEndOfMonth()
     val colorsByDay = linkedMapOf<LocalDate, MutableList<Int>>()
@@ -1271,9 +1282,7 @@ internal fun monthMarkersFor(
             .forEach { addMarker(it, task.displayColor(taskColorMode)) }
     }
 
-    return colorsByDay.mapValues { (_, colors) ->
-        MonthDayMarkers(colors = colors.take(3), hasMore = colors.size > 3)
-    }
+    return colorsByDay
 }
 
 private fun String.toDisplayDate(): String = runCatching {

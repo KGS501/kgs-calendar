@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import com.kgs.calendar.ui.platform.mouseDragScroll
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -1899,7 +1901,7 @@ private fun TimeSidebar(hours: IntRange, hourHeightDp: Float) {
             .height((hourHeightDp * hourCount).dp),
     ) {
         val textMeasurer = rememberTextMeasurer()
-        val labelStyle = TextStyle(color = textColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        val labelStyle = TextStyle(fontFamily = LocalAppFontFamily.current, color = textColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         val labels = remember(hours, labelStyle, textMeasurer) {
             hours.map { hour -> textMeasurer.measure("%02d:00".format(hour), labelStyle) }
         }

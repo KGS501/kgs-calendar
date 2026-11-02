@@ -49,6 +49,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import com.kgs.calendar.ui.blendWith
 import com.kgs.calendar.ui.accentContainerContentColor
@@ -131,9 +134,10 @@ internal fun CalendarUiState.visibleDays(yearViewOpen: Boolean): ClosedRange<Loc
 }
 
 /**
- * The desktop toolbar: back, today and forward as three round buttons with the shown period
- * beside them on the left, search in the middle, and the views, "create" and the tasks on the
- * right. It replaces the phone's toolbar and month drop-down.
+ * The desktop toolbar: back, today and forward as three round buttons on the left, search in the
+ * middle, and the views, "create" and the tasks on the right. The sidebar's month names the shown
+ * period, so the toolbar doesn't. The search field hides while the search is open: it has become
+ * the search's own field ([onSearchBounds] tells where it is, for that morph).
  */
 @Composable
 internal fun DesktopToolbar(
@@ -141,25 +145,23 @@ internal fun DesktopToolbar(
     yearViewOpen: Boolean,
     tasksNeedAttention: Boolean,
     tasksPinned: Boolean,
+    searchOpen: Boolean,
     onStep: (Int) -> Unit,
     onToday: () -> Unit,
     onViewSelected: (DesktopView) -> Unit,
     onSearch: () -> Unit,
+    onSearchBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
     onTasks: () -> Unit,
     onCreateEvent: () -> Unit,
     onCreateTask: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val locale = LocalAppLocale.current
     BoxWithConstraints(modifier = modifier.fillMaxWidth().height(DesktopToolbarHeight)) {
         // Narrower windows get narrower view segments and an icon-only create button first.
-        val wide = maxWidth >= 1100.dp
-        val segmentWidth = if (maxWidth >= 1200.dp) 66.dp else 60.dp
+        val wide = maxWidth >= 1000.dp
+        val segmentWidth = if (maxWidth >= 1150.dp) 66.dp else 60.dp
         // Beside a pinned task pane or in a small window the views become a drop-down.
-        val compact = maxWidth < 900.dp
-        val title = remember(state.selectedDate, state.selectedView, state.multiDayCount, state.weekViewEnabled, yearViewOpen, locale) {
-            state.desktopTitle(yearViewOpen, locale)
-        }
+        val compact = maxWidth < 760.dp
         DesktopToolbarLayout(
             modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
             navigation = {
@@ -176,28 +178,16 @@ internal fun DesktopToolbar(
                     }
                 }
             },
-            title = {
-                AnimatedContent(
-                    targetState = title,
-                    transitionSpec = {
-                        (slideInVertically(tween(MotionMedium, easing = MotionEmphasized)) { it / 3 } + fadeIn(tween(MotionShort))) togetherWith
-                            (slideOutVertically(tween(MotionShort, easing = MotionStandard)) { -it / 3 } + fadeOut(tween(MotionShort)))
-                    },
-                    label = "desktopTitle",
-                ) { text ->
-                    Text(
-                        text,
-                        color = WarmInk,
-                        fontSize = 22.sp,
-                        lineHeight = 28.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            search = {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { onSearchBounds(it.boundsInRoot()) }
+                        .graphicsLayer { alpha = if (searchOpen) 0f else 1f },
+                ) {
+                    SearchField(onClick = onSearch)
                 }
             },
-            search = { SearchField(onClick = onSearch) },
             actions = {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val weekLabel = stringResource(if (state.weekViewEnabled) R.string.week else R.string.desktop_days, state.multiDayCount)
@@ -212,20 +202,12 @@ internal fun DesktopToolbar(
                         )
                     }
                     CreateButton(onCreateEvent = onCreateEvent, onCreateTask = onCreateTask, showLabel = wide)
-                    Box {
-                        RoundToolbarButton(
-                            stringResource(R.string.tasks),
-                            onClick = onTasks,
-                            background = if (tasksPinned) accentContainerColor() else Color.Transparent,
-                        ) {
-                            Icon(
-                                Icons.Default.TaskAlt,
-                                contentDescription = null,
-                                tint = if (tasksPinned) accentContainerContentColor() else WarmInk,
-                                modifier = Modifier.size(22.dp),
-                            )
+                    // A pinned task pane is open already; its own pin closes it.
+                    if (!tasksPinned) Box {
+                        RoundToolbarButton(stringResource(R.string.tasks), onClick = onTasks, background = Color.Transparent) {
+                            Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
                         }
-                        if (tasksNeedAttention && !tasksPinned) {
+                        if (tasksNeedAttention) {
                             Box(
                                 Modifier
                                     .align(Alignment.TopEnd)
@@ -243,32 +225,29 @@ internal fun DesktopToolbar(
 }
 
 /**
- * Places the toolbar's parts: [navigation] and [title] from the start, [actions] at the end and
- * [search] centered in the toolbar. When the middle has no room for the search field it fills the
- * space between the title and the actions instead, down to a search button.
+ * Places the toolbar's parts: [navigation] at the start, [actions] at the end and [search]
+ * centered in the toolbar. When the middle has no room for the search field it fills the space
+ * between them instead, down to a search button.
  */
 @Composable
 private fun DesktopToolbarLayout(
     navigation: @Composable () -> Unit,
-    title: @Composable () -> Unit,
     search: @Composable () -> Unit,
     actions: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Layout(contents = listOf(navigation, title, search, actions), modifier = modifier) { measurables, constraints ->
-        val (navigationM, titleM, searchM, actionsM) = measurables
+    Layout(contents = listOf(navigation, search, actions), modifier = modifier) { measurables, constraints ->
+        val (navigationM, searchM, actionsM) = measurables
         val width = constraints.maxWidth
         val height = constraints.maxHeight
         val gap = 16.dp.roundToPx()
         val loose = Constraints(maxHeight = height)
         val nav = navigationM.first().measure(loose)
         val acts = actionsM.first().measure(loose)
-        val titleStart = nav.width + gap
+        val start = nav.width + gap
         val actionsStart = width - acts.width
-        // A fixed room for the title, so that the search field stays put while the title changes.
-        val titleWanted = TitleReserve.roundToPx()
         val center = width / 2
-        val centeredHalf = minOf(center - (titleStart + titleWanted + gap), actionsStart - gap - center)
+        val centeredHalf = minOf(center - start, actionsStart - gap - center)
         val searchMax = SearchMaxWidth.roundToPx()
         val searchMin = SearchMinWidth.roundToPx()
         val searchWidth: Int
@@ -277,47 +256,25 @@ private fun DesktopToolbarLayout(
             searchWidth = minOf(searchMax, centeredHalf * 2)
             searchX = center - searchWidth / 2
         } else {
-            val free = actionsStart - gap - (titleStart + titleWanted + gap)
+            val free = actionsStart - gap - start
             searchWidth = if (free >= searchMin) minOf(searchMax, free) else SearchButtonSize.roundToPx()
-            searchX = (actionsStart - gap - searchWidth).coerceAtLeast(titleStart)
+            searchX = (actionsStart - gap - searchWidth).coerceAtLeast(start)
         }
         val searchPlaceable = searchM.first().measure(Constraints.fixed(searchWidth, SearchHeight.roundToPx()))
-        val titlePlaceable = titleM.first().measure(loose.copy(maxWidth = (searchX - gap - titleStart).coerceAtLeast(0)))
         layout(width, height) {
             nav.placeRelative(0, (height - nav.height) / 2)
-            titlePlaceable.placeRelative(titleStart, (height - titlePlaceable.height) / 2)
             searchPlaceable.placeRelative(searchX, (height - searchPlaceable.height) / 2)
             acts.placeRelative(actionsStart, (height - acts.height) / 2)
         }
     }
 }
 
-private val SearchMaxWidth = 360.dp
-private val SearchMinWidth = 160.dp
+private val SearchMaxWidth = 420.dp
+internal val SearchMinWidth = 160.dp
 private val SearchHeight = 40.dp
 private val SearchButtonSize = 40.dp
-/** The room the period's title keeps before the search field, enough for "September 2026". */
-private val TitleReserve = 200.dp
 
 internal val DesktopToolbarHeight: Dp = 68.dp
-
-private fun CalendarUiState.desktopTitle(yearViewOpen: Boolean, locale: java.util.Locale): String {
-    if (yearViewOpen) return selectedDate.year.toString()
-    val monthYear = DateTimeFormatter.ofPattern("LLLL yyyy", locale)
-    val range = visibleDays(yearViewOpen = false)
-    if (range == null || YearMonth.from(range.start) == YearMonth.from(range.endInclusive)) {
-        return selectedDate.format(monthYear).replaceFirstChar { it.titlecase(locale) }
-    }
-    val start = range.start
-    val end = range.endInclusive
-    val startMonth = start.month.getDisplayName(TextStyle.SHORT_STANDALONE, locale).trimEnd('.')
-    val endMonth = end.month.getDisplayName(TextStyle.SHORT_STANDALONE, locale).trimEnd('.')
-    return if (start.year == end.year) {
-        "$startMonth – $endMonth ${end.year}"
-    } else {
-        "$startMonth ${start.year} – $endMonth ${end.year}"
-    }
-}
 
 /** A round toolbar button with [content] centered, darker while hovered. */
 @Composable

@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import com.kgs.calendar.res.LocalAppLocale
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import androidx.compose.animation.AnimatedContent
@@ -1292,6 +1294,7 @@ internal fun OverdueTasksBand(
         val countLabel = tasks.size.toString()
         val minimizeLabel = stringResource(R.string.minimize_overdue_tasks)
         val labelStyle = TextStyle(
+            fontFamily = LocalAppFontFamily.current,
             fontSize = 12.sp,
             lineHeight = 13.sp,
             fontWeight = FontWeight.SemiBold,

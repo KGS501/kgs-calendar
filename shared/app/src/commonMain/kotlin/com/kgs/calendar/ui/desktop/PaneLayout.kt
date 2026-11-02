@@ -13,6 +13,11 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -27,9 +32,10 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.kgs.calendar.ui.MotionShort
+import com.kgs.calendar.ui.MotionEmphasized
+import com.kgs.calendar.ui.MotionMedium
+import com.kgs.calendar.ui.WarmInk
 import com.kgs.calendar.ui.WarmBrown
-import com.kgs.calendar.ui.WarmLine
 import com.kgs.calendar.ui.platform.ResizeHorizontalPointerIcon
 
 /**
@@ -84,8 +90,10 @@ class PaneLayoutPreferences(
 val LocalPaneLayout = staticCompositionLocalOf { PaneLayoutPreferences() }
 
 /**
- * The seam between two panes: a hairline that a pointer can grab to move it. It highlights while
- * hovered or dragged; [onDrag] gets the movement in dp, [onDragEnd] follows the release.
+ * The seam between two panes: no line, only a small pill in its middle that a pointer can grab
+ * to move it. The pill grows and darkens while hovered or dragged, and only the pill takes the
+ * drag, so the rest of the seam stays out of the way. [onDrag] gets the movement in dp,
+ * [onDragEnd] follows the release.
  */
 @Composable
 internal fun PaneSeam(
@@ -102,33 +110,40 @@ internal fun PaneSeam(
     val emphasis by animateFloatAsState(
         targetValue = when {
             dragged -> 1f
-            hovered -> 0.6f
+            hovered -> 0.75f
             else -> 0f
         },
-        animationSpec = tween(MotionShort),
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
         label = "paneSeamEmphasis",
     )
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .width(PaneSeamWidth)
-            .pointerHoverIcon(ResizeHorizontalPointerIcon)
-            .hoverable(interaction)
-            .draggable(
-                state = rememberDraggableState { deltaPx -> currentOnDrag(deltaPx / density.density) },
-                orientation = Orientation.Horizontal,
-                interactionSource = interaction,
-                onDragStopped = { currentOnDragEnd() },
-            ),
+            .width(PaneSeamWidth),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier
-                .fillMaxHeight()
-                .width(1.dp + 2.dp * emphasis)
-                .background(lerp(WarmLine.copy(alpha = 0.6f), WarmBrown.copy(alpha = 0.8f), emphasis)),
-        )
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .pointerHoverIcon(ResizeHorizontalPointerIcon)
+                .hoverable(interaction)
+                .draggable(
+                    state = rememberDraggableState { deltaPx -> currentOnDrag(deltaPx / density.density) },
+                    orientation = Orientation.Horizontal,
+                    interactionSource = interaction,
+                    onDragStopped = { currentOnDragEnd() },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(width = 4.dp + 2.dp * emphasis, height = 36.dp + 28.dp * emphasis)
+                    .clip(CircleShape)
+                    .background(lerp(WarmInk.copy(alpha = 0.16f), WarmBrown.copy(alpha = 0.85f), emphasis)),
+            )
+        }
     }
 }
 
-internal val PaneSeamWidth = 9.dp
+internal val PaneSeamWidth = 16.dp

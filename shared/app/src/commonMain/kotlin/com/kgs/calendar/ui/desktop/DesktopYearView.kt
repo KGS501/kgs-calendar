@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -225,7 +226,7 @@ private fun LazyListState.centerYear(): Int? {
 private const val YearColumns = 37
 private val YearMinRowHeight = 46.dp
 private val YearWeekdayHeaderHeight = 26.dp
-private val YearHeadingHeight = 34.dp
+private val YearHeadingHeight = 52.dp
 private val YearPillTop = 17.dp
 private val YearPillHeight = 13.dp
 private val YearPillGap = 2.dp
@@ -236,20 +237,50 @@ private val YearDotGap = 2.dp
 
 private fun DayOfWeek.isWeekend(): Boolean = this == DayOfWeek.SATURDAY || this == DayOfWeek.SUNDAY
 
-/** A small gap and the year's name where one year ends and the next begins. */
+/**
+ * Where one year ends and the next begins: the year's name in the middle, with a line reaching out
+ * on either side that fades before the edges.
+ */
 @Composable
 private fun YearHeading(year: Int, current: Boolean, labelWidth: Dp) {
-    Box(Modifier.fillMaxWidth().height(YearHeadingHeight), contentAlignment = Alignment.BottomStart) {
+    val color = if (current) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(YearHeadingHeight)
+            .padding(start = labelWidth),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+    ) {
+        YearHeadingLine(color, fadeTowardsStart = true)
         Text(
             year.toString(),
-            color = if (current) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            lineHeight = 16.sp,
+            color = color,
+            fontSize = 22.sp,
+            lineHeight = 26.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.6.sp,
-            modifier = Modifier.padding(start = 6.dp, bottom = 6.dp),
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(horizontal = 18.dp),
         )
+        YearHeadingLine(color, fadeTowardsStart = false)
     }
+}
+
+@Composable
+private fun YearHeadingLine(color: Color, fadeTowardsStart: Boolean) {
+    val solid = color.copy(alpha = 0.45f)
+    val clear = color.copy(alpha = 0f)
+    Box(
+        Modifier
+            .width(180.dp)
+            .height(1.5.dp)
+            .clip(CircleShape)
+            .background(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    if (fadeTowardsStart) listOf(clear, solid) else listOf(solid, clear),
+                ),
+            ),
+    )
 }
 
 @Composable
@@ -391,9 +422,9 @@ private fun YearDayCell(
                     hidden = hidden,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
+                        .padding(start = 3.dp, end = 2.dp, bottom = 1.dp)
                         .fillMaxWidth()
-                        .height(YearDotsHeight)
-                        .padding(start = 3.dp, end = 2.dp, bottom = 2.dp),
+                        .height(YearDotsHeight - 1.dp),
                 )
             }
         }
@@ -408,41 +439,34 @@ private fun YearDayCell(
 @Composable
 private fun HiddenItemDots(hidden: List<MonthRowPillCandidate>, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
-    val countStyle = TextStyle(fontSize = 8.sp, lineHeight = 8.sp, fontWeight = FontWeight.SemiBold)
-    val density = LocalDensity.current
-    BoxWithConstraints(modifier) {
-        val available = with(density) { maxWidth.toPx() }
-        val step = with(density) { (YearDotSize + YearDotGap).toPx() }
-        val dot = with(density) { YearDotSize.toPx() }
-        fun countWidth(count: Int): Float = measurer.measure("+$count", countStyle).size.width.toFloat()
-        val (dots, rest) = remember(hidden.size, available) {
-            hiddenDotLayout(hidden.size, available, dot, step, ::countWidth)
+    val countStyle = TextStyle(
+        fontFamily = com.kgs.calendar.ui.theme.LocalAppFontFamily.current,
+        fontSize = 8.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+    val countColor = MaterialTheme.colorScheme.onSurfaceVariant
+    // Dots and count are drawn on one center line, so the count sits level with the dots.
+    androidx.compose.foundation.Canvas(modifier) {
+        val dot = YearDotSize.toPx()
+        val step = dot + YearDotGap.toPx()
+        val (dots, rest) = hiddenDotLayout(hidden.size, size.width, dot, step) { count ->
+            measurer.measure("+$count", countStyle).size.width.toFloat()
         }
-        Row(
-            modifier = Modifier.matchParentSize(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(YearDotGap),
-        ) {
-            hidden.take(dots).forEach { item ->
-                val color = Color(item.color)
-                Box(
-                    Modifier
-                        .size(YearDotSize)
-                        .clip(CircleShape)
-                        .then(
-                            if (item.task != null) Modifier.border(1.2.dp, color, CircleShape) else Modifier.background(color),
-                        ),
-                )
+        val centerY = size.height / 2f
+        hidden.take(dots).forEachIndexed { index, item ->
+            val color = Color(item.color)
+            val center = androidx.compose.ui.geometry.Offset(index * step + dot / 2f, centerY)
+            if (item.task != null) {
+                drawCircle(color, radius = dot / 2f - 0.6.dp.toPx(), center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(1.2.dp.toPx()))
+            } else {
+                drawCircle(color, radius = dot / 2f, center = center)
             }
-            if (rest > 0) {
-                Text(
-                    "+$rest",
-                    style = countStyle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        }
+        if (rest > 0) {
+            val layout = measurer.measure("+$rest", countStyle.copy(color = countColor))
+            // Digits and "+" are centered on about half their cap height above the baseline.
+            val visualCenter = layout.firstBaseline - 8.sp.toPx() * 0.36f
+            drawText(layout, topLeft = androidx.compose.ui.geometry.Offset(dots * step, centerY - visualCenter))
         }
     }
 }

@@ -101,6 +101,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Keyboard
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
@@ -301,6 +302,7 @@ internal fun SettingsPage(
         runCatching { SettingsDestination.valueOf(navigationStack.last()) }.getOrDefault(SettingsDestination.Main)
     }
     val twoPane = currentCalendarWindowLayout().usesTwoPaneSettings
+    val shortcutBindings = com.kgs.calendar.ui.platform.LocalShortcutBindings.current
     val paneDestination = currentDestination.takeUnless { it == SettingsDestination.Main } ?: SettingsDestination.Accounts
     // The section shown beside the main page, highlighted there.
     val openSectionDestination = navigationStack.getOrNull(1)
@@ -459,6 +461,13 @@ internal fun SettingsPage(
                         iconColor = SettingsColors.General,
                         selected = twoPane && openSectionDestination == SettingsDestination.General,
                     ) { openSection(SettingsDestination.General) }
+                    if (shortcutBindings != null) SettingsNavRow(
+                        title = stringResource(R.string.settings_shortcuts),
+                        subtitle = explanation(R.string.settings_shortcuts_summary),
+                        icon = Icons.Default.Keyboard,
+                        iconColor = SettingsColors.Shortcuts,
+                        selected = twoPane && openSectionDestination == SettingsDestination.KeyboardShortcuts,
+                    ) { openSection(SettingsDestination.KeyboardShortcuts) }
                     if (PlatformFeatures.homeScreenWidgets) SettingsNavRow(
                         title = stringResource(R.string.widgets),
                         subtitle = explanation(R.string.widget_settings_summary),
@@ -1419,6 +1428,7 @@ internal fun SettingsPage(
             }
             // Its own list, see SettingsSubpages.
             SettingsDestination.RecentlyDeleted -> Unit
+            SettingsDestination.KeyboardShortcuts -> shortcutBindings?.let { KeyboardShortcutsSettings(it) }
         }
     }
     @Composable
@@ -1965,6 +1975,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.EventFieldOrder -> stringResource(R.string.event_fields)
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
     SettingsDestination.RecentlyDeleted -> stringResource(R.string.recently_deleted)
+    SettingsDestination.KeyboardShortcuts -> stringResource(R.string.settings_shortcuts)
 }
 
 @Composable
@@ -2017,6 +2028,7 @@ private object SettingsColors {
     val Sponsor = Color(0xFF9A6070)
     val Bug = Color(0xFFA08A4E)
     val Privacy = Color(0xFF4E8A8C)
+    val Shortcuts = Color(0xFF5A7CA0)
 }
 
 

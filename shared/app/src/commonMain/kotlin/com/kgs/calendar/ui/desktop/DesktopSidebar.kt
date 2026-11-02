@@ -1,11 +1,13 @@
 package com.kgs.calendar.ui.desktop
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.layout.BoxWithConstraints
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.Flow
 import com.kgs.calendar.ui.MotionStandard
-import com.kgs.calendar.ui.monthMarkersFor
-import com.kgs.calendar.ui.MonthDayMarkers
+import com.kgs.calendar.ui.monthMarkerColors
 import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.IntOffset
@@ -130,7 +132,7 @@ internal fun DesktopSidebar(
                 fontSize = 20.sp,
                 lineHeight = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
-                fontFamily = FontFamily.SansSerif,
+                fontFamily = com.kgs.calendar.ui.theme.LocalAppFontFamily.current ?: FontFamily.SansSerif,
                 color = WarmInk,
                 maxLines = 1,
                 softWrap = false,
@@ -201,13 +203,20 @@ private fun SidebarAction(label: String, icon: ImageVector, onClick: () -> Unit)
     }
 }
 
-private val MiniMonthRowHeight = 36.dp
+/** A week of the small month: the day's circle, and its dots below it with room to breathe. */
+private val MiniMonthRowHeight = 46.dp
+/** Today's circle and the band of shown days have the same height, so one turns into the other. */
+private val MiniMonthCircle = 30.dp
+private val MiniMonthCircleTop = 3.dp
+private val MiniMonthDotsTop = MiniMonthCircleTop + MiniMonthCircle + 4.dp
+private val MiniMonthDot = 4.dp
+private val MiniMonthDotGap = 2.dp
 
 /**
  * A small month: the days the calendar shows are banded, and the band glides along as they
  * change; today is filled in the accent color; the dots under a day are its items in their
- * calendars' colors, as in the app's month overview. Its own arrows browse months without
- * changing the calendar; a click selects a day.
+ * calendars' colors, as many as the day's width holds, and a plus when there are more. Its own
+ * arrows browse months without changing the calendar; a click selects a day.
  */
 @Composable
 private fun MiniMonth(
@@ -246,15 +255,25 @@ private fun MiniMonth(
             .padding(horizontal = 10.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                month.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.titlecase(locale) },
-                color = WarmInk,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            AnimatedContent(
+                targetState = month,
+                transitionSpec = {
+                    (slideInVertically(tween(MotionMedium, easing = MotionEmphasized)) { it * direction / 2 } + fadeIn(tween(MotionShort))) togetherWith
+                        (slideOutVertically(tween(MotionShort)) { -it * direction / 2 } + fadeOut(tween(MotionShort)))
+                },
+                label = "miniMonthTitle",
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
-            )
+            ) { shown ->
+                Text(
+                    shown.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.titlecase(locale) },
+                    color = WarmInk,
+                    fontSize = 19.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             SmallIconButton(Icons.Default.ChevronLeft, stringResource(R.string.desktop_previous)) {
                 direction = -1
                 month = month.minusMonths(1)
@@ -264,7 +283,7 @@ private fun MiniMonth(
                 month = month.plusMonths(1)
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         val weekdays = weekdaysFrom(firstDayOfWeek)
         Row(Modifier.fillMaxWidth()) {
             weekdays.forEach { day ->
@@ -291,8 +310,8 @@ private fun MiniMonth(
             val items by produceState(emptyList<EventEntity>() to emptyList<TaskEntity>(), shownMonth) {
                 observeRange(shownMonth.atDay(1), shownMonth.atEndOfMonth().plusDays(1)).collect { value = it }
             }
-            val markers = remember(items, shownMonth, taskColorMode) {
-                monthMarkersFor(
+            val colors = remember(items, shownMonth, taskColorMode) {
+                monthMarkerColors(
                     shownMonth,
                     items.first,
                     items.second.filter { isMonthSurfaceTaskVisible(it.isCompleted, it.status) },
@@ -312,13 +331,17 @@ private fun MiniMonth(
                 label = "miniMonthBandEnd",
             )
             val bandColor = WarmBrown.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.22f else 0.16f)
-            Box {
+            BoxWithConstraints {
+                val cellWidth = maxWidth / 7
+                // As many dots as a day's width holds; with more items one place goes to the plus.
+                val dotCapacity = (((cellWidth - 6.dp + MiniMonthDotGap) / (MiniMonthDot + MiniMonthDotGap)).toInt()).coerceAtLeast(1)
                 Canvas(Modifier.matchParentSize()) {
                     if (bandAlpha <= 0.001f || bandEnd <= bandStart) return@Canvas
                     val cell = size.width / 7f
                     val rowHeight = MiniMonthRowHeight.toPx()
-                    val inset = 2.dp.toPx()
-                    val radius = (rowHeight - inset * 2) / 2f
+                    val circle = MiniMonthCircle.toPx()
+                    // Single days are exactly today's circle; longer ranges are a pill of the same height.
+                    val inset = ((cell - circle) / 2f).coerceAtLeast(0f)
                     for (week in 0 until 6) {
                         val from = maxOf(bandStart, week * 7f)
                         val to = minOf(bandEnd, week * 7f + 7f)
@@ -327,9 +350,9 @@ private fun MiniMonth(
                         val right = (to - week * 7f) * cell - inset
                         drawRoundRect(
                             color = bandColor.copy(alpha = bandColor.alpha * bandAlpha),
-                            topLeft = Offset(left, week * rowHeight + inset),
-                            size = Size((right - left).coerceAtLeast(0f), rowHeight - inset * 2),
-                            cornerRadius = CornerRadius(radius, radius),
+                            topLeft = Offset(left, week * rowHeight + MiniMonthCircleTop.toPx()),
+                            size = Size((right - left).coerceAtLeast(0f), circle),
+                            cornerRadius = CornerRadius(circle / 2f, circle / 2f),
                         )
                     }
                 }
@@ -338,12 +361,14 @@ private fun MiniMonth(
                         Row(Modifier.fillMaxWidth()) {
                             for (dayIndex in 0 until 7) {
                                 val date = gridStart.plusDays(week * 7L + dayIndex)
+                                val dayColors = if (YearMonth.from(date) == shownMonth) colors[date].orEmpty() else emptyList()
                                 MiniMonthDay(
                                     date = date,
                                     inMonth = YearMonth.from(date) == shownMonth,
                                     today = date == today,
                                     selected = date == selectedDate,
-                                    markers = markers[date],
+                                    colors = dayColors,
+                                    dotCapacity = dotCapacity,
                                     onClick = { onDateSelected(date) },
                                     modifier = Modifier.weight(1f),
                                 )
@@ -362,24 +387,25 @@ private fun MiniMonthDay(
     inMonth: Boolean,
     today: Boolean,
     selected: Boolean,
-    markers: MonthDayMarkers?,
+    colors: List<Int>,
+    dotCapacity: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val accentText = if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
-    Column(
+    Box(
         modifier = modifier
             .height(MiniMonthRowHeight)
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(26.dp)
+                .align(Alignment.TopCenter)
+                .padding(top = MiniMonthCircleTop)
+                .size(MiniMonthCircle)
                 .clip(CircleShape)
                 .background(
                     when {
@@ -402,23 +428,33 @@ private fun MiniMonthDay(
                 fontWeight = if (today || selected) FontWeight.Bold else FontWeight.Medium,
             )
         }
-        // The day's items in their calendars' colors; a plus when there are more than fit.
-        Row(
-            modifier = Modifier.height(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            markers?.colors?.forEach { color ->
-                Box(Modifier.size(4.dp).clip(CircleShape).background(Color(color)))
-            }
-            if (markers?.hasMore == true) {
-                Text(
-                    "+",
-                    color = WarmInk,
-                    fontSize = 8.sp,
-                    lineHeight = 8.sp,
-                    modifier = Modifier.offset { IntOffset(0, -1) },
-                )
+        if (colors.isNotEmpty()) {
+            val more = colors.size > dotCapacity
+            val shown = if (more) colors.take((dotCapacity - 1).coerceAtLeast(0)) else colors
+            val plusColor = WarmInk.copy(alpha = 0.75f)
+            // The day's items in their calendars' colors, centered on one line with the plus.
+            Canvas(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = MiniMonthDotsTop)
+                    .size(
+                        width = (MiniMonthDot + MiniMonthDotGap) * (shown.size + if (more) 1 else 0) - MiniMonthDotGap,
+                        height = MiniMonthDot + 2.dp,
+                    ),
+            ) {
+                val dot = MiniMonthDot.toPx()
+                val step = dot + MiniMonthDotGap.toPx()
+                val centerY = size.height / 2f
+                shown.forEachIndexed { index, color ->
+                    drawCircle(Color(color), radius = dot / 2f, center = Offset(index * step + dot / 2f, centerY))
+                }
+                if (more) {
+                    val cx = shown.size * step + dot / 2f
+                    val arm = dot * 0.62f
+                    val stroke = 1.2.dp.toPx()
+                    drawLine(plusColor, Offset(cx - arm, centerY), Offset(cx + arm, centerY), stroke)
+                    drawLine(plusColor, Offset(cx, centerY - arm), Offset(cx, centerY + arm), stroke)
+                }
             }
         }
     }

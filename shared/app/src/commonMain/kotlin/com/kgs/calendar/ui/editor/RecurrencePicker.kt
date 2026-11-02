@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
@@ -235,7 +237,7 @@ internal fun TypeableAmount(value: Int, range: IntRange, onValueChange: (Int) ->
                     text.toIntOrNull()?.takeIf { it in range }?.let(onValueChange)
                 },
                 singleLine = true,
-                textStyle = TextStyle(color = WarmBrown, fontSize = fontSizeSp.sp, lineHeight = (fontSizeSp + 4).sp, fontWeight = FontWeight.SemiBold),
+                textStyle = TextStyle(fontFamily = LocalAppFontFamily.current, color = WarmBrown, fontSize = fontSizeSp.sp, lineHeight = (fontSizeSp + 4).sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(WarmBrown),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { editing = false }),
