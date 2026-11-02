@@ -1,46 +1,38 @@
 package com.kgs.calendar.ui.desktop
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.kgs.calendar.domain.model.CalendarViewMode
-import com.kgs.calendar.domain.time.toDate
-import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.CalendarViewModel
-import com.kgs.calendar.ui.DetailSheet
+import com.kgs.calendar.ui.MotionEmphasized
 import com.kgs.calendar.ui.MotionMedium
 import com.kgs.calendar.ui.MotionShort
-import com.kgs.calendar.ui.MotionStandard
 import com.kgs.calendar.ui.SettingsDestination
-import com.kgs.calendar.ui.WarmLine
-import com.kgs.calendar.ui.model.taskDate
+import com.kgs.calendar.ui.TaskPane
 import com.kgs.calendar.ui.shell.CalendarShellUiState
 import java.time.LocalDate
-import java.time.YearMonth
 
 /** Below this window width the desktop uses the phone layout: the sidebar would leave the calendar too little room. */
 internal const val DesktopFrameMinWidthDp = 760
 
 /**
- * The desktop window: the permanent sidebar on the left, the toolbar above the calendar, and the
- * calendar itself ([content]) or the year view. Sheets and overlays stay above it as on Android.
+ * The desktop window: the permanent sidebar on the left, the toolbar above the calendar
+ * ([content], which shows the year view as well), and the task pane on the right while it is
+ * pinned. The seams between them can be dragged. Sheets and overlays stay above it as on Android.
  */
 @Composable
 internal fun DesktopFrame(
@@ -52,57 +44,38 @@ internal fun DesktopFrame(
     onViewSelected: (CalendarViewMode) -> Unit,
     onCreateEvent: () -> Unit,
     onCreateTask: () -> Unit,
+    onCreateTaskInPane: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val panes = LocalPaneLayout.current
     val yearViewOpen = shell.yearViewOpen
     fun showDate(date: LocalDate) {
         viewModel.selectDate(date)
         shell.requestDate(date)
-    }
-    val upcoming by remember(today) { viewModel.observeRange(today, today.plusDays(7)) }
-        .collectAsState(initial = emptyList<com.kgs.calendar.data.local.entity.EventEntity>() to emptyList())
-    val markedMonth = YearMonth.from(state.selectedDate)
-    val marked by remember(markedMonth) {
-        viewModel.observeRange(markedMonth.atDay(1).minusDays(7), markedMonth.atEndOfMonth().plusDays(15))
-    }.collectAsState(initial = emptyList<com.kgs.calendar.data.local.entity.EventEntity>() to emptyList())
-    val markedDays = remember(marked) {
-        buildSet {
-            marked.first.forEach { event ->
-                var day = event.startsAtMillis.toDate()
-                val end = event.endDateInclusive()
-                while (!day.isAfter(end) && size < 400) {
-                    add(day)
-                    day = day.plusDays(1)
-                }
-            }
-            marked.second.forEach { task -> task.taskDate()?.let(::add) }
-        }
     }
     Row(Modifier.fillMaxSize()) {
         DesktopSidebar(
             state = state,
             yearViewOpen = yearViewOpen,
             today = today,
-            upcomingEvents = upcoming.first,
-            upcomingTasks = upcoming.second,
-            markedDays = markedDays,
+            observeRange = viewModel::observeRange,
             onDateSelected = { date ->
                 shell.yearViewOpen = false
                 showDate(date)
             },
-            onEventClick = { shell.openDetail(DetailSheet.Event(it)) },
-            onTaskClick = { shell.openTaskDetail(it) },
             onCollectionVisibleInViews = viewModel.settings::setCollectionVisibleInViews,
             onCollectionSettings = shell::editCollection,
             onGroupSettings = shell::editGroup,
             onSettings = { shell.openSettings(SettingsDestination.Main) },
+            modifier = Modifier.width(panes.sidebarWidthDp.dp),
         )
-        VerticalDivider(color = WarmLine.copy(alpha = 0.6f), modifier = Modifier.fillMaxHeight().width(1.dp))
+        PaneSeam(onDrag = panes::dragSidebar, onDragEnd = panes::commit)
         Column(Modifier.weight(1f)) {
             DesktopToolbar(
                 state = state,
                 yearViewOpen = yearViewOpen,
                 tasksNeedAttention = tasksNeedAttention,
+                tasksPinned = panes.tasksPanePinned,
                 onStep = { direction -> showDate(state.steppedDate(direction, yearViewOpen)) },
                 onToday = {
                     viewModel.today()
@@ -119,44 +92,59 @@ internal fun DesktopFrame(
                     }
                 },
                 onSearch = shell::openSearch,
-                onTasks = shell::openTaskDrawer,
+                // A pinned task pane is already there: the button puts it away again.
+                onTasks = { if (panes.tasksPanePinned) panes.pinTasksPane(false) else shell.openTaskDrawer() },
                 onCreateEvent = onCreateEvent,
                 onCreateTask = onCreateTask,
             )
-            Box(Modifier.weight(1f)) {
-                AnimatedContent(
-                    targetState = yearViewOpen,
-                    transitionSpec = {
-                        (fadeIn(tween(MotionMedium, easing = MotionStandard)) + scaleIn(tween(MotionMedium, easing = MotionStandard), initialScale = 0.985f)) togetherWith
-                            fadeOut(tween(MotionShort))
-                    },
-                    label = "desktopYearView",
-                ) { showYear ->
-                    if (showYear) {
-                        val year = state.selectedDate.year
-                        val yearItems by remember(year) {
-                            viewModel.observeRange(LocalDate.of(year, 1, 1), LocalDate.of(year + 1, 1, 1))
-                        }.collectAsState(initial = emptyList<com.kgs.calendar.data.local.entity.EventEntity>() to emptyList())
-                        DesktopYearView(
-                            year = year,
-                            firstDayOfWeek = state.firstDayOfWeek,
-                            today = today,
-                            events = yearItems.first,
-                            tasks = yearItems.second,
-                            taskColorMode = state.taskColorMode,
-                            onOpenDay = { date ->
-                                shell.yearViewOpen = false
-                                viewModel.selectDate(date)
-                                onViewSelected(CalendarViewMode.Day)
-                            },
-                            onEventClick = { shell.openDetail(DetailSheet.Event(it)) },
-                            onTaskClick = { shell.openTaskDetail(it) },
-                        )
-                    } else {
-                        content()
-                    }
-                }
+            content()
+        }
+        AnimatedVisibility(
+            visible = panes.tasksPanePinned,
+            enter = expandHorizontally(tween(MotionMedium, easing = MotionEmphasized), expandFrom = Alignment.Start) + fadeIn(tween(MotionMedium)),
+            exit = shrinkHorizontally(tween(MotionMedium, easing = MotionEmphasized), shrinkTowards = Alignment.Start) + fadeOut(tween(MotionShort)),
+        ) {
+            Row(Modifier.fillMaxHeight()) {
+                PaneSeam(onDrag = panes::dragTasksPane, onDragEnd = panes::commit)
+                TaskPane(
+                    state = state,
+                    onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                    onTaskClick = { shell.openTaskDetail(it) },
+                    onShowCompleted = shell::openCompletedTasks,
+                    onCreateTask = onCreateTaskInPane,
+                    showDivider = false,
+                    pinned = true,
+                    onPinnedChange = panes::pinTasksPane,
+                    modifier = Modifier.width(panes.tasksPaneWidthDp.dp),
+                )
             }
         }
     }
+}
+
+/** The year view inside the calendar's view switcher, with the data of the years on screen. */
+@Composable
+internal fun DesktopYearPane(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    shell: CalendarShellUiState,
+    today: LocalDate,
+    morphDay: LocalDate,
+    onOpenDay: (LocalDate) -> Unit,
+) {
+    DesktopYearView(
+        selectedYear = state.selectedDate.year,
+        firstDayOfWeek = state.firstDayOfWeek,
+        today = today,
+        taskColorMode = state.taskColorMode,
+        morphDay = morphDay,
+        dateRequest = shell.dateRequest,
+        scrollStep = shell.scrollStep,
+        observeRange = viewModel::observeRange,
+        onYearShown = { year ->
+            // The toolbar follows the year in view; the day stays, so the other views come back to it.
+            if (year != state.selectedDate.year) viewModel.selectDate(state.selectedDate.withYear(year))
+        },
+        onOpenDay = onOpenDay,
+    )
 }

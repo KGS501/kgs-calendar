@@ -30,6 +30,7 @@ import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.KgsCalendarApp
 import com.kgs.calendar.ui.desktop.CalendarChrome
 import com.kgs.calendar.ui.desktop.LocalCalendarChrome
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
 import com.kgs.calendar.ui.platform.DesktopShortcuts
@@ -55,6 +56,7 @@ fun main(args: Array<String>) {
     DesktopAppVersion = System.getProperty("kgs.version") ?: "V.1.4.6-3"
     val graph = DesktopGraph(dataDirectory(args))
     val placementStore = WindowPlacementStore(File(graph.dataDirectory, "window.properties"))
+    val paneLayout = PaneLayoutStore(File(graph.dataDirectory, "layout.properties")).restore()
     // Demo items only ever go into a separate, empty profile.
     if ("--demo" in args && "--data-dir" in args) {
         runBlocking {
@@ -130,6 +132,7 @@ fun main(args: Array<String>) {
                 LocalWindowChrome provides windowChrome,
                 LocalDesktopShortcuts provides shortcuts,
                 LocalCalendarChrome provides CalendarChrome.Desktop,
+                LocalPaneLayout provides paneLayout,
             ) {
                 Box(
                     Modifier

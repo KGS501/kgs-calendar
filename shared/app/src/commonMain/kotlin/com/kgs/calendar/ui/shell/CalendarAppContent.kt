@@ -263,6 +263,7 @@ internal fun CalendarAppContent(
         onOpenDetail = shell::openLaunchedDetail,
         onForegroundRecentered = { foregroundRecenterRequest += 1 },
     )
+    val paneLayout = com.kgs.calendar.ui.desktop.LocalPaneLayout.current
     fun showDate(date: LocalDate) {
         viewModel.selectDate(date)
         shell.requestDate(date)
@@ -272,7 +273,7 @@ internal fun CalendarAppContent(
             newEvent = { openEventCreation(state.defaultFabCreationDate()) },
             newTask = { openTaskCreation(state.defaultFabCreationDate(), scheduledForDay = true) },
             search = shell::openSearch,
-            tasks = shell::openTaskDrawer,
+            tasks = { if (paneLayout.tasksPanePinned) paneLayout.pinTasksPane(false) else shell.openTaskDrawer() },
             menu = shell::openMenuDrawer,
             settings = { shell.openSettings(SettingsDestination.Main) },
             today = {
@@ -280,6 +281,20 @@ internal fun CalendarAppContent(
                 shell.requestDate(LocalDate.now())
             },
             step = { direction -> showDate(state.steppedDate(direction, shell.yearViewOpen)) },
+            nudge = { direction ->
+                // The multi-day view moves by a day; a week view keeps its weeks and other views their pages.
+                if (!shell.yearViewOpen && state.selectedView == CalendarViewMode.ThreeDay && !state.weekViewEnabled) {
+                    showDate(state.selectedDate.plusDays(direction.toLong()))
+                } else {
+                    showDate(state.steppedDate(direction, shell.yearViewOpen))
+                }
+            },
+            nudgeVertical = { direction ->
+                when {
+                    shell.yearViewOpen -> shell.requestScrollStep(direction)
+                    state.selectedView == CalendarViewMode.Month -> showDate(state.steppedDate(direction))
+                }
+            },
             selectView = { view ->
                 shell.yearViewOpen = false
                 viewModel.selectView(view)

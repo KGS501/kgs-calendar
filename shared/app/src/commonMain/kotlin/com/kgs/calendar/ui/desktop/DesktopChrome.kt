@@ -5,6 +5,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -48,6 +49,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
+import com.kgs.calendar.ui.blendWith
+import com.kgs.calendar.ui.accentContainerContentColor
+import com.kgs.calendar.ui.TodayDateIcon
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -122,14 +131,16 @@ internal fun CalendarUiState.visibleDays(yearViewOpen: Boolean): ClosedRange<Loc
 }
 
 /**
- * The desktop toolbar: today and paging on the left with the shown period, the views in the
- * middle, search and tasks on the right. It replaces the phone's toolbar and month drop-down.
+ * The desktop toolbar: back, today and forward as three round buttons with the shown period
+ * beside them on the left, search in the middle, and the views, "create" and the tasks on the
+ * right. It replaces the phone's toolbar and month drop-down.
  */
 @Composable
 internal fun DesktopToolbar(
     state: CalendarUiState,
     yearViewOpen: Boolean,
     tasksNeedAttention: Boolean,
+    tasksPinned: Boolean,
     onStep: (Int) -> Unit,
     onToday: () -> Unit,
     onViewSelected: (DesktopView) -> Unit,
@@ -141,92 +152,152 @@ internal fun DesktopToolbar(
 ) {
     val locale = LocalAppLocale.current
     BoxWithConstraints(modifier = modifier.fillMaxWidth().height(DesktopToolbarHeight)) {
-    // The title keeps its room: narrower windows get narrower view segments and an icon for search.
-    val wide = maxWidth >= 1000.dp
-    val segmentWidth = when {
-        wide -> 72.dp
-        maxWidth >= 760.dp -> 62.dp
-        else -> 54.dp
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .height(40.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(settingsControlColor()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ToolbarIconButton(Icons.Default.ChevronLeft, stringResource(R.string.desktop_previous)) { onStep(-1) }
-            Box(
-                modifier = Modifier
-                    .height(40.dp)
-                    .clickable(onClick = onToday)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(stringResource(R.string.today), color = WarmInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-            ToolbarIconButton(Icons.Default.ChevronRight, stringResource(R.string.desktop_next)) { onStep(1) }
-        }
+        // Narrower windows get narrower view segments and an icon-only create button first.
+        val wide = maxWidth >= 1100.dp
+        val segmentWidth = if (maxWidth >= 1200.dp) 66.dp else 60.dp
+        // Beside a pinned task pane or in a small window the views become a drop-down.
+        val compact = maxWidth < 900.dp
         val title = remember(state.selectedDate, state.selectedView, state.multiDayCount, state.weekViewEnabled, yearViewOpen, locale) {
             state.desktopTitle(yearViewOpen, locale)
         }
-        AnimatedContent(
-            targetState = title,
-            transitionSpec = {
-                (slideInVertically(tween(MotionMedium, easing = MotionEmphasized)) { it / 3 } + fadeIn(tween(MotionShort))) togetherWith
-                    (slideOutVertically(tween(MotionShort, easing = MotionStandard)) { -it / 3 } + fadeOut(tween(MotionShort)))
+        DesktopToolbarLayout(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            navigation = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RoundToolbarButton(stringResource(R.string.desktop_previous), onClick = { onStep(-1) }) {
+                        Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
+                    }
+                    // Like the app's today button: the calendar icon with today's date.
+                    RoundToolbarButton(stringResource(R.string.today), onClick = onToday) {
+                        TodayDateIcon(day = LocalCalendarTimeSnapshot.current.today.dayOfMonth, modifier = Modifier.size(22.dp))
+                    }
+                    RoundToolbarButton(stringResource(R.string.desktop_next), onClick = { onStep(1) }) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
+                    }
+                }
             },
-            label = "desktopTitle",
-            modifier = Modifier.weight(1f),
-        ) { text ->
-            Text(
-                text,
-                color = WarmInk,
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        DesktopViewSwitcher(
-            segmentWidth = segmentWidth,
-            selected = state.desktopView(yearViewOpen),
-            weekLabel = stringResource(if (state.weekViewEnabled) R.string.week else R.string.desktop_days, state.multiDayCount),
-            onSelected = onViewSelected,
+            title = {
+                AnimatedContent(
+                    targetState = title,
+                    transitionSpec = {
+                        (slideInVertically(tween(MotionMedium, easing = MotionEmphasized)) { it / 3 } + fadeIn(tween(MotionShort))) togetherWith
+                            (slideOutVertically(tween(MotionShort, easing = MotionStandard)) { -it / 3 } + fadeOut(tween(MotionShort)))
+                    },
+                    label = "desktopTitle",
+                ) { text ->
+                    Text(
+                        text,
+                        color = WarmInk,
+                        fontSize = 22.sp,
+                        lineHeight = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            },
+            search = { SearchField(onClick = onSearch) },
+            actions = {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val weekLabel = stringResource(if (state.weekViewEnabled) R.string.week else R.string.desktop_days, state.multiDayCount)
+                    if (compact) {
+                        CompactViewSwitcher(selected = state.desktopView(yearViewOpen), weekLabel = weekLabel, onSelected = onViewSelected)
+                    } else {
+                        DesktopViewSwitcher(
+                            segmentWidth = segmentWidth,
+                            selected = state.desktopView(yearViewOpen),
+                            weekLabel = weekLabel,
+                            onSelected = onViewSelected,
+                        )
+                    }
+                    CreateButton(onCreateEvent = onCreateEvent, onCreateTask = onCreateTask, showLabel = wide)
+                    Box {
+                        RoundToolbarButton(
+                            stringResource(R.string.tasks),
+                            onClick = onTasks,
+                            background = if (tasksPinned) accentContainerColor() else Color.Transparent,
+                        ) {
+                            Icon(
+                                Icons.Default.TaskAlt,
+                                contentDescription = null,
+                                tint = if (tasksPinned) accentContainerContentColor() else WarmInk,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        if (tasksNeedAttention && !tasksPinned) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = (-6).dp, y = 6.dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(WarmBrown),
+                            )
+                        }
+                    }
+                }
+            },
         )
-        // A fixed slot: the button morphs into its menu without moving its neighbours.
-        Box(Modifier.width(if (wide) 112.dp else 44.dp), contentAlignment = Alignment.CenterEnd) {
-            CreateButton(onCreateEvent = onCreateEvent, onCreateTask = onCreateTask, showLabel = wide)
-        }
-        if (wide) {
-            SearchPill(onClick = onSearch)
-        } else {
-            ToolbarIconButton(Icons.Default.Search, stringResource(R.string.search), onClick = onSearch)
-        }
-        Box {
-            ToolbarIconButton(Icons.Default.TaskAlt, stringResource(R.string.tasks), size = 40.dp, onClick = onTasks)
-            if (tasksNeedAttention) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-6).dp, y = 6.dp)
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(WarmBrown),
-                )
-            }
-        }
-    }
     }
 }
+
+/**
+ * Places the toolbar's parts: [navigation] and [title] from the start, [actions] at the end and
+ * [search] centered in the toolbar. When the middle has no room for the search field it fills the
+ * space between the title and the actions instead, down to a search button.
+ */
+@Composable
+private fun DesktopToolbarLayout(
+    navigation: @Composable () -> Unit,
+    title: @Composable () -> Unit,
+    search: @Composable () -> Unit,
+    actions: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(navigation, title, search, actions), modifier = modifier) { measurables, constraints ->
+        val (navigationM, titleM, searchM, actionsM) = measurables
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val gap = 16.dp.roundToPx()
+        val loose = Constraints(maxHeight = height)
+        val nav = navigationM.first().measure(loose)
+        val acts = actionsM.first().measure(loose)
+        val titleStart = nav.width + gap
+        val actionsStart = width - acts.width
+        // A fixed room for the title, so that the search field stays put while the title changes.
+        val titleWanted = TitleReserve.roundToPx()
+        val center = width / 2
+        val centeredHalf = minOf(center - (titleStart + titleWanted + gap), actionsStart - gap - center)
+        val searchMax = SearchMaxWidth.roundToPx()
+        val searchMin = SearchMinWidth.roundToPx()
+        val searchWidth: Int
+        val searchX: Int
+        if (centeredHalf * 2 >= searchMin) {
+            searchWidth = minOf(searchMax, centeredHalf * 2)
+            searchX = center - searchWidth / 2
+        } else {
+            val free = actionsStart - gap - (titleStart + titleWanted + gap)
+            searchWidth = if (free >= searchMin) minOf(searchMax, free) else SearchButtonSize.roundToPx()
+            searchX = (actionsStart - gap - searchWidth).coerceAtLeast(titleStart)
+        }
+        val searchPlaceable = searchM.first().measure(Constraints.fixed(searchWidth, SearchHeight.roundToPx()))
+        val titlePlaceable = titleM.first().measure(loose.copy(maxWidth = (searchX - gap - titleStart).coerceAtLeast(0)))
+        layout(width, height) {
+            nav.placeRelative(0, (height - nav.height) / 2)
+            titlePlaceable.placeRelative(titleStart, (height - titlePlaceable.height) / 2)
+            searchPlaceable.placeRelative(searchX, (height - searchPlaceable.height) / 2)
+            acts.placeRelative(actionsStart, (height - acts.height) / 2)
+        }
+    }
+}
+
+private val SearchMaxWidth = 360.dp
+private val SearchMinWidth = 160.dp
+private val SearchHeight = 40.dp
+private val SearchButtonSize = 40.dp
+/** The room the period's title keeps before the search field, enough for "September 2026". */
+private val TitleReserve = 200.dp
 
 internal val DesktopToolbarHeight: Dp = 68.dp
 
@@ -248,20 +319,33 @@ private fun CalendarUiState.desktopTitle(yearViewOpen: Boolean, locale: java.uti
     }
 }
 
+/** A round toolbar button with [content] centered, darker while hovered. */
 @Composable
-private fun ToolbarIconButton(icon: ImageVector, description: String, size: Dp = 40.dp, onClick: () -> Unit) {
+private fun RoundToolbarButton(
+    description: String,
+    onClick: () -> Unit,
+    background: Color = settingsControlColor(),
+    size: Dp = 40.dp,
+    content: @Composable () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+    val fill = when {
+        background == Color.Transparent && hovered -> WarmInk.copy(alpha = 0.08f)
+        hovered -> background.blendWith(WarmInk, 0.08f)
+        else -> background
+    }
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (hovered) WarmInk.copy(alpha = 0.08f) else Color.Transparent)
+            .background(fill)
             .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .clickable(interactionSource = interaction, indication = null, onClickLabel = description, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = WarmInk, modifier = Modifier.size(22.dp))
+        content()
     }
 }
 
@@ -329,6 +413,61 @@ private fun DesktopViewSwitcher(
     }
 }
 
+@Composable
+private fun DesktopView.label(weekLabel: String): String = when (this) {
+    DesktopView.Day -> stringResource(R.string.day)
+    DesktopView.Week -> weekLabel
+    DesktopView.Month -> stringResource(R.string.month)
+    DesktopView.Year -> stringResource(R.string.desktop_year)
+    DesktopView.Agenda -> stringResource(R.string.agenda)
+}
+
+/** The views as a drop-down showing the selected one, where the segmented switch has no room. */
+@Composable
+private fun CompactViewSwitcher(selected: DesktopView, weekLabel: String, onSelected: (DesktopView) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    MorphingDropdown(
+        expanded = open,
+        onDismissRequest = { open = false },
+        buttonShape = RoundedCornerShape(20.dp),
+        buttonColor = settingsControlColor(),
+        alignEnd = true,
+        onClick = { open = true },
+        menuMinWidth = 160.dp,
+        button = {
+            Row(
+                modifier = Modifier.height(40.dp).padding(start = 16.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(selected.label(weekLabel), color = WarmInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                Icon(Icons.Default.ExpandMore, contentDescription = null, tint = WarmInk, modifier = Modifier.size(20.dp))
+            }
+        },
+        menu = {
+            DesktopView.entries.forEach { view ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            open = false
+                            onSelected(view)
+                        }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        view.label(weekLabel),
+                        color = if (view == selected) WarmBrown else WarmInk,
+                        fontSize = 15.sp,
+                        fontWeight = if (view == selected) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                }
+            }
+        },
+    )
+}
+
 /** "New" with the choice of event or task, in the app's morphing drop-down. */
 @Composable
 private fun CreateButton(onCreateEvent: () -> Unit, onCreateTask: () -> Unit, showLabel: Boolean) {
@@ -339,6 +478,7 @@ private fun CreateButton(onCreateEvent: () -> Unit, onCreateTask: () -> Unit, sh
         onDismissRequest = { open = false },
         buttonShape = RoundedCornerShape(20.dp),
         buttonColor = WarmBrown,
+        alignEnd = true,
         onClick = { open = true },
         onClickLabel = stringResource(R.string.create),
         role = androidx.compose.ui.semantics.Role.Button,
@@ -351,7 +491,14 @@ private fun CreateButton(onCreateEvent: () -> Unit, onCreateTask: () -> Unit, sh
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = onAccent, modifier = Modifier.size(20.dp))
                 if (showLabel) {
-                    Text(stringResource(R.string.create), color = onAccent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.create),
+                        color = onAccent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
                 }
             }
         },
@@ -384,34 +531,49 @@ private fun CreateMenuRow(icon: ImageVector, label: String, onClick: () -> Unit)
 }
 
 @Composable
-private fun SearchPill(onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    Row(
-        modifier = Modifier
-            .height(40.dp)
-            .widthIn(min = 180.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (hovered) settingsControlColor().copy(alpha = 0.8f) else settingsControlColor())
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
-        Text(stringResource(R.string.search), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, modifier = Modifier.weight(1f, fill = false))
-        Spacer(Modifier.width(18.dp))
-        Text(
-            "Ctrl F",
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+private fun SearchField(onClick: () -> Unit) {
+    BoxWithConstraints {
+        if (maxWidth < SearchMinWidth) {
+            RoundToolbarButton(stringResource(R.string.search), onClick = onClick, background = Color.Transparent) {
+                Icon(Icons.Default.Search, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
+            }
+            return@BoxWithConstraints
+        }
+        val interaction = remember { MutableInteractionSource() }
+        val hovered by interaction.collectIsHoveredAsState()
+        Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(WarmLine.copy(alpha = 0.5f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
+                .fillMaxSize()
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (hovered) settingsControlColor().blendWith(WarmInk, 0.05f) else settingsControlColor())
+                .hoverable(interaction)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
+            Text(
+                stringResource(R.string.search),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "Ctrl F",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(WarmLine.copy(alpha = 0.5f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
     }
 }
 

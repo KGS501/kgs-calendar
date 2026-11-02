@@ -19,7 +19,8 @@ import com.kgs.calendar.domain.model.CalendarViewMode
  * they act only while the calendar itself is shown.
  *
  * - Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, Ctrl+, settings, F5 refresh
- * - T today, ← / → or Page Up / Page Down previous / next range
+ * - T today, Page Up / Page Down previous / next range
+ * - ← / → a day in the multi-day view (a page elsewhere), ↑ / ↓ a row in the month and year views
  * - D day, W multi-day, M month, Y (or J) year, A agenda; + / − one day more or fewer
  * - Ctrl+Shift+T tasks, Ctrl+M menu
  */
@@ -43,8 +44,12 @@ class DesktopShortcuts {
             ctrl -> null
             event.key == Key.F5 -> actions.refresh
             event.key == Key.T -> actions.today
-            event.key == Key.DirectionLeft || event.key == Key.PageUp -> { { actions.step(-1) } }
-            event.key == Key.DirectionRight || event.key == Key.PageDown -> { { actions.step(1) } }
+            event.key == Key.PageUp -> { { actions.step(-1) } }
+            event.key == Key.PageDown -> { { actions.step(1) } }
+            event.key == Key.DirectionLeft -> { { actions.nudge(-1) } }
+            event.key == Key.DirectionRight -> { { actions.nudge(1) } }
+            event.key == Key.DirectionUp -> { { actions.nudgeVertical(-1) } }
+            event.key == Key.DirectionDown -> { { actions.nudgeVertical(1) } }
             event.key == Key.D -> { { actions.selectView(CalendarViewMode.Day) } }
             event.key == Key.W -> { { actions.selectView(CalendarViewMode.ThreeDay) } }
             event.key == Key.M -> { { actions.selectView(CalendarViewMode.Month) } }

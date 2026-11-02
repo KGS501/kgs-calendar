@@ -6,6 +6,8 @@ import com.kgs.calendar.ui.hasTaskToolbarAttention
 import java.time.ZoneId
 import com.kgs.calendar.ui.desktop.LocalCalendarChrome
 import com.kgs.calendar.ui.desktop.DesktopFrame
+import com.kgs.calendar.ui.desktop.DesktopYearPane
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import com.kgs.calendar.ui.desktop.CalendarChrome
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -102,6 +104,7 @@ internal fun CalendarAppScaffold(
     val quietInteraction = remember { MutableInteractionSource() }
     // Narrow desktop windows have no room for the sidebar and use the phone layout instead.
     val desktop = LocalCalendarChrome.current == CalendarChrome.Desktop && currentWindowMetrics().widthDp >= DesktopFrameMinWidthDp
+    val paneLayout = LocalPaneLayout.current
     // The drawer shows how many items "Recently deleted" holds.
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -184,6 +187,15 @@ internal fun CalendarAppScaffold(
                             foregroundRecenterRequest = foregroundRecenterRequest,
                             showToolbar = !desktop,
                             dateRequest = shell.dateRequest,
+                            yearViewOpen = desktop && shell.yearViewOpen,
+                            yearView = if (desktop) {
+                                { morphDay, onOpenDay ->
+                                    DesktopYearPane(viewModel, renderState, shell, today, morphDay, onOpenDay)
+                                }
+                            } else {
+                                null
+                            },
+                            onYearViewDayOpened = { shell.yearViewOpen = false },
                         )
                     }
                 }
@@ -201,6 +213,7 @@ internal fun CalendarAppScaffold(
                         onViewSelected = onViewSelected,
                         onCreateEvent = { onCreateEvent(state.defaultFabCreationDate()) },
                         onCreateTask = { onCreateTask(state.defaultFabCreationDate(), true, SheetOrigin.Calendar) },
+                        onCreateTaskInPane = { onCreateTask(today, false, SheetOrigin.Calendar) },
                         content = calendarShell,
                     )
                 } else {
@@ -294,6 +307,14 @@ internal fun CalendarAppScaffold(
                 onShowCompleted = shell::openCompletedTasks,
                 onCreateTask = {
                     onCreateTask(today, false, SheetOrigin.Calendar)
+                },
+                onPin = if (desktop) {
+                    {
+                        shell.closeTaskDrawer()
+                        paneLayout.pinTasksPane(true)
+                    }
+                } else {
+                    null
                 },
             )
             CalendarSearchOverlay(

@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -125,6 +126,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.kgs.calendar.res.SharedR as R
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import com.kgs.calendar.ui.desktop.PaneSeam
 import com.kgs.calendar.data.isSupportedReadOnlyCalendarUrl
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -254,6 +257,8 @@ internal fun SettingsPage(
     onRestoreAccountImage: (String) -> Unit = {},
     trashCount: Int = 0,
     onRecentlyDeleted: () -> Unit = {},
+    /** "Recently deleted" as the right column's content in two columns. */
+    recentlyDeletedPane: (@Composable () -> Unit)? = null,
     problemCount: Int = 0,
     onProblems: () -> Unit = {},
     covered: Boolean = false,
@@ -472,7 +477,10 @@ internal fun SettingsPage(
                         },
                         icon = Icons.Default.Delete,
                         iconColor = SettingsColors.Trash,
-                        onClick = onRecentlyDeleted,
+                        selected = twoPane && openSectionDestination == SettingsDestination.RecentlyDeleted,
+                        onClick = {
+                            if (twoPane && recentlyDeletedPane != null) openSection(SettingsDestination.RecentlyDeleted) else onRecentlyDeleted()
+                        },
                     )
                 }
                 SettingsGroup(title = stringResource(R.string.settings_project)) {
@@ -1409,6 +1417,8 @@ internal fun SettingsPage(
                     )
                 }
             }
+            // Its own list, see SettingsSubpages.
+            SettingsDestination.RecentlyDeleted -> Unit
         }
     }
     @Composable
@@ -1444,7 +1454,11 @@ internal fun SettingsPage(
             },
             label = "settingsSubpage",
         ) { page ->
-            SettingsPageColumn(page)
+            if (page == SettingsDestination.RecentlyDeleted && recentlyDeletedPane != null) {
+                recentlyDeletedPane()
+            } else {
+                SettingsPageColumn(page)
+            }
         }
     }
     Surface(
@@ -1454,26 +1468,35 @@ internal fun SettingsPage(
         color = MaterialTheme.colorScheme.background,
     ) {
         if (twoPane) {
-            Row(
+            val panes = LocalPaneLayout.current
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = statusTop + 8.dp, bottom = navBottom),
             ) {
-                Column(Modifier.weight(2f)) {
-                    SettingsTopBar(
-                        title = SettingsDestination.Main.localizedTitle(),
-                        onBack = onClose,
-                        trailing = { SettingsProblemsButton(count = problemCount, onClick = onProblems) },
+                val totalWidth = maxWidth
+                Row(Modifier.fillMaxSize()) {
+                    // The seam between the columns can be dragged to share the width differently.
+                    Column(Modifier.width(totalWidth * panes.settingsListFraction)) {
+                        SettingsTopBar(
+                            title = SettingsDestination.Main.localizedTitle(),
+                            onBack = onClose,
+                            trailing = { SettingsProblemsButton(count = problemCount, onClick = onProblems) },
+                        )
+                        SettingsPageColumn(SettingsDestination.Main)
+                    }
+                    PaneSeam(
+                        onDrag = { delta -> panes.dragSettingsList(delta, totalWidth.value) },
+                        onDragEnd = panes::commit,
                     )
-                    SettingsPageColumn(SettingsDestination.Main)
-                }
-                Column(Modifier.weight(3f)) {
-                    // A section's own page has no back arrow: its left column entry is still there.
-                    SettingsTopBar(
-                        title = paneDestination.localizedTitle(),
-                        onBack = if (navigationStack.size > 2) ::navigateBack else null,
-                    )
-                    SettingsSubpages(paneDestination)
+                    Column(Modifier.weight(1f)) {
+                        // A section's own page has no back arrow: its left column entry is still there.
+                        SettingsTopBar(
+                            title = paneDestination.localizedTitle(),
+                            onBack = if (navigationStack.size > 2) ::navigateBack else null,
+                        )
+                        SettingsSubpages(paneDestination)
+                    }
                 }
             }
         } else {
@@ -1941,6 +1964,7 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.About -> stringResource(R.string.about_kgs_calendar)
     SettingsDestination.EventFieldOrder -> stringResource(R.string.event_fields)
     SettingsDestination.TaskFieldOrder -> stringResource(R.string.task_fields)
+    SettingsDestination.RecentlyDeleted -> stringResource(R.string.recently_deleted)
 }
 
 @Composable

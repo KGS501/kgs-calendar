@@ -237,6 +237,18 @@ internal fun SettingsOverlay(
             onRestoreAccountImage = viewModel.sources::restoreAccountImage,
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
+            recentlyDeletedPane = {
+                RecentlyDeletedPage(
+                    trash = trash,
+                    taskColorMode = state.taskColorMode,
+                    onItemClick = shell::openTrashedDetail,
+                    onEmptyTrash = viewModel.trash::emptyTrash,
+                    onDismissNotice = viewModel.trash::dismissNotice,
+                    onOpened = viewModel.trash::refresh,
+                    onClose = {},
+                    embedded = true,
+                )
+            },
             problemCount = problemCount,
             onProblems = shell::openProblems,
             covered = covered,

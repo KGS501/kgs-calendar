@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -626,6 +628,8 @@ internal fun TaskDrawer(
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
+    /** Pins the sidebar as a permanent pane (the desktop); null where it can't be pinned. */
+    onPin: (() -> Unit)? = null,
 ) {
     val drawerProgress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -696,6 +700,8 @@ internal fun TaskDrawer(
                 onTaskClick = onTaskClick,
                 onShowCompleted = onShowCompleted,
                 onCreateTask = onCreateTask,
+                pinned = false,
+                onPinnedChange = onPin?.let { pin -> { pinned: Boolean -> if (pinned) pin() } },
             )
         }
     }
@@ -713,6 +719,10 @@ internal fun TaskPane(
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The hairline on the pane's calendar side; the desktop draws its own seam there. */
+    showDivider: Boolean = true,
+    pinned: Boolean = false,
+    onPinnedChange: ((Boolean) -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier
@@ -728,8 +738,10 @@ internal fun TaskPane(
                 onTaskClick = onTaskClick,
                 onShowCompleted = onShowCompleted,
                 onCreateTask = onCreateTask,
+                pinned = pinned,
+                onPinnedChange = onPinnedChange,
             )
-            Box(
+            if (showDivider) Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
@@ -750,6 +762,8 @@ private fun TaskSidebarContent(
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
+    pinned: Boolean = false,
+    onPinnedChange: ((Boolean) -> Unit)? = null,
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Column(
@@ -767,6 +781,23 @@ private fun TaskSidebarContent(
             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+            }
+            if (onPinnedChange != null) {
+                // Pinned, the sidebar stays beside the calendar like the left one.
+                IconButton(
+                    onClick = { onPinnedChange(!pinned) },
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (pinned) accentContainerColor() else Color.Transparent),
+                ) {
+                    Icon(
+                        if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = stringResource(if (pinned) R.string.desktop_unpin_tasks else R.string.desktop_pin_tasks),
+                        tint = if (pinned) accentContainerContentColor() else WarmInk,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
             IconButton(
                 onClick = onCreateTask,

@@ -62,6 +62,14 @@ internal class CalendarShellUiState(
     fun requestDate(date: java.time.LocalDate) {
         dateRequest = DateRequest((dateRequest?.serial ?: 0) + 1, date)
     }
+
+    /** A request to scroll the shown view by one row up (-1) or down (+1), from the arrow keys. */
+    var scrollStep by mutableStateOf<ScrollStepRequest?>(null)
+        private set
+
+    fun requestScrollStep(direction: Int) {
+        scrollStep = ScrollStepRequest((scrollStep?.serial ?: 0) + 1, direction)
+    }
     private var creationSheetState by mutableStateOf<CreationSheet?>(null)
 
     /** Every editor that opens starts a new draft in [editorDrafts]; closing one ends its draft. */
@@ -759,3 +767,6 @@ private const val TransferDraftKey = "transferDraft"
 
 /** One request to show [date]; [serial] tells repeated requests for the same date apart. */
 data class DateRequest(val serial: Int, val date: java.time.LocalDate)
+
+/** One request to scroll by a row in [direction]; [serial] tells repeated requests apart. */
+data class ScrollStepRequest(val serial: Int, val direction: Int)

@@ -14,6 +14,10 @@ internal class CalendarShortcuts(
     val today: () -> Unit,
     /** Moves the shown range back (-1) or forward (+1) by one page of the current view. */
     val step: (Int) -> Unit,
+    /** The left and right arrows: a day in the multi-day view, otherwise a page. */
+    val nudge: (Int) -> Unit,
+    /** The up and down arrows: a row in the month and year views. */
+    val nudgeVertical: (Int) -> Unit,
     val selectView: (CalendarViewMode) -> Unit,
     /** The desktop's year view. */
     val yearView: () -> Unit,

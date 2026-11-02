@@ -1,6 +1,20 @@
 package com.kgs.calendar.ui.desktop
 
 import androidx.compose.animation.AnimatedContent
+import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.flow.Flow
+import com.kgs.calendar.ui.MotionStandard
+import com.kgs.calendar.ui.monthMarkersFor
+import com.kgs.calendar.ui.MonthDayMarkers
+import com.kgs.calendar.domain.model.isMonthSurfaceTaskVisible
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -84,34 +98,24 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
-internal val DesktopSidebarWidth = 296.dp
-
 /**
- * The desktop's permanent sidebar: the month with the shown days, what is coming up in the next
- * days, the calendars with their switches, and settings.
+ * The desktop's permanent sidebar: the month with the shown days, the calendars with their
+ * switches as in the Android app's drawer, and settings.
  */
 @Composable
 internal fun DesktopSidebar(
     state: CalendarUiState,
     yearViewOpen: Boolean,
     today: LocalDate,
-    upcomingEvents: List<EventEntity>,
-    upcomingTasks: List<TaskEntity>,
-    markedDays: Set<LocalDate>,
+    observeRange: (LocalDate, LocalDate) -> Flow<Pair<List<EventEntity>, List<TaskEntity>>>,
     onDateSelected: (LocalDate) -> Unit,
-    onEventClick: (EventEntity) -> Unit,
-    onTaskClick: (TaskEntity) -> Unit,
     onCollectionVisibleInViews: (String, Boolean) -> Unit,
     onCollectionSettings: (CollectionEntity) -> Unit,
     onGroupSettings: (String) -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .width(DesktopSidebarWidth)
-            .fillMaxHeight(),
-    ) {
+    Column(modifier = modifier.fillMaxHeight()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,6 +132,8 @@ internal fun DesktopSidebar(
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.SansSerif,
                 color = WarmInk,
+                maxLines = 1,
+                softWrap = false,
             )
         }
         val scroll = rememberScrollState()
@@ -142,21 +148,12 @@ internal fun DesktopSidebar(
                 visibleDays = state.visibleDays(yearViewOpen),
                 firstDayOfWeek = state.firstDayOfWeek,
                 today = today,
-                markedDays = markedDays,
+                taskColorMode = state.taskColorMode,
+                observeRange = observeRange,
                 onDateSelected = onDateSelected,
                 modifier = Modifier.padding(horizontal = 14.dp),
             )
             Spacer(Modifier.height(22.dp))
-            SidebarHeading(stringResource(R.string.desktop_upcoming))
-            UpcomingList(
-                today = today,
-                events = upcomingEvents,
-                tasks = upcomingTasks,
-                taskColorMode = state.taskColorMode,
-                onEventClick = onEventClick,
-                onTaskClick = onTaskClick,
-            )
-            Spacer(Modifier.height(18.dp))
             SidebarHeading(stringResource(R.string.desktop_calendars))
             CalendarSourceList(
                 state = state,
@@ -200,13 +197,17 @@ private fun SidebarAction(label: String, icon: ImageVector, onClick: () -> Unit)
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(icon, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
-        Text(label, color = WarmInk, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = WarmInk, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
+private val MiniMonthRowHeight = 36.dp
+
 /**
- * A small month: the shown days are banded, today is filled in the accent color, days with items
- * have a dot. Its own arrows browse months without changing the calendar; a click selects a day.
+ * A small month: the days the calendar shows are banded, and the band glides along as they
+ * change; today is filled in the accent color; the dots under a day are its items in their
+ * calendars' colors, as in the app's month overview. Its own arrows browse months without
+ * changing the calendar; a click selects a day.
  */
 @Composable
 private fun MiniMonth(
@@ -214,7 +215,8 @@ private fun MiniMonth(
     visibleDays: ClosedRange<LocalDate>?,
     firstDayOfWeek: java.time.DayOfWeek,
     today: LocalDate,
-    markedDays: Set<LocalDate>,
+    taskColorMode: com.kgs.calendar.data.settings.TaskColorMode,
+    observeRange: (LocalDate, LocalDate) -> Flow<Pair<List<EventEntity>, List<TaskEntity>>>,
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -228,6 +230,14 @@ private fun MiniMonth(
             month = target
         }
     }
+    // The band keeps its last days while it fades out, e.g. when the year view opens.
+    var lastVisibleDays by remember { mutableStateOf(visibleDays) }
+    if (visibleDays != null) lastVisibleDays = visibleDays
+    val bandAlpha by animateFloatAsState(
+        targetValue = if (visibleDays != null) 1f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionStandard),
+        label = "miniMonthBandAlpha",
+    )
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -241,6 +251,8 @@ private fun MiniMonth(
                 color = WarmInk,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             SmallIconButton(Icons.Default.ChevronLeft, stringResource(R.string.desktop_previous)) {
@@ -276,26 +288,66 @@ private fun MiniMonth(
             label = "miniMonth",
         ) { shownMonth ->
             val gridStart = shownMonth.atDay(1).with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
-            Column {
-                for (week in 0 until 6) {
-                    Row(Modifier.fillMaxWidth()) {
-                        for (dayIndex in 0 until 7) {
-                            val date = gridStart.plusDays(week * 7L + dayIndex)
-                            MiniMonthDay(
-                                date = date,
-                                inMonth = YearMonth.from(date) == shownMonth,
-                                today = date == today,
-                                selected = date == selectedDate,
-                                band = visibleDays?.let { range -> date in range }?.let { inRange ->
-                                    if (!inRange) null else Band(
-                                        start = date == visibleDays.start || dayIndex == 0,
-                                        end = date == visibleDays.endInclusive || dayIndex == 6,
-                                    )
-                                },
-                                marked = date in markedDays,
-                                onClick = { onDateSelected(date) },
-                                modifier = Modifier.weight(1f),
-                            )
+            val items by produceState(emptyList<EventEntity>() to emptyList<TaskEntity>(), shownMonth) {
+                observeRange(shownMonth.atDay(1), shownMonth.atEndOfMonth().plusDays(1)).collect { value = it }
+            }
+            val markers = remember(items, shownMonth, taskColorMode) {
+                monthMarkersFor(
+                    shownMonth,
+                    items.first,
+                    items.second.filter { isMonthSurfaceTaskVisible(it.isCompleted, it.status) },
+                    taskColorMode,
+                )
+            }
+            // The band in day indices of this grid, end exclusive; it moves smoothly between ranges.
+            val range = lastVisibleDays
+            val bandStart by animateFloatAsState(
+                targetValue = range?.let { ChronoUnit.DAYS.between(gridStart, it.start).toFloat().coerceIn(-1f, 43f) } ?: 0f,
+                animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                label = "miniMonthBandStart",
+            )
+            val bandEnd by animateFloatAsState(
+                targetValue = range?.let { (ChronoUnit.DAYS.between(gridStart, it.endInclusive) + 1).toFloat().coerceIn(-1f, 43f) } ?: 0f,
+                animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+                label = "miniMonthBandEnd",
+            )
+            val bandColor = WarmBrown.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.22f else 0.16f)
+            Box {
+                Canvas(Modifier.matchParentSize()) {
+                    if (bandAlpha <= 0.001f || bandEnd <= bandStart) return@Canvas
+                    val cell = size.width / 7f
+                    val rowHeight = MiniMonthRowHeight.toPx()
+                    val inset = 2.dp.toPx()
+                    val radius = (rowHeight - inset * 2) / 2f
+                    for (week in 0 until 6) {
+                        val from = maxOf(bandStart, week * 7f)
+                        val to = minOf(bandEnd, week * 7f + 7f)
+                        if (to - from <= 0.01f) continue
+                        val left = (from - week * 7f) * cell + inset
+                        val right = (to - week * 7f) * cell - inset
+                        drawRoundRect(
+                            color = bandColor.copy(alpha = bandColor.alpha * bandAlpha),
+                            topLeft = Offset(left, week * rowHeight + inset),
+                            size = Size((right - left).coerceAtLeast(0f), rowHeight - inset * 2),
+                            cornerRadius = CornerRadius(radius, radius),
+                        )
+                    }
+                }
+                Column {
+                    for (week in 0 until 6) {
+                        Row(Modifier.fillMaxWidth()) {
+                            for (dayIndex in 0 until 7) {
+                                val date = gridStart.plusDays(week * 7L + dayIndex)
+                                MiniMonthDay(
+                                    date = date,
+                                    inMonth = YearMonth.from(date) == shownMonth,
+                                    today = date == today,
+                                    selected = date == selectedDate,
+                                    markers = markers[date],
+                                    onClick = { onDateSelected(date) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
                     }
                 }
@@ -304,48 +356,30 @@ private fun MiniMonth(
     }
 }
 
-private class Band(val start: Boolean, val end: Boolean)
-
 @Composable
 private fun MiniMonthDay(
     date: LocalDate,
     inMonth: Boolean,
     today: Boolean,
     selected: Boolean,
-    band: Band?,
-    marked: Boolean,
+    markers: MonthDayMarkers?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val bandColor = WarmBrown.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.22f else 0.16f)
-    Box(
+    val accentText = if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
+    Column(
         modifier = modifier
-            .height(34.dp)
-            .padding(vertical = 2.dp),
-        contentAlignment = Alignment.Center,
+            .height(MiniMonthRowHeight)
+            .hoverable(interaction)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        if (band != null) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(start = if (band.start) 3.dp else 0.dp, end = if (band.end) 3.dp else 0.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = if (band.start) 15.dp else 0.dp,
-                            bottomStart = if (band.start) 15.dp else 0.dp,
-                            topEnd = if (band.end) 15.dp else 0.dp,
-                            bottomEnd = if (band.end) 15.dp else 0.dp,
-                        ),
-                    )
-                    .background(bandColor),
-            )
-        }
-        val accentText = if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
         Box(
             modifier = Modifier
-                .size(30.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .background(
                     when {
@@ -353,9 +387,7 @@ private fun MiniMonthDay(
                         hovered -> WarmInk.copy(alpha = 0.08f)
                         else -> Color.Transparent
                     },
-                )
-                .hoverable(interaction)
-                .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -366,16 +398,26 @@ private fun MiniMonthDay(
                     else -> WarmInk
                 },
                 fontSize = 13.sp,
+                lineHeight = 15.sp,
                 fontWeight = if (today || selected) FontWeight.Bold else FontWeight.Medium,
             )
-            if (marked && !today) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 3.dp)
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(if (inMonth) WarmBrown else WarmBrown.copy(alpha = 0.4f)),
+        }
+        // The day's items in their calendars' colors; a plus when there are more than fit.
+        Row(
+            modifier = Modifier.height(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            markers?.colors?.forEach { color ->
+                Box(Modifier.size(4.dp).clip(CircleShape).background(Color(color)))
+            }
+            if (markers?.hasMore == true) {
+                Text(
+                    "+",
+                    color = WarmInk,
+                    fontSize = 8.sp,
+                    lineHeight = 8.sp,
+                    modifier = Modifier.offset { IntOffset(0, -1) },
                 )
             }
         }
@@ -397,132 +439,4 @@ private fun SmallIconButton(icon: ImageVector, description: String, onClick: () 
     ) {
         Icon(icon, contentDescription = description, tint = WarmInk, modifier = Modifier.size(20.dp))
     }
-}
-
-/** The next days with their all-day items, timed events and open tasks, like a short agenda. */
-@Composable
-private fun UpcomingList(
-    today: LocalDate,
-    events: List<EventEntity>,
-    tasks: List<TaskEntity>,
-    taskColorMode: com.kgs.calendar.data.settings.TaskColorMode,
-    onEventClick: (EventEntity) -> Unit,
-    onTaskClick: (TaskEntity) -> Unit,
-) {
-    val locale = LocalAppLocale.current
-    val days = remember(today, events, tasks) {
-        (0L until UpcomingDays).map { offset ->
-            val day = today.plusDays(offset)
-            val dayEvents = events
-                .filter { event -> !day.isBefore(event.startsAtMillis.toDate()) && !day.isAfter(event.endDateInclusive()) }
-                .sortedWith(compareBy<EventEntity> { !it.allDay }.thenBy { it.startsAtMillis }.thenBy { it.title })
-            val dayTasks = tasks.filter { it.isOpen() && it.taskDate() == day }.sortedBy { it.dueAtMillis ?: it.startAtMillis }
-            Triple(day, dayEvents, dayTasks)
-        }.filter { (day, dayEvents, dayTasks) -> day == today || dayEvents.isNotEmpty() || dayTasks.isNotEmpty() }
-    }
-    if (days.all { (_, dayEvents, dayTasks) -> dayEvents.isEmpty() && dayTasks.isEmpty() }) {
-        Text(
-            stringResource(R.string.desktop_nothing_upcoming),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
-        )
-        return
-    }
-    val dateFormatter = remember(locale) { dayMonthFormatter(locale, weekday = "EEE") }
-    days.forEach { (day, dayEvents, dayTasks) ->
-        val prefix = when (day) {
-            today -> stringResource(R.string.today)
-            today.plusDays(1) -> stringResource(R.string.desktop_tomorrow)
-            else -> null
-        }
-        Row(
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 10.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (prefix != null) {
-                Text(prefix, color = if (day == today) WarmBrown else WarmInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Text(day.format(dateFormatter), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        }
-        dayEvents.forEach { event -> UpcomingEventRow(event, day, onClick = { onEventClick(event) }) }
-        dayTasks.forEach { task -> UpcomingTaskRow(task, taskColorMode, onClick = { onTaskClick(task) }) }
-    }
-}
-
-private const val UpcomingDays = 7L
-
-@Composable
-private fun UpcomingEventRow(event: EventEntity, day: LocalDate, onClick: () -> Unit) {
-    val color = Color(event.displayColor())
-    val timedOnThisDay = !event.allDay && event.startsAtMillis.toDate() == day
-    UpcomingRow(onClick = onClick) {
-        if (timedOnThisDay) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-            Column(Modifier.weight(1f)) {
-                Text(event.title, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    "${event.startsAtMillis.toTimeText()} – ${event.endsAtMillis.toTimeText()}" +
-                        event.location?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        } else {
-            val onColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
-            Text(
-                event.title,
-                color = onColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun UpcomingTaskRow(task: TaskEntity, taskColorMode: com.kgs.calendar.data.settings.TaskColorMode, onClick: () -> Unit) {
-    UpcomingRow(onClick = onClick) {
-        Icon(
-            Icons.Default.RadioButtonUnchecked,
-            contentDescription = null,
-            tint = Color(task.displayColor(taskColorMode)),
-            modifier = Modifier.size(15.dp),
-        )
-        Text(task.title, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        val due = task.dueAtMillis
-        if (task.dueHasTime && due != null) {
-            Text(due.toTimeText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun UpcomingRow(onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (hovered) WarmInk.copy(alpha = 0.06f) else Color.Transparent)
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        content = content,
-    )
 }

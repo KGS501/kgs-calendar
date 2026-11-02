@@ -28,6 +28,8 @@ internal enum class SettingsDestination {
     About,
     EventFieldOrder,
     TaskFieldOrder,
+    /** "Recently deleted" beside the main page in two columns; on its own it is a page of its own. */
+    RecentlyDeleted,
 }
 
 internal sealed interface CreationSheet {

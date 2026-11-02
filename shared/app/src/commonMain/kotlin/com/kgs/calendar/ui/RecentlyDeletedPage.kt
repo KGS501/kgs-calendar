@@ -84,6 +84,8 @@ internal fun RecentlyDeletedPage(
     onDismissNotice: () -> Unit,
     onOpened: () -> Unit,
     onClose: () -> Unit,
+    /** In the settings' right column: no back arrow, and the list keeps to the column. */
+    embedded: Boolean = false,
 ) {
     LaunchedEffect(Unit) { onOpened() }
     var emptyTrashConfirmOpen by rememberSaveable { mutableStateOf(false) }
@@ -110,24 +112,27 @@ internal fun RecentlyDeletedPage(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = statusTop + 8.dp),
+                    .padding(top = if (embedded) 0.dp else statusTop + 8.dp),
             ) {
-                Row(
+                // Embedded, the settings' column already names the page; only its action remains.
+                if (!embedded || trash.entries.isNotEmpty()) Row(
                     modifier = Modifier
-                        .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
-                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                        .then(if (embedded) Modifier.fillMaxWidth() else Modifier.centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)))
+                        .padding(horizontal = 18.dp, vertical = if (embedded) 0.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
+                    if (!embedded) {
+                        IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
+                        }
                     }
                     Text(
-                        stringResource(R.string.recently_deleted),
-                        color = WarmInk,
-                        fontSize = 24.sp,
-                        lineHeight = 28.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        if (embedded) appPluralString(R.plurals.recently_deleted_items, trash.entries.size, trash.entries.size) else stringResource(R.string.recently_deleted),
+                        color = if (embedded) MaterialTheme.colorScheme.onSurfaceVariant else WarmInk,
+                        fontSize = if (embedded) 14.sp else 24.sp,
+                        lineHeight = if (embedded) 18.sp else 28.sp,
+                        fontWeight = if (embedded) FontWeight.Medium else FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -149,7 +154,7 @@ internal fun RecentlyDeletedPage(
                 if (trash.entries.isEmpty()) {
                     RecentlyDeletedEmptyState(Modifier.fillMaxSize().padding(bottom = navBottom))
                 } else {
-                    val listSidePadding = centeredContentPadding(
+                    val listSidePadding = if (embedded) 18.dp else centeredContentPadding(
                         availableWidth = currentCalendarWindowLayout().widthDp.dp,
                         maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
                         basePadding = 18.dp,

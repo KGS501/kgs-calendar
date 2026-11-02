@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -383,7 +384,7 @@ private fun MonthDayCard(
 private val MonthDayRowHeight = 108.dp
 private const val MonthVisiblePillLanes = 4
 
-private data class MonthRowPillCandidate(
+internal data class MonthRowPillCandidate(
     val id: String,
     val uid: String?,
     /** The occurrence this pill shows, for its pending-sync indicator. */
@@ -401,7 +402,7 @@ private data class MonthRowPillCandidate(
     val isMultiDay: Boolean = spanDays > 1
 }
 
-private data class MonthRowPillSegment(
+internal data class MonthRowPillSegment(
     val candidate: MonthRowPillCandidate,
     val visualStart: LocalDate,
     val visualEnd: LocalDate,
@@ -409,21 +410,32 @@ private data class MonthRowPillSegment(
     val fadeMode: MonthRowFadeMode,
 )
 
-private enum class MonthRowFadeMode {
+internal enum class MonthRowFadeMode {
     None,
     IntoNextDay,
     AtRowEnd,
 }
 
-private fun buildMonthRowPillSegments(
+/** A row's pills in their lanes, and per day the items that found no room in the row's lanes. */
+internal data class MonthRowPillLayout(
+    val segments: List<MonthRowPillSegment>,
+    val hiddenByDay: Map<LocalDate, List<MonthRowPillCandidate>>,
+)
+
+/**
+ * Lays out the items of [rowDays] (a week of the month view, a month of the desktop's year view)
+ * in [visibleLanes] lanes; items that break at the row's end fade out there.
+ */
+internal fun buildMonthRowPillSegments(
     rowDays: List<LocalDate>,
     rowStartDate: LocalDate,
     rowEndDate: LocalDate,
     eventsByDay: Map<LocalDate, List<EventEntity>>,
     tasksByDay: Map<LocalDate, List<TaskEntity>>,
     taskColorMode: TaskColorMode,
-): Pair<List<MonthRowPillSegment>, Map<LocalDate, Int>> {
-    val rowStart = rowDays.firstOrNull() ?: return emptyList<MonthRowPillSegment>() to emptyMap()
+    visibleLanes: Int = MonthVisiblePillLanes,
+): MonthRowPillLayout {
+    val rowStart = rowDays.firstOrNull() ?: return MonthRowPillLayout(emptyList(), emptyMap())
     val rowEnd = rowDays.lastOrNull() ?: rowStart
     val candidates = buildList {
         rowDays
@@ -517,16 +529,16 @@ private fun buildMonthRowPillSegments(
             lane.all { existing -> doesNotOverlap(existing) || isMultiDayJunction(existing) }
 
         val fullLane = laneSegments.indexOfFirst(::canPlaceFully)
-        val visibleFadeLane = if (candidate.isMultiDay && laneSegments.size >= MonthVisiblePillLanes) {
+        val visibleFadeLane = if (candidate.isMultiDay && laneSegments.size >= visibleLanes) {
             laneSegments.indexOfFirst { lane -> canShareLaneWithFade(lane) }
-                .takeIf { it in 0 until MonthVisiblePillLanes }
+                .takeIf { it in 0 until visibleLanes }
                 ?: -1
         } else {
             -1
         }
         val targetLane = when {
-            fullLane in 0 until MonthVisiblePillLanes -> fullLane
-            laneSegments.size < MonthVisiblePillLanes -> laneSegments.size
+            fullLane in 0 until visibleLanes -> fullLane
+            laneSegments.size < visibleLanes -> laneSegments.size
             visibleFadeLane >= 0 -> visibleFadeLane
             fullLane >= 0 -> fullLane
             else -> laneSegments.size
@@ -575,7 +587,7 @@ private fun buildMonthRowPillSegments(
     }
 
     val visibleSegments = segments
-        .filter { it.lane < MonthVisiblePillLanes && !it.visualEnd.isBefore(it.visualStart) }
+        .filter { it.lane < visibleLanes && !it.visualEnd.isBefore(it.visualStart) }
         .map {
             MonthRowPillSegment(
                 candidate = it.candidate,
@@ -590,11 +602,10 @@ private fun buildMonthRowPillSegments(
             .filter { it.fadeMode != MonthRowFadeMode.None && it.actualEnd == day }
             .map { it.candidate.id }
             .toSet()
-        val active = candidates.count { day in it.start..it.end && it.id !in fadeRepresentedIds }
-        val visible = visibleSegments.count { day in it.visualStart..it.visualEnd }
-        (active - visible).coerceAtLeast(0)
-    }.filterValues { it > 0 }
-    return visibleSegments to hiddenByDay
+        val visibleIds = visibleSegments.filter { day in it.visualStart..it.visualEnd }.mapTo(hashSetOf()) { it.candidate.id }
+        sortedCandidates.filter { day in it.start..it.end && it.id !in fadeRepresentedIds && it.id !in visibleIds }
+    }.filterValues { it.isNotEmpty() }
+    return MonthRowPillLayout(visibleSegments, hiddenByDay)
 }
 
 @Composable
@@ -610,7 +621,7 @@ private fun MonthRowPillOverlay(
     if (rowDays.isEmpty()) return
     val (segments, hiddenByDay) = remember(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode) {
         buildMonthRowPillSegments(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode)
-    }
+    }.let { it.segments to it.hiddenByDay.mapValues { (_, items) -> items.size } }
     BoxWithConstraints(modifier = modifier) {
         val spacing = 4.dp
         val cellWidth = (maxWidth - spacing * 6) / 7f
@@ -622,39 +633,14 @@ private fun MonthRowPillOverlay(
         val laneStep = 15.dp * textScale
 
         segments.forEach { segment ->
-            val startColumn = ChronoUnit.DAYS.between(rowStartDate, segment.visualStart).toInt().coerceIn(0, 6)
-            val endColumn = ChronoUnit.DAYS.between(rowStartDate, segment.visualEnd).toInt().coerceIn(startColumn, 6)
-            val span = endColumn - startColumn + 1
-            val x = step * startColumn + 3.dp
-            val bodyWidth = cellWidth * span + spacing * (span - 1) - 6.dp
-            val availableTailWidth = (maxWidth - x - bodyWidth).coerceAtLeast(0.dp)
-            val tailWidth = when (segment.fadeMode) {
-                MonthRowFadeMode.IntoNextDay -> minOf(cellWidth * 0.34f + spacing, availableTailWidth)
-                else -> 0.dp
-            }
-            val width = bodyWidth + tailWidth
-            val leftSolidStart = if (segment.candidate.start < segment.visualStart && width > 0.dp) {
-                val fadeWidth = minOf(cellWidth * 0.30f, width)
-                (fadeWidth.value / width.value).coerceIn(0.02f, 0.36f)
-            } else {
-                0f
-            }
-            val rightSolidEnd = when {
-                segment.fadeMode == MonthRowFadeMode.IntoNextDay && width > 0.dp ->
-                    (bodyWidth.value / width.value).coerceIn(0.05f, 0.98f)
-                (segment.fadeMode == MonthRowFadeMode.AtRowEnd || segment.candidate.end > segment.visualEnd) && bodyWidth > 0.dp -> {
-                    val fadeWidth = minOf(cellWidth * 0.34f, bodyWidth)
-                    ((bodyWidth - fadeWidth).value / width.value).coerceIn(leftSolidStart + 0.04f, 0.98f)
-                }
-                else -> 1f
-            }
+            val geometry = monthRowPillGeometry(segment, rowStartDate, columns = 7, cellWidth = cellWidth, spacing = spacing, rowWidth = maxWidth)
             MonthRowPillChip(
                 segment = segment,
-                leftSolidStart = leftSolidStart,
-                rightSolidEnd = rightSolidEnd,
+                leftSolidStart = geometry.leftSolidStart,
+                rightSolidEnd = geometry.rightSolidEnd,
                 modifier = Modifier
-                    .offset(x = x, y = pillTop + laneStep * segment.lane)
-                    .width(width)
+                    .offset(x = geometry.x, y = pillTop + laneStep * segment.lane)
+                    .width(geometry.width)
                     .height(pillHeight),
             )
         }
@@ -672,12 +658,60 @@ private fun MonthRowPillOverlay(
     }
 }
 
+internal data class MonthRowPillGeometry(val x: Dp, val width: Dp, val leftSolidStart: Float, val rightSolidEnd: Float)
+
+/**
+ * Where a pill of a row of [columns] cells starting at [rowStartDate] goes, and which part of it
+ * is solid: pills that continue beyond the row fade at that end, and a pill handing over to
+ * another one in the same lane fades into the next day.
+ */
+internal fun monthRowPillGeometry(
+    segment: MonthRowPillSegment,
+    rowStartDate: LocalDate,
+    columns: Int,
+    cellWidth: Dp,
+    spacing: Dp,
+    rowWidth: Dp,
+    inset: Dp = 3.dp,
+): MonthRowPillGeometry {
+    val step = cellWidth + spacing
+    val startColumn = ChronoUnit.DAYS.between(rowStartDate, segment.visualStart).toInt().coerceIn(0, columns - 1)
+    val endColumn = ChronoUnit.DAYS.between(rowStartDate, segment.visualEnd).toInt().coerceIn(startColumn, columns - 1)
+    val span = endColumn - startColumn + 1
+    val x = step * startColumn + inset
+    val bodyWidth = cellWidth * span + spacing * (span - 1) - inset * 2
+    val availableTailWidth = (rowWidth - x - bodyWidth).coerceAtLeast(0.dp)
+    val tailWidth = when (segment.fadeMode) {
+        MonthRowFadeMode.IntoNextDay -> minOf(cellWidth * 0.34f + spacing, availableTailWidth)
+        else -> 0.dp
+    }
+    val width = bodyWidth + tailWidth
+    val leftSolidStart = if (segment.candidate.start < segment.visualStart && width > 0.dp) {
+        val fadeWidth = minOf(cellWidth * 0.30f, width)
+        (fadeWidth.value / width.value).coerceIn(0.02f, 0.36f)
+    } else {
+        0f
+    }
+    val rightSolidEnd = when {
+        segment.fadeMode == MonthRowFadeMode.IntoNextDay && width > 0.dp ->
+            (bodyWidth.value / width.value).coerceIn(0.05f, 0.98f)
+        (segment.fadeMode == MonthRowFadeMode.AtRowEnd || segment.candidate.end > segment.visualEnd) && bodyWidth > 0.dp -> {
+            val fadeWidth = minOf(cellWidth * 0.34f, bodyWidth)
+            ((bodyWidth - fadeWidth).value / width.value).coerceIn(leftSolidStart + 0.04f, 0.98f)
+        }
+        else -> 1f
+    }
+    return MonthRowPillGeometry(x, width, leftSolidStart, rightSolidEnd)
+}
+
 @Composable
-private fun MonthRowPillChip(
+internal fun MonthRowPillChip(
     segment: MonthRowPillSegment,
     leftSolidStart: Float,
     rightSolidEnd: Float,
     modifier: Modifier = Modifier,
+    /** Painted under a fading pill so that what is behind it doesn't show through; null for none. */
+    fadeBase: Color? = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f),
 ) {
     val candidate = segment.candidate
     val bg = Color(candidate.color)
@@ -712,10 +746,9 @@ private fun MonthRowPillChip(
     } else {
         Brush.horizontalGradient(0f to fill, 1f to fill)
     }
-    val fadeBase = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f)
     BoxWithConstraints(
         modifier = modifier
-            .then(if (hasEdgeFade && !tentative) Modifier.background(fadeBase, RoundedCornerShape(6.dp)) else Modifier)
+            .then(if (hasEdgeFade && !tentative && fadeBase != null) Modifier.background(fadeBase, RoundedCornerShape(6.dp)) else Modifier)
             .background(brush, RoundedCornerShape(6.dp))
             .then(if (tentative) Modifier.dashedBorder(bg.copy(alpha = 0.9f), 6.dp) else Modifier),
     ) {

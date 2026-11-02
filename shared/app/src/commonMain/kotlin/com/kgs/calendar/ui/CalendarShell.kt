@@ -169,6 +169,11 @@ fun CalendarShell(
     showToolbar: Boolean = true,
     /** A date to move the month grid or agenda to, requested from outside, e.g. the desktop toolbar. */
     dateRequest: com.kgs.calendar.ui.shell.DateRequest? = null,
+    /** The desktop's year view, shown instead of the selected view while [yearViewOpen]. */
+    yearViewOpen: Boolean = false,
+    yearView: (@Composable (morphDay: LocalDate, onOpenDay: (LocalDate) -> Unit) -> Unit)? = null,
+    /** A day of the year view opens: the year view closes as the day view comes in. */
+    onYearViewDayOpened: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -289,6 +294,7 @@ fun CalendarShell(
         state.selectedView.group() == CalendarViewGroup.Timeline &&
         (tabletopSplit || (!monthOverviewOpen && !monthOverviewGestureClosing))
     val showLandscapeMultiDayControls = showLandscapeTimelineControl &&
+        !yearViewOpen &&
         state.selectedView == CalendarViewMode.ThreeDay &&
         !state.weekViewEnabled &&
         state.multiDaySidebarControlsEnabled
@@ -576,13 +582,28 @@ fun CalendarShell(
         ) {
             SharedTransitionLayout(modifier = Modifier.matchParentSize()) {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+                    // A day opens out of the month and year grids the same way.
+                    fun openDayFromGrid(day: LocalDate, fromYear: Boolean) {
+                        if (monthDayTransitionPending) return
+                        monthDayTransitionPending = true
+                        monthMorphDayText = day.toString()
+                        scope.launch {
+                            withFrameNanos { }
+                            onDateSelected(day)
+                            withFrameNanos { }
+                            if (fromYear) onYearViewDayOpened()
+                            onViewSelected(CalendarViewMode.Day)
+                            monthDayTransitionPending = false
+                        }
+                    }
                     AnimatedContent(
-                        targetState = state.selectedView.group(),
+                        targetState = if (yearViewOpen && yearView != null) CalendarViewGroup.Year else state.selectedView.group(),
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                         transitionSpec = {
+                            val grids = setOf(CalendarViewGroup.MonthGrid, CalendarViewGroup.Year)
                             val timelineMonth =
-                                (initialState == CalendarViewGroup.Timeline && targetState == CalendarViewGroup.MonthGrid) ||
-                                    (initialState == CalendarViewGroup.MonthGrid && targetState == CalendarViewGroup.Timeline)
+                                (initialState == CalendarViewGroup.Timeline && targetState in grids) ||
+                                    (initialState in grids && targetState == CalendarViewGroup.Timeline)
                             if (timelineMonth) {
                                 fadeIn(animationSpec = tween(MorphDurationMs, easing = MorphEasing)) togetherWith
                                     fadeOut(animationSpec = tween(MorphDurationMs, easing = MorphEasing))
@@ -665,19 +686,7 @@ fun CalendarShell(
                                     onMonthChanged = { month ->
                                         if (YearMonth.from(state.selectedDate) != month) onDateSelected(month.atDay(1))
                                     },
-                                    onOpenDay = { day ->
-                                        if (!monthDayTransitionPending) {
-                                            monthDayTransitionPending = true
-                                            monthMorphDayText = day.toString()
-                                            scope.launch {
-                                                withFrameNanos { }
-                                                onDateSelected(day)
-                                                withFrameNanos { }
-                                                onViewSelected(CalendarViewMode.Day)
-                                                monthDayTransitionPending = false
-                                            }
-                                        }
-                                    },
+                                    onOpenDay = { day -> openDayFromGrid(day, fromYear = false) },
                                     morphDay = monthMorphDay,
                                     jumpRequest = monthJumpRequest,
                                     onJumpConsumed = { monthJumpRequest = null },
@@ -692,6 +701,7 @@ fun CalendarShell(
                                     onLoadLater = onLoadLaterAgenda,
                                 )
                                 CalendarViewGroup.Tasks -> TaskInbox(state, onTaskStatusChanged, onDetail)
+                                CalendarViewGroup.Year -> yearView?.invoke(monthMorphDay) { day -> openDayFromGrid(day, fromYear = true) }
                             }
                         }
                     }
@@ -985,7 +995,7 @@ private fun CalendarToolbar(
 }
 
 @Composable
-private fun TodayDateIcon(day: Int, modifier: Modifier = Modifier) {
+internal fun TodayDateIcon(day: Int, modifier: Modifier = Modifier) {
     val iconColor = WarmInk
     Box(
         modifier = modifier.drawBehind {
@@ -1020,7 +1030,7 @@ private fun TodayDateIcon(day: Int, modifier: Modifier = Modifier) {
 /** The box holding the selected view; in the tabletop posture its top edge sits at the hinge. */
 internal const val CalendarViewContainerTag = "calendar-view-container"
 
-private enum class CalendarViewGroup { Timeline, MonthGrid, Agenda, Tasks }
+private enum class CalendarViewGroup { Timeline, MonthGrid, Agenda, Tasks, Year }
 
 private fun CalendarViewMode.group(): CalendarViewGroup = when (this) {
     CalendarViewMode.Day, CalendarViewMode.ThreeDay -> CalendarViewGroup.Timeline

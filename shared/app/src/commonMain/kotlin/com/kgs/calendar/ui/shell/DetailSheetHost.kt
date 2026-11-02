@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import com.kgs.calendar.domain.task.isRecurring
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
@@ -65,6 +66,8 @@ internal fun DetailSheetHost(
         val foldPanel = LocalFoldPosture.current != FoldPosture.Normal
         val backReturnsToParentTask = currentDetail is DetailSheet.Task && shell.detailTaskBackStack.isNotEmpty()
         KgsModalBottomSheet(
+            // Over the settings, which show "Recently deleted" in their right column in two columns.
+            modifier = if (shell.settingsOpen) Modifier.zIndex(45f) else Modifier,
             onDismissRequest = shell::closeDetail,
             initialSnap = currentDetail.preferredInitialSnap(),
             initialContentHeight = currentDetail.estimatedPopoverHeight(),
