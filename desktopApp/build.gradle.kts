@@ -31,7 +31,7 @@ compose.desktop {
         if (System.getenv("KGS_DESKTOP_DEMO") == "1") args += "--demo"
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
-            // The startup splash and the JVM options file (see below), in the app's resources folder.
+            // The JVM options file (see below), in the app's resources folder.
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             packageName = "KGS Calendar"
             // Windows installers need a plain MAJOR.MINOR.BUILD version.
@@ -61,8 +61,8 @@ compose.desktop {
     }
 }
 
-// Faster starts. The JVM shows the splash while it starts, before the app's window exists, and loads
-// classes from class-data-sharing archives instead of reading and verifying them from the jars:
+// Faster starts: the JVM loads classes from class-data-sharing archives instead of reading and verifying
+// them from the jars:
 // - the runtime's own (JDK) classes from bin/server/classes.jsa, made here once the runtime is linked;
 // - the app's classes from an archive the app builds on the user's computer (ClassDataArchive), from
 //   the list of classes it loads; kgs-jvm.options then names it. Only the packaged app gets these
@@ -91,7 +91,6 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageT
     // Every package is made from scratch (the installers don't reuse the app image), so each gets them.
     run {
         freeArgs.addAll(
-            "--java-options", "-splash:\$APPDIR/resources/splash.png",
             "--java-options", "-XX:VMOptionsFile=\$APPDIR/resources/kgs-jvm.options",
             "--java-options", "-XX:DumpLoadedClassList=\$APPDIR/resources/kgs-classes.lst",
         )

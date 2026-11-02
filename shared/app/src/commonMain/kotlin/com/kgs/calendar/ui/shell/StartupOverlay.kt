@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,8 +75,8 @@ fun KgsStartupScreen(themeMode: AppThemeMode, colorMode: AppColorMode) {
 
 /**
  * Covers the app from its first frame until the calendar is loaded and laid out, then gives way to it:
- * the app's icon and name in the middle of the window, in the user's colours, as in the splash that
- * the desktop shows before its window exists. [alwaysShow] puts it up even when the calendar is ready
+ * the app's icon and name in the middle of the window, in the user's colours, as in the startup screen
+ * the desktop window shows before the app is set up. [alwaysShow] puts it up even when the calendar is ready
  * at once, as on the desktop, where it continues the window's own startup screen.
  */
 @Composable
@@ -114,20 +115,25 @@ internal fun StartupOverlay(ready: Boolean, alwaysShow: Boolean = false, onGone:
 @Composable
 internal fun IdleWarmUp(active: Boolean, views: List<@Composable () -> Unit>) {
     var current by remember { mutableStateOf(-1) }
+    var round by remember { mutableStateOf(0) }
     LaunchedEffect(active) {
         if (!active) return@LaunchedEffect
         delay(WarmUpDelayMs)
-        for (index in views.indices) {
-            current = index
-            // Long enough for views that build up over a few frames (the year view) to be complete.
-            repeat(WarmUpFrames) { withFrameNanos { } }
-            current = -1
-            delay(WarmUpPauseMs)
+        // A second round builds each view afresh: building it is what the first visit costs most.
+        repeat(WarmUpRounds) { r ->
+            round = r
+            for (index in views.indices) {
+                current = index
+                // Long enough for views that build up over a few frames (the year view) to be complete.
+                repeat(WarmUpFrames) { withFrameNanos { } }
+                current = -1
+                delay(WarmUpPauseMs)
+            }
         }
     }
     val view = views.getOrNull(current) ?: return
     Box(Modifier.fillMaxSize().zIndex(-1f)) {
-        view()
+        key(round, current) { view() }
         // Whatever reaches down here is not for these views.
         Box(
             Modifier
@@ -194,7 +200,7 @@ private fun StartupCover(ready: Boolean, leave: Float) {
     }
 }
 
-/** The app's icon with its inner shapes solid white, as on the desktop's app icon and splash. */
+/** The app's icon with its inner shapes solid white, as on the desktop's app icon. */
 @Composable
 private fun StartupLogo(modifier: Modifier) {
     Image(
@@ -217,5 +223,6 @@ private fun StartupLogo(modifier: Modifier) {
 private const val LeaveDurationMs = 320
 private const val SlowAfterMs = 900L
 private const val WarmUpDelayMs = 1_500L
-private const val WarmUpPauseMs = 400L
-private const val WarmUpFrames = 20
+private const val WarmUpPauseMs = 250L
+private const val WarmUpFrames = 16
+private const val WarmUpRounds = 2

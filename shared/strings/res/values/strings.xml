@@ -801,6 +801,8 @@
     <string name="desktop_quit">Quit</string>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
     <string name="desktop_year">Year</string>
+    <string name="desktop_close_to_tray">Keep running when closed</string>
+    <string name="desktop_close_to_tray_help">Closing the window keeps KGS Calendar in the notification area, so reminders still appear and it opens again at once. Turned off, closing the window quits the app.</string>
     <string name="desktop_year_rows_lower">Lower month rows</string>
     <string name="desktop_year_rows_taller">Taller month rows</string>
     <string name="desktop_calendars">Calendars</string>

@@ -49,6 +49,7 @@ class PaneLayoutPreferences(
     settingsListFraction: Float = DefaultSettingsListFraction,
     sheetPosition: Float = DefaultSheetPosition,
     yearRowHeightDp: Float = DefaultYearRowHeightDp,
+    monthRowScale: Float = 1f,
     private val onChanged: (PaneLayoutPreferences) -> Unit = {},
 ) {
     var sidebarWidthDp by mutableFloatStateOf(sidebarWidthDp.coerceIn(SidebarWidthRangeDp))
@@ -71,6 +72,19 @@ class PaneLayoutPreferences(
         val next = (yearRowHeightDp * if (steps > 0) 1.15f else 1f / 1.15f).coerceIn(YearRowHeightRangeDp)
         if (next != yearRowHeightDp) {
             yearRowHeightDp = next
+            commit()
+        }
+    }
+
+    /** How much taller (or lower) than usual the month view's week rows are; Ctrl and the mouse wheel. */
+    var monthRowScale by mutableFloatStateOf(monthRowScale.coerceIn(MonthRowScaleRange))
+        private set
+
+    fun zoomMonthRows(steps: Int) {
+        val next = (monthRowScale * if (steps > 0) 1.15f else 1f / 1.15f).coerceIn(MonthRowScaleRange)
+        if (next != monthRowScale) {
+            // Close to the usual height snaps to it, so the way back always ends exactly there.
+            monthRowScale = if (kotlin.math.abs(next - 1f) < 0.04f) 1f else next
             commit()
         }
     }
@@ -109,6 +123,7 @@ class PaneLayoutPreferences(
         const val DefaultSheetPosition = 0.5f
         const val DefaultYearRowHeightDp = 118f
         val YearRowHeightRangeDp = 48f..300f
+        val MonthRowScaleRange = 0.6f..2.2f
         val SidebarWidthRangeDp = 248f..420f
         val TasksPaneWidthRangeDp = 280f..520f
         val SettingsListFractionRange = 0.28f..0.6f

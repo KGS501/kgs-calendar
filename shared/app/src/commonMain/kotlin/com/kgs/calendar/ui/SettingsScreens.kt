@@ -1281,6 +1281,14 @@ internal fun SettingsPage(
                         checked = state.autoLoadMapPreviews,
                         onCheckedChange = onAutoLoadMapPreviewsChanged,
                     )
+                    com.kgs.calendar.ui.platform.LocalDesktopWindowBehaviour.current?.let { window ->
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.desktop_close_to_tray),
+                            subtitle = explanation(R.string.desktop_close_to_tray_help),
+                            checked = window.closeToTray,
+                            onCheckedChange = window::updateCloseToTray,
+                        )
+                    }
                 }
             }
             SettingsDestination.Widgets -> {

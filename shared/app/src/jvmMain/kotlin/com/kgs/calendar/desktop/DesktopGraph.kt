@@ -63,6 +63,8 @@ class DesktopGraph(val dataDirectory: File) {
         icalCodec = IcalCodec(),
         readOnlyHttpClient = okHttpClient,
         sourceImageDirectory = File(dataDirectory, "source-images"),
+        // Off the window's thread, so the app stays responsive while it syncs.
+        syncContext = Dispatchers.Default,
     )
     val syncOrchestrator = calendarData.syncOrchestrator
 

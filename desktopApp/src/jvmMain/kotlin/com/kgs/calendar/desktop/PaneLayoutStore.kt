@@ -16,6 +16,7 @@ class PaneLayoutStore(private val file: File) {
             settingsListFraction = float("settingsListFraction", PaneLayoutPreferences.DefaultSettingsListFraction),
             sheetPosition = float("sheetPosition", PaneLayoutPreferences.DefaultSheetPosition),
             yearRowHeightDp = float("yearRowHeight", PaneLayoutPreferences.DefaultYearRowHeightDp),
+            monthRowScale = float("monthRowScale", 1f),
             onChanged = ::save,
         )
     }
@@ -28,6 +29,7 @@ class PaneLayoutStore(private val file: File) {
         values["settingsListFraction"] = layout.settingsListFraction.toString()
         values["sheetPosition"] = layout.sheetPosition.toString()
         values["yearRowHeight"] = layout.yearRowHeightDp.toString()
+        values["monthRowScale"] = layout.monthRowScale.toString()
         runCatching {
             file.parentFile?.mkdirs()
             file.outputStream().use { values.store(it, null) }

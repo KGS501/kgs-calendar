@@ -92,6 +92,9 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlin.math.pow
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -214,6 +217,9 @@ private interface TimelineVerticalPinchOwner {
     fun begin(upperY: Float, lowerY: Float): PinchSnapshot?
     fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float)
     fun end()
+
+    /** Ctrl and the mouse wheel: zooms by [factor] around [anchorY], gliding there like a pinch. */
+    fun zoomBy(anchorY: Float, factor: Float)
 }
 
 internal val TimelineHourHeightDpSemanticsKey =
@@ -724,6 +730,39 @@ internal fun TimelineView(
                     timeScroll.scrollTo(targetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue))
                     currentOnTimeScrollChanged.value(timeScroll.value)
                     pinchTargetScrollPx = Float.NaN
+                }
+            }
+
+            // The wheel zoom is a pinch whose fingers glide apart (or together) over a few frames.
+            private var wheelSnapshot: PinchSnapshot? = null
+            private var wheelAnchorY = 0f
+            private var wheelScale = 1f
+            private var wheelTarget = 1f
+            private var wheelGliding = false
+
+            override fun zoomBy(anchorY: Float, factor: Float) {
+                val snapshot = wheelSnapshot ?: begin(anchorY - WheelZoomSpanPx, anchorY + WheelZoomSpanPx)?.also {
+                    wheelSnapshot = it
+                    wheelAnchorY = anchorY
+                    wheelScale = 1f
+                    wheelTarget = 1f
+                } ?: return
+                val startHeight = snapshot.initialViewport.hourHeightPx
+                wheelTarget = (wheelTarget * factor)
+                    .coerceIn(snapshot.minHourHeightPx / startHeight, snapshot.maxHourHeightPx / startHeight)
+                if (wheelGliding) return
+                wheelGliding = true
+                scope.launch {
+                    while (true) {
+                        withFrameNanos { }
+                        val remaining = wheelTarget - wheelScale
+                        wheelScale = if (abs(remaining) < 0.002f) wheelTarget else wheelScale + remaining * 0.3f
+                        update(snapshot, wheelAnchorY - WheelZoomSpanPx * wheelScale, wheelAnchorY + WheelZoomSpanPx * wheelScale)
+                        if (wheelScale == wheelTarget) break
+                    }
+                    wheelSnapshot = null
+                    wheelGliding = false
+                    end()
                 }
             }
         }
@@ -1884,6 +1923,12 @@ private fun DayPagerColumn(
     }
 }
 
+/** Half the distance between the imagined fingers of a wheel zoom; any positive value works. */
+private const val WheelZoomSpanPx = 100f
+
+/** How much one wheel notch zooms. */
+private const val WheelZoomStep = 1.18f
+
 private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): Modifier =
     pointerInput(owner) {
         awaitEachGesture {
@@ -1891,6 +1936,16 @@ private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): M
             var ownsGesture = false
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
+                    val change = event.changes.firstOrNull()
+                    val delta = change?.scrollDelta?.y ?: 0f
+                    if (change != null && delta != 0f) {
+                        // Wheel up zooms in (taller hours), as in the year and month views.
+                        owner.zoomBy(change.position.y, WheelZoomStep.pow(-delta.coerceIn(-3f, 3f)))
+                        change.consume()
+                    }
+                    continue
+                }
                 val pressed = event.changes.filter { it.pressed }
                 if (!ownsGesture && pressed.size >= 2) {
                     val upperY = pressed.minOf { it.position.y }

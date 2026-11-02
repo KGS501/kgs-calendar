@@ -176,14 +176,29 @@ internal fun DesktopYearPane(
 }
 
 /**
- * The views [IdleWarmUp] renders once after the start: the month and the year view. They only look:
- * none of them changes the selection or the loaded range.
+ * The views [IdleWarmUp] renders once after the start: all the views the toolbar switches between, so
+ * that the first visit to each is as smooth as later ones. They only look: none of them changes the
+ * selection or the loaded range.
  */
 internal fun desktopWarmUpViews(
     viewModel: CalendarViewModel,
     state: CalendarUiState,
     today: LocalDate,
 ): List<@Composable () -> Unit> = listOf(
+    { WarmUpTimeline(state, CalendarViewMode.ThreeDay) },
+    { WarmUpTimeline(state, CalendarViewMode.Day) },
+    {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            com.kgs.calendar.ui.AgendaList(
+                state = state,
+                onTaskStatusChanged = { _, _ -> },
+                onDetail = {},
+                navigationRequest = remember { com.kgs.calendar.ui.agenda.AgendaNavigationRequest(0L, state.selectedDate) },
+                onLoadEarlier = {},
+                onLoadLater = {},
+            )
+        }
+    },
     {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             com.kgs.calendar.ui.MonthView(
@@ -216,3 +231,38 @@ internal fun desktopWarmUpViews(
         }
     },
 )
+
+@Composable
+private fun WarmUpTimeline(state: CalendarUiState, view: CalendarViewMode) {
+    val windowLayout = com.kgs.calendar.ui.layout.currentCalendarWindowLayout()
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        com.kgs.calendar.ui.TimelineView(
+            state = state.copy(selectedView = view),
+            selectedView = view,
+            onDateSelected = {},
+            onViewSelected = {},
+            onMultiDayCountChanged = {},
+            onTaskStatusChanged = { _, _ -> },
+            onEventMoved = { _, _, _, _, _ -> },
+            onTaskMoved = { _, _, _, _, _ -> },
+            onEventMovedAllDay = { _, _, _ -> },
+            onTaskMovedAllDay = { _, _, _ -> },
+            onSlotSelected = { _, _ -> },
+            onAllDaySlotSelected = {},
+            draftEvent = null,
+            onDraftEventChanged = {},
+            onDraftInteraction = {},
+            onDraftTap = {},
+            timelineBottomInset = 0.dp,
+            onDetail = {},
+            timeScroll = androidx.compose.foundation.rememberScrollState(),
+            hourHeightDp = if (windowLayout.isLandscape) state.landscapeTimelineHourHeightDp else state.portraitTimelineHourHeightDp,
+            onHourHeightChange = {},
+            initialTimeScrollApplied = false,
+            onInitialTimeScrollApplied = {},
+            monthMorphDay = state.selectedDate,
+            isLandscape = windowLayout.isLandscape,
+            landscapeCompactRequested = state.landscapeTimelineCompact,
+        )
+    }
+}

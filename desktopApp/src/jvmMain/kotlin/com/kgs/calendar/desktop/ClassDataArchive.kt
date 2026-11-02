@@ -8,6 +8,8 @@ import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 
 /**
  * Faster starts from the second one on, by class data sharing: the JVM maps an archive of the app's
@@ -32,14 +34,17 @@ internal object ClassDataArchive {
 
     @Volatile private var started = false
 
-    /** Builds the archive in the background if there is none yet; blocks the calling thread while it runs. */
-    fun build() {
+    /**
+     * Builds the archive if there is none yet; blocks the calling thread while it runs. Cancelling it
+     * (the app quits) stops the build, which then starts over on a later run.
+     */
+    suspend fun build() {
         if (started) return
         started = true
         runCatching { buildArchive() }.onFailure { println("KGS class archive not built: $it") }
     }
 
-    private fun buildArchive() {
+    private suspend fun buildArchive() {
         val resources = System.getProperty("compose.application.resources.dir")?.let(::File) ?: return
         val options = File(resources, OPTIONS_FILE)
         val classList = File(resources, CLASS_LIST)
@@ -62,6 +67,12 @@ internal object ClassDataArchive {
         // This run still adds to the list; the archive is built from what it holds now.
         val listCopy = File(resources, "$CLASS_LIST.build")
         Files.copy(classList.toPath(), listCopy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        // A second start (which only hands over to this app and ends) begins the shared list anew
+        // underneath this one, which leaves a gap of zeros in it: such a list waits for the next run.
+        if (listCopy.readBytes().any { it == 0.toByte() }) {
+            listCopy.delete()
+            return
+        }
         val argFile = File(resources, "kgs-classes.args")
         fun quoted(value: String) = "\"" + value.replace("\\", "\\\\") + "\""
         argFile.writeText(
@@ -76,23 +87,31 @@ internal object ClassDataArchive {
             ).joinToString("\n", postfix = "\n"),
             charset,
         )
+        val running = java.util.concurrent.atomic.AtomicReference<Process?>()
+        // Should the app end some other way meanwhile, the build ends with it.
+        val stopOnExit = Thread { running.get()?.destroyForcibly() }
         try {
+            Runtime.getRuntime().addShutdownHook(stopOnExit)
             val process = ProcessBuilder(javaw.absolutePath, "@${argFile.absolutePath}")
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .start()
+            running.set(process)
             lowerPriority(process)
-            val finished = process.waitFor(10, TimeUnit.MINUTES)
-            if (!finished) {
-                process.destroyForcibly()
-                archive.delete()
-                return
+            val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(10)
+            while (!process.waitFor(250, TimeUnit.MILLISECONDS)) {
+                if (!currentCoroutineContext().isActive || System.nanoTime() > deadline) {
+                    process.destroyForcibly().waitFor(5, TimeUnit.SECONDS)
+                    archive.delete()
+                    return
+                }
             }
             if (process.exitValue() != 0 || !archive.isFile || archive.length() == 0L) {
                 archive.delete()
                 return
             }
         } finally {
+            runCatching { Runtime.getRuntime().removeShutdownHook(stopOnExit) }
             listCopy.delete()
             argFile.delete()
         }

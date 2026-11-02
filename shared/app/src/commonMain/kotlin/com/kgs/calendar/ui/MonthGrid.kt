@@ -8,6 +8,27 @@ import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -93,13 +114,22 @@ internal fun MonthBlock(
     taskColorMode: TaskColorMode,
     morphDay: LocalDate,
     onOpenDay: (LocalDate) -> Unit,
+    /** The user's zoom of the week rows (Ctrl and the mouse wheel on the desktop); 1 is the usual height. */
+    rowScale: Float = 1f,
 ) {
     val firstDay = month.atDay(1)
     val leading = firstDay.leadingDaysFrom(firstDayOfWeek)
     val length = month.lengthOfMonth()
     val rowCount = ((leading + length + 6) / 7)
     val cards = monthCardMetrics()
-    val rowHeight = cards.rowHeight * calendarTextScale()
+    val textScale = calendarTextScale()
+    val rowHeight = cards.rowHeight * textScale * rowScale
+    // Taller rows show more items before the "+n"; lower ones fewer.
+    val visibleLanes = if (rowScale == 1f) {
+        MonthVisiblePillLanes
+    } else {
+        ((rowHeight - cards.cardTop * textScale - cards.moreSize.value.dp * 1.5f) / (cards.cardStep * textScale)).toInt().coerceIn(1, 14)
+    }
     Column(Modifier.fillMaxWidth()) {
         // Breathing room + big month name where one month ends and the next begins.
         Text(
@@ -134,6 +164,10 @@ internal fun MonthBlock(
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                         )
                     }
+                    // The cells show their hover tint themselves, so the pills' fades over a hovered day
+                    // can fade into the same tint.
+                    val hoverSources = remember { List(7) { MutableInteractionSource() } }
+                    val hoveredColumns = hoverSources.map { it.collectIsHoveredAsState() }
                     Box(
                         modifier = Modifier.fillMaxWidth().height(rowHeight),
                     ) {
@@ -154,6 +188,8 @@ internal fun MonthBlock(
                                         morphEnabled = day == morphDay,
                                         showInlinePills = false,
                                         onClick = { onOpenDay(day) },
+                                        interactionSource = hoverSources[column],
+                                        hovered = { hoveredColumns[column].value },
                                         modifier = Modifier.weight(1f).fillMaxHeight(),
                                     )
                                 } else {
@@ -168,6 +204,8 @@ internal fun MonthBlock(
                             eventsByDay = eventsByDay,
                             tasksByDay = tasksByDay,
                             taskColorMode = taskColorMode,
+                            visibleLanes = visibleLanes,
+                            hoveredColumn = { hoveredColumns.indexOfFirst { it.value } },
                             modifier = Modifier.matchParentSize(),
                         )
                     }
@@ -197,6 +235,13 @@ internal fun MonthView(
     val months = remember { (0 until MonthViewPageCount).map { MonthViewBase.plusMonths(it.toLong()) } }
     val initialIndex = remember { YearMonth.from(state.selectedDate).toMonthViewPage() }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val panes = LocalPaneLayout.current
+    // Zooming glides between heights, like the year view's.
+    val rowScale by animateFloatAsState(
+        targetValue = panes.monthRowScale,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "monthRowScale",
+    )
 
     val calendarTasks = remember(state.datedTasks) {
         state.datedTasks.filter { task ->
@@ -249,7 +294,20 @@ internal fun MonthView(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                // Ctrl and the mouse wheel make the week rows taller or lower, like zooming.
+                .pointerInput(panes) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
+                                val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                if (delta != 0f) panes.zoomMonthRows(if (delta < 0f) 1 else -1)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                },
             contentPadding = PaddingValues(bottom = navBottom + 24.dp),
         ) {
             items(months, key = { it.toString() }) { month ->
@@ -262,6 +320,7 @@ internal fun MonthView(
                     taskColorMode = state.taskColorMode,
                     morphDay = morphDay,
                     onOpenDay = onOpenDay,
+                    rowScale = rowScale,
                 )
             }
         }
@@ -278,11 +337,16 @@ private fun MonthDayCard(
     morphEnabled: Boolean,
     showInlinePills: Boolean = true,
     onClick: () -> Unit,
+    interactionSource: MutableInteractionSource? = null,
+    /** Whether the pointer is over the cell, read while drawing. */
+    hovered: () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val isToday = day == LocalCalendarTimeSnapshot.current.today
     val cellShape = RoundedCornerShape(12.dp)
-    val cellColor = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f)
+    val cellColor = monthCellColor()
+    val hoverColor = monthCellHoverColor(cellColor)
+    val source = interactionSource ?: remember { MutableInteractionSource() }
     // Keep the visible month cell in the month scene. Only an invisible anchor participates as
     // the source of the container transform. Otherwise Compose lifts the solid cell into the
     // transition overlay immediately, briefly covering row-spanning pills before the entering
@@ -298,11 +362,13 @@ private fun MonthDayCard(
                     exit = MorphCellExit,
                 ),
         )
+        // The ripple shows presses only; the hover tint is the cell's own colour (see hoverColor).
+        CompositionLocalProvider(LocalRippleConfiguration provides MonthCellRipple) {
         Column(
             modifier = Modifier
                 .matchParentSize()
                 .clip(cellShape)
-                .background(cellColor, cellShape)
+                .drawBehind { drawRect(if (hovered()) hoverColor else cellColor) }
                 .then(
                     if (isToday) {
                         Modifier.border(1.dp, WarmBrown, cellShape)
@@ -310,7 +376,7 @@ private fun MonthDayCard(
                         Modifier
                     },
                 )
-                .clickable(onClick = onClick)
+                .clickable(interactionSource = source, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick)
                 .padding(horizontal = 3.dp, vertical = 3.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
@@ -382,8 +448,20 @@ private fun MonthDayCard(
                 )
             }
         }
+        }
     }
 }
+
+@Composable
+private fun monthCellColor(): Color = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f)
+
+@Composable
+private fun monthCellHoverColor(cellColor: Color): Color = cellColor.blendWith(WarmInk, 0.07f)
+
+/** Material's ripple without its hover layer (the month cells tint themselves while hovered). */
+private val MonthCellRipple = RippleConfiguration(
+    rippleAlpha = RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.1f, hoveredAlpha = 0f, pressedAlpha = 0.1f),
+)
 
 /** The sizes of the month grid's day cells and item cards: compact on phones, larger on the desktop. */
 internal data class MonthCardMetrics(
@@ -650,11 +728,16 @@ private fun MonthRowPillOverlay(
     eventsByDay: Map<LocalDate, List<EventEntity>>,
     tasksByDay: Map<LocalDate, List<TaskEntity>>,
     taskColorMode: TaskColorMode,
+    visibleLanes: Int = MonthVisiblePillLanes,
+    /** The column (0-6) under the pointer, or -1; read while drawing. */
+    hoveredColumn: () -> Int = { -1 },
     modifier: Modifier = Modifier,
 ) {
     if (rowDays.isEmpty()) return
-    val (segments, hiddenByDay) = remember(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode) {
-        buildMonthRowPillSegments(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode)
+    val cellColor = monthCellColor()
+    val hoverColor = monthCellHoverColor(cellColor)
+    val (segments, hiddenByDay) = remember(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode, visibleLanes) {
+        buildMonthRowPillSegments(rowDays, rowStartDate, rowEndDate, eventsByDay, tasksByDay, taskColorMode, visibleLanes = visibleLanes)
     }.let { it.segments to it.hiddenByDay.mapValues { (_, items) -> items.size } }
     BoxWithConstraints(modifier = modifier) {
         val spacing = 4.dp
@@ -677,6 +760,15 @@ private fun MonthRowPillOverlay(
                 lineHeight = cards.lineHeight,
                 corner = cards.corner,
                 textPadding = cards.textPadding,
+                fadeBase = cellColor,
+                // Over a hovered day, the pill fades into the day's hover tint.
+                fadeBaseOverlay = {
+                    val column = hoveredColumn()
+                    if (column >= 0) {
+                        val left = (step * column - geometry.x).toPx()
+                        drawRect(hoverColor, topLeft = Offset(left, 0f), size = Size(cellWidth.toPx(), size.height))
+                    }
+                },
                 modifier = Modifier
                     .offset(x = geometry.x, y = pillTop + laneStep * segment.lane)
                     .width(geometry.width)
@@ -691,7 +783,7 @@ private fun MonthRowPillOverlay(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = cards.moreSize,
                 lineHeight = cards.moreSize * 1.15f,
-                modifier = Modifier.offset(x = step * column + 6.dp, y = pillTop + laneStep * MonthVisiblePillLanes),
+                modifier = Modifier.offset(x = step * column + 6.dp, y = pillTop + laneStep * visibleLanes),
             )
         }
     }
@@ -750,7 +842,9 @@ internal fun MonthRowPillChip(
     rightSolidEnd: Float,
     modifier: Modifier = Modifier,
     /** Painted under a fading pill so that what is behind it doesn't show through; null for none. */
-    fadeBase: Color? = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f),
+    fadeBase: Color? = monthCellColor(),
+    /** Drawn over [fadeBase], within the pill's shape, e.g. a hovered day's tint. */
+    fadeBaseOverlay: (DrawScope.() -> Unit)? = null,
     fontSize: TextUnit = 9.sp,
     lineHeight: TextUnit = 11.sp,
     corner: Dp = 6.dp,
@@ -792,6 +886,16 @@ internal fun MonthRowPillChip(
     BoxWithConstraints(
         modifier = modifier
             .then(if (hasEdgeFade && !tentative && fadeBase != null) Modifier.background(fadeBase, RoundedCornerShape(corner)) else Modifier)
+            .then(
+                if (hasEdgeFade && !tentative && fadeBase != null && fadeBaseOverlay != null) {
+                    Modifier.drawBehind {
+                        val radius = CornerRadius(corner.toPx())
+                        clipPath(Path().apply { addRoundRect(RoundRect(0f, 0f, size.width, size.height, radius)) }) { fadeBaseOverlay() }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .background(brush, RoundedCornerShape(corner))
             .then(if (tentative) Modifier.dashedBorder(bg.copy(alpha = 0.9f), corner) else Modifier),
     ) {

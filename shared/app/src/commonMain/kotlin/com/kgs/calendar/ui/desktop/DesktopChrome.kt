@@ -49,10 +49,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -319,21 +315,9 @@ private fun DesktopViewSwitcher(
     onSelected: (DesktopView) -> Unit,
 ) {
     val options = DesktopView.entries
-    // The highlight moves the moment a view is clicked; the view itself follows once the highlight has
-    // nearly arrived. A view that is slow to build the first time then doesn't hold up the slide.
-    var shown by remember { mutableStateOf(selected) }
-    LaunchedEffect(selected) { shown = selected }
-    val scope = rememberCoroutineScope()
-    var pendingSelection by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    val currentOnSelected by rememberUpdatedState(onSelected)
+    val shown = selected
     fun select(option: DesktopView) {
-        if (option == shown && pendingSelection?.isActive != true) return
-        shown = option
-        pendingSelection?.cancel()
-        pendingSelection = scope.launch {
-            kotlinx.coroutines.delay((MotionMedium * 0.6f).toLong())
-            currentOnSelected(option)
-        }
+        if (option != selected) onSelected(option)
     }
     val index = options.indexOf(shown)
     val highlightOffset by animateDpAsState(
