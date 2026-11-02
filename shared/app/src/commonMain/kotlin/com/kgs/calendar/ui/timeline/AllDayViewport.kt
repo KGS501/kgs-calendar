@@ -218,7 +218,6 @@ internal fun AllDayViewportOverlay(
     onExpandedChange: (Boolean) -> Unit,
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
-    priorityPageCount: Int,
     reservation: AllDayReservation? = null,
     allowVerticalOverflow: Boolean = false,
 ) {
@@ -257,41 +256,27 @@ internal fun AllDayViewportOverlay(
     }
     val visibleStartPage = viewportWindow.layoutStartPage
     val visibleEndPage = viewportWindow.layoutEndPage
-    val corePageCount = priorityPageCount.coerceIn(1, MAX_MULTI_DAY_COUNT)
-    // Keep the outgoing day in the ordering until its last grid pixel leaves.
-    // Switching at the swipe midpoint can remove a collision while both sides remain visible.
-    val priorityStartPage = visibleStartPage
-    val priorityEndPage = min(visibleEndPage, visibleStartPage + corePageCount - 1)
     val layoutStartPage = visibleStartPage
     val layoutEndPage = visibleEndPage
-    val overlayItems = remember(events, tasks, layoutStartPage, layoutEndPage, priorityStartPage, priorityEndPage, taskColorMode) {
+    val sourceItems = remember(events, tasks, layoutStartPage, layoutEndPage, taskColorMode) {
         buildAllDayOverlayItems(
             events = events,
             tasks = tasks,
             taskColorMode = taskColorMode,
             visibleStartPage = layoutStartPage,
             visibleEndPage = layoutEndPage,
-            priorityStartPage = priorityStartPage,
-            priorityEndPage = priorityEndPage,
         )
     }
-    val scene = remember(
-        overlayItems,
-        layoutStartPage,
-        layoutEndPage,
-        priorityStartPage,
-        priorityEndPage,
-        maxVisibleItems,
-    ) {
+    val scene = remember(sourceItems, layoutStartPage, layoutEndPage, maxVisibleItems) {
         buildAllDayScene(
-            overlayItems = overlayItems,
+            overlayItems = sourceItems,
             visibleStartPage = layoutStartPage,
             visibleEndPage = layoutEndPage,
-            priorityStartPage = priorityStartPage,
-            priorityEndPage = priorityEndPage,
             maxVisibleItems = maxVisibleItems,
         )
     }
+    // The visible items, in the rows of this window.
+    val overlayItems = scene.overlayItems
     val pageItemsByPage = scene.pageItemsByPage
     val collapsedVisibleItemLimit = scene.metrics.collapsedVisibleItemLimit
     val overflowLane = scene.metrics.overflowLane

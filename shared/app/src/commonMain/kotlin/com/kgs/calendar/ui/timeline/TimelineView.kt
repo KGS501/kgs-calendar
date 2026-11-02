@@ -522,7 +522,6 @@ internal fun TimelineView(
             maxVisibleItems = state.maxVisibleAllDayItems,
             expanded = allDayExpanded,
             draftDate = draftEvent?.takeIf { it.allDay }?.date,
-            priorityPageCount = clampedDayCount,
         )
     }
     val baseAllDayHeight = allDayAreaLayout.height
@@ -545,7 +544,7 @@ internal fun TimelineView(
         calendarTasks,
         state.maxVisibleAllDayItems,
     ) {
-        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems, clampedDayCount)
+        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems)
     }
     val allDayArrowRotation by animateFloatAsState(
         targetValue = if (allDayExpanded) 180f else 0f,
@@ -1249,7 +1248,6 @@ internal fun TimelineView(
                     onExpandedChange = { allDayExpanded = it },
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
-                    priorityPageCount = ctx.days.size,
                     reservation = visibleReservation,
                     allowVerticalOverflow = allowAllDayVerticalOverflow,
                 )
@@ -1297,7 +1295,6 @@ internal fun TimelineView(
                     onExpandedChange = { allDayExpanded = it },
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
-                    priorityPageCount = targetDayCount,
                     reservation = visibleReservation,
                     allowVerticalOverflow = allowAllDayVerticalOverflow,
                 )

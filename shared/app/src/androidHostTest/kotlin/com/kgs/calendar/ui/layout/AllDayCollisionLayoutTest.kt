@@ -15,7 +15,7 @@ class AllDayCollisionLayoutTest {
     private val collisionPage = october1.toDayPage()
 
     @Test fun collisionGeometryIsContinuousReversibleAndFullWidthAtRest() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         val group = scene.collapsedLayout.collisions.single()
         fun frame(offset: Float) = requireNotNull(allDayCollisionFrame(
             group, scene.collapsedLayout.segments, collisionPage - 2, offset, 100f, 100f, 300f,
@@ -30,21 +30,21 @@ class AllDayCollisionLayoutTest {
     }
 
     @Test fun overlappingHandoffDoesNotLeaveAnEventBarOnTheCollisionDay() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         assertFalse("Event 3 must retract into the overlap card on October 1", scene.collapsedLayout.segments.any {
             it.item.title == "3" && collisionPage in it.startPage..it.endPage
         })
-        assertEquals(setOf("3", "4", "5"), scene.hiddenPages.getValue(collisionPage).map { it.title }.toSet())
+        assertEquals(setOf("3", "4", "5", "6"), scene.hiddenPages.getValue(collisionPage).map { it.title }.toSet())
         assertEquals(4, scene.metrics.collapsedRowCount)
         val overlap = scene.overflowGroups.single { it.page == collisionPage && it.lane == 2 }
         assertTrue(overlap.collision)
-        assertEquals(setOf("3", "4", "5"), overlap.items.map { it.title }.toSet())
+        assertEquals(setOf("3", "4", "5", "6"), overlap.items.map { it.title }.toSet())
         assertEquals(3, overlap.restingLane)
         assertEquals(1, scene.overflowGroups.count { it.page == collisionPage })
     }
 
     @Test fun existingOverflowMovesUpAndBackWithoutSquashingOrDuplicating() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         val group = scene.overflowGroups.single { it.page == collisionPage }
         fun frame(offset: Float): AllDayOverflowFrame {
             val collision = allDayCollisionFrame(scene.collapsedLayout.collisions.single(),
@@ -56,22 +56,14 @@ class AllDayCollisionLayoutTest {
         frames.forEach { assertEquals(100f, it.rightX - it.leftX, 0.001f) }
     }
 
-    @Test fun emptyRestingRowShrinksWithTheCardAndReturnsOnReverseSwipe() {
-        val scene = scene(-1, 1)
-        val rows = (0..8).map { step ->
-            scene.collapsedRowsAtViewport(collisionPage - 2, -25f * step, 100f, 100f, 300f)
-        }
-        assertEquals(listOf(4f, 3.75f, 3.5f, 3.25f, 3f, 3.25f, 3.5f, 3.75f, 4f), rows)
-    }
-
     @Test fun aDraftInTheRestingRowPreventsThatRowFromShrinking() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         assertEquals(4f, scene.collapsedRowsAtViewport(
             collisionPage - 2, -100f, 100f, 100f, 300f, minimumRows = 4), 0.001f)
     }
 
     @Test fun anotherDaysOverflowKeepsItsRowWhileTheCollisionCardMovesUp() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         val regular = AllDayOverflowGroup(collisionPage + 1, 3, scene.overflowGroups.single().items)
         val withAnotherOverflow = scene.copy(overflowGroups = scene.overflowGroups + regular)
         assertEquals(4f, withAnotherOverflow.collapsedRowsAtViewport(
@@ -79,7 +71,7 @@ class AllDayCollisionLayoutTest {
     }
 
     @Test fun collisionWithoutAnExistingOverflowStillSquashesInsideItsRow() {
-        val scene = scene(-1, 1)
+        val scene = collisionScene()
         val group = scene.collapsedLayout.collisions.single()
         val frames = (0..8).map { step ->
             val collision = allDayCollisionFrame(group, scene.collapsedLayout.segments,
@@ -90,15 +82,16 @@ class AllDayCollisionLayoutTest {
         assertTrue(frames.all { it.lane == 2f })
     }
 
-    @Test fun edgeWindowsKeepTheirExistingSelection() {
+    @Test fun aDayShowsTheSameItemsWhereverTheWindowStarts() {
         val before = scene(-2, 0)
         val after = scene(0, 2)
         assertTrue(before.collapsedLayout.collisions.isEmpty())
         assertTrue(after.collapsedLayout.collisions.isEmpty())
+        // The items that started first keep the day; the later ones go into its overflow.
         assertEquals(setOf("1", "2", "3"), before.visibleTitles(collisionPage))
-        assertEquals(setOf("1", "2", "4"), after.visibleTitles(collisionPage))
+        assertEquals(setOf("1", "2", "3"), after.visibleTitles(collisionPage))
         assertEquals(setOf("4", "5"), before.hiddenPages.getValue(collisionPage).map { it.title }.toSet())
-        assertEquals(setOf("3", "5"), after.hiddenPages.getValue(collisionPage).map { it.title }.toSet())
+        assertEquals(setOf("4", "5"), after.hiddenPages.getValue(collisionPage).map { it.title }.toSet())
     }
 
     @Test fun copiesInDifferentCalendarsHaveDistinctStableIdentity() {
@@ -109,9 +102,44 @@ class AllDayCollisionLayoutTest {
         assertEquals(items.map { it.id to it.lane }, items(listOf(copy, original), -1, 1).map { it.id to it.lane })
     }
 
-    @Test fun continuingItemsWithLaterEndsAreHigherThanLongerButEndingItems() {
+    @Test fun earlierItemsKeepTheHigherRowWhenTheyEndFirst() {
         val items = items(listOf(event("older", -20, 0), event("future", -2, 8)), -1, 1)
-        assertTrue(items.single { it.title == "future" }.lane < items.single { it.title == "older" }.lane)
+        assertTrue(items.single { it.title == "older" }.lane < items.single { it.title == "future" }.lane)
+    }
+
+    @Test fun scrollingNeverSwapsTheRowsOfTwoVisibleItems() {
+        val random = java.util.Random(7)
+        repeat(120) { iteration ->
+            val events = (0 until 14).map { index ->
+                val start = random.nextInt(24) - 12
+                event("$index", start, start + random.nextInt(9))
+            }
+            for (limit in listOf(0, 2, 3, 4)) {
+                var previous: AllDayScene? = null
+                for (start in -6..6) {
+                    val scene = buildAllDayScene(items(events, start, start + 4), collisionPage + start, collisionPage + start + 4, limit)
+                    previous?.let { earlier ->
+                        assertSameRowOrder("expanded $iteration/$limit/$start", earlier.overlayItems.associate { it.id to it.lane },
+                            scene.overlayItems.associate { it.id to it.lane })
+                        val sharedPages = (collisionPage + start)..(collisionPage + start + 3)
+                        fun rows(of: AllDayScene) = of.collapsedLayout.segments
+                            .filter { segment -> sharedPages.any { it in segment.startPage..segment.endPage } }
+                            .associate { it.item.id to it.lane }
+                        assertSameRowOrder("collapsed $iteration/$limit/$start", rows(earlier), rows(scene))
+                    }
+                    previous = scene
+                }
+            }
+        }
+    }
+
+    private fun assertSameRowOrder(message: String, before: Map<String, Int>, after: Map<String, Int>) {
+        val shared = before.keys.intersect(after.keys).toList()
+        for (a in shared) for (b in shared) {
+            if (before.getValue(a) < before.getValue(b)) {
+                assertTrue("$message: $a and $b traded rows", after.getValue(a) < after.getValue(b))
+            }
+        }
     }
 
     @Test fun arbitraryWindowsAccountForEveryItemExactlyOnceWithoutExceedingTheRowLimit() {
@@ -123,8 +151,7 @@ class AllDayCollisionLayoutTest {
             }
             for (limit in 0..6) {
                 val items = items(events, -2, 2)
-                val scene = buildAllDayScene(items, collisionPage - 2, collisionPage + 2,
-                    collisionPage - 2, collisionPage + 2, limit)
+                val scene = buildAllDayScene(items, collisionPage - 2, collisionPage + 2, limit)
                 assertTrue("Row budget iteration=$iteration limit=$limit actual=${scene.metrics.collapsedRowCount}",
                     scene.metrics.collapsedRowCount <= limit.coerceAtLeast(1))
                 for (page in collisionPage - 2..collisionPage + 2) {
@@ -144,9 +171,8 @@ class AllDayCollisionLayoutTest {
     @Test fun collisionCanSpanSeveralDaysButAdjacentNonOverlappingEventsDoNotCollide() {
         fun make(leftEnd: Int): AllDayScene {
             val items = items(listOf(event("1", -20, 20), event("2", -10, 10),
-                event("3", -4, leftEnd), event("4", 0, 8), event("5", 0, 1)), -1, 2)
-            return buildAllDayScene(items, collisionPage - 1, collisionPage + 2,
-                collisionPage - 1, collisionPage + 2, 4)
+                event("3", -4, leftEnd), event("4", 0, 8), event("5", 0, 1), event("6", 0, 9)), -1, 2)
+            return buildAllDayScene(items, collisionPage - 1, collisionPage + 2, 4)
         }
         val multiDay = make(1)
         assertEquals(setOf(collisionPage, collisionPage + 1), multiDay.collapsedLayout.collisions.map { it.page }.toSet())
@@ -176,11 +202,21 @@ class AllDayCollisionLayoutTest {
     private fun AllDayScene.visibleTitles(page: Int) = collapsedLayout.segments
         .filter { page in it.startPage..it.endPage }.map { it.item.title }.toSet()
 
+    /**
+     * Event 4 returns from October 1's overflow on October 2. Event 6 returns from it as well and,
+     * being longer, takes that overflow's row first, so 4 can only continue right after event 3,
+     * which ends on October 1: a hand-off that needs the overlap control.
+     */
+    private fun collisionScene(): AllDayScene {
+        val items = items(listOf(event("1", -20, 20), event("2", -10, 10), event("3", -4, 0),
+            event("4", 0, 8), event("5", 0, 0), event("6", 0, 9)), -1, 1)
+        return buildAllDayScene(items, collisionPage - 1, collisionPage + 1, 4)
+    }
+
     private fun scene(start: Int, end: Int): AllDayScene {
         val items = items(listOf(event("1", -20, 20), event("2", -10, 10), event("3", -4, 0),
             event("4", 0, 8), event("5", 0, 0)), start, end)
-        return buildAllDayScene(items, collisionPage + start, collisionPage + end,
-            collisionPage + start, collisionPage + end, 4)
+        return buildAllDayScene(items, collisionPage + start, collisionPage + end, 4)
     }
 
     private fun items(events: List<EventEntity>, start: Int, end: Int) = buildAllDayOverlayItems(
