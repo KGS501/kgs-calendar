@@ -88,8 +88,8 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 }
 
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
-    // The installers repackage this app image, which already has the options.
-    if (name == "createDistributable" || name == "createReleaseDistributable") {
+    // Every package is made from scratch (the installers don't reuse the app image), so each gets them.
+    run {
         freeArgs.addAll(
             "--java-options", "-splash:\$APPDIR/resources/splash.png",
             "--java-options", "-XX:VMOptionsFile=\$APPDIR/resources/kgs-jvm.options",
