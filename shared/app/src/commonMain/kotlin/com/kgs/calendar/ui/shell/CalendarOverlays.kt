@@ -27,6 +27,13 @@ import org.jetbrains.compose.resources.painterResource
 import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.kgs.calendar.ui.MotionStandardAccelerate
+import com.kgs.calendar.ui.MotionEmphasized
+import com.kgs.calendar.ui.MotionStandard
+import com.kgs.calendar.ui.MotionShort
+import com.kgs.calendar.ui.MotionMedium
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.domain.source.isLocalCollectionHref
@@ -154,7 +161,16 @@ internal fun SettingsOverlay(
     problemCount: Int,
 ) {
     // "Recently deleted" opens from the settings and covers them; closing it returns there.
-    if (shell.settingsOpen && !shell.trashOpen) {
+    // The settings grow in over the calendar and fade away again, rather than appearing at once.
+    AnimatedVisibility(
+        visible = shell.settingsOpen && !shell.trashOpen,
+        enter = fadeIn(tween(MotionMedium, easing = MotionStandard)) +
+            scaleIn(tween(MotionMedium, easing = MotionEmphasized), initialScale = 0.96f),
+        exit = fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) +
+            scaleOut(tween(MotionShort, easing = MotionStandardAccelerate), targetScale = 0.97f),
+        // Above the calendar's layers, as the page itself is.
+        modifier = Modifier.zIndex(40f),
+    ) {
         val trash by viewModel.trash.state.collectAsStateWithLifecycle()
         // Problems opens from the settings too. They stay composed but are not placed underneath it,
         // so closing Problems returns to the same settings page.

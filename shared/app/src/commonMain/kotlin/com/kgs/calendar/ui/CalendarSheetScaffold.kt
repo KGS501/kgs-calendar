@@ -674,15 +674,16 @@ internal fun KgsModalBottomSheet(
                             // beside a sheet narrower than the screen.
                             Modifier.dropShadow(
                                 shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
+                                // Strong enough to show clearly where the sheet ends, also over the dimmed calendar.
                                 shadow = Shadow(
-                                    radius = if (separationShadow) 34.dp else 26.dp,
-                                    spread = 2.dp,
+                                    radius = 32.dp,
+                                    spread = 4.dp,
                                     color = Color.Black,
                                     alpha = when {
-                                        separationShadow && separationShadowDark -> 0.42f
-                                        separationShadow -> 0.2f
-                                        separationShadowDark -> 0.3f
-                                        else -> 0.14f
+                                        separationShadow && separationShadowDark -> 0.62f
+                                        separationShadow -> 0.36f
+                                        separationShadowDark -> 0.55f
+                                        else -> 0.34f
                                     },
                                 ),
                             )

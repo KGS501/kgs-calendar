@@ -801,6 +801,8 @@
     <string name="desktop_quit">Beenden</string>
     <string name="desktop_running_in_tray">KGS Calendar läuft im Infobereich weiter, damit deine Erinnerungen weiter erscheinen. Über das Symbol dort kannst du es beenden.</string>
     <string name="desktop_year">Jahr</string>
+    <string name="desktop_year_rows_lower">Niedrigere Monatszeilen</string>
+    <string name="desktop_year_rows_taller">Höhere Monatszeilen</string>
     <string name="desktop_calendars">Kalender</string>
     <string name="desktop_pin_tasks">Aufgaben neben dem Kalender offen halten</string>
     <string name="desktop_unpin_tasks">Aufgabenbereich schließen</string>

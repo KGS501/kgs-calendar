@@ -801,6 +801,8 @@
     <string name="desktop_quit">Quit</string>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
     <string name="desktop_year">Year</string>
+    <string name="desktop_year_rows_lower">Lower month rows</string>
+    <string name="desktop_year_rows_taller">Taller month rows</string>
     <string name="desktop_calendars">Calendars</string>
     <string name="desktop_pin_tasks">Keep the tasks open beside the calendar</string>
     <string name="desktop_unpin_tasks">Close the tasks pane</string>

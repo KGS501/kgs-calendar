@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -142,6 +143,9 @@ fun main(args: Array<String>) {
                 Box(
                     Modifier
                         .fillMaxSize()
+                        // Keys a focused element didn't use reach the shortcuts here, before Compose
+                        // would spend the arrow keys on moving focus between buttons.
+                        .onKeyEvent { event -> shortcuts.handle(event) }
                         // The mouse's back button goes back like Escape.
                         .onPointerEvent(PointerEventType.Press) { event ->
                             if (event.button == PointerButton.Back) backDispatcher.back()

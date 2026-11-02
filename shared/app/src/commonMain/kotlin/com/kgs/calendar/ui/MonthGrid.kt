@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -95,7 +96,8 @@ internal fun MonthBlock(
     val leading = firstDay.leadingDaysFrom(firstDayOfWeek)
     val length = month.lengthOfMonth()
     val rowCount = ((leading + length + 6) / 7)
-    val rowHeight = MonthDayRowHeight * calendarTextScale()
+    val cards = monthCardMetrics()
+    val rowHeight = cards.rowHeight * calendarTextScale()
     Column(Modifier.fillMaxWidth()) {
         // Breathing room + big month name where one month ends and the next begins.
         Text(
@@ -313,14 +315,14 @@ private fun MonthDayCard(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .size(20.dp * calendarTextScale()),
+                .size(monthCardMetrics().dayNumberBox * calendarTextScale()),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 day.dayOfMonth.toString(),
                 color = if (isToday) WarmBrown else WarmInk,
-                fontSize = 12.sp,
-                lineHeight = 13.sp,
+                fontSize = monthCardMetrics().dayNumberSize,
+                lineHeight = monthCardMetrics().dayNumberSize * 1.1f,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 softWrap = false,
@@ -381,7 +383,37 @@ private fun MonthDayCard(
     }
 }
 
-private val MonthDayRowHeight = 108.dp
+/** The sizes of the month grid's day cells and item cards: compact on phones, larger on the desktop. */
+internal data class MonthCardMetrics(
+    val rowHeight: Dp,
+    val dayNumberBox: Dp,
+    val dayNumberSize: TextUnit,
+    val cardTop: Dp,
+    val cardHeight: Dp,
+    val cardStep: Dp,
+    val fontSize: TextUnit,
+    val lineHeight: TextUnit,
+    val corner: Dp,
+    val textPadding: Dp,
+    val moreSize: TextUnit,
+)
+
+private val PhoneMonthCards = MonthCardMetrics(
+    rowHeight = 108.dp, dayNumberBox = 20.dp, dayNumberSize = 12.sp,
+    cardTop = 25.dp, cardHeight = 13.dp, cardStep = 15.dp,
+    fontSize = 9.sp, lineHeight = 11.sp, corner = 6.dp, textPadding = 4.dp, moreSize = 9.sp,
+)
+
+/** On the desktop the cards are as large as the all-day cards of the day views. */
+private val DesktopMonthCards = MonthCardMetrics(
+    rowHeight = 168.dp, dayNumberBox = 30.dp, dayNumberSize = 15.sp,
+    cardTop = 36.dp, cardHeight = 24.dp, cardStep = 27.dp,
+    fontSize = 12.sp, lineHeight = 15.sp, corner = 8.dp, textPadding = 7.dp, moreSize = 11.sp,
+)
+
+@Composable
+internal fun monthCardMetrics(): MonthCardMetrics =
+    if (com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop) DesktopMonthCards else PhoneMonthCards
 private const val MonthVisiblePillLanes = 4
 
 internal data class MonthRowPillCandidate(
@@ -628,9 +660,10 @@ private fun MonthRowPillOverlay(
         val step = cellWidth + spacing
         // The pills grow with their text, below the day number.
         val textScale = calendarTextScale()
-        val pillTop = 25.dp * textScale
-        val pillHeight = 13.dp * textScale
-        val laneStep = 15.dp * textScale
+        val cards = monthCardMetrics()
+        val pillTop = cards.cardTop * textScale
+        val pillHeight = cards.cardHeight * textScale
+        val laneStep = cards.cardStep * textScale
 
         segments.forEach { segment ->
             val geometry = monthRowPillGeometry(segment, rowStartDate, columns = 7, cellWidth = cellWidth, spacing = spacing, rowWidth = maxWidth)
@@ -638,6 +671,10 @@ private fun MonthRowPillOverlay(
                 segment = segment,
                 leftSolidStart = geometry.leftSolidStart,
                 rightSolidEnd = geometry.rightSolidEnd,
+                fontSize = cards.fontSize,
+                lineHeight = cards.lineHeight,
+                corner = cards.corner,
+                textPadding = cards.textPadding,
                 modifier = Modifier
                     .offset(x = geometry.x, y = pillTop + laneStep * segment.lane)
                     .width(geometry.width)
@@ -650,8 +687,8 @@ private fun MonthRowPillOverlay(
             Text(
                 "+$count",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.sp,
-                lineHeight = 10.sp,
+                fontSize = cards.moreSize,
+                lineHeight = cards.moreSize * 1.15f,
                 modifier = Modifier.offset(x = step * column + 6.dp, y = pillTop + laneStep * MonthVisiblePillLanes),
             )
         }
@@ -712,6 +749,10 @@ internal fun MonthRowPillChip(
     modifier: Modifier = Modifier,
     /** Painted under a fading pill so that what is behind it doesn't show through; null for none. */
     fadeBase: Color? = WarmGrid.copy(alpha = if (MaterialTheme.colorScheme.background.isDark()) 0.92f else 0.96f),
+    fontSize: TextUnit = 9.sp,
+    lineHeight: TextUnit = 11.sp,
+    corner: Dp = 6.dp,
+    textPadding: Dp = 4.dp,
 ) {
     val candidate = segment.candidate
     val bg = Color(candidate.color)
@@ -748,22 +789,24 @@ internal fun MonthRowPillChip(
     }
     BoxWithConstraints(
         modifier = modifier
-            .then(if (hasEdgeFade && !tentative && fadeBase != null) Modifier.background(fadeBase, RoundedCornerShape(6.dp)) else Modifier)
-            .background(brush, RoundedCornerShape(6.dp))
-            .then(if (tentative) Modifier.dashedBorder(bg.copy(alpha = 0.9f), 6.dp) else Modifier),
+            .then(if (hasEdgeFade && !tentative && fadeBase != null) Modifier.background(fadeBase, RoundedCornerShape(corner)) else Modifier)
+            .background(brush, RoundedCornerShape(corner))
+            .then(if (tentative) Modifier.dashedBorder(bg.copy(alpha = 0.9f), corner) else Modifier),
     ) {
-        val titleStartPadding = 4.dp + maxWidth * leftSolidStart
+        val titleStartPadding = textPadding + maxWidth * leftSolidStart
         Text(
             candidate.title,
             color = textColor.copy(alpha = if (cancelled) 0.54f else if (candidate.completed) 0.64f else 1f),
-            fontSize = 9.sp,
-            lineHeight = 11.sp,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
-            fontWeight = FontWeight.Medium,
+            fontWeight = if (fontSize >= 11.sp) FontWeight.SemiBold else FontWeight.Medium,
             textDecoration = if (cancelled) TextDecoration.LineThrough else null,
-            modifier = Modifier.padding(start = titleStartPadding, end = 4.dp, top = 1.dp, bottom = 0.dp),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = titleStartPadding, end = textPadding),
         )
         PendingMutationBadge(candidate.event, candidate.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
     }

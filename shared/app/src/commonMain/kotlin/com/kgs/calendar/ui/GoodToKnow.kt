@@ -135,7 +135,16 @@ private fun DrawScope.pointer(center: Offset, alpha: Float, press: Float, ink: C
     )
 }
 
-private fun DrawScope.card(left: Float, top: Float, width: Float, height: Float, color: Color, lift: Float = 0f) {
+private fun DrawScope.card(
+    left: Float,
+    top: Float,
+    width: Float,
+    height: Float,
+    color: Color,
+    lift: Float = 0f,
+    /** Where the title lines begin, e.g. right of a task's circle. */
+    textInset: Float = 8.dp.toPx(),
+) {
     val radius = CornerRadius(7.dp.toPx(), 7.dp.toPx())
     if (lift > 0f) {
         drawRoundRect(
@@ -146,17 +155,20 @@ private fun DrawScope.card(left: Float, top: Float, width: Float, height: Float,
         )
     }
     drawRoundRect(color, topLeft = Offset(left, top), size = Size(width, height), cornerRadius = radius)
-    // Title and time lines on the card.
+    // Title and time lines on the card, centered in it as one block.
+    val textWidth = (width - textInset - 8.dp.toPx()).coerceAtLeast(0f)
+    val block = 4.dp.toPx() + 4.dp.toPx() + 3.dp.toPx()
+    val blockTop = top + (height - block) / 2f
     drawRoundRect(
         Color.White.copy(alpha = 0.85f),
-        topLeft = Offset(left + 8.dp.toPx(), top + 8.dp.toPx()),
-        size = Size(width * 0.55f, 4.dp.toPx()),
+        topLeft = Offset(left + textInset, blockTop),
+        size = Size(textWidth * 0.7f, 4.dp.toPx()),
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
     )
     drawRoundRect(
         Color.White.copy(alpha = 0.55f),
-        topLeft = Offset(left + 8.dp.toPx(), top + 16.dp.toPx()),
-        size = Size(width * 0.35f, 3.dp.toPx()),
+        topLeft = Offset(left + textInset, blockTop + 8.dp.toPx()),
+        size = Size(textWidth * 0.45f, 3.dp.toPx()),
         cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx()),
     )
 }
@@ -179,10 +191,13 @@ private fun MoveIllustration() {
             val y = pad + r * (size.height - pad * 2) / 3f
             drawLine(grid.copy(alpha = 0.6f), Offset(pad, y), Offset(size.width - pad, y), 1.dp.toPx())
         }
-        val cardWidth = columnWidth - 10.dp.toPx()
-        val cardHeight = 34.dp.toPx()
-        val start = Offset(pad + 5.dp.toPx(), pad + 10.dp.toPx())
-        val end = Offset(pad + columnWidth + 5.dp.toPx(), pad + (size.height - pad * 2) / 3f + 14.dp.toPx())
+        // The card fills one cell of the grid, inset a little, and moves from cell to cell.
+        val rowHeight = (size.height - pad * 2) / 3f
+        val inset = 3.dp.toPx()
+        val cardWidth = columnWidth - inset * 2
+        val cardHeight = rowHeight - inset * 2
+        val start = Offset(pad + inset, pad + inset)
+        val end = Offset(pad + columnWidth + inset, pad + rowHeight + inset)
         val appear = phase(t, 0.02f, 0.12f) * (1f - phase(t, 0.9f, 0.98f))
         val press = phase(t, 0.14f, 0.3f) * (1f - phase(t, 0.72f, 0.8f))
         val travel = phase(t, 0.32f, 0.7f)
@@ -211,8 +226,8 @@ private fun StatusIllustration() {
         val cardWidth = size.width * 0.76f
         val cardTop = size.height * 0.5f - 22.dp.toPx()
         val cardHeight = 44.dp.toPx()
-        card(cardLeft, cardTop, cardWidth, cardHeight, TipCardColor)
-        // The task's circle on the card.
+        // The task's circle sits at the card's start, its text right of it.
+        card(cardLeft, cardTop, cardWidth, cardHeight, TipCardColor, textInset = 42.dp.toPx())
         val circle = Offset(cardLeft + 22.dp.toPx(), cardTop + cardHeight / 2f)
         val ringRadius = 9.dp.toPx()
         val hold = phase(t, 0.1f, 0.4f)

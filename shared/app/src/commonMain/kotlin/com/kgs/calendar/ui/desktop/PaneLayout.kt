@@ -48,6 +48,7 @@ class PaneLayoutPreferences(
     tasksPanePinned: Boolean = false,
     settingsListFraction: Float = DefaultSettingsListFraction,
     sheetPosition: Float = DefaultSheetPosition,
+    yearRowHeightDp: Float = DefaultYearRowHeightDp,
     private val onChanged: (PaneLayoutPreferences) -> Unit = {},
 ) {
     var sidebarWidthDp by mutableFloatStateOf(sidebarWidthDp.coerceIn(SidebarWidthRangeDp))
@@ -61,6 +62,18 @@ class PaneLayoutPreferences(
      * 0.5 centered. Dragging a sheet's handle sideways moves it; every sheet opens there.
      */
     var sheetPosition by mutableFloatStateOf(sheetPosition.coerceIn(0f, 1f))
+
+    /** How tall the year view's month rows are; the user zooms them in steps. */
+    var yearRowHeightDp by mutableFloatStateOf(yearRowHeightDp.coerceIn(YearRowHeightRangeDp))
+        private set
+
+    fun zoomYearRows(steps: Int) {
+        val next = (yearRowHeightDp * if (steps > 0) 1.15f else 1f / 1.15f).coerceIn(YearRowHeightRangeDp)
+        if (next != yearRowHeightDp) {
+            yearRowHeightDp = next
+            commit()
+        }
+    }
 
     fun dragSheet(deltaPx: Float, freeWidthPx: Float) {
         if (freeWidthPx <= 0f) return
@@ -94,6 +107,8 @@ class PaneLayoutPreferences(
         const val DefaultTasksPaneWidthDp = 336f
         const val DefaultSettingsListFraction = 0.4f
         const val DefaultSheetPosition = 0.5f
+        const val DefaultYearRowHeightDp = 118f
+        val YearRowHeightRangeDp = 48f..300f
         val SidebarWidthRangeDp = 248f..420f
         val TasksPaneWidthRangeDp = 280f..520f
         val SettingsListFractionRange = 0.28f..0.6f

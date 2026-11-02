@@ -36,6 +36,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.kgs.calendar.res.stringResource
+import com.kgs.calendar.res.SharedR as R
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -158,10 +169,12 @@ internal fun DesktopYearView(
         listState.animateScrollToItem(target)
     }
     BoxWithConstraints(modifier = modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp)) {
-        val labelWidth = 52.dp
+        val labelWidth = 60.dp
         val cellWidth = (maxWidth - labelWidth) / YearColumns
-        // A whole year fits the view: its heading and twelve rows.
-        val rowHeight = max(YearMinRowHeight, (maxHeight - YearWeekdayHeaderHeight - YearHeadingHeight - 6.dp) / 12)
+        // The rows are as tall as the user sets them: low enough for a whole year on screen, or
+        // tall enough for more items before they turn into dots. The list scrolls through the years.
+        val panes = LocalPaneLayout.current
+        val rowHeight = panes.yearRowHeightDp.dp
         val rowHeightPx = with(density) { rowHeight.toPx() }
         var handledScrollStep by remember { mutableStateOf(scrollStep?.serial) }
         LaunchedEffect(scrollStep) {
@@ -172,22 +185,45 @@ internal fun DesktopYearView(
         }
         val lanes = ((rowHeight - YearPillTop - YearDotsHeight + YearPillGap) / YearPillStep).toInt().coerceAtLeast(0)
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.height(YearWeekdayHeaderHeight).padding(start = labelWidth)) {
+            Row(Modifier.height(YearWeekdayHeaderHeight)) {
+                YearRowHeightControl(
+                    onSmaller = { panes.zoomYearRows(-1) },
+                    onLarger = { panes.zoomYearRows(1) },
+                    modifier = Modifier.width(labelWidth),
+                )
                 for (column in 0 until YearColumns) {
                     val day = weekdays[column % 7]
                     Text(
                         day.shortLabel(locale, narrow = cellWidth < 26.dp),
                         color = if (day.isWeekend()) WarmBrown else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        modifier = Modifier.width(cellWidth).padding(top = 8.dp),
+                        modifier = Modifier.width(cellWidth).padding(top = 10.dp),
                     )
                 }
             }
-            LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    // Ctrl and the mouse wheel make the rows taller or lower, like zooming.
+                    .pointerInput(panes) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
+                                    val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                                    if (delta != 0f) panes.zoomYearRows(if (delta < 0f) 1 else -1)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                    },
+            ) {
                 items(YearViewYearCount * YearViewItemsPerYear, key = { it }) { index ->
                     val month = monthAt(index)
                     if (month == null) {
@@ -214,6 +250,36 @@ internal fun DesktopYearView(
     }
 }
 
+/** Lower or taller month rows (also Ctrl and the mouse wheel). */
+@Composable
+private fun YearRowHeightControl(onSmaller: () -> Unit, onLarger: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxHeight(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+    ) {
+        YearZoomButton(Icons.Default.Remove, stringResource(R.string.desktop_year_rows_lower), onSmaller)
+        YearZoomButton(Icons.Default.Add, stringResource(R.string.desktop_year_rows_taller), onLarger)
+    }
+}
+
+@Composable
+private fun YearZoomButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(if (hovered) settingsControlColor().blendWith(WarmInk, 0.08f) else settingsControlColor())
+            .hoverable(interaction)
+            .clickable(interactionSource = interaction, indication = null, onClickLabel = description, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = WarmInk, modifier = Modifier.size(16.dp))
+    }
+}
+
 /** The year whose rows cover the middle of the view. */
 private fun LazyListState.centerYear(): Int? {
     val info = layoutInfo
@@ -225,15 +291,14 @@ private fun LazyListState.centerYear(): Int? {
 }
 
 private const val YearColumns = 37
-private val YearMinRowHeight = 46.dp
-private val YearWeekdayHeaderHeight = 26.dp
-private val YearHeadingHeight = 52.dp
-private val YearPillTop = 17.dp
-private val YearPillHeight = 13.dp
-private val YearPillGap = 2.dp
+private val YearWeekdayHeaderHeight = 32.dp
+private val YearHeadingHeight = 56.dp
+private val YearPillTop = 23.dp
+private val YearPillHeight = 20.dp
+private val YearPillGap = 3.dp
 private val YearPillStep = YearPillHeight + YearPillGap
-private val YearDotsHeight = 10.dp
-private val YearDotSize = 5.dp
+private val YearDotsHeight = 13.dp
+private val YearDotSize = 6.dp
 private val YearDotGap = 2.dp
 
 private fun DayOfWeek.isWeekend(): Boolean = this == DayOfWeek.SATURDAY || this == DayOfWeek.SUNDAY
@@ -321,8 +386,8 @@ private fun YearMonthRow(
             Text(
                 month.month.getDisplayName(JavaTextStyle.SHORT_STANDALONE, locale).trimEnd('.').replaceFirstChar { it.titlecase(locale) },
                 color = if (isCurrentMonth) WarmBrown else WarmInk,
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
+                fontSize = 17.sp,
+                lineHeight = 21.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 6.dp, top = 4.dp),
             )
@@ -356,6 +421,10 @@ private fun YearMonthRow(
                     leftSolidStart = geometry.leftSolidStart,
                     rightSolidEnd = geometry.rightSolidEnd,
                     fadeBase = null,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    corner = 6.dp,
+                    textPadding = 5.dp,
                     modifier = Modifier
                         .offset(x = geometry.x, y = YearPillTop + YearPillStep * segment.lane)
                         .width(geometry.width)
@@ -385,6 +454,8 @@ private fun YearDayCell(
         else -> settingsControlColor()
     }
     val shape = RoundedCornerShape(6.dp)
+    // Two digits still fit when the window, or a pinned pane, leaves the days narrow.
+    val dayNumberSize = (width.value * 0.42f).coerceIn(8f, 12f).sp
     Box(modifier = modifier.size(width, height).padding(1.dp)) {
         // Only an invisible anchor takes part in the day's morph, as in the month view: the
         // opening day grows out of these bounds while the tile itself stays in the year.
@@ -406,8 +477,8 @@ private fun YearDayCell(
             Text(
                 date.dayOfMonth.toString(),
                 color = if (today) accentText else WarmInk,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
+                fontSize = dayNumberSize,
+                lineHeight = dayNumberSize * 1.25f,
                 fontWeight = if (today) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 1,
                 softWrap = false,
@@ -442,7 +513,7 @@ private fun HiddenItemDots(hidden: List<MonthRowPillCandidate>, modifier: Modifi
     val measurer = rememberTextMeasurer()
     val countStyle = TextStyle(
         fontFamily = com.kgs.calendar.ui.theme.LocalAppFontFamily.current,
-        fontSize = 8.sp,
+        fontSize = 10.sp,
         fontWeight = FontWeight.SemiBold,
     )
     val countColor = MaterialTheme.colorScheme.onSurfaceVariant
