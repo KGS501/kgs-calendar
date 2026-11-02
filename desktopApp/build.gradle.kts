@@ -36,7 +36,12 @@ compose.desktop {
             description = "Calendar and tasks for CalDAV and Nextcloud"
             vendor = "KGS501"
             copyright = "KGS501"
-            includeAllModules = true
+            // From suggestRuntimeModules, plus what is only used at runtime: TLS key exchange for
+            // servers, localized month and day names, logging, JNDI for ical4j and screen readers.
+            modules(
+                "java.instrument", "java.sql", "jdk.unsupported", "java.logging", "java.naming",
+                "java.management", "jdk.crypto.ec", "jdk.localedata", "jdk.charsets", "jdk.accessibility",
+            )
             windows {
                 iconFile.set(project.file("icons/kgs_calendar.ico"))
                 menu = true

@@ -33,6 +33,41 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 - Home screen widget support
 - English and German app language support
 
+## Windows desktop app (preview)
+
+`:desktopApp` runs the Android app's own screens, view model, sync engine and database on
+Windows with Compose Multiplatform, so the desktop app looks and behaves like the Android app
+instead of re-implementing it.
+
+- `:core:data` is multiplatform (Android and desktop JVM). Android-only parts (device calendars,
+  encrypted credentials, image scaling) sit behind small platform functions; the desktop keeps
+  passwords encrypted with Windows DPAPI and has no device calendars.
+- `:shared:app` holds the screens, view model and helpers formerly in `:app`. Platform
+  differences live in `ui/platform` (`expect`/`actual`): back handling (Escape and the mouse's
+  back button on the desktop), file pickers, links and maps, system bars, clock updates, window
+  metrics, shortcuts and mouse-drag scrolling.
+- `shared/strings/res` is the single source of the strings. Android merges it into its
+  resources; `:shared:app` generates `SharedR` (imported as `R`) and the string tables from it.
+- `:app` keeps what only Android has: activities, widgets, notifications, WorkManager sync and
+  the calendar provider.
+
+Run it with JDK 17 from the repository root (the Android SDK is still needed to configure the
+build). Use a separate profile and synthetic items for testing:
+
+```
+KGS_DESKTOP_DATA_DIR=<empty folder> KGS_DESKTOP_DEMO=1 ./gradlew :desktopApp:run
+./gradlew :desktopApp:createDistributable   # portable app in desktopApp/build/compose/binaries
+./gradlew :desktopApp:packageMsi            # installer; needs the WiX 3 toolset on PATH
+```
+
+Without `KGS_DESKTOP_DATA_DIR` the app uses `%LOCALAPPDATA%\KGS Calendar`. Closing the window
+keeps it in the notification area so reminders still appear; quit it from the tray icon.
+Keyboard: Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, T today, ←/→ previous and
+next range, D/W/M/A day, multi-day, month and agenda, +/− days shown, F5 refresh, Escape back.
+
+On Windows, a few host tests fail on `main` as well: the DataStore tests that open a second
+store on the same file (Windows can't rename over an open file) and a DNS-timing outage test.
+
 ## iOS port (in progress)
 
 The iOS port is **not a functional calendar app yet**. `iosApp/KgsCalendar.xcodeproj` is a
@@ -44,7 +79,8 @@ animations from shared source. It does not create or persist calendar items.
 - `:shared:ui`: original visual controls, motion tokens, surface colors, timeline pinch/viewport
   calculations, header presentation, fold layout rules and reorder scrolling. Android consumes
   these modules too, so these implementations are not separate iOS copies.
-- `:core:data` and the remaining `:app` code are still Android-specific.
+- `:core:data` and `:shared:app` now also build for the desktop JVM (see the Windows section); their
+  common code still uses the JDK (`java.time`, OkHttp, ical4j), so it is not yet available to iOS.
 
 The existing gesture/layout characterization tests have moved into `commonTest`, making them
 available to JVM and Apple test targets. With JDK 17 and Android SDK 36 configured, run
