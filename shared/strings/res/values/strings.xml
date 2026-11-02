@@ -800,4 +800,13 @@
     <string name="source_device_only">Only on this device</string>
     <string name="desktop_quit">Quit</string>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
+    <string name="desktop_year">Year</string>
+    <string name="desktop_tomorrow">Tomorrow</string>
+    <string name="desktop_upcoming">Upcoming</string>
+    <string name="desktop_calendars">Calendars</string>
+    <string name="desktop_previous">Previous</string>
+    <string name="desktop_next">Next</string>
+    <string name="desktop_nothing_upcoming">Nothing planned for the next days</string>
+    <string name="desktop_days">%1$d days</string>
+    <string name="windows_colors">Windows colors</string>
 </resources>

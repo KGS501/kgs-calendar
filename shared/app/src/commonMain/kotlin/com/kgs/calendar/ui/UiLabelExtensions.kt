@@ -2,6 +2,7 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.platform.PlatformFeatures
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.material.icons.Icons
@@ -79,7 +80,7 @@ internal fun AppThemeMode.localizedLabel(): String = when (this) {
     AppThemeMode.KgsBlue -> appString(R.string.kgs_blue)
     AppThemeMode.KgsWarm -> appString(R.string.kgs_warm)
     AppThemeMode.KgsFresh -> appString(R.string.kgs_fresh)
-    AppThemeMode.SystemDynamic -> appString(R.string.android_colors)
+    AppThemeMode.SystemDynamic -> appString(PlatformFeatures.systemColorsLabel)
 }
 
 @Composable

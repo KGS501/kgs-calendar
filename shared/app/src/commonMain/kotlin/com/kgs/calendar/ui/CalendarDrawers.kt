@@ -211,28 +211,12 @@ internal fun CalendarDrawer(
                     DrawerViewItem(stringResource(R.string.month), Icons.Default.CalendarMonth, CalendarViewMode.Month, state.selectedView, onViewSelected)
                     DrawerActionRow(stringResource(R.string.refresh), Icons.Default.Refresh, onSync)
                     HorizontalDivider(color = WarmLine, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 6.dp))
-                    val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
-                    val visibleGroups = state.calendarGroups
-                        .map { group -> group to group.collections.filter { it.isEnabled } }
-                        .filter { (_, collections) -> collections.isNotEmpty() }
-                    visibleGroups.forEachIndexed { index, (group, collections) ->
-                        if (index > 0) {
-                            Spacer(Modifier.height(10.dp))
-                        }
-                        DrawerSourceSection(
-                            group = group,
-                            image = group.image(state.sourceImages),
-                            avatarColor = group.avatarColor(state.calendarGroupSettings),
-                            collections = collections,
-                            feedStatus = { collection ->
-                                readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
-                            },
-                            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
-                            onGroupSettings = { onGroupSettings(group.key) },
-                            onCollectionVisibleInViews = onCollectionVisibleInViews,
-                            onCollectionSettings = onCollectionSettings,
-                        )
-                    }
+                    CalendarSourceList(
+                        state = state,
+                        onCollectionVisibleInViews = onCollectionVisibleInViews,
+                        onCollectionSettings = onCollectionSettings,
+                        onGroupSettings = onGroupSettings,
+                    )
                 }
                 // The line only shows while calendars scroll underneath the pinned rows.
                 HorizontalDivider(color = WarmLine.copy(alpha = if (listScroll.canScrollForward) 1f else 0f))
@@ -240,6 +224,38 @@ internal fun CalendarDrawer(
                 DrawerActionRow(stringResource(R.string.app_settings), Icons.Default.Settings, onAppSettings)
             }
         }
+    }
+}
+
+/** The calendars by source, each with its visibility switch and settings, as in the drawer. */
+@Composable
+internal fun CalendarSourceList(
+    state: CalendarUiState,
+    onCollectionVisibleInViews: (String, Boolean) -> Unit,
+    onCollectionSettings: (CollectionEntity) -> Unit,
+    onGroupSettings: (String) -> Unit,
+) {
+    val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
+    val visibleGroups = state.calendarGroups
+        .map { group -> group to group.collections.filter { it.isEnabled } }
+        .filter { (_, collections) -> collections.isNotEmpty() }
+    visibleGroups.forEachIndexed { index, (group, collections) ->
+        if (index > 0) {
+            Spacer(Modifier.height(10.dp))
+        }
+        DrawerSourceSection(
+            group = group,
+            image = group.image(state.sourceImages),
+            avatarColor = group.avatarColor(state.calendarGroupSettings),
+            collections = collections,
+            feedStatus = { collection ->
+                readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
+            },
+            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            onGroupSettings = { onGroupSettings(group.key) },
+            onCollectionVisibleInViews = onCollectionVisibleInViews,
+            onCollectionSettings = onCollectionSettings,
+        )
     }
 }
 

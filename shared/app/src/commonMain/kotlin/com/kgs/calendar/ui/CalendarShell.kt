@@ -165,6 +165,10 @@ fun CalendarShell(
     onLoadLaterAgenda: () -> Unit = {},
     timelineViewportMemory: TimelineOrientationViewportMemory? = null,
     foregroundRecenterRequest: Int = 0,
+    /** False where the window has its own toolbar and month navigation (the desktop). */
+    showToolbar: Boolean = true,
+    /** A date to move the month grid or agenda to, requested from outside, e.g. the desktop toolbar. */
+    dateRequest: com.kgs.calendar.ui.shell.DateRequest? = null,
 ) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -289,6 +293,15 @@ fun CalendarShell(
         !state.weekViewEnabled &&
         state.multiDaySidebarControlsEnabled
     val today = LocalCalendarTimeSnapshot.current.today
+
+    LaunchedEffect(dateRequest) {
+        val date = dateRequest?.date ?: return@LaunchedEffect
+        when (state.selectedView) {
+            CalendarViewMode.Agenda -> requestAgendaNavigation(date)
+            CalendarViewMode.Month -> monthJumpRequest = YearMonth.from(date)
+            else -> Unit
+        }
+    }
 
     LaunchedEffect(foregroundRecenterRequest) {
         if (foregroundRecenterRequest <= handledForegroundRecenterSerial) return@LaunchedEffect
@@ -458,7 +471,7 @@ fun CalendarShell(
                     onVerticalEnd = ::settleMonthOverviewDismissDrag,
                 ),
         ) {
-        CalendarToolbar(
+        if (showToolbar) CalendarToolbar(
             state = state,
             onMenu = {
                 if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onMenu()
@@ -698,7 +711,7 @@ fun CalendarShell(
             ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(y = statusTop + 58.dp + landscapeMultiDayControlsTopOffset + tabletopViewTop)
+                .offset(y = (if (showToolbar) statusTop + 58.dp else 0.dp) + landscapeMultiDayControlsTopOffset + tabletopViewTop)
                 .width(TimeSidebarWidth)
                 .height(landscapeHeaderPresentation.multiDayControlsHeight)
                 .zIndex(40f),

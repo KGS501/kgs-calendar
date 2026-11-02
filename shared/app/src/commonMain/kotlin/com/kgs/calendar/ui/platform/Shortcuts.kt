@@ -15,6 +15,8 @@ internal class CalendarShortcuts(
     /** Moves the shown range back (-1) or forward (+1) by one page of the current view. */
     val step: (Int) -> Unit,
     val selectView: (CalendarViewMode) -> Unit,
+    /** The desktop's year view. */
+    val yearView: () -> Unit,
     /** Shows one day more (+1) or fewer (-1) in the multi-day view. */
     val changeDayCount: (Int) -> Unit,
     val refresh: () -> Unit,

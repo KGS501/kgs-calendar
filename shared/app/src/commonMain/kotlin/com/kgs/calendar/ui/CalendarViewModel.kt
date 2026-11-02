@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kgs.calendar.data.CalendarRepository
+import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.CalendarRange
@@ -678,6 +679,20 @@ class CalendarViewModel(
 
     fun today() {
         selectDate(LocalDate.now())
+    }
+
+    /**
+     * The visible events and dated tasks of [start] until [endExclusive], independent of the
+     * selected view: for overviews that show more than it, such as the desktop's year view.
+     */
+    fun observeRange(start: LocalDate, endExclusive: LocalDate): Flow<Pair<List<EventEntity>, List<TaskEntity>>> {
+        val startMillis = start.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val endMillis = endExclusive.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        return combine(
+            repository.observeEvents(startMillis, endMillis),
+            repository.observeDatedTasks(startMillis, endMillis),
+            collectionVisibility,
+        ) { events, tasks, visibility -> visibility.visibleEvents(events) to visibility.visibleTasks(tasks) }
     }
 
     fun messageShown() {

@@ -28,6 +28,8 @@ import androidx.compose.ui.window.rememberTrayState
 import com.kgs.calendar.res.AppStrings
 import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.KgsCalendarApp
+import com.kgs.calendar.ui.desktop.CalendarChrome
+import com.kgs.calendar.ui.desktop.LocalCalendarChrome
 import com.kgs.calendar.ui.platform.BackDispatcher
 import com.kgs.calendar.ui.platform.DesktopAppVersion
 import com.kgs.calendar.ui.platform.DesktopShortcuts
@@ -127,6 +129,7 @@ fun main(args: Array<String>) {
                 LocalBackDispatcher provides backDispatcher,
                 LocalWindowChrome provides windowChrome,
                 LocalDesktopShortcuts provides shortcuts,
+                LocalCalendarChrome provides CalendarChrome.Desktop,
             ) {
                 Box(
                     Modifier

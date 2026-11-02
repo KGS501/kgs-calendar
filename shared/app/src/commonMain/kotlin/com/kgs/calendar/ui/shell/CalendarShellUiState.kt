@@ -51,6 +51,17 @@ internal class CalendarShellUiState(
     var createMenuOpen by mutableStateOf(false)
         private set
     var overdueTasksExpanded by mutableStateOf(false)
+
+    /** The desktop's year view, shown instead of the selected view; Android has none. */
+    var yearViewOpen by mutableStateOf(false)
+
+    /** A date the shown view should move to, from outside it (the desktop toolbar and keys). */
+    var dateRequest by mutableStateOf<DateRequest?>(null)
+        private set
+
+    fun requestDate(date: java.time.LocalDate) {
+        dateRequest = DateRequest((dateRequest?.serial ?: 0) + 1, date)
+    }
     private var creationSheetState by mutableStateOf<CreationSheet?>(null)
 
     /** Every editor that opens starts a new draft in [editorDrafts]; closing one ends its draft. */
@@ -745,3 +756,6 @@ internal fun rememberCalendarShellUiState(
 private const val PendingRestoreTimeoutMillis = 5_000L
 
 private const val TransferDraftKey = "transferDraft"
+
+/** One request to show [date]; [serial] tells repeated requests for the same date apart. */
+data class DateRequest(val serial: Int, val date: java.time.LocalDate)

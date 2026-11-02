@@ -800,4 +800,13 @@
     <string name="source_device_only">Nur auf diesem Gerät</string>
     <string name="desktop_quit">Beenden</string>
     <string name="desktop_running_in_tray">KGS Calendar läuft im Infobereich weiter, damit deine Erinnerungen weiter erscheinen. Über das Symbol dort kannst du es beenden.</string>
+    <string name="desktop_year">Jahr</string>
+    <string name="desktop_tomorrow">Morgen</string>
+    <string name="desktop_upcoming">Demnächst</string>
+    <string name="desktop_calendars">Kalender</string>
+    <string name="desktop_previous">Zurück</string>
+    <string name="desktop_next">Weiter</string>
+    <string name="desktop_nothing_upcoming">In den nächsten Tagen ist nichts geplant</string>
+    <string name="desktop_days">%1$d Tage</string>
+    <string name="windows_colors">Windows-Farben</string>
 </resources>

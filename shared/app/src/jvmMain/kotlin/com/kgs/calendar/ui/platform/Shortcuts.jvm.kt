@@ -20,7 +20,7 @@ import com.kgs.calendar.domain.model.CalendarViewMode
  *
  * - Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, Ctrl+, settings, F5 refresh
  * - T today, ← / → or Page Up / Page Down previous / next range
- * - D day, W multi-day, M month, A agenda; + / − one day more or fewer
+ * - D day, W multi-day, M month, Y (or J) year, A agenda; + / − one day more or fewer
  * - Ctrl+Shift+T tasks, Ctrl+M menu
  */
 class DesktopShortcuts {
@@ -49,6 +49,7 @@ class DesktopShortcuts {
             event.key == Key.W -> { { actions.selectView(CalendarViewMode.ThreeDay) } }
             event.key == Key.M -> { { actions.selectView(CalendarViewMode.Month) } }
             event.key == Key.A -> { { actions.selectView(CalendarViewMode.Agenda) } }
+            event.key == Key.Y || event.key == Key.J -> actions.yearView
             event.key == Key.Plus || event.key == Key.NumPadAdd || (shift && event.key == Key.Equals) -> { { actions.changeDayCount(1) } }
             event.key == Key.Minus || event.key == Key.NumPadSubtract -> { { actions.changeDayCount(-1) } }
             else -> null

@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.desktop.steppedDate
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.SettingsDestination
 import com.kgs.calendar.domain.model.coerceMultiDayCount
@@ -262,6 +263,10 @@ internal fun CalendarAppContent(
         onOpenDetail = shell::openLaunchedDetail,
         onForegroundRecentered = { foregroundRecenterRequest += 1 },
     )
+    fun showDate(date: LocalDate) {
+        viewModel.selectDate(date)
+        shell.requestDate(date)
+    }
     ProvideCalendarShortcuts(
         shortcuts = CalendarShortcuts(
             newEvent = { openEventCreation(state.defaultFabCreationDate()) },
@@ -270,11 +275,18 @@ internal fun CalendarAppContent(
             tasks = shell::openTaskDrawer,
             menu = shell::openMenuDrawer,
             settings = { shell.openSettings(SettingsDestination.Main) },
-            today = viewModel::today,
-            step = { direction -> viewModel.selectDate(state.steppedDate(direction)) },
-            selectView = viewModel::selectView,
+            today = {
+                viewModel.today()
+                shell.requestDate(LocalDate.now())
+            },
+            step = { direction -> showDate(state.steppedDate(direction, shell.yearViewOpen)) },
+            selectView = { view ->
+                shell.yearViewOpen = false
+                viewModel.selectView(view)
+            },
+            yearView = { shell.yearViewOpen = true },
             changeDayCount = { delta ->
-                if (state.selectedView == CalendarViewMode.ThreeDay) {
+                if (state.selectedView == CalendarViewMode.ThreeDay && !shell.yearViewOpen) {
                     viewModel.settings.setMultiDayCount((state.multiDayCount + delta).coerceMultiDayCount())
                 }
             },
@@ -341,12 +353,4 @@ internal fun CalendarAppContent(
         showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
     )
     StartupOverlay(visible = !state.initialDataLoaded)
-}
-
-/** The selected date one page of the current view earlier (-1) or later (+1), as a swipe would show. */
-private fun CalendarUiState.steppedDate(direction: Int): LocalDate = when (selectedView) {
-    CalendarViewMode.Month -> selectedDate.plusMonths(direction.toLong())
-    CalendarViewMode.Day -> selectedDate.plusDays(direction.toLong())
-    CalendarViewMode.Agenda -> selectedDate.plusWeeks(direction.toLong())
-    else -> selectedDate.plusDays(direction.toLong() * if (weekViewEnabled) 7 else multiDayCount.coerceMultiDayCount())
 }

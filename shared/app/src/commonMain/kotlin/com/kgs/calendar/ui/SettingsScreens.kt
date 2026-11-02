@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.platform.PlatformFeatures
 import com.kgs.calendar.res.kgs_logo_vector
 import com.kgs.calendar.res.brand_samsung
 import com.kgs.calendar.res.brand_nextcloud
@@ -453,7 +454,7 @@ internal fun SettingsPage(
                         iconColor = SettingsColors.General,
                         selected = twoPane && openSectionDestination == SettingsDestination.General,
                     ) { openSection(SettingsDestination.General) }
-                    SettingsNavRow(
+                    if (PlatformFeatures.homeScreenWidgets) SettingsNavRow(
                         title = stringResource(R.string.widgets),
                         subtitle = explanation(R.string.widget_settings_summary),
                         icon = Icons.Default.Widgets,
@@ -1238,7 +1239,7 @@ internal fun SettingsPage(
                         label = { it.localizedLabel() },
                         onSelected = onLanguageSelected,
                     )
-                    SettingsSwitchRow(
+                    if (PlatformFeatures.haptics) SettingsSwitchRow(
                         title = stringResource(R.string.haptic_feedback),
                         checked = state.hapticFeedbackEnabled,
                         onCheckedChange = onHapticFeedbackChanged,
