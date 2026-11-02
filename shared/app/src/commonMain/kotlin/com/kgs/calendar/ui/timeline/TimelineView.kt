@@ -135,7 +135,6 @@ import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
 import com.kgs.calendar.ui.timeline.pagePosition
 import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
-import com.kgs.calendar.ui.layout.collapsedRowsAtViewport
 import com.kgs.calendar.ui.layout.buildAllDayViewportWindow
 import com.kgs.calendar.ui.layout.rightEdgeSquashGeometry
 import com.kgs.calendar.ui.model.orderedOverdueTasks
@@ -525,10 +524,8 @@ internal fun TimelineView(
         )
     }
     val baseAllDayHeight = allDayAreaLayout.height
-    val collapsedViewportRows = allDayAreaLayout.scene?.collapsedRowsAtViewport(
-        allDayAnchorPage, allDayAnchorOffsetPx, pagerDayWidthPx, pagerDayStepPx, dayGeometryViewportWidthPx,
-        minimumRows = allDayAreaLayout.draftRows,
-    ) ?: 0f
+    val collapsedViewportRows = allDayAreaLayout.scene
+        ?.let { maxOf(it.metrics.collapsedRowCount, allDayAreaLayout.draftRows).toFloat() } ?: 0f
     val collapsedViewportHeight = if (collapsedViewportRows == 0f) 22.dp else (collapsedViewportRows * 29f + 10f).dp
     val visibleReservation = activeTimedDrag?.session?.reservation
         ?.takeIf { reservation -> reservation.date in pagerVisibleDays }

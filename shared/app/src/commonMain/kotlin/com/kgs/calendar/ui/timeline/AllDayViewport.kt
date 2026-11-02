@@ -124,9 +124,6 @@ import com.kgs.calendar.ui.calendar.DayStartHour
 import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
 import com.kgs.calendar.ui.calendar.toDayDate
 import com.kgs.calendar.ui.calendar.toDayPage
-import com.kgs.calendar.ui.layout.allDayCollisionFrame
-import com.kgs.calendar.ui.layout.allDayOverflowFrame
-import com.kgs.calendar.ui.layout.AllDayContinuationSegment
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.allDayContinuationFadeVisualProgress
 import com.kgs.calendar.ui.layout.allDayLeadingCornerProgress
@@ -289,7 +286,6 @@ internal fun AllDayViewportOverlay(
     val renderCollapsedItems = !expanded || expansionProgress < 0.999f
     val collapsedConnectorAlpha = (1f - expansionProgress).coerceIn(0f, 1f)
     val collapsedSegmentsByItem = remember(scene) { scene.collapsedLayout.segments.groupBy { it.item.id } }
-    val continuationSegments = scene.collapsedLayout.continuations
     var draggingAllDayItemId by remember { mutableStateOf<String?>(null) }
     fun moveAllDayItemToTimed(item: AllDayOverlayItem, date: LocalDate, start: LocalTime, end: LocalTime) {
         item.event?.let { event ->
@@ -306,12 +302,6 @@ internal fun AllDayViewportOverlay(
         item.task?.let { task ->
             onTaskMovedAllDay(task.resourceHref, task.startAtMillis ?: task.dueAtMillis ?: System.currentTimeMillis(), date)
         }
-    }
-    val collisionFrames = scene.collapsedLayout.collisions.associate { group ->
-        (group.page to group.lane) to allDayCollisionFrame(
-            group, scene.collapsedLayout.segments, anchorPage, anchorOffsetPx,
-            dayWidthPx, dayStepPx, layoutViewportWidthPx,
-        )
     }
     Box(
         modifier = Modifier
@@ -339,102 +329,6 @@ internal fun AllDayViewportOverlay(
                     }
                 },
         )
-        if (renderCollapsedItems) {
-            fun segmentVisibility(startPage: Int, endPage: Int): Float {
-                val segmentStartX = allDayPageLeftX(startPage, anchorPage, anchorOffsetPx, dayStepPx)
-                val segmentEndX = allDayPageLeftX(endPage, anchorPage, anchorOffsetPx, dayStepPx) + dayWidthPx
-                return allDaySegmentVisualVisibility(
-                    segmentStartX = segmentStartX,
-                    segmentEndX = segmentEndX,
-                    viewportWidthPx = viewportWidthPx,
-                    fadeDistancePx = continuationFadeExitDistancePx,
-                )
-            }
-
-            continuationSegments.forEach { segment ->
-                // Collision continuations fade on the moving event edge itself; drawing a
-                // second connector here would bleed through the full-width abstraction.
-                if (collisionFrames[segment.page to segment.lane] != null) return@forEach
-                val left = allDayPageLeftX(segment.page, anchorPage, anchorOffsetPx, dayStepPx)
-                val spacing = (dayStepPx - dayWidthPx).coerceAtLeast(0f)
-                val overlap = with(density) { 9.dp.toPx() }
-                val edgeReach = dayWidthPx * 0.18f
-                val previousSource = if (segment.fromPrevious) {
-                    collapsedSegmentsByItem[segment.item.id].orEmpty()
-                        .asSequence()
-                        .filter { it.endPage < segment.page }
-                        .maxByOrNull { it.endPage }
-                } else {
-                    null
-                }
-                val nextSource = if (segment.toNext) {
-                    collapsedSegmentsByItem[segment.item.id].orEmpty()
-                        .asSequence()
-                        .filter { it.startPage > segment.page }
-                        .minByOrNull { it.startPage }
-                } else {
-                    null
-                }
-                val fromPreviousAlpha = previousSource?.let {
-                    segmentVisibility(it.startPage, it.endPage)
-                } ?: 0f
-                val toNextAlpha = nextSource?.let {
-                    segmentVisibility(it.startPage, it.endPage)
-                } ?: 0f
-                val segmentLeft = when {
-                    segment.fromPrevious -> left - spacing - overlap
-                    segment.toNext -> left + dayWidthPx - edgeReach
-                    else -> left
-                }
-                val segmentRight = when {
-                    segment.toNext -> left + dayWidthPx + spacing + overlap
-                    segment.fromPrevious -> left + edgeReach
-                    else -> left + dayWidthPx
-                }
-                val visibleLeft = segmentLeft.coerceAtLeast(0f)
-                val visibleRight = segmentRight.coerceAtMost(viewportWidthPx)
-                val visibleWidth = visibleRight - visibleLeft
-                if (visibleWidth <= 1f) return@forEach
-                val physicalFadeWidth = (spacing + overlap + edgeReach).coerceAtLeast(1f)
-                val sideReachFraction = (physicalFadeWidth / visibleWidth).coerceIn(
-                    0.05f,
-                    if (segment.fromPrevious && segment.toNext) 0.48f else 1f,
-                )
-                key("all-day-continuation:${segment.item.id}:${segment.page}") {
-                    val animatedCollapsedLane by animateFloatAsState(
-                        targetValue = segment.lane.toFloat(),
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "allDayContinuationCollapsedLane",
-                    )
-                    val animatedExpandedLane by animateFloatAsState(
-                        targetValue = segment.item.lane.toFloat(),
-                        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
-                        label = "allDayContinuationExpandedLane",
-                    )
-                    val animatedLane = interpolateAllDayTransitionLane(
-                        collapsedLane = animatedCollapsedLane,
-                        expandedLane = animatedExpandedLane,
-                        expansionProgress = expansionProgress,
-                    )
-                    AllDayContinuationChip(
-                        segment = segment,
-                        fromPreviousAlpha = fromPreviousAlpha,
-                        toNextAlpha = toNextAlpha,
-                        sideReachFraction = sideReachFraction,
-                        modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = visibleLeft.roundToInt(),
-                                    y = with(density) { (7.dp + (animatedLane * 29f).dp).roundToPx() },
-                                )
-                            }
-                            .width(with(density) { visibleWidth.toDp() })
-                            .height(24.dp)
-                            .graphicsLayer { alpha = collapsedConnectorAlpha },
-                    )
-                }
-            }
-        }
         scene.visualPieces.forEach { piece ->
                 key("all-day-piece:${piece.key}") {
                     val item = piece.item
@@ -459,14 +353,8 @@ internal fun AllDayViewportOverlay(
                     val segment = piece.collapsedSegment
                     val collapsedStartTarget = (segment?.startPage?.takeIf { it > layoutStartPage } ?: item.startPage).toFloat()
                     val collapsedEndTarget = (segment?.endPage?.takeIf { it < layoutEndPage } ?: item.endPage).toFloat()
-                    val leadingCollision = segment?.let { collisionFrames[(it.startPage - 1) to it.lane] }
-                    val trailingCollision = segment?.let { collisionFrames[(it.endPage + 1) to it.lane] }
-                    val collapsedStartX = leadingCollision?.let {
-                        max(itemStartX, it.intervalRightX + daySpacingPx)
-                    } ?: (anchorOffsetPx + (collapsedStartTarget - anchorPage) * dayStepPx)
-                    val collapsedEndX = trailingCollision?.let {
-                        min(itemEndX, it.intervalLeftX - daySpacingPx)
-                    } ?: (anchorOffsetPx + (collapsedEndTarget - anchorPage) * dayStepPx + dayWidthPx)
+                    val collapsedStartX = anchorOffsetPx + (collapsedStartTarget - anchorPage) * dayStepPx
+                    val collapsedEndX = anchorOffsetPx + (collapsedEndTarget - anchorPage) * dayStepPx + dayWidthPx
                     val collapsedContinuesPastViewport = segment?.let {
                         allDaySegmentContinuesPastViewport(
                             itemStartPage = item.startPage,
@@ -576,8 +464,12 @@ internal fun AllDayViewportOverlay(
                                 1f
                             },
                             showPrimaryContent = piece.primary,
-                            leadingAbstractionFade = (leadingCollision?.progress ?: 0f) * (1f - expansionProgress),
-                            trailingAbstractionFade = (trailingCollision?.progress ?: 0f) * (1f - expansionProgress),
+                            // A card going into or coming out of a day's overflow fades at that edge; in the
+                            // overflow's own row it reaches under the overflow card.
+                            leadingAbstractionFade = if (segment?.fromOverflow == true) 1f - expansionProgress else 0f,
+                            trailingAbstractionFade = if (segment?.intoOverflow == true) 1f - expansionProgress else 0f,
+                            leadingAbstractionReaches = segment?.lane == overflowLane,
+                            trailingAbstractionReaches = segment?.lane == overflowLane,
                             modifier = Modifier
                                 .offset {
                                     IntOffset(
@@ -596,17 +488,15 @@ internal fun AllDayViewportOverlay(
                 }
             }
         scene.overflowGroups.forEach { group ->
-            val collision = collisionFrames[group.page to group.lane]
-            val frame = allDayOverflowFrame(group, collision,
-                allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx), dayWidthPx)
-            val visibleLeft = frame.leftX.coerceAtLeast(0f)
-            val visibleRight = frame.rightX.coerceAtMost(viewportWidthPx)
+            val dayLeft = allDayPageLeftX(group.page, anchorPage, anchorOffsetPx, dayStepPx)
+            val visibleLeft = dayLeft.coerceAtLeast(0f)
+            val visibleRight = (dayLeft + dayWidthPx).coerceAtMost(viewportWidthPx)
             if (visibleRight - visibleLeft <= 1f || !renderCollapsedItems) return@forEach
             key("all-day-overflow:${group.page}") {
                 AllDayOverflowChip(
                     modifier = Modifier
                         .offset {
-                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (frame.lane * 29).dp).roundToPx() })
+                            IntOffset(visibleLeft.roundToInt(), with(density) { (7.dp + (group.lane * 29).dp).roundToPx() })
                         }
                         .width(with(density) { (visibleRight - visibleLeft).toDp() })
                         .height(22.dp)
@@ -703,56 +593,6 @@ internal fun AllDayViewportOverlay(
 }
 
 @Composable
-private fun AllDayContinuationChip(
-    segment: AllDayContinuationSegment,
-    fromPreviousAlpha: Float,
-    toNextAlpha: Float,
-    sideReachFraction: Float,
-    modifier: Modifier,
-) {
-    val darkPalette = CurrentDarkPalette
-    val eventVisuals = remember(segment.item.event?.status, segment.item.event?.manualColor, segment.item.event?.color, darkPalette) {
-        segment.item.event?.cardVisuals(darkPalette = darkPalette)
-    }
-    val base = eventVisuals?.background ?: Color(segment.item.color)
-    val itemAlpha = if (segment.item.completed) 0.42f else 1f
-    val leftAlpha = itemAlpha * fromPreviousAlpha
-    val rightAlpha = itemAlpha * toNextAlpha
-    val leftReach = (sideReachFraction * fromPreviousAlpha.coerceIn(0f, 1f)).coerceIn(0f, 1f)
-    val rightReach = (sideReachFraction * toNextAlpha.coerceIn(0f, 1f)).coerceIn(0f, 1f)
-    val stops = when {
-        segment.fromPrevious && segment.toNext -> arrayOf(
-            0f to base.copy(alpha = leftAlpha),
-            (leftReach * 0.42f) to base.copy(alpha = leftAlpha),
-            leftReach to base.copy(alpha = 0f),
-            (1f - rightReach) to base.copy(alpha = 0f),
-            (1f - rightReach * 0.42f) to base.copy(alpha = rightAlpha),
-            1f to base.copy(alpha = rightAlpha),
-        )
-        segment.fromPrevious -> arrayOf(
-            0f to base.copy(alpha = leftAlpha),
-            (leftReach * 0.42f) to base.copy(alpha = leftAlpha),
-            leftReach to base.copy(alpha = 0f),
-            1f to base.copy(alpha = 0f),
-        )
-        segment.toNext -> arrayOf(
-            0f to base.copy(alpha = 0f),
-            (1f - rightReach) to base.copy(alpha = 0f),
-            (1f - rightReach * 0.42f) to base.copy(alpha = rightAlpha),
-            1f to base.copy(alpha = rightAlpha),
-        )
-        else -> arrayOf(
-            0f to base.copy(alpha = 0f),
-            1f to base.copy(alpha = 0f),
-        )
-    }
-    Box(
-        modifier = modifier
-            .background(Brush.horizontalGradient(*stops)),
-    )
-}
-
-@Composable
 private fun AllDayOverflowChip(
     modifier: Modifier,
     hiddenItems: List<AllDayOverlayItem>,
@@ -817,14 +657,19 @@ private val AllDayAbstractionFadeReach = 24.dp
 private val AllDayAbstractionContinuationExtension = 16.dp
 
 /** Fade actual extended event pixels into the hidden interval, rather than ending a rounded chip at its boundary. */
-private fun Modifier.allDayAbstractionEdgeFade(leading: Float, trailing: Float): Modifier {
+private fun Modifier.allDayAbstractionEdgeFade(
+    leading: Float,
+    trailing: Float,
+    leadingReach: Float = leading,
+    trailingReach: Float = trailing,
+): Modifier {
     if (leading <= 0.001f && trailing <= 0.001f) return this
     return drawWithContent {
         // Include the existing leading viewport fade outside the card bounds.
         // A bounds-clipped graphicsLayer would cut that fade off at the sidebar.
         val edge = min(AllDayAbstractionFadeReach.toPx(), size.width / 2f).coerceAtLeast(1f)
-        val leadingExtension = AllDayAbstractionContinuationExtension.toPx() * leading
-        val trailingExtension = AllDayAbstractionContinuationExtension.toPx() * trailing
+        val leadingExtension = AllDayAbstractionContinuationExtension.toPx() * leadingReach
+        val trailingExtension = AllDayAbstractionContinuationExtension.toPx() * trailingReach
         val bleed = 20.dp.toPx()
         drawContext.canvas.saveLayer(
             androidx.compose.ui.geometry.Rect(-bleed, 0f, size.width + trailingExtension, size.height),
@@ -992,6 +837,9 @@ private fun AllDayViewportChip(
     showPrimaryContent: Boolean = true,
     leadingAbstractionFade: Float = 0f,
     trailingAbstractionFade: Float = 0f,
+    /** Whether the faded edge reaches under the overflow card next to it, which is in the same row. */
+    leadingAbstractionReaches: Boolean = false,
+    trailingAbstractionReaches: Boolean = false,
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onDetail: (DetailSheet) -> Unit,
     onMoveToTimed: (AllDayOverlayItem, LocalDate, LocalTime, LocalTime) -> Unit,
@@ -1163,7 +1011,12 @@ private fun AllDayViewportChip(
                     y = displayDragY.roundToInt(),
                 )
             }
-            .allDayAbstractionEdgeFade(leadingAbstractionFade, trailingAbstractionFade)
+            .allDayAbstractionEdgeFade(
+                leading = leadingAbstractionFade,
+                trailing = trailingAbstractionFade,
+                leadingReach = if (leadingAbstractionReaches) leadingAbstractionFade else 0f,
+                trailingReach = if (trailingAbstractionReaches) trailingAbstractionFade else 0f,
+            )
             .then(
                 Modifier.leadingContinuationFade(
                     color = color,
@@ -1189,8 +1042,8 @@ private fun AllDayViewportChip(
                 dashedBorder = eventVisuals?.dashedBorder == true,
                 leadingRadius = leadingRadius,
                 trailingRadius = trailingRadius,
-                leadingExtension = AllDayAbstractionContinuationExtension * leadingAbstractionFade,
-                trailingExtension = AllDayAbstractionContinuationExtension * trailingAbstractionFade,
+                leadingExtension = AllDayAbstractionContinuationExtension * if (leadingAbstractionReaches) leadingAbstractionFade else 0f,
+                trailingExtension = AllDayAbstractionContinuationExtension * if (trailingAbstractionReaches) trailingAbstractionFade else 0f,
             )
             .then(dragModifier),
     ) {
