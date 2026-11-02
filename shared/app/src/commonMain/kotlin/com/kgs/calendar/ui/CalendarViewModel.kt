@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -113,6 +115,12 @@ class CalendarViewModel(
     deliverInitialLaunchEvents: Boolean = true,
     /** The open editor's draft; kept here so that it survives rotation without the saved-state Bundle. */
     val editorDrafts: EditorDraftStore = EditorDraftStore(),
+    /**
+     * The saved look, when the platform could read it before the window opened: the startup screen then
+     * shows in it right away instead of in the defaults until the settings are loaded.
+     */
+    initialThemeMode: AppThemeMode = AppThemeMode.KgsBlue,
+    initialColorMode: AppColorMode = AppColorMode.Auto,
 ) : ViewModel() {
     private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
 
@@ -458,6 +466,8 @@ class CalendarViewModel(
         loadedDataRange = dataRange.value,
         requestedDataRange = dataRange.value,
         searchOccurrenceRange = search.occurrenceRange,
+        themeMode = initialThemeMode,
+        colorMode = initialColorMode,
     )
 
     val uiState: StateFlow<CalendarUiState> = combine(

@@ -364,7 +364,7 @@ internal fun TimePickerField(
         Dialog(onDismissRequest = { dialogOpen = false }) {
             PickerPopupTheme {
                 Surface(
-                    modifier = Modifier.widthIn(min = 328.dp, max = 360.dp),
+                    modifier = Modifier.widthIn(min = 328.dp, max = 360.dp).dialogEntrance(),
                     shape = RoundedCornerShape(26.dp),
                     color = popupSurfaceColor(),
                     tonalElevation = 6.dp,

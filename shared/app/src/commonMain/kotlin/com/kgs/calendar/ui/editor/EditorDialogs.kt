@@ -336,7 +336,7 @@ internal fun ModalEditorDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
-            modifier = Modifier.wideDialogWidth(),
+            modifier = Modifier.wideDialogWidth().dialogEntrance(),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {

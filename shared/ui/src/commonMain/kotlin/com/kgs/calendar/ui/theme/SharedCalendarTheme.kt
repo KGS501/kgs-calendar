@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import com.kgs.calendar.ui.blendWith
 import com.kgs.calendar.data.settings.AppThemeMode
 
 private val LightColors: ColorScheme = lightColorScheme(
@@ -181,8 +182,10 @@ fun calendarColorScheme(themeMode: AppThemeMode, darkTheme: Boolean, dynamicColo
     }.withNeutralPopupSurfaces(darkTheme)
 
 private fun ColorScheme.withNeutralPopupSurfaces(darkTheme: Boolean): ColorScheme {
-    val popupSurface = if (darkTheme) Color(0xFF202124) else Color.White
-    val raisedSurface = if (darkTheme) Color(0xFF303134) else Color(0xFFF1F3F4)
+    // Dark menus and popups are the palette's own surface, lifted a little as elevation reads in
+    // the dark, rather than a stock gray that looks like the system's menus.
+    val popupSurface = if (darkTheme) surface.blendWith(Color.White, 0.07f) else Color.White
+    val raisedSurface = if (darkTheme) surface.blendWith(Color.White, 0.13f) else Color(0xFFF1F3F4)
     return copy(
         surfaceContainerLowest = popupSurface,
         surfaceContainerLow = popupSurface,

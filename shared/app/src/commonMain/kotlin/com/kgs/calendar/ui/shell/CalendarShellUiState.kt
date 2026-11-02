@@ -55,6 +55,12 @@ internal class CalendarShellUiState(
     /** The desktop's year view, shown instead of the selected view; Android has none. */
     var yearViewOpen by mutableStateOf(false)
 
+    /**
+     * Where the user left the year view, so that it opens there again; for this run of the app only,
+     * a new one starts with today's month in the middle.
+     */
+    var yearViewScroll: YearViewScroll? = null
+
     /** A date the shown view should move to, from outside it (the desktop toolbar and keys). */
     var dateRequest by mutableStateOf<DateRequest?>(null)
         private set
@@ -767,6 +773,9 @@ private const val TransferDraftKey = "transferDraft"
 
 /** One request to show [date]; [serial] tells repeated requests for the same date apart. */
 data class DateRequest(val serial: Int, val date: java.time.LocalDate)
+
+/** The year view's scroll position: its first item and how far that is scrolled, and the year in the middle. */
+data class YearViewScroll(val index: Int, val offset: Int, val centerYear: Int)
 
 /** One request to scroll by a row in [direction]; [serial] tells repeated requests apart. */
 data class ScrollStepRequest(val serial: Int, val direction: Int)

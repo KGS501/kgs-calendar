@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -81,7 +82,7 @@ fun KgsAlertDialog(
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
-        modifier = modifier.wideDialogWidth(),
+        modifier = modifier.wideDialogWidth().dialogEntrance(),
         properties = WideDialogProperties,
         dismissButton = dismissButton,
         title = title?.let { content ->
@@ -94,6 +95,26 @@ fun KgsAlertDialog(
         titleContentColor = titleContentColor,
         textContentColor = textContentColor,
     )
+}
+
+/**
+ * How a popup comes in: it fades in while rising a little and growing from just below its size,
+ * instead of appearing at once. Put it on the dialog's outermost content.
+ */
+@Composable
+fun Modifier.dialogEntrance(): Modifier {
+    val progress = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        progress.animateTo(1f, androidx.compose.animation.core.tween(MotionMedium, easing = MotionEmphasized))
+    }
+    return graphicsLayer {
+        val p = progress.value
+        alpha = p
+        val scale = 0.94f + 0.06f * p
+        scaleX = scale
+        scaleY = scale
+        translationY = (1f - p) * 14.dp.toPx()
+    }
 }
 
 private val DialogTitleStyle = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)

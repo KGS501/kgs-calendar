@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -155,7 +157,7 @@ internal fun DesktopYearPane(
     onOpenDay: (LocalDate) -> Unit,
 ) {
     DesktopYearView(
-        selectedYear = state.selectedDate.year,
+        selectedDate = state.selectedDate,
         firstDayOfWeek = state.firstDayOfWeek,
         today = today,
         taskColorMode = state.taskColorMode,
@@ -168,5 +170,49 @@ internal fun DesktopYearPane(
             if (year != state.selectedDate.year) viewModel.selectDate(state.selectedDate.withYear(year))
         },
         onOpenDay = onOpenDay,
+        remembered = shell.yearViewScroll,
+        onRemember = { shell.yearViewScroll = it },
     )
 }
+
+/**
+ * The views [IdleWarmUp] renders once after the start: the month and the year view. They only look:
+ * none of them changes the selection or the loaded range.
+ */
+internal fun desktopWarmUpViews(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    today: LocalDate,
+): List<@Composable () -> Unit> = listOf(
+    {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            com.kgs.calendar.ui.MonthView(
+                state = state,
+                onMonthChanged = {},
+                onOpenDay = {},
+                morphDay = state.selectedDate,
+                jumpRequest = null,
+                onJumpConsumed = {},
+                onDetail = {},
+            )
+        }
+    },
+    {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            DesktopYearView(
+                selectedDate = state.selectedDate,
+                firstDayOfWeek = state.firstDayOfWeek,
+                today = today,
+                taskColorMode = state.taskColorMode,
+                morphDay = state.selectedDate,
+                dateRequest = null,
+                scrollStep = null,
+                observeRange = viewModel::observeRange,
+                onYearShown = {},
+                onOpenDay = {},
+                remembered = null,
+                onRemember = {},
+            )
+        }
+    },
+)

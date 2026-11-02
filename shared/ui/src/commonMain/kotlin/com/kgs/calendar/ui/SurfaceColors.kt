@@ -38,10 +38,9 @@ fun editorSectionColor(): Color =
     }
 
 
+/** Menus and popups: white in the light, the palette's lifted surface in the dark (see the theme). */
 @Composable
-fun popupSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF202124) else Color.White
+fun popupSurfaceColor(): Color = MaterialTheme.colorScheme.surfaceContainer
 
 @Composable
-fun popupControlSurfaceColor(): Color =
-    if (MaterialTheme.colorScheme.background.isDark()) Color(0xFF303134) else Color(0xFFF1F3F4)
+fun popupControlSurfaceColor(): Color = MaterialTheme.colorScheme.surfaceContainerHighest

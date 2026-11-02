@@ -36,6 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.kgs.calendar.ui.MonthRowPillLayout
+import com.kgs.calendar.ui.shell.YearViewScroll
+import androidx.compose.runtime.DisposableEffect
 import com.kgs.calendar.res.stringResource
 import com.kgs.calendar.res.SharedR as R
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,6 +111,22 @@ private fun monthAt(index: Int): YearMonth? {
 
 private fun yearAt(index: Int): Int = YearViewFirstYear + index / YearViewItemsPerYear
 
+private fun monthRowIndex(month: YearMonth): Int = yearHeadingIndex(month.year) + month.monthValue
+
+/**
+ * The first item and how far it is scrolled so that the item at [index] (a month row [rowPx] tall) sits
+ * in the middle of a [viewportPx] tall view; at the top if it is taller than the view.
+ */
+internal fun centeredPosition(index: Int, rowPx: Float, headingPx: Float, viewportPx: Float): Pair<Int, Int> {
+    var above = ((viewportPx - rowPx) / 2f).coerceAtLeast(0f)
+    var first = index
+    while (above > 0f && first > 0) {
+        first--
+        above -= if (first % YearViewItemsPerYear == 0) headingPx else rowPx
+    }
+    return first to (-above).coerceAtLeast(0f).toInt()
+}
+
 /**
  * The desktop's year view: a row per month with the days in weekday-aligned columns, so the same
  * weekday lines up through the year, and the years one after another as the view scrolls. A day
@@ -116,7 +135,7 @@ private fun yearAt(index: Int): Int = YearViewFirstYear + index / YearViewItemsP
  */
 @Composable
 internal fun DesktopYearView(
-    selectedYear: Int,
+    selectedDate: LocalDate,
     firstDayOfWeek: DayOfWeek,
     today: LocalDate,
     taskColorMode: TaskColorMode,
@@ -126,11 +145,31 @@ internal fun DesktopYearView(
     observeRange: (LocalDate, LocalDate) -> Flow<Pair<List<EventEntity>, List<TaskEntity>>>,
     onYearShown: (Int) -> Unit,
     onOpenDay: (LocalDate) -> Unit,
+    /** Where the user left the view earlier in this run; it opens there again if still in the selected year. */
+    remembered: YearViewScroll?,
+    onRemember: (YearViewScroll) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalAppLocale.current
     val density = LocalDensity.current
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = yearHeadingIndex(selectedYear))
+    val resume = remember { remembered?.takeIf { it.centerYear == selectedDate.year } }
+    // Without a place to resume, the selected day's month (normally today's) ends up in the middle; see below.
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = resume?.index ?: monthRowIndex(YearMonth.from(selectedDate)),
+        initialFirstVisibleItemScrollOffset = resume?.offset ?: 0,
+    )
+    val currentOnRemember by rememberUpdatedState(onRemember)
+    DisposableEffect(listState) {
+        onDispose {
+            currentOnRemember(
+                YearViewScroll(
+                    index = listState.firstVisibleItemIndex,
+                    offset = listState.firstVisibleItemScrollOffset,
+                    centerYear = listState.centerYear() ?: selectedDate.year,
+                ),
+            )
+        }
+    }
     val weekdays = weekdaysFrom(firstDayOfWeek)
     // The years on screen, and the items of them; the last ones stay while the next load.
     val shownYears by remember(listState) {
@@ -156,20 +195,6 @@ internal fun DesktopYearView(
             .distinctUntilChanged()
             .collect { currentOnYearShown(it) }
     }
-    // Today and the toolbar's arrows bring a year's January to the top; requests from before the
-    // view opened are already shown.
-    var handledDateRequest by remember { mutableStateOf(dateRequest?.serial) }
-    LaunchedEffect(dateRequest) {
-        val request = dateRequest ?: return@LaunchedEffect
-        if (request.serial == handledDateRequest) return@LaunchedEffect
-        handledDateRequest = request.serial
-        val target = yearHeadingIndex(request.date.year)
-        val distance = target - listState.firstVisibleItemIndex
-        if (kotlin.math.abs(distance) > 2 * YearViewItemsPerYear) {
-            listState.scrollToItem(target - distance.coerceIn(-YearViewItemsPerYear, YearViewItemsPerYear))
-        }
-        listState.animateScrollToItem(target)
-    }
     BoxWithConstraints(modifier = modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp)) {
         val labelWidth = 60.dp
         val cellWidth = (maxWidth - labelWidth) / YearColumns
@@ -184,6 +209,36 @@ internal fun DesktopYearView(
             label = "yearRowHeight",
         )
         val rowHeightPx = with(density) { rowHeight.toPx() }
+        val viewportPx = with(density) { (maxHeight - YearWeekdayHeaderHeight).toPx() }
+        val headingPx = with(density) { YearHeadingHeight.toPx() }
+        /** The first item and its offset that put [month]'s row in the middle of the view. */
+        fun centered(month: YearMonth, rowPx: Float): Pair<Int, Int> =
+            centeredPosition(monthRowIndex(month), rowPx, headingPx, viewportPx)
+        if (resume == null) {
+            // Once, before the first frame: the month in the middle rather than at the top.
+            remember {
+                val (index, offset) = centered(YearMonth.from(selectedDate), with(density) { targetRowHeight.toPx() })
+                listState.requestScrollToItem(index, offset)
+            }
+        }
+        // Today puts today's month in the middle; the toolbar's arrows bring a year's January to the
+        // top. Requests from before the view opened are already shown.
+        var handledDateRequest by remember { mutableStateOf(dateRequest?.serial) }
+        LaunchedEffect(dateRequest) {
+            val request = dateRequest ?: return@LaunchedEffect
+            if (request.serial == handledDateRequest) return@LaunchedEffect
+            handledDateRequest = request.serial
+            val (target, offset) = if (request.date == today) {
+                centered(YearMonth.from(today), rowHeightPx)
+            } else {
+                yearHeadingIndex(request.date.year) to 0
+            }
+            val distance = target - listState.firstVisibleItemIndex
+            if (kotlin.math.abs(distance) > 2 * YearViewItemsPerYear) {
+                listState.scrollToItem(target - distance.coerceIn(-YearViewItemsPerYear, YearViewItemsPerYear))
+            }
+            listState.animateScrollToItem(target, offset)
+        }
         var handledScrollStep by remember { mutableStateOf(scrollStep?.serial) }
         LaunchedEffect(scrollStep) {
             val request = scrollStep ?: return@LaunchedEffect
@@ -195,6 +250,16 @@ internal fun DesktopYearView(
         // card ever spills into the next month while the rows move.
         val laneHeight = minOf(rowHeight, targetRowHeight)
         val lanes = ((laneHeight - YearPillTop - YearDotsHeight + YearPillGap) / YearPillStep).toInt().coerceAtLeast(0)
+        // Opening the view builds all its rows at once, which can hold up the animations around it for
+        // a moment. So the rows first show their days, and their items follow one row per frame.
+        val firstRowIndex = remember { listState.firstVisibleItemIndex }
+        val revealedRows = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+        LaunchedEffect(Unit) {
+            while (revealedRows.intValue < RevealedRowsAtOnce) {
+                androidx.compose.runtime.withFrameNanos { }
+                revealedRows.intValue++
+            }
+        }
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.height(YearWeekdayHeaderHeight)) {
                 YearRowHeightControl(
@@ -240,8 +305,13 @@ internal fun DesktopYearView(
                     if (month == null) {
                         YearHeading(yearAt(index), current = yearAt(index) == today.year, labelWidth = labelWidth)
                     } else {
+                        val order = index - firstRowIndex
+                        val showItems by remember(order) {
+                            androidx.compose.runtime.derivedStateOf { revealedRows.intValue > order || revealedRows.intValue >= RevealedRowsAtOnce }
+                        }
                         YearMonthRow(
                             month = month,
+                            showItems = showItems,
                             eventsByDay = eventsByDay,
                             tasksByDay = tasksByDay,
                             taskColorMode = taskColorMode,
@@ -302,6 +372,11 @@ private fun LazyListState.centerYear(): Int? {
 }
 
 private const val YearColumns = 37
+
+private val NoRowItems = MonthRowPillLayout(emptyList(), emptyMap())
+
+/** After this many frames every row shows its items, also those that only scroll in then. */
+private const val RevealedRowsAtOnce = 16
 private val YearWeekdayHeaderHeight = 32.dp
 private val YearHeadingHeight = 56.dp
 private val YearPillTop = 23.dp
@@ -363,6 +438,8 @@ private fun YearHeadingLine(color: Color, fadeTowardsStart: Boolean) {
 @Composable
 private fun YearMonthRow(
     month: YearMonth,
+    /** False while the row only shows its days, as the view opens. */
+    showItems: Boolean,
     eventsByDay: Map<LocalDate, List<EventEntity>>,
     tasksByDay: Map<LocalDate, List<TaskEntity>>,
     taskColorMode: TaskColorMode,
@@ -380,7 +457,8 @@ private fun YearMonthRow(
     val firstColumnDate = month.atDay(1).minusDays(leading.toLong())
     val days = remember(month) { (1..month.lengthOfMonth()).map(month::atDay) }
     // The month is one row, so items break where a month ends, as they do at a week's end in the month view.
-    val layout = remember(month, eventsByDay, tasksByDay, taskColorMode, lanes) {
+    val layout = remember(month, eventsByDay, tasksByDay, taskColorMode, lanes, showItems) {
+        if (!showItems) return@remember NoRowItems
         buildMonthRowPillSegments(
             rowDays = days,
             rowStartDate = days.first(),

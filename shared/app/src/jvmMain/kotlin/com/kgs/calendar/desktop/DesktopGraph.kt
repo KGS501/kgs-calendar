@@ -1,5 +1,8 @@
 package com.kgs.calendar.desktop
 
+import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.data.settings.AppThemeMode
+import kotlinx.coroutines.runBlocking
 import com.kgs.calendar.data.CalendarDataComponents
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.ical.IcalCodec
@@ -153,6 +156,9 @@ class DesktopGraph(val dataDirectory: File) {
             result.items
         },
         editorDrafts = EditorDraftStore(EditorDraftFiles(File(dataDirectory, "editor-drafts"))),
+        // A quick read, so that the startup screen is in the user's colours from the first frame on.
+        initialThemeMode = runCatching { runBlocking { settingsStore.themeMode.first() } }.getOrDefault(AppThemeMode.KgsBlue),
+        initialColorMode = runCatching { runBlocking { settingsStore.colorMode.first() } }.getOrDefault(AppColorMode.Auto),
     )
 
     private companion object {

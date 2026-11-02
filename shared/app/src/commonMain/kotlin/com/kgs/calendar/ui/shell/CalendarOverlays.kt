@@ -1,18 +1,14 @@
 package com.kgs.calendar.ui
 
-import com.kgs.calendar.res.kgs_logo_vector
-import com.kgs.calendar.res.Res
 import androidx.compose.ui.layout.layout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,8 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import org.jetbrains.compose.resources.painterResource
 import com.kgs.calendar.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -459,47 +453,6 @@ internal fun RecurringSaveDialogHost(
                 shell.finishRecurringSave()
             },
         )
-    }
-}
-
-@Composable
-internal fun StartupOverlay(visible: Boolean) {
-    AnimatedVisibility(
-        visible = visible,
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(1000f),
-        enter = fadeIn(animationSpec = tween(90, easing = MotionStandard)),
-        exit = fadeOut(animationSpec = tween(180, easing = MotionStandardAccelerate)),
-    ) {
-        StartupDataOverlay()
-    }
-}
-
-@Composable
-private fun StartupDataOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier.size(124.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.primary,
-                strokeWidth = 4.dp,
-            )
-            Image(
-                painter = painterResource(Res.drawable.kgs_logo_vector),
-                contentDescription = stringResource(R.string.app_name),
-                modifier = Modifier.size(82.dp),
-                contentScale = ContentScale.Fit,
-            )
-        }
     }
 }
 

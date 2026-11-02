@@ -49,6 +49,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -315,7 +319,23 @@ private fun DesktopViewSwitcher(
     onSelected: (DesktopView) -> Unit,
 ) {
     val options = DesktopView.entries
-    val index = options.indexOf(selected)
+    // The highlight moves the moment a view is clicked; the view itself follows once the highlight has
+    // nearly arrived. A view that is slow to build the first time then doesn't hold up the slide.
+    var shown by remember { mutableStateOf(selected) }
+    LaunchedEffect(selected) { shown = selected }
+    val scope = rememberCoroutineScope()
+    var pendingSelection by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val currentOnSelected by rememberUpdatedState(onSelected)
+    fun select(option: DesktopView) {
+        if (option == shown && pendingSelection?.isActive != true) return
+        shown = option
+        pendingSelection?.cancel()
+        pendingSelection = scope.launch {
+            kotlinx.coroutines.delay((MotionMedium * 0.6f).toLong())
+            currentOnSelected(option)
+        }
+    }
+    val index = options.indexOf(shown)
     val highlightOffset by animateDpAsState(
         targetValue = segmentWidth * index,
         animationSpec = tween(MotionMedium, easing = MotionEmphasized),
@@ -346,14 +366,14 @@ private fun DesktopViewSwitcher(
                     DesktopView.Year -> stringResource(R.string.desktop_year)
                     DesktopView.Agenda -> stringResource(R.string.agenda)
                 }
-                val isSelected = option == selected
+                val isSelected = option == shown
                 val selectedText = if (accentContainerColor().isDark()) Color.White else Color(0xFF1C1A18)
                 Box(
                     modifier = Modifier
                         .width(segmentWidth)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelected(option) },
+                        .clickable { select(option) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

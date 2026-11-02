@@ -542,12 +542,8 @@ internal fun TaskStatusCheckbox(
             )
             // Inner glyph centered inside the ring.
             when (status) {
-                "IN-PROCESS" -> Box(
-                    modifier = Modifier
-                        .size(iconSize * 0.34f)
-                        .clip(CircleShape)
-                        .background(tint),
-                )
+                // Drawn in the ring's own bounds, so it sits exactly at the ring's center.
+                "IN-PROCESS" -> CenteredDot(tint, iconSize, fraction = 0.34f)
                 "CANCELLED" -> Icon(
                     Icons.Default.Close,
                     contentDescription = null,
@@ -584,7 +580,7 @@ private fun TaskStatusPickerDialog(
         Surface(
             shape = DialogShape,
             color = popupSurfaceColor(),
-            modifier = Modifier.wideDialogWidth(),
+            modifier = Modifier.wideDialogWidth().dialogEntrance(),
         ) {
             Column(modifier = Modifier.padding(vertical = 14.dp)) {
                 Text(
@@ -609,7 +605,7 @@ private fun TaskStatusPickerDialog(
                         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
                             when (value) {
-                                "IN-PROCESS" -> Box(Modifier.size(8.dp).clip(CircleShape).background(WarmInk))
+                                "IN-PROCESS" -> CenteredDot(WarmInk, 22.dp, fraction = 0.36f)
                                 "CANCELLED" -> Icon(Icons.Default.Close, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
                                 "COMPLETED" -> Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
                             }
@@ -755,4 +751,12 @@ private fun EventEntity.estimatedParticipantsDetailHeight(): Int {
         if (ownParticipationControls > 0) 2 else 0,
     ).sum()
     return surfacePadding + header + organizerHeight + attendeeRows + ownParticipationControls + spacingCount * 10
+}
+
+/** A dot at the exact center of a [size] square, e.g. inside a status ring of that size. */
+@Composable
+internal fun CenteredDot(color: Color, size: Dp, fraction: Float) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        drawCircle(color, radius = this.size.minDimension * fraction / 2f, center = center)
+    }
 }

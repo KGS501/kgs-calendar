@@ -368,5 +368,13 @@ internal fun CalendarAppContent(
         shell = shell,
         showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
     )
-    StartupOverlay(visible = !state.initialDataLoaded)
+    val desktop = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
+    var startupDone by remember { mutableStateOf(false) }
+    if (desktop) {
+        IdleWarmUp(
+            active = startupDone,
+            views = com.kgs.calendar.ui.desktop.desktopWarmUpViews(viewModel, state, today),
+        )
+    }
+    StartupOverlay(ready = state.initialDataLoaded, alwaysShow = desktop, onGone = { startupDone = true })
 }

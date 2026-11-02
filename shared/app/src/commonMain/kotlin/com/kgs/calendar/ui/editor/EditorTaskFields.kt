@@ -256,7 +256,7 @@ internal fun TaskParentPickerDialog(
     val hierarchy = rememberTaskHierarchyPresentation(filteredCandidates, expandedByDefault = true)
     Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
-            modifier = Modifier.wideDialogWidth(),
+            modifier = Modifier.wideDialogWidth().dialogEntrance(),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
