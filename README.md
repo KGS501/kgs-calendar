@@ -62,8 +62,13 @@ KGS_DESKTOP_DATA_DIR=<empty folder> KGS_DESKTOP_DEMO=1 ./gradlew :desktopApp:run
 
 Without `KGS_DESKTOP_DATA_DIR` the app uses `%LOCALAPPDATA%\KGS Calendar`. Closing the window
 keeps it in the notification area so reminders still appear; quit it from the tray icon.
+Windows at least 760 dp wide get the desktop layout (`ui/desktop`): a sidebar with the month,
+the next days and the calendars, a toolbar with paging, views, create, search and tasks, and a
+desktop-only year view. Narrower windows use the phone layout.
+
 Keyboard: Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, T today, ←/→ previous and
-next range, D/W/M/A day, multi-day, month and agenda, +/− days shown, F5 refresh, Escape back.
+next range, D/W/M/Y/A day, multi-day, month, year and agenda, +/− days shown, F5 refresh,
+Escape back.
 
 On Windows, a few host tests fail on `main` as well: the DataStore tests that open a second
 store on the same file (Windows can't rename over an open file) and a DNS-timing outage test.
