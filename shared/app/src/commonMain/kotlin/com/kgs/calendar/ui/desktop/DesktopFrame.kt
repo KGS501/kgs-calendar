@@ -50,6 +50,8 @@ internal fun DesktopFrame(
     today: LocalDate,
     tasksNeedAttention: Boolean,
     onViewSelected: (CalendarViewMode) -> Unit,
+    onCreateEvent: () -> Unit,
+    onCreateTask: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val yearViewOpen = shell.yearViewOpen
@@ -118,6 +120,8 @@ internal fun DesktopFrame(
                 },
                 onSearch = shell::openSearch,
                 onTasks = shell::openTaskDrawer,
+                onCreateEvent = onCreateEvent,
+                onCreateTask = onCreateTask,
             )
             Box(Modifier.weight(1f)) {
                 AnimatedContent(

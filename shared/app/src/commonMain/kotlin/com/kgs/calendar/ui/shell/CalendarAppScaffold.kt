@@ -199,14 +199,17 @@ internal fun CalendarAppScaffold(
                             zoneId = ZoneId.systemDefault(),
                         ),
                         onViewSelected = onViewSelected,
+                        onCreateEvent = { onCreateEvent(state.defaultFabCreationDate()) },
+                        onCreateTask = { onCreateTask(state.defaultFabCreationDate(), true, SheetOrigin.Calendar) },
                         content = calendarShell,
                     )
                 } else {
                     calendarShell()
                 }
             }
+            // The desktop creates from its toolbar instead of a floating button.
             AnimatedVisibility(
-                visible = shell.creationSheet == null,
+                visible = shell.creationSheet == null && !desktop,
                 enter = fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)) +
                     scaleIn(initialScale = 0.92f, animationSpec = tween(MotionMedium, easing = MotionEmphasized)),
                 exit = fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) +

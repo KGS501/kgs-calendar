@@ -1,5 +1,10 @@
 package com.kgs.calendar.ui.desktop
 
+import com.kgs.calendar.ui.MorphingDropdown
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -130,6 +135,8 @@ internal fun DesktopToolbar(
     onViewSelected: (DesktopView) -> Unit,
     onSearch: () -> Unit,
     onTasks: () -> Unit,
+    onCreateEvent: () -> Unit,
+    onCreateTask: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalAppLocale.current
@@ -195,6 +202,10 @@ internal fun DesktopToolbar(
             weekLabel = stringResource(if (state.weekViewEnabled) R.string.week else R.string.desktop_days, state.multiDayCount),
             onSelected = onViewSelected,
         )
+        // A fixed slot: the button morphs into its menu without moving its neighbours.
+        Box(Modifier.width(if (wide) 112.dp else 44.dp), contentAlignment = Alignment.CenterEnd) {
+            CreateButton(onCreateEvent = onCreateEvent, onCreateTask = onCreateTask, showLabel = wide)
+        }
         if (wide) {
             SearchPill(onClick = onSearch)
         } else {
@@ -315,6 +326,60 @@ private fun DesktopViewSwitcher(
                 }
             }
         }
+    }
+}
+
+/** "New" with the choice of event or task, in the app's morphing drop-down. */
+@Composable
+private fun CreateButton(onCreateEvent: () -> Unit, onCreateTask: () -> Unit, showLabel: Boolean) {
+    var open by remember { mutableStateOf(false) }
+    val onAccent = if (WarmBrown.isDark()) Color.White else Color(0xFF1C1A18)
+    MorphingDropdown(
+        expanded = open,
+        onDismissRequest = { open = false },
+        buttonShape = RoundedCornerShape(20.dp),
+        buttonColor = WarmBrown,
+        onClick = { open = true },
+        onClickLabel = stringResource(R.string.create),
+        role = androidx.compose.ui.semantics.Role.Button,
+        menuMinWidth = 180.dp,
+        button = {
+            Row(
+                modifier = Modifier.height(40.dp).padding(start = 12.dp, end = if (showLabel) 16.dp else 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = onAccent, modifier = Modifier.size(20.dp))
+                if (showLabel) {
+                    Text(stringResource(R.string.create), color = onAccent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        menu = {
+            CreateMenuRow(Icons.Default.Event, stringResource(R.string.new_event)) {
+                open = false
+                onCreateEvent()
+            }
+            CreateMenuRow(Icons.Default.TaskAlt, stringResource(R.string.new_task)) {
+                open = false
+                onCreateTask()
+            }
+        },
+    )
+}
+
+@Composable
+private fun CreateMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+        Text(label, color = WarmInk, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -148,8 +148,7 @@ internal fun DesktopYearView(
     val months = remember(year) { (1..12).map { YearMonth.of(year, it) } }
     val placedByMonth = remember(months, bars) { months.associateWith { layoutYearMonth(it, bars) } }
     val weekdays = weekdaysFrom(firstDayOfWeek)
-    // The bottom leaves room for the create button, so it never covers the last days of December.
-    BoxWithConstraints(modifier = modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, bottom = 84.dp)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, bottom = 12.dp)) {
         val labelWidth = 52.dp
         val headerHeight = 26.dp
         val cellWidth = (maxWidth - labelWidth) / YearColumns
@@ -191,7 +190,7 @@ internal fun DesktopYearView(
 }
 
 private const val YearColumns = 37
-private val YearMinRowHeight = 58.dp
+private val YearMinRowHeight = 46.dp
 private val YearBarHeight = 14.dp
 private val YearBarGap = 2.dp
 private val YearDayNumberHeight = 17.dp
