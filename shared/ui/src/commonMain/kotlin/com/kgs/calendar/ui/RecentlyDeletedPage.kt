@@ -1,7 +1,6 @@
 package com.kgs.calendar.ui
 
 import com.kgs.calendar.ui.res.pluralStringResource
-
 import com.kgs.calendar.time.*
 import kotlinx.datetime.*
 import com.kgs.calendar.ui.res.PluralsResource
@@ -71,6 +70,7 @@ import kotlin.time.Instant
 import com.kgs.calendar.time.ZoneId
 import com.kgs.calendar.time.DateTimeFormatter
 import com.kgs.calendar.time.FormatStyle
+import androidx.compose.runtime.ReadOnlyComposable
 
 /**
  * "Recently deleted", opened from the settings: the deleted events and tasks as their usual cards
@@ -86,6 +86,8 @@ fun RecentlyDeletedPage(
     onDismissNotice: () -> Unit,
     onOpened: () -> Unit,
     onClose: () -> Unit,
+    /** In the settings' right column: no back arrow, and the list keeps to the column. */
+    embedded: Boolean = false,
 ) {
     LaunchedEffect(Unit) { onOpened() }
     var emptyTrashConfirmOpen by rememberSaveable { mutableStateOf(false) }
@@ -112,24 +114,27 @@ fun RecentlyDeletedPage(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = statusTop + 8.dp),
+                    .padding(top = if (embedded) 0.dp else statusTop + 8.dp),
             ) {
-                Row(
+                // Embedded, the settings' column already names the page; only its action remains.
+                if (!embedded || trash.entries.isNotEmpty()) Row(
                     modifier = Modifier
-                        .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth))
-                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                        .then(if (embedded) Modifier.fillMaxWidth() else Modifier.centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)))
+                        .padding(horizontal = 18.dp, vertical = if (embedded) 0.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(Res.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
+                    if (!embedded) {
+                        IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = stringResource(Res.string.back), tint = WarmInk, modifier = Modifier.size(25.dp))
+                        }
                     }
                     Text(
-                        stringResource(Res.string.recently_deleted),
-                        color = WarmInk,
-                        fontSize = 24.sp,
-                        lineHeight = 28.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        if (embedded) appPluralString(Res.plurals.recently_deleted_items, trash.entries.size, trash.entries.size) else stringResource(Res.string.recently_deleted),
+                        color = if (embedded) MaterialTheme.colorScheme.onSurfaceVariant else WarmInk,
+                        fontSize = if (embedded) 14.sp else 24.sp,
+                        lineHeight = if (embedded) 18.sp else 28.sp,
+                        fontWeight = if (embedded) FontWeight.Medium else FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -151,7 +156,7 @@ fun RecentlyDeletedPage(
                 if (trash.entries.isEmpty()) {
                     RecentlyDeletedEmptyState(Modifier.fillMaxSize().padding(bottom = navBottom))
                 } else {
-                    val listSidePadding = centeredContentPadding(
+                    val listSidePadding = if (embedded) 18.dp else centeredContentPadding(
                         availableWidth = currentCalendarWindowLayout().widthDp.dp,
                         maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
                         basePadding = 18.dp,
@@ -169,6 +174,8 @@ fun RecentlyDeletedPage(
                             val showDate = index == 0 || result.date != entries[index - 1].second.date
                             item(key = "trashed-${entry.item.id}") {
                                 Box(Modifier.fillMaxWidth().testTag("trashed_item_${entry.item.id}")) {
+                                  // Deleted items are snapshots: they have no right-click menu to edit or delete them.
+                                  androidx.compose.runtime.CompositionLocalProvider(LocalItemContextMenu provides null) {
                                     CalendarSearchResultRow(
                                         item = result,
                                         showDate = showDate,
@@ -184,6 +191,7 @@ fun RecentlyDeletedPage(
                                         // Being in the past means nothing here: show the cards in their normal colours.
                                         mutePastEvents = false,
                                     )
+                                  }
                                 }
                             }
                         }

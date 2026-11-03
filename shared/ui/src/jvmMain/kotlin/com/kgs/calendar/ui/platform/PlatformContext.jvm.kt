@@ -1,10 +1,13 @@
 package com.kgs.calendar.ui.platform
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.kgs.calendar.time.AppLocale
@@ -109,12 +112,15 @@ actual fun rememberPickImageLauncher(onResult: (PlatformUri?) -> Unit): () -> Un
 @Composable
 actual fun ProvidePlatformLocale(locale: AppLocale, content: @Composable () -> Unit) = content()
 
-/** Receives the app's palette, so the window's title bar can match it (set by the desktop app). */
-var DesktopWindowChrome: (darkPalette: Boolean) -> Unit = {}
+/** Receives the app's background and text colours, so the window's title bar can match the app. */
+val LocalWindowChrome = staticCompositionLocalOf<(background: Color, content: Color, dark: Boolean) -> Unit> { { _, _, _ -> } }
 
 @Composable
 actual fun PlatformSystemBarsEffect(darkPalette: Boolean) {
-    androidx.compose.runtime.SideEffect { DesktopWindowChrome(darkPalette) }
+    val chrome = LocalWindowChrome.current
+    val background = MaterialTheme.colorScheme.background
+    val content = MaterialTheme.colorScheme.onBackground
+    SideEffect { chrome(background, content, darkPalette) }
 }
 
 actual fun decodeImageBitmap(bytes: ByteArray): ImageBitmap? =

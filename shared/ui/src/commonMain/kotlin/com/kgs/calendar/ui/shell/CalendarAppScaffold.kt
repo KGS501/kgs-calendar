@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.time.*
 import kotlinx.datetime.*
 import androidx.compose.animation.AnimatedVisibility
@@ -54,6 +55,14 @@ import kotlinx.datetime.LocalDate
 import kotlin.math.roundToInt
 import com.kgs.calendar.ui.theme.CappedFontScale
 import com.kgs.calendar.ui.theme.MaxCalendarFontScale
+import com.kgs.calendar.ui.desktop.DesktopFrameMinWidthDp
+import com.kgs.calendar.ui.hasTaskToolbarAttention
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.ui.desktop.LocalCalendarChrome
+import com.kgs.calendar.ui.desktop.DesktopFrame
+import com.kgs.calendar.ui.desktop.DesktopYearPane
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import com.kgs.calendar.ui.desktop.CalendarChrome
 
 /** The calendar with its create button, drawers and search overlay, blurred behind the create menu. */
 @Composable
@@ -95,6 +104,9 @@ fun CalendarAppScaffold(
     }
     val density = LocalDensity.current
     val quietInteraction = remember { MutableInteractionSource() }
+    // Narrow desktop windows have no room for the sidebar and use the phone layout instead.
+    val desktop = LocalCalendarChrome.current == CalendarChrome.Desktop && currentCalendarWindowLayout().widthDp >= DesktopFrameMinWidthDp
+    val paneLayout = LocalPaneLayout.current
     // The drawer shows how many items "Recently deleted" holds.
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -125,60 +137,95 @@ fun CalendarAppScaffold(
                     .fillMaxSize()
                     .blur(backgroundBlur),
             ) {
-                // Seven day columns leave little room, so the calendar stops growing with the font earlier.
-                CappedFontScale(MaxCalendarFontScale) {
-                    CalendarShell(
+                val calendarShell: @Composable () -> Unit = {
+                    // Seven day columns leave little room, so the calendar stops growing with the font earlier.
+                    CappedFontScale(MaxCalendarFontScale) {
+                        CalendarShell(
+                            state = renderState,
+                            onMenu = shell::openMenuDrawer,
+                            onDateSelected = viewModel::selectDate,
+                            onViewSelected = onViewSelected,
+                            onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
+                            onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
+                            onLandscapeTimelineCompactChanged = viewModel.settings::setLandscapeTimelineCompact,
+                            onToday = viewModel::today,
+                            onSearch = shell::openSearch,
+                            onTasks = shell::openTaskDrawer,
+                            onTaskStatusChanged = viewModel.edits::setTaskStatus,
+                            onEventMoved = viewModel.edits::moveTimedEvent,
+                            onTaskMoved = viewModel.edits::moveTimedTask,
+                            onEventMovedAllDay = viewModel.edits::moveAllDayEvent,
+                            onTaskMovedAllDay = viewModel.edits::moveAllDayTask,
+                            onSlotSelected = { date, start ->
+                                shell.selectDraftSlot(
+                                    preview = timelineSlotDraftPreview(date, start, state.defaultEventDurationMinutes),
+                                    wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+                                )
+                            },
+                            onAllDaySlotSelected = { date ->
+                                shell.selectDraftSlot(
+                                    preview = allDaySlotDraftPreview(date),
+                                    wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+                                )
+                            },
+                            draftEvent = shell.draftEventSelection(),
+                            onDraftEventChanged = { draft ->
+                                shell.moveDraft(EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay))
+                            },
+                            onDraftInteraction = shell::onDraftInteraction,
+                            onDraftTap = shell::requestCreationExpand,
+                            // In the tabletop and book postures the editor is a panel beside the calendar, not a low sheet over it.
+                            timelineBottomInset = if (shell.editorWireframeMode && foldPosture == FoldPosture.Normal) {
+                                EditorTinyVisibleHeight
+                            } else {
+                                0.dp
+                            },
+                            onDetail = shell::openDetail,
+                            overdueTasksExpanded = shell.overdueTasksExpanded,
+                            onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },
+                            onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
+                            onLoadLaterAgenda = viewModel::loadLaterAgenda,
+                            timelineViewportMemory = viewModel.timelineViewportMemory,
+                            foregroundRecenterRequest = foregroundRecenterRequest,
+                            showToolbar = !desktop,
+                            dateRequest = shell.dateRequest,
+                            yearViewOpen = desktop && shell.yearViewOpen,
+                            yearView = if (desktop) {
+                                { morphDay, onOpenDay ->
+                                    DesktopYearPane(viewModel, renderState, shell, today, morphDay, onOpenDay)
+                                }
+                            } else {
+                                null
+                            },
+                            onYearViewDayOpened = { shell.yearViewOpen = false },
+                        )
+                    }
+                }
+                if (desktop) {
+                    DesktopFrame(
+                        viewModel = viewModel,
                         state = renderState,
-                        onMenu = shell::openMenuDrawer,
-                        onDateSelected = viewModel::selectDate,
+                        shell = shell,
+                        today = today,
+                        tasksNeedAttention = hasTaskToolbarAttention(
+                            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences + state.datedTasks,
+                            today = today,
+                            zoneId = ZoneId.systemDefault(),
+                        ),
                         onViewSelected = onViewSelected,
-                        onMultiDayCountChanged = viewModel.settings::setMultiDayCount,
-                        onTimelineHourHeightChanged = viewModel.settings::setTimelineHourHeight,
-                        onLandscapeTimelineCompactChanged = viewModel.settings::setLandscapeTimelineCompact,
-                        onToday = viewModel::today,
-                        onSearch = shell::openSearch,
-                        onTasks = shell::openTaskDrawer,
-                        onTaskStatusChanged = viewModel.edits::setTaskStatus,
-                        onEventMoved = viewModel.edits::moveTimedEvent,
-                        onTaskMoved = viewModel.edits::moveTimedTask,
-                        onEventMovedAllDay = viewModel.edits::moveAllDayEvent,
-                        onTaskMovedAllDay = viewModel.edits::moveAllDayTask,
-                        onSlotSelected = { date, start ->
-                            shell.selectDraftSlot(
-                                preview = timelineSlotDraftPreview(date, start, state.defaultEventDurationMinutes),
-                                wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
-                            )
-                        },
-                        onAllDaySlotSelected = { date ->
-                            shell.selectDraftSlot(
-                                preview = allDaySlotDraftPreview(date),
-                                wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
-                            )
-                        },
-                        draftEvent = shell.draftEventSelection(),
-                        onDraftEventChanged = { draft ->
-                            shell.moveDraft(EditorSchedulePreview(draft.date, draft.start, draft.end, draft.allDay))
-                        },
-                        onDraftInteraction = shell::onDraftInteraction,
-                        onDraftTap = shell::requestCreationExpand,
-                        // In the tabletop and book postures the editor is a panel beside the calendar, not a low sheet over it.
-                        timelineBottomInset = if (shell.editorWireframeMode && foldPosture == FoldPosture.Normal) {
-                            EditorTinyVisibleHeight
-                        } else {
-                            0.dp
-                        },
-                        onDetail = shell::openDetail,
-                        overdueTasksExpanded = shell.overdueTasksExpanded,
-                        onOverdueTasksExpandedChange = { shell.overdueTasksExpanded = it },
-                        onLoadEarlierAgenda = viewModel::loadEarlierAgenda,
-                        onLoadLaterAgenda = viewModel::loadLaterAgenda,
-                        timelineViewportMemory = viewModel.timelineViewportMemory,
-                        foregroundRecenterRequest = foregroundRecenterRequest,
+                        onCreateEvent = { onCreateEvent(state.defaultFabCreationDate()) },
+                        onCreateTask = { onCreateTask(state.defaultFabCreationDate(), true, SheetOrigin.Calendar) },
+                        onCreateTaskInPane = { onCreateTask(today, false, SheetOrigin.Calendar) },
+                        onCloseSearch = onCloseSearch,
+                        content = calendarShell,
                     )
+                } else {
+                    calendarShell()
                 }
             }
+            // The desktop creates from its toolbar instead of a floating button.
             AnimatedVisibility(
-                visible = shell.creationSheet == null,
+                visible = shell.creationSheet == null && !desktop,
                 enter = fadeIn(animationSpec = tween(MotionShort, easing = MotionStandard)) +
                     scaleIn(initialScale = 0.92f, animationSpec = tween(MotionMedium, easing = MotionEmphasized)),
                 exit = fadeOut(animationSpec = tween(MotionShort, easing = MotionStandardAccelerate)) +
@@ -199,7 +246,8 @@ fun CalendarAppScaffold(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             // The sidebar is narrow too: long words would break inside its labels.
-            CappedFontScale(MaxCalendarFontScale) {
+            // The desktop shows its calendars in the permanent sidebar instead.
+            if (!desktop) CappedFontScale(MaxCalendarFontScale) {
                 CalendarDrawer(
                     visible = shell.drawerOpen,
                     state = renderState,
@@ -263,8 +311,18 @@ fun CalendarAppScaffold(
                 onCreateTask = {
                     onCreateTask(today, false, SheetOrigin.Calendar)
                 },
+                completedInline = desktop,
+                onPin = if (desktop) {
+                    {
+                        shell.closeTaskDrawer()
+                        paneLayout.pinTasksPane(true)
+                    }
+                } else {
+                    null
+                },
             )
-            CalendarSearchOverlay(
+            // The desktop searches in the calendar's column (DesktopSearchPanel).
+            if (!desktop) CalendarSearchOverlay(
                 visible = shell.searchOpen,
                 query = renderState.searchQuery,
                 searchMode = renderState.searchMode,

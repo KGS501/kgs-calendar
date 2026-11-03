@@ -8,7 +8,6 @@ import com.kgs.calendar.domain.source.isLocalAccount
 import com.kgs.calendar.time.nowMillis
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -19,7 +18,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /**
  * Background synchronization while the app runs, with Android's triggers: the chosen sync
@@ -69,13 +67,10 @@ class DesktopSync(
         attempt { repository.syncNow(includeDisabledProviderCalendars = false) }
     }
 
-    /**
-     * Runs [sync] off the window's thread, then the follow-ups whatever its outcome: a late failure
-     * may already have stored new items.
-     */
+    /** Runs [sync], then the follow-ups whatever its outcome: a late failure may already have stored new items. */
     private suspend fun attempt(sync: suspend () -> Unit) = lock.withLock {
         try {
-            withContext(Dispatchers.Default) { sync() }
+            sync()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {

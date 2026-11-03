@@ -329,6 +329,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
         shape = shape,
         modifier = Modifier
             .fillMaxWidth()
+            .itemContextMenu(event)
             .alpha(pendingAlpha)
             .then(
                 when {
@@ -608,6 +609,8 @@ fun CompletedTasksView(
     onTaskStatusChanged: (TaskEntity, String) -> Unit,
     onTaskClick: (TaskEntity) -> Unit,
     onClose: () -> Unit,
+    /** Inside the task sidebar rather than a page of its own. */
+    embedded: Boolean = false,
 ) {
     BackHandler(enabled = true) { onClose() }
     var query by rememberSaveable { mutableStateOf("") }
@@ -633,7 +636,7 @@ fun CompletedTasksView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = statusTop),
+                .padding(top = if (embedded) statusTop + 18.dp else statusTop),
         ) {
             Row(
                 modifier = Modifier
@@ -727,18 +730,18 @@ private fun OverdueTaskSection(
         enter = expandVertically(tween(MotionMedium, easing = MotionEmphasized)) + fadeIn(tween(MotionMedium, easing = MotionStandard)),
         exit = shrinkVertically(tween(MotionMedium, easing = MotionStandardAccelerate)) + fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)),
     ) {
-        Surface(
+        // A tinted backdrop rather than a clipping surface: pulsing priority cards may grow past it.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                .background(WarmBrown.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
                 .testTag(OverdueTaskSectionTag),
-            shape = RoundedCornerShape(20.dp),
-            color = WarmBrown.copy(alpha = 0.12f),
         ) {
             Column(
                 modifier = Modifier
-                    .padding(top = 12.dp, bottom = 8.dp)
-                    .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+                    .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))
+                    .padding(top = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Row(
@@ -984,7 +987,7 @@ private fun EventRow(event: EventEntity, onClick: () -> Unit) {
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().itemContextMenu(event),
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(Color(event.displayColor())))
@@ -1155,7 +1158,8 @@ fun TaskRow(
                 .zIndex(1f)
                 .alpha(pendingAlpha * hierarchyExitCardAlpha)
                 .graphicsLayer { clip = false }
-                .taskPriorityMotion(if (inactive || !priorityMotionEnabled) null else task.priority, cardColor),
+                .taskPriorityMotion(if (inactive || !priorityMotionEnabled) null else task.priority, cardColor)
+                .itemContextMenu(task),
         ) {
             Box(Modifier.fillMaxWidth()) {
                 TaskCardCompletionBurst(burstKey, color = contentColor, modifier = Modifier.matchParentSize())

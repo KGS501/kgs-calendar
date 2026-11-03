@@ -335,16 +335,18 @@ fun ModalEditorDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
         Surface(
-            modifier = Modifier.wideDialogWidth(),
+            modifier = Modifier.wideDialogWidth().dialogEntrance(),
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(title, color = WarmInk, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
-                content()
+            ProvidePopupSurface {
+                Column(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(title, color = WarmInk, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
+                    content()
+                }
             }
         }
     }

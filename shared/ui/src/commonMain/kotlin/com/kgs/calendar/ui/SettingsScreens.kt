@@ -171,6 +171,13 @@ import com.kgs.calendar.ui.sources.subtitle
 import com.kgs.calendar.json.JSONObject
 import kotlinx.datetime.DayOfWeek
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
+import com.kgs.calendar.ui.platform.appVersionName
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Lightbulb
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import com.kgs.calendar.ui.desktop.PaneSeam
 
 @Composable
 fun SettingsPage(
@@ -252,6 +259,8 @@ fun SettingsPage(
     onRestoreAccountImage: (String) -> Unit = {},
     trashCount: Int = 0,
     onRecentlyDeleted: () -> Unit = {},
+    /** "Recently deleted" as the right column's content in two columns. */
+    recentlyDeletedPane: (@Composable () -> Unit)? = null,
     problemCount: Int = 0,
     onProblems: () -> Unit = {},
     covered: Boolean = false,
@@ -294,6 +303,7 @@ fun SettingsPage(
         runCatching { SettingsDestination.valueOf(navigationStack.last()) }.getOrDefault(SettingsDestination.Main)
     }
     val twoPane = currentCalendarWindowLayout().usesTwoPaneSettings
+    val shortcutBindings = com.kgs.calendar.ui.platform.LocalShortcutBindings.current
     val paneDestination = currentDestination.takeUnless { it == SettingsDestination.Main } ?: SettingsDestination.Accounts
     // The section shown beside the main page, highlighted there.
     val openSectionDestination = navigationStack.getOrNull(1)
@@ -452,6 +462,13 @@ fun SettingsPage(
                         iconColor = SettingsColors.General,
                         selected = twoPane && openSectionDestination == SettingsDestination.General,
                     ) { openSection(SettingsDestination.General) }
+                    if (shortcutBindings != null) SettingsNavRow(
+                        title = stringResource(Res.string.settings_shortcuts),
+                        subtitle = explanation(Res.string.settings_shortcuts_summary),
+                        icon = Icons.Default.Keyboard,
+                        iconColor = SettingsColors.Shortcuts,
+                        selected = twoPane && openSectionDestination == SettingsDestination.KeyboardShortcuts,
+                    ) { openSection(SettingsDestination.KeyboardShortcuts) }
                     if (PlatformFeatures.homeScreenWidgets) SettingsNavRow(
                         title = stringResource(Res.string.widgets),
                         subtitle = explanation(Res.string.widget_settings_summary),
@@ -462,6 +479,13 @@ fun SettingsPage(
                 }
                 SettingsGroup {
                     SettingsNavRow(
+                        title = stringResource(Res.string.settings_good_to_know),
+                        subtitle = explanation(Res.string.settings_good_to_know_summary),
+                        icon = Icons.Default.Lightbulb,
+                        iconColor = SettingsColors.GoodToKnow,
+                        selected = twoPane && openSectionDestination == SettingsDestination.GoodToKnow,
+                    ) { openSection(SettingsDestination.GoodToKnow) }
+                    SettingsNavRow(
                         title = stringResource(Res.string.recently_deleted),
                         subtitle = if (trashCount > 0) {
                             pluralStringResource(Res.plurals.recently_deleted_items, trashCount, trashCount)
@@ -470,7 +494,10 @@ fun SettingsPage(
                         },
                         icon = Icons.Default.Delete,
                         iconColor = SettingsColors.Trash,
-                        onClick = onRecentlyDeleted,
+                        selected = twoPane && openSectionDestination == SettingsDestination.RecentlyDeleted,
+                        onClick = {
+                            if (twoPane && recentlyDeletedPane != null) openSection(SettingsDestination.RecentlyDeleted) else onRecentlyDeleted()
+                        },
                     )
                 }
                 SettingsGroup(title = stringResource(Res.string.settings_project)) {
@@ -1246,7 +1273,7 @@ fun SettingsPage(
                         label = { it.localizedLabel() },
                         onSelected = onLanguageSelected,
                     )
-                    SettingsSwitchRow(
+                    if (PlatformFeatures.haptics) SettingsSwitchRow(
                         title = stringResource(Res.string.haptic_feedback),
                         checked = state.hapticFeedbackEnabled,
                         onCheckedChange = onHapticFeedbackChanged,
@@ -1263,6 +1290,14 @@ fun SettingsPage(
                         checked = state.autoLoadMapPreviews,
                         onCheckedChange = onAutoLoadMapPreviewsChanged,
                     )
+                    com.kgs.calendar.ui.platform.LocalDesktopWindowBehaviour.current?.let { window ->
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.desktop_close_to_tray),
+                            subtitle = explanation(Res.string.desktop_close_to_tray_help),
+                            checked = window.closeToTray,
+                            onCheckedChange = window::updateCloseToTray,
+                        )
+                    }
                 }
             }
             SettingsDestination.Widgets -> {
@@ -1416,6 +1451,10 @@ fun SettingsPage(
                     )
                 }
             }
+            // Its own list, see SettingsSubpages.
+            SettingsDestination.RecentlyDeleted -> Unit
+            SettingsDestination.KeyboardShortcuts -> shortcutBindings?.let { KeyboardShortcutsSettings(it) }
+            SettingsDestination.GoodToKnow -> GoodToKnowSettings()
         }
     }
     @Composable
@@ -1451,7 +1490,11 @@ fun SettingsPage(
             },
             label = "settingsSubpage",
         ) { page ->
-            SettingsPageColumn(page)
+            if (page == SettingsDestination.RecentlyDeleted && recentlyDeletedPane != null) {
+                recentlyDeletedPane()
+            } else {
+                SettingsPageColumn(page)
+            }
         }
     }
     Surface(
@@ -1461,26 +1504,35 @@ fun SettingsPage(
         color = MaterialTheme.colorScheme.background,
     ) {
         if (twoPane) {
-            Row(
+            val panes = LocalPaneLayout.current
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = statusTop + 8.dp, bottom = navBottom),
             ) {
-                Column(Modifier.weight(2f)) {
-                    SettingsTopBar(
-                        title = SettingsDestination.Main.localizedTitle(),
-                        onBack = onClose,
-                        trailing = { SettingsProblemsButton(count = problemCount, onClick = onProblems) },
+                val totalWidth = maxWidth
+                Row(Modifier.fillMaxSize()) {
+                    // The seam between the columns can be dragged to share the width differently.
+                    Column(Modifier.width(totalWidth * panes.settingsListFraction)) {
+                        SettingsTopBar(
+                            title = SettingsDestination.Main.localizedTitle(),
+                            onBack = onClose,
+                            trailing = { SettingsProblemsButton(count = problemCount, onClick = onProblems) },
+                        )
+                        SettingsPageColumn(SettingsDestination.Main)
+                    }
+                    PaneSeam(
+                        onDrag = { delta -> panes.dragSettingsList(delta, totalWidth.value) },
+                        onDragEnd = panes::commit,
                     )
-                    SettingsPageColumn(SettingsDestination.Main)
-                }
-                Column(Modifier.weight(3f)) {
-                    // A section's own page has no back arrow: its left column entry is still there.
-                    SettingsTopBar(
-                        title = paneDestination.localizedTitle(),
-                        onBack = if (navigationStack.size > 2) ::navigateBack else null,
-                    )
-                    SettingsSubpages(paneDestination)
+                    Column(Modifier.weight(1f)) {
+                        // A section's own page has no back arrow: its left column entry is still there.
+                        SettingsTopBar(
+                            title = paneDestination.localizedTitle(),
+                            onBack = if (navigationStack.size > 2) ::navigateBack else null,
+                        )
+                        SettingsSubpages(paneDestination)
+                    }
                 }
             }
         } else {
@@ -1948,6 +2000,9 @@ private fun SettingsDestination.localizedTitle(): String = when (this) {
     SettingsDestination.About -> stringResource(Res.string.about_kgs_calendar)
     SettingsDestination.EventFieldOrder -> stringResource(Res.string.event_fields)
     SettingsDestination.TaskFieldOrder -> stringResource(Res.string.task_fields)
+    SettingsDestination.RecentlyDeleted -> stringResource(Res.string.recently_deleted)
+    SettingsDestination.KeyboardShortcuts -> stringResource(Res.string.settings_shortcuts)
+    SettingsDestination.GoodToKnow -> stringResource(Res.string.settings_good_to_know)
 }
 
 @Composable
@@ -2000,6 +2055,8 @@ private object SettingsColors {
     val Sponsor = Color(0xFF9A6070)
     val Bug = Color(0xFFA08A4E)
     val Privacy = Color(0xFF4E8A8C)
+    val Shortcuts = Color(0xFF5A7CA0)
+    val GoodToKnow = Color(0xFFB8892E)
 }
 
 /** The installed version name, e.g. "V.1.4.5-2". */
@@ -2022,9 +2079,7 @@ private fun AboutIdentityCard() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Image(
-            rememberVectorPainter(KgsDrawables.kgsLogoVector),
-            contentDescription = null,
+        KgsAppLogo(
             // The mark fills about 62 % of this drawable; at 92 dp it matches the 56 dp mark in KGS Notes.
             modifier = Modifier.size(92.dp),
         )
@@ -2225,7 +2280,16 @@ fun CollectionSettingsSheet(
                 if (collection.supportsEvents) CalendarCapabilityChip(stringResource(Res.string.events), Color(0xFF2F5AEA))
                 if (collection.supportsTasks) CalendarCapabilityChip(stringResource(Res.string.tasks), Color(0xFF00A86B))
             }
-            OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.name)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                name,
+                { name = it },
+                label = { Text(stringResource(Res.string.name)) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                // Filled where the sheet is a popup (the desktop): an outline alone is hard to see there.
+                colors = if (LocalOnPopupSurface.current) dialogFieldColors() else OutlinedTextFieldDefaults.colors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
             SettingsGroup(horizontalPadding = 0.dp) {
                 SettingsColorRow(
                     title = stringResource(Res.string.color),

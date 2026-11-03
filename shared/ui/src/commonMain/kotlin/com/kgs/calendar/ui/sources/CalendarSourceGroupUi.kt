@@ -71,6 +71,7 @@ import com.kgs.calendar.ui.WarmInk
 import com.kgs.calendar.ui.components.ClearableOutlinedTextField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.kgs.calendar.ui.platform.decodeImageBitmap
 
 /** The name the local calendar's source is created with; shown in the app's language until renamed. */
 const val DefaultLocalSourceName = "Local calendar"

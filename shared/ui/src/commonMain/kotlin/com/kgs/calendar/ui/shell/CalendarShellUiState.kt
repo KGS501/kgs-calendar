@@ -53,6 +53,31 @@ class CalendarShellUiState(
     var createMenuOpen by mutableStateOf(false)
         private set
     var overdueTasksExpanded by mutableStateOf(false)
+
+    /** The desktop's year view, shown instead of the selected view; Android has none. */
+    var yearViewOpen by mutableStateOf(false)
+
+    /**
+     * Where the user left the year view, so that it opens there again; for this run of the app only,
+     * a new one starts with today's month in the middle.
+     */
+    var yearViewScroll: YearViewScroll? = null
+
+    /** A date the shown view should move to, from outside it (the desktop toolbar and keys). */
+    var dateRequest by mutableStateOf<DateRequest?>(null)
+        private set
+
+    fun requestDate(date: kotlinx.datetime.LocalDate) {
+        dateRequest = DateRequest((dateRequest?.serial ?: 0) + 1, date)
+    }
+
+    /** A request to scroll the shown view by one row up (-1) or down (+1), from the arrow keys. */
+    var scrollStep by mutableStateOf<ScrollStepRequest?>(null)
+        private set
+
+    fun requestScrollStep(direction: Int) {
+        scrollStep = ScrollStepRequest((scrollStep?.serial ?: 0) + 1, direction)
+    }
     private var creationSheetState by mutableStateOf<CreationSheet?>(null)
 
     /** Every editor that opens starts a new draft in [editorDrafts]; closing one ends its draft. */
@@ -747,3 +772,12 @@ fun rememberCalendarShellUiState(
 private const val PendingRestoreTimeoutMillis = 5_000L
 
 private const val TransferDraftKey = "transferDraft"
+
+/** One request to show [date]; [serial] tells repeated requests for the same date apart. */
+data class DateRequest(val serial: Int, val date: kotlinx.datetime.LocalDate)
+
+/** The year view's scroll position: its first item and how far that is scrolled, and the year in the middle. */
+data class YearViewScroll(val index: Int, val offset: Int, val centerYear: Int)
+
+/** One request to scroll by a row in [direction]; [serial] tells repeated requests apart. */
+data class ScrollStepRequest(val serial: Int, val direction: Int)

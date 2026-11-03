@@ -54,6 +54,9 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.data.settings.AppThemeMode
 
 data class CalendarWidgetLaunchTarget(
     val date: LocalDate,
@@ -111,6 +114,12 @@ class CalendarViewModel(
     deliverInitialLaunchEvents: Boolean = true,
     /** The open editor's draft; kept here so that it survives rotation without the saved-state Bundle. */
     val editorDrafts: EditorDraftStore = EditorDraftStore(),
+    /**
+     * The saved look, when the platform could read it before the window opened: the startup screen then
+     * shows in it right away instead of in the defaults until the settings are loaded.
+     */
+    initialThemeMode: AppThemeMode = AppThemeMode.KgsBlue,
+    initialColorMode: AppColorMode = AppColorMode.Auto,
 ) : ViewModel() {
     private val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
 
@@ -456,6 +465,8 @@ class CalendarViewModel(
         loadedDataRange = dataRange.value,
         requestedDataRange = dataRange.value,
         searchOccurrenceRange = search.occurrenceRange,
+        themeMode = initialThemeMode,
+        colorMode = initialColorMode,
     )
 
     val uiState: StateFlow<CalendarUiState> = combine(
@@ -677,6 +688,20 @@ class CalendarViewModel(
 
     fun today() {
         selectDate(LocalDate.now())
+    }
+
+    /**
+     * The visible events and dated tasks of [start] until [endExclusive], independent of the
+     * selected view: for overviews that show more than it, such as the desktop's year view.
+     */
+    fun observeRange(start: LocalDate, endExclusive: LocalDate): Flow<Pair<List<EventEntity>, List<TaskEntity>>> {
+        val startMillis = start.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val endMillis = endExclusive.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        return combine(
+            repository.observeEvents(startMillis, endMillis),
+            repository.observeDatedTasks(startMillis, endMillis),
+            collectionVisibility,
+        ) { events, tasks, visibility -> visibility.visibleEvents(events) to visibility.visibleTasks(tasks) }
     }
 
     fun messageShown() {

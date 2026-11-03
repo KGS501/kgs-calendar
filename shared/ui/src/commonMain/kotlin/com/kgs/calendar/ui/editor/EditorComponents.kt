@@ -73,6 +73,8 @@ import kotlin.math.min
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import com.kgs.calendar.ui.theme.MaxAppFontScale
+import androidx.compose.material3.TimePickerLayoutType
+import com.kgs.calendar.ui.platform.bestDateTimePattern
 
 @Composable
 fun ReadOnlyEditorNotice(title: String) {
@@ -363,7 +365,7 @@ fun TimePickerField(
         Dialog(onDismissRequest = { dialogOpen = false }) {
             PickerPopupTheme {
                 Surface(
-                    modifier = Modifier.widthIn(min = 328.dp, max = 360.dp),
+                    modifier = Modifier.widthIn(min = 328.dp, max = 360.dp).dialogEntrance(),
                     shape = RoundedCornerShape(26.dp),
                     color = popupSurfaceColor(),
                     tonalElevation = 6.dp,
@@ -387,6 +389,8 @@ fun TimePickerField(
                         val onAccentContainer = if (accentContainer.isDark()) Color.White else Color(0xFF1C1A18)
                         TimePicker(
                             state = pickerState,
+                            // The dialog is narrow; the side-by-side layout of wide or landscape windows doesn't fit.
+                            layoutType = TimePickerLayoutType.Vertical,
                             colors = TimePickerDefaults.colors(
                                 clockDialColor = popupControlSurfaceColor(),
                                 selectorColor = accent,

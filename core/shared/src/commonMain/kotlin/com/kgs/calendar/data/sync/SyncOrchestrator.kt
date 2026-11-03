@@ -1,5 +1,8 @@
 package com.kgs.calendar.data.sync
 
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.withContext
 import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
@@ -19,12 +22,19 @@ class SyncOrchestrator(
     private val engines: List<CalendarSourceSyncEngine>,
     private val trash: TrashBin? = null,
     private val remoteSyncLock: RemoteSyncLock = RemoteSyncLock(),
+    /**
+     * Where syncs and uploads run. The desktop moves them off its UI thread, where a sync started from
+     * the window would otherwise read and store everything; empty runs them where they are called.
+     */
+    private val syncContext: CoroutineContext = EmptyCoroutineContext,
 ) {
     suspend fun syncNow(
         includeDisabledProviderCalendars: Boolean = false,
         forceFullCalDavRefresh: Boolean = false,
-    ) = remoteSyncLock.withLock {
-        syncNowLocked(SourceSyncOptions(includeDisabledProviderCalendars, forceFullCalDavRefresh))
+    ) = onSyncContext {
+        remoteSyncLock.withLock {
+            syncNowLocked(SourceSyncOptions(includeDisabledProviderCalendars, forceFullCalDavRefresh))
+        }
     }
 
     private suspend fun syncNowLocked(options: SourceSyncOptions) {
@@ -54,12 +64,14 @@ class SyncOrchestrator(
     }
 
     /** Durable worker recovery drains the entire outbox, including edits from earlier processes. */
-    suspend fun pushAllPendingChanges() = remoteSyncLock.withLock {
-        repairs.repairPendingTaskMutations()
-        uploader.pushPendingMutations(database.pendingMutationDao().all())
+    suspend fun pushAllPendingChanges() = onSyncContext {
+        remoteSyncLock.withLock {
+            repairs.repairPendingTaskMutations()
+            uploader.pushPendingMutations(database.pendingMutationDao().all())
+        }
     }
 
-    suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long) {
+    suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long): Unit = onSyncContext {
         remoteSyncLock.withLock {
             val threshold = startedAtMillis - TARGETED_SYNC_CLOCK_SKEW_MILLIS
             val pendingMutations = database.pendingMutationDao().createdSince(threshold)
@@ -67,6 +79,10 @@ class SyncOrchestrator(
             uploader.pushPendingMutations(database.pendingMutationDao().createdSince(threshold))
         }
     }
+
+    /** Without a [syncContext], right here: no context switch, so failures reach callers exactly as thrown. */
+    private suspend fun <T> onSyncContext(block: suspend () -> T): T =
+        if (syncContext == EmptyCoroutineContext) block() else withContext(syncContext) { block() }
 
     private companion object {
         const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L

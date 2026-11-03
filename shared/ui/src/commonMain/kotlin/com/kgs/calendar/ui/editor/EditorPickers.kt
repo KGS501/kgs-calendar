@@ -107,6 +107,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+import com.kgs.calendar.ui.platform.colorToHsv
 
 @Composable
 fun LocationSelectorField(location: String, onClick: () -> Unit) {
@@ -302,7 +304,7 @@ private fun CompactSearchField(
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val textStyle = TextStyle(color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
+    val textStyle = TextStyle(fontFamily = LocalAppFontFamily.current, color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp)
     val focusManager = LocalFocusManager.current
     BasicTextField(
         value = value,

@@ -29,6 +29,7 @@ import com.kgs.calendar.ui.shell.editorSchedule
 import com.kgs.calendar.ui.shell.newSubtaskSchedule
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import androidx.compose.ui.zIndex
 
 /** The event/task detail sheet, morphing between a task and its subtasks or parent. */
 @Composable
@@ -67,6 +68,8 @@ fun DetailSheetHost(
         val foldPanel = LocalFoldPosture.current != FoldPosture.Normal
         val backReturnsToParentTask = currentDetail is DetailSheet.Task && shell.detailTaskBackStack.isNotEmpty()
         KgsModalBottomSheet(
+            // Over the settings, which show "Recently deleted" in their right column in two columns.
+            modifier = if (shell.settingsOpen) Modifier.zIndex(45f) else Modifier,
             onDismissRequest = shell::closeDetail,
             initialSnap = currentDetail.preferredInitialSnap(),
             initialContentHeight = currentDetail.estimatedPopoverHeight(),

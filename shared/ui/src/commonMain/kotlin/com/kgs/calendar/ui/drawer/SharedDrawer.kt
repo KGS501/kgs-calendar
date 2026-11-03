@@ -228,15 +228,14 @@ fun KgsLogoBurstButton(contentDescription: String?) {
                 }
             }
         }
-        Image(
-            imageVector = KgsLogoVector,
+        // The app icon's look: solid white shapes in the blue calendar.
+        com.kgs.calendar.ui.KgsAppLogo(
             contentDescription = contentDescription,
             modifier = Modifier.size(42.dp).graphicsLayer {
                 scaleX = logoScale
                 scaleY = logoScale
                 rotationZ = logoRotation
             },
-            contentScale = ContentScale.Fit,
         )
     }
 }

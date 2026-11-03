@@ -102,7 +102,9 @@ import com.kgs.calendar.time.DateTimeFormatter
 import com.kgs.calendar.time.ChronoUnit
 import kotlin.math.roundToInt
 import kotlin.math.abs
-
+import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.foundation.gestures.Orientation
+import com.kgs.calendar.ui.platform.mouseDragScroll
 
 @Composable
 fun MonthOverview(
@@ -589,7 +591,8 @@ private fun MonthStrip(
                 .fillMaxWidth()
                 .height(44.dp)
                 .padding(top = 5.dp, bottom = 5.dp)
-                .horizontalEdgeFade(edgeWidth = 8.dp),
+                .horizontalEdgeFade(edgeWidth = 8.dp)
+                .mouseDragScroll(listState, Orientation.Horizontal, ScrollableDefaults.flingBehavior()),
         ) {
             items(MonthStripPageCount, key = { it }) { page ->
                 val itemMonth = page.toMonth()
@@ -729,7 +732,8 @@ fun YearStrip(
             .fillMaxWidth()
             .height(52.dp)
             .background(MaterialTheme.colorScheme.background)
-            .horizontalEdgeFade(edgeWidth = 12.dp),
+            .horizontalEdgeFade(edgeWidth = 12.dp)
+            .mouseDragScroll(listState, Orientation.Horizontal, ScrollableDefaults.flingBehavior()),
         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 7.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
