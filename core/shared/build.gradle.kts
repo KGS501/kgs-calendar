@@ -43,7 +43,11 @@ kotlin {
         }
         androidMain.get().dependsOn(jvmCommonMain)
         jvmMain.get().dependsOn(jvmCommonMain)
-        jvmMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
+        jvmMain.dependencies {
+            implementation(libs.androidx.sqlite.bundled)
+            // Windows' data protection (DPAPI) for the stored passwords.
+            implementation(libs.jna.platform)
+        }
         iosMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
     }
 }

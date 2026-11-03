@@ -113,6 +113,8 @@ kotlin {
         compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(libs.versions.jvmTarget.get())) }
         withHostTest { isIncludeAndroidResources = true }
     }
+    // The Windows app (desktopApp).
+    jvm()
     iosArm64()
     iosX64()
     iosSimulatorArm64()
@@ -153,6 +155,11 @@ kotlin {
             implementation(libs.androidx.core.ktx)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.window)
+        }
+        jvmMain.dependencies {
+            implementation(compose.desktop.common)
+            implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.jna.platform)
         }
         getByName("androidHostTest").dependencies {
             implementation(libs.junit)
