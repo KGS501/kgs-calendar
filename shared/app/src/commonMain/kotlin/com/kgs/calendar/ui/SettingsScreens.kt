@@ -2064,9 +2064,7 @@ private fun AboutIdentityCard() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Image(
-            painterResource(Res.drawable.kgs_logo_vector),
-            contentDescription = null,
+        KgsAppLogo(
             // The mark fills about 62 % of this drawable; at 92 dp it matches the 56 dp mark in KGS Notes.
             modifier = Modifier.size(92.dp),
         )

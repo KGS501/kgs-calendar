@@ -116,8 +116,7 @@ internal fun KgsLogoBurstButton() {
                 }
             }
         }
-        Image(
-            painter = painterResource(Res.drawable.kgs_logo_vector),
+        KgsAppLogo(
             contentDescription = stringResource(R.string.app_name),
             modifier = Modifier
                 .size(42.dp)
@@ -127,7 +126,6 @@ internal fun KgsLogoBurstButton() {
                     rotationZ = logoRotation
                     shadowElevation = 0f
                 },
-            contentScale = ContentScale.Fit,
         )
     }
 }

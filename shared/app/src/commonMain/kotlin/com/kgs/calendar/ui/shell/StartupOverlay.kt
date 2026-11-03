@@ -200,25 +200,8 @@ private fun StartupCover(ready: Boolean, leave: Float) {
     }
 }
 
-/** The app's icon with its inner shapes solid white, as on the desktop's app icon. */
 @Composable
-private fun StartupLogo(modifier: Modifier) {
-    Image(
-        painter = org.jetbrains.compose.resources.painterResource(Res.drawable.kgs_logo_vector),
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
-        modifier = modifier.drawBehind {
-            // Under the shapes only, inside the calendar's body (in the icon's 2000-unit grid).
-            val unit = size.minDimension / 2000f
-            drawRoundRect(
-                color = Color.White,
-                topLeft = Offset(560f * unit, 620f * unit),
-                size = Size(890f * unit, 880f * unit),
-                cornerRadius = CornerRadius(40f * unit),
-            )
-        },
-    )
-}
+private fun StartupLogo(modifier: Modifier) = com.kgs.calendar.ui.KgsAppLogo(modifier)
 
 private const val LeaveDurationMs = 320
 private const val SlowAfterMs = 900L

@@ -799,6 +799,15 @@
     <string name="source_read_only">Nur lesen</string>
     <string name="source_device_only">Nur auf diesem Gerät</string>
     <string name="desktop_quit">Beenden</string>
+    <string name="tray_open">KGS Calendar öffnen</string>
+    <string name="tray_up_next">Als Nächstes</string>
+    <string name="tray_nothing_planned">Nichts weiter geplant</string>
+    <string name="tray_tomorrow">Morgen</string>
+    <string name="tray_quit">KGS Calendar beenden</string>
+    <plurals name="tray_tasks_due">
+        <item quantity="one">%1$d Aufgabe heute fällig</item>
+        <item quantity="other">%1$d Aufgaben heute fällig</item>
+    </plurals>
     <string name="desktop_close_to_tray">Nach dem Schließen weiterlaufen</string>
     <string name="desktop_close_to_tray_help">Beim Schließen des Fensters bleibt KGS Calendar im Infobereich, damit Erinnerungen weiter erscheinen und die App sofort wieder offen ist. Ausgeschaltet beendet das Schließen des Fensters die App.</string>
     <string name="desktop_running_in_tray">KGS Calendar läuft im Infobereich weiter, damit deine Erinnerungen weiter erscheinen. Über das Symbol dort kannst du es beenden.</string>

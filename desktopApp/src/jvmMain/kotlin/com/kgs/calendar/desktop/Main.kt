@@ -24,17 +24,15 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.window.Notification
-import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberTrayState
 import com.kgs.calendar.res.AppStrings
 import com.kgs.calendar.res.SharedR as R
 import com.kgs.calendar.ui.CalendarViewModel
 import com.kgs.calendar.ui.KgsCalendarApp
 import com.kgs.calendar.ui.KgsStartupScreen
+import com.kgs.calendar.ui.desktop.KgsTrayMenu
 import com.kgs.calendar.ui.desktop.CalendarChrome
 import com.kgs.calendar.ui.desktop.LocalCalendarChrome
 import com.kgs.calendar.ui.desktop.LocalPaneLayout
@@ -52,9 +50,6 @@ import com.kgs.calendar.ui.theme.LocalAppPlatformTextStyle
 import java.awt.Component
 import java.awt.Container
 import java.awt.Frame
-import java.awt.SystemTray
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import javax.swing.RootPaneContainer
@@ -75,12 +70,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.withFrameNanos
 
-/** `--data-dir <folder>` keeps a separate profile, e.g. for testing; otherwise `%LOCALAPPDATA%\KGS Calendar`. */
+/** `--data-dir <folder>` keeps a separate profile, e.g. for testing; otherwise [DataLocation.default]. */
 private fun dataDirectory(args: Array<String>): File {
     val explicit = args.indexOf("--data-dir").takeIf { it >= 0 }?.let { args.getOrNull(it + 1) }
     if (explicit != null) return File(explicit).absoluteFile
-    val base = System.getenv("LOCALAPPDATA")?.let(::File) ?: File(System.getProperty("user.home"), ".local/share")
-    return File(base, "KGS Calendar")
+    return DataLocation.default.also(DataLocation::adoptPreviewData)
 }
 
 /** The calendar's data and logic, set up on their own thread while the window starts. */
@@ -88,7 +82,7 @@ private class LoadedApp(val graph: DesktopGraph, val viewModel: CalendarViewMode
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    DesktopAppVersion = System.getProperty("kgs.version") ?: "V.1.4.6-3"
+    DesktopAppVersion = System.getProperty("kgs.version") ?: "V.2.0.0"
     val dataDirectory = dataDirectory(args)
     // Started again while it runs (the Start menu, a shortcut): the running app shows its window instead.
     val instance = SingleInstance.claim(dataDirectory) ?: exitProcess(0)
@@ -118,12 +112,26 @@ fun main(args: Array<String>) {
         val loaded by produceState<LoadedApp?>(null) { value = loading.await() }
         val backDispatcher = remember { BackDispatcher() }
         val shortcuts = remember { DesktopShortcuts(shortcutBindings) }
-        val trayState = rememberTrayState()
         val windowState = remember { placementStore.restore() }
         val icon = painterResource("kgs_logo.png")
+        // The tray's actions reach the window, which is set up further down.
+        val trayActions = remember { TrayActions() }
+        var menuAnchor by remember { mutableStateOf<java.awt.Point?>(null) }
+        var menuPrepared by remember { mutableStateOf(false) }
+        val tray = remember {
+            AppTray(
+                tooltip = TrayTooltip,
+                onOpen = { trayActions.open() },
+                onMenu = { point ->
+                    menuPrepared = true
+                    menuAnchor = point
+                },
+            )
+        }
+        DisposableEffect(tray) { onDispose { tray.remove() } }
         LaunchedEffect(loaded) {
             val app = loaded ?: return@LaunchedEffect
-            app.graph.reminders.notifier = { title, body -> trayState.sendNotification(Notification(title, body.orEmpty())) }
+            app.graph.reminders.notifier = { title, body -> tray.notify(title, body.orEmpty()) }
             // Sync and reminders work in the background, never on the window's thread.
             app.graph.start(CoroutineScope(coroutineContext + Dispatchers.Default))
             // The next start's startup screen shows in the look the app has now.
@@ -132,6 +140,11 @@ fun main(args: Array<String>) {
                     .map { it.themeMode to it.colorMode }
                     .distinctUntilChanged()
                     .collect { (theme, color) -> appearanceStore.save(theme, color) }
+            }
+            // The tray icon's menu is made ready in good time, so it opens at once when first asked for.
+            launch {
+                delay(TrayMenuPrepareDelayMs)
+                menuPrepared = true
             }
             // Once the app has settled, its classes are saved for faster starts (once per version).
             launch(Dispatchers.IO) {
@@ -175,33 +188,31 @@ fun main(args: Array<String>) {
         }
         LaunchedEffect(Unit) {
             instance.listen { SwingUtilities.invokeLater(::showWindow) }
+            // Signing out, or an installer updating the app, closes it properly.
+            SessionEnd.install { SwingUtilities.invokeLater(::quit) }
+            UpdateWatcher.start { SwingUtilities.invokeLater(::quit) }
         }
-        Tray(
-            icon = icon,
-            state = trayState,
-            tooltip = TrayTooltip,
-            onAction = ::showWindow,
-            menu = {
-                Item(AppStrings.get(R.string.open, Locale.getDefault()), onClick = ::showWindow)
-                Item(AppStrings.get(R.string.desktop_quit, Locale.getDefault()), onClick = ::quit)
-            },
-        )
-        LaunchedEffect(Unit) {
-            // Windows' own action for a tray icon is a double click; like other apps', this one opens
-            // with one. (The icon is the one Tray just added.)
-            repeat(20) {
-                val icons = runCatching { SystemTray.getSystemTray().trayIcons.filter { it.toolTip == TrayTooltip } }.getOrDefault(emptyList())
-                if (icons.isNotEmpty()) {
-                    icons.forEach { trayIcon ->
-                        trayIcon.addMouseListener(object : MouseAdapter() {
-                            override fun mouseClicked(e: MouseEvent) {
-                                if (e.button == MouseEvent.BUTTON1 && e.clickCount == 1) showWindow()
-                            }
-                        })
-                    }
-                    return@LaunchedEffect
-                }
-                delay(100)
+        trayActions.open = ::showWindow
+        if (menuPrepared) {
+            CompositionLocalProvider(
+                LocalAppFontFamily provides RobotoFontFamily,
+                LocalAppPlatformTextStyle provides DesktopPlatformTextStyle,
+                LocalCalendarChrome provides CalendarChrome.Desktop,
+            ) {
+                KgsTrayMenu(
+                    anchor = menuAnchor,
+                    viewModel = loaded?.viewModel,
+                    themeMode = startupTheme,
+                    colorMode = startupColor,
+                    shortcuts = shortcutBindings,
+                    onDismiss = { menuAnchor = null },
+                    onOpen = ::showWindow,
+                    onAction = { action ->
+                        showWindow()
+                        shortcuts.perform(action)
+                    },
+                    onQuit = ::quit,
+                )
             }
         }
         Window(
@@ -216,7 +227,7 @@ fun main(args: Array<String>) {
                     windowVisible = false
                     if (!trayHintShown) {
                         trayHintShown = true
-                        trayState.sendNotification(Notification("KGS Calendar", AppStrings.get(R.string.desktop_running_in_tray, Locale.getDefault())))
+                        tray.notify("KGS Calendar", AppStrings.get(R.string.desktop_running_in_tray, Locale.getDefault()))
                     }
                 }
             },
@@ -307,6 +318,13 @@ fun main(args: Array<String>) {
 private const val ClassArchiveDelayMs = 45_000L
 
 private const val TrayTooltip = "KGS Calendar"
+
+private const val TrayMenuPrepareDelayMs = 8_000L
+
+/** What the tray icon does, set once the window it acts on exists. */
+private class TrayActions {
+    var open: () -> Unit = {}
+}
 
 private const val SettleFrames = 3
 private const val SettleTimeoutMs = 1_500L

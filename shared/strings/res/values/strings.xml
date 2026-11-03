@@ -799,6 +799,15 @@
     <string name="source_read_only">Read only</string>
     <string name="source_device_only">Only on this device</string>
     <string name="desktop_quit">Quit</string>
+    <string name="tray_open">Open KGS Calendar</string>
+    <string name="tray_up_next">Up next</string>
+    <string name="tray_nothing_planned">Nothing else planned</string>
+    <string name="tray_tomorrow">Tomorrow</string>
+    <string name="tray_quit">Quit KGS Calendar</string>
+    <plurals name="tray_tasks_due">
+        <item quantity="one">%1$d task due today</item>
+        <item quantity="other">%1$d tasks due today</item>
+    </plurals>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
     <string name="desktop_year">Year</string>
     <string name="desktop_close_to_tray">Keep running when closed</string>

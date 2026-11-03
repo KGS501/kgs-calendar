@@ -95,6 +95,16 @@ class DesktopShortcuts(val bindings: ShortcutBindings) {
         return true
     }
 
+    /**
+     * Runs [action] as its key would, from elsewhere (the tray icon's menu), also while a page covers
+     * the calendar. False while there is no calendar to act on yet.
+     */
+    fun perform(action: ShortcutAction): Boolean {
+        val actions = shortcuts ?: return false
+        actionOf(action, actions)()
+        return true
+    }
+
     private fun actionOf(action: ShortcutAction, actions: CalendarShortcuts): () -> Unit = when (action) {
         ShortcutAction.NewEvent -> actions.newEvent
         ShortcutAction.NewTask -> actions.newTask

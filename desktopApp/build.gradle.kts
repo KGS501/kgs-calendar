@@ -6,8 +6,22 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-/** The Android version name without its prefix, e.g. "V.1.4.6-3" → "1.4.6-3". */
-val appVersionName = "V.1.4.6-3"
+/** The app's version as the other platforms show it: V.MAJOR.MINOR.PATCH, or V.MAJOR.MINOR.PATCH-BUILD for a rebuild. */
+val appVersionName = "V.2.0.0"
+
+/**
+ * The installer's version. Windows only installs a package over the one before it (keeping its data)
+ * when this version is higher, and it compares just three numbers, so every build handed out needs
+ * a higher one: V.2.0.0 → 2.0.0, V.2.0.0-3 → 2.0.3, V.2.0.1 → 2.0.100.
+ */
+val installerVersion: String = run {
+    val match = Regex("""V\.(\d+)\.(\d+)\.(\d+)(?:-(\d+))?""").matchEntire(appVersionName)
+        ?: error("Unexpected version name $appVersionName")
+    val (major, minor, patch, build) = match.destructured
+    val buildNumber = patch.toInt() * 100 + (build.toIntOrNull() ?: 0)
+    check(build.isEmpty() || build.toInt() < 100) { "A rebuild number must stay below 100" }
+    "$major.$minor.$buildNumber"
+}
 
 kotlin {
     jvm()
@@ -35,7 +49,7 @@ compose.desktop {
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             packageName = "KGS Calendar"
             // Windows installers need a plain MAJOR.MINOR.BUILD version.
-            packageVersion = appVersionName.removePrefix("V.").substringBefore('-')
+            packageVersion = installerVersion
             // Windows shows this as the program's name (Task Manager, "Open with").
             description = "KGS Calendar"
             vendor = "KGS501"
@@ -51,10 +65,12 @@ compose.desktop {
             windows {
                 iconFile.set(project.file("icons/kgs_calendar.ico"))
                 menu = true
+                // Straight into the Start menu's list, not into a folder (jpackage's default is one called "Unknown").
+                menuGroup = ""
                 shortcut = true
                 perUserInstall = true
                 dirChooser = false
-                // Keeps updates installing over the previous version; never change it.
+                // Keeps updates installing over the previous version; never change it (UpdateWatcher knows it too).
                 upgradeUuid = "e37ae039-a4f6-46a7-a7fd-14f524e68795"
             }
         }

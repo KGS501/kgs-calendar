@@ -32,6 +32,22 @@ object WindowsChrome {
         set(DWMWA_TEXT_COLOR, content.colorRef())
     }
 
+    /**
+     * Gives a borderless popup [window] (the tray icon's menu) Windows 11's rounded corners and a thin
+     * [border] around its [background]; earlier Windows versions keep square corners.
+     */
+    fun roundMenuCorners(window: java.awt.Window, background: Color, border: Color) {
+        val api = dwm ?: return
+        val pointer = runCatching { Native.getWindowPointer(window) }.getOrNull() ?: return
+        val hwnd = WinDef.HWND(pointer)
+        fun set(attribute: Int, value: Int) {
+            api.DwmSetWindowAttribute(hwnd, attribute, IntByReference(value), Int.SIZE_BYTES)
+        }
+        set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)
+        set(DWMWA_BORDER_COLOR, border.colorRef())
+        set(DWMWA_CAPTION_COLOR, background.colorRef())
+    }
+
     /** COLORREF is 0x00BBGGRR. */
     private fun Color.colorRef(): Int {
         val argb = toArgb()
@@ -45,4 +61,6 @@ object WindowsChrome {
     private const val DWMWA_BORDER_COLOR = 34
     private const val DWMWA_CAPTION_COLOR = 35
     private const val DWMWA_TEXT_COLOR = 36
+    private const val DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    private const val DWMWCP_ROUND = 2
 }
