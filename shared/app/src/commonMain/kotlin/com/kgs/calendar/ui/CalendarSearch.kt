@@ -1664,6 +1664,7 @@ private fun SearchResultCard(
                         else -> Modifier
                     },
                 )
+                .itemContextMenu(event)
                 .clickable(onClick = onClick)
         ) {
             Column(

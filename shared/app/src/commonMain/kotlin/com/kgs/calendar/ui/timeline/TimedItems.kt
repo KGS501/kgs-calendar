@@ -572,7 +572,8 @@ private fun TimedEventBlock(
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-event-${event.resourceHref}")
-                .then(dragModifier),
+                .then(dragModifier)
+                .itemContextMenu(event),
         ) {
             Box(
                 Modifier
@@ -903,7 +904,8 @@ private fun TimedTaskBlock(
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-task-${task.resourceHref}")
-                .then(dragModifier),
+                .then(dragModifier)
+                .itemContextMenu(task),
         ) {
             TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())
             Box(

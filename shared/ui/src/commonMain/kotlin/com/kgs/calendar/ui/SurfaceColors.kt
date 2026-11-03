@@ -1,6 +1,8 @@
 package com.kgs.calendar.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 
@@ -29,13 +31,36 @@ fun accentContainerColor(): Color =
 
 
 @Composable
-fun editorSectionColor(): Color =
+fun editorSectionColor(): Color = when {
+    // On a popup, which is itself lifted, the fields and rows must stand out from it.
+    LocalOnPopupSurface.current -> popupFieldColor()
     // In dark mode, raised cards are a touch lighter than the sheet, as elevation reads there.
-    if (MaterialTheme.colorScheme.background.isDark()) {
-        MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.07f)
+    MaterialTheme.colorScheme.background.isDark() -> MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.07f)
+    else -> MaterialTheme.colorScheme.background
+}
+
+/**
+ * True on a popup's surface ([popupSurfaceColor]), set by [ProvidePopupSurface]: text fields, switch rows
+ * and choices there take [popupFieldColor], since the colors they have on a sheet are the popup's own.
+ */
+val LocalOnPopupSurface = compositionLocalOf { false }
+
+/** Marks [content] as drawn on a popup's surface (see [LocalOnPopupSurface]). */
+@Composable
+fun ProvidePopupSurface(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalOnPopupSurface provides true, content = content)
+}
+
+/** Fields, switch rows and choices on a popup: clearly set off from its surface, in light and dark. */
+@Composable
+fun popupFieldColor(): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (colors.background.isDark()) {
+        colors.surface.blendWith(Color.White, 0.15f)
     } else {
-        MaterialTheme.colorScheme.background
+        colors.background.blendWith(colors.onSurface, 0.045f)
     }
+}
 
 
 /** Menus and popups: white in the light, the palette's lifted surface in the dark (see the theme). */

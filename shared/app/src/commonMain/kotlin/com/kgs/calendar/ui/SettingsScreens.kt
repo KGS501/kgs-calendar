@@ -83,6 +83,7 @@ import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -2265,7 +2266,16 @@ internal fun CollectionSettingsSheet(
                 if (collection.supportsEvents) CalendarCapabilityChip(stringResource(R.string.events), Color(0xFF2F5AEA))
                 if (collection.supportsTasks) CalendarCapabilityChip(stringResource(R.string.tasks), Color(0xFF00A86B))
             }
-            OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.name)) }, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                name,
+                { name = it },
+                label = { Text(stringResource(R.string.name)) },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                // Filled where the sheet is a popup (the desktop): an outline alone is hard to see there.
+                colors = if (LocalOnPopupSurface.current) dialogFieldColors() else OutlinedTextFieldDefaults.colors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
             SettingsGroup(horizontalPadding = 0.dp) {
                 SettingsColorRow(
                     title = stringResource(R.string.color),

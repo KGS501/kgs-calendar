@@ -88,7 +88,7 @@ fun KgsAlertDialog(
         title = title?.let { content ->
             { ProvideTextStyle(DialogTitleStyle.copy(fontFamily = LocalAppFontFamily.current)) { content() } }
         },
-        text = text,
+        text = text?.let { content -> { ProvidePopupSurface(content) } },
         shape = DialogShape,
         containerColor = containerColor,
         tonalElevation = 0.dp,
@@ -305,9 +305,10 @@ fun DialogFieldCaption(text: String) {
 @Composable
 fun selectedSegmentColor(): Color =
     if (MaterialTheme.colorScheme.background.isDark()) {
-        MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.18f)
+        // Its track is lighter on a popup (see popupFieldColor), so the pill is too.
+        MaterialTheme.colorScheme.surface.blendWith(Color.White, if (LocalOnPopupSurface.current) 0.27f else 0.18f)
     } else {
-        MaterialTheme.colorScheme.surface
+        Color.White.takeIf { LocalOnPopupSurface.current } ?: MaterialTheme.colorScheme.surface
     }
 
 /** An on/off choice inside a popup, as a filled row with a switch. */

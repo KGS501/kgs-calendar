@@ -51,6 +51,20 @@ internal fun CalendarAppContent(
     state: CalendarUiState,
     today: LocalDate,
 ) {
+    // Cards anywhere below open their right-click menu here (see itemContextMenu).
+    val itemMenu = remember { ItemContextMenuState() }
+    CompositionLocalProvider(LocalItemContextMenu provides itemMenu) {
+        CalendarAppBody(viewModel, state, today, itemMenu)
+    }
+}
+
+@Composable
+private fun CalendarAppBody(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    today: LocalDate,
+    itemMenu: ItemContextMenuState,
+) {
     val defaultWireframeColor = WarmBrown.toArgb()
     val platform = rememberPlatformServices()
     val shell = rememberCalendarShellUiState(
@@ -351,6 +365,7 @@ internal fun CalendarAppContent(
         shell = shell,
         today = today,
     )
+    ItemContextMenuHost(menu = itemMenu, viewModel = viewModel, state = state, shell = shell, today = today)
     SettingsOverlay(viewModel = viewModel, state = state, shell = shell, problemCount = problemItems.size)
     WelcomeOverlay(
         viewModel = viewModel,

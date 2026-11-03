@@ -260,86 +260,88 @@ internal fun TaskParentPickerDialog(
             shape = DialogShape,
             color = popupSurfaceColor(),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ProvidePopupSurface {
+                Column(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.parent_task),
-                        color = WarmInk,
-                        fontSize = 20.sp,
-                        lineHeight = 26.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = WarmInk)
-                    }
-                }
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    placeholder = { Text(stringResource(R.string.search_ellipsis)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = dialogFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                DialogChoiceGroup {
-                    DialogChoiceRow(
-                        label = stringResource(R.string.no_parent_task),
-                        selected = selectedParentUid == null,
-                        leading = { Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp)) },
-                        onClick = { onSelected(null) },
-                    )
-                }
-                if (filteredCandidates.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(116.dp),
-                        contentAlignment = Alignment.Center,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            if (candidates.isEmpty()) stringResource(R.string.no_parent_task) else stringResource(R.string.no_matches),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
+                            stringResource(R.string.parent_task),
+                            color = WarmInk,
+                            fontSize = 20.sp,
+                            lineHeight = 26.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = WarmInk)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        placeholder = { Text(stringResource(R.string.search_ellipsis)) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = dialogFieldColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    DialogChoiceGroup {
+                        DialogChoiceRow(
+                            label = stringResource(R.string.no_parent_task),
+                            selected = selectedParentUid == null,
+                            leading = { Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp)) },
+                            onClick = { onSelected(null) },
                         )
                     }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 430.dp)
-                            .verticalScroll(rememberScrollState())
-                            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))
-                            .graphicsLayer { clip = false },
-                    ) {
-                        hierarchy.entries.forEach { entry ->
-                            AnimatedTaskHierarchyEntry(entry) {
-                                TaskRow(
-                                    task = entry.task,
-                                    taskColorMode = taskColorMode,
-                                    onTaskStatusChanged = { _, _ -> onSelected(entry.task.uid) },
-                                    prominent = true,
-                                    hierarchyDepth = entry.depth,
-                                    hierarchyContinuationLevels = entry.continuationLevels,
-                                    hierarchyLastSibling = entry.lastSibling,
-                                    hasSubtasks = entry.hasChildren,
-                                    subtasksExpanded = entry.expanded,
-                                    onToggleSubtasks = { hierarchy.toggle(entry.task) },
-                                    outerHorizontalPadding = 0.dp,
-                                    outerVerticalPadding = 3.dp,
-                                    connectorStemInset = TaskHierarchyStemInset,
-                                    onClick = { onSelected(entry.task.uid) },
-                                )
+                    if (filteredCandidates.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(116.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (candidates.isEmpty()) stringResource(R.string.no_parent_task) else stringResource(R.string.no_matches),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp,
+                                lineHeight = 17.sp,
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 430.dp)
+                                .verticalScroll(rememberScrollState())
+                                .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))
+                                .graphicsLayer { clip = false },
+                        ) {
+                            hierarchy.entries.forEach { entry ->
+                                AnimatedTaskHierarchyEntry(entry) {
+                                    TaskRow(
+                                        task = entry.task,
+                                        taskColorMode = taskColorMode,
+                                        onTaskStatusChanged = { _, _ -> onSelected(entry.task.uid) },
+                                        prominent = true,
+                                        hierarchyDepth = entry.depth,
+                                        hierarchyContinuationLevels = entry.continuationLevels,
+                                        hierarchyLastSibling = entry.lastSibling,
+                                        hasSubtasks = entry.hasChildren,
+                                        subtasksExpanded = entry.expanded,
+                                        onToggleSubtasks = { hierarchy.toggle(entry.task) },
+                                        outerHorizontalPadding = 0.dp,
+                                        outerVerticalPadding = 3.dp,
+                                        connectorStemInset = TaskHierarchyStemInset,
+                                        onClick = { onSelected(entry.task.uid) },
+                                    )
+                                }
                             }
                         }
                     }

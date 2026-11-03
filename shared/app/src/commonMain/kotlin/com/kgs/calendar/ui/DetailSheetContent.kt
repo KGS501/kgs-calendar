@@ -1287,7 +1287,7 @@ private fun DetailOverflowMenu(
 }
 
 @Composable
-private fun CopyTargetDialog(
+internal fun CopyTargetDialog(
     copyTargets: List<CollectionEntity>,
     hiddenCollectionHrefs: Set<String> = emptySet(),
     onDismiss: () -> Unit,
@@ -1360,7 +1360,7 @@ internal fun RecurringSaveScopeDialog(
 }
 
 @Composable
-private fun DeleteConfirmationDialog(
+internal fun DeleteConfirmationDialog(
     itemLabel: String,
     recurringScopes: Boolean,
     /** How long the deleted item can be restored; null when that isn't known yet. */

@@ -172,6 +172,8 @@ internal fun RecentlyDeletedPage(
                             val showDate = index == 0 || result.date != entries[index - 1].second.date
                             item(key = "trashed-${entry.item.id}") {
                                 Box(Modifier.fillMaxWidth().testTag("trashed_item_${entry.item.id}")) {
+                                  // Deleted items are snapshots: they have no right-click menu to edit or delete them.
+                                  androidx.compose.runtime.CompositionLocalProvider(LocalItemContextMenu provides null) {
                                     CalendarSearchResultRow(
                                         item = result,
                                         showDate = showDate,
@@ -187,6 +189,7 @@ internal fun RecentlyDeletedPage(
                                         // Being in the past means nothing here: show the cards in their normal colours.
                                         mutePastEvents = false,
                                     )
+                                  }
                                 }
                             }
                         }

@@ -329,6 +329,7 @@ private fun AgendaEventCard(event: EventEntity, onClick: () -> Unit) {
         shape = shape,
         modifier = Modifier
             .fillMaxWidth()
+            .itemContextMenu(event)
             .alpha(pendingAlpha)
             .then(
                 when {
@@ -986,7 +987,7 @@ private fun EventRow(event: EventEntity, onClick: () -> Unit) {
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().itemContextMenu(event),
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(Color(event.displayColor())))
@@ -1157,7 +1158,8 @@ internal fun TaskRow(
                 .zIndex(1f)
                 .alpha(pendingAlpha * hierarchyExitCardAlpha)
                 .graphicsLayer { clip = false }
-                .taskPriorityMotion(if (inactive || !priorityMotionEnabled) null else task.priority, cardColor),
+                .taskPriorityMotion(if (inactive || !priorityMotionEnabled) null else task.priority, cardColor)
+                .itemContextMenu(task),
         ) {
             Box(Modifier.fillMaxWidth()) {
                 TaskCardCompletionBurst(burstKey, color = contentColor, modifier = Modifier.matchParentSize())

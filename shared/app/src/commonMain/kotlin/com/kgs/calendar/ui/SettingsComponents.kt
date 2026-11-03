@@ -138,9 +138,12 @@ internal fun SettingsFootnote(text: String, modifier: Modifier = Modifier) {
 internal val LocalSettingsRowColor = compositionLocalOf<Color?> { null }
 
 @Composable
-internal fun settingsControlColor(): Color =
-    LocalSettingsRowColor.current
+internal fun settingsControlColor(): Color = when {
+    // White rows would vanish on a white popup, and the sheet's tint is not the popup's.
+    LocalOnPopupSurface.current -> popupFieldColor()
+    else -> LocalSettingsRowColor.current
         ?: if (MaterialTheme.colorScheme.background.isDark()) MaterialTheme.colorScheme.surface else Color.White
+}
 
 @Composable
 internal fun accentContainerContentColor(): Color =

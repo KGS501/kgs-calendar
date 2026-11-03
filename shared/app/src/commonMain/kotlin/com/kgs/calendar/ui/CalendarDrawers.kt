@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.platform.onSecondaryClick
+
 import com.kgs.calendar.ui.theme.LocalAppFontFamily
 
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -289,6 +291,7 @@ private fun DrawerSourceSection(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClickLabel = stringResource(R.string.calendar_group_edit), onClick = onGroupSettings)
+            .onSecondaryClick { onGroupSettings() }
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -409,6 +412,7 @@ private fun DrawerCollectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSettings)
+            .onSecondaryClick { onSettings() }
             // Indented under the group's picture, so each group's calendars read as one set.
             .padding(start = 42.dp, end = 24.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,

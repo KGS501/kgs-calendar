@@ -2,6 +2,8 @@
 
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.ui.platform.onSecondaryClick
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -485,7 +487,7 @@ internal enum class PlannedTaskSort(val label: String) {
  * Shared task checkbox used in the day view, sidebar, detail sheet and editor.
  *
  * - Tap toggles between COMPLETED and NEEDS-ACTION, unless the caller requests the picker.
- * - Long-press opens a status menu (Offen / In Bearbeitung / Erledigt / Abgebrochen).
+ * - Long-press or a right click opens a status menu (Offen / In Bearbeitung / Erledigt / Abgebrochen).
  * - The glyph reflects the status: empty circle (open), slow indeterminate spinner
  *   (in progress), filled check (completed) and an X (cancelled).
  */
@@ -507,6 +509,8 @@ internal fun TaskStatusCheckbox(
         modifier = modifier
             .size(boxSize)
             .clip(CircleShape)
+            // A right click opens the status menu too, as a long press does.
+            .onSecondaryClick(enabled = enabled) { menuOpen = true }
             .combinedClickable(
                 enabled = enabled,
                 onClick = {
@@ -582,44 +586,46 @@ private fun TaskStatusPickerDialog(
             color = popupSurfaceColor(),
             modifier = Modifier.wideDialogWidth().dialogEntrance(),
         ) {
-            Column(modifier = Modifier.padding(vertical = 14.dp)) {
-                Text(
-                    appString(R.string.status),
-                    color = WarmInk,
-                    fontSize = 20.sp,
-                    lineHeight = 26.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
-                )
-                TaskStatusOptions.forEach { value ->
-                    val label = taskStatusOptionLabel(value)
-                    val selected = value == current
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(value) }
-                            .padding(horizontal = 22.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
-                            when (value) {
-                                "IN-PROCESS" -> CenteredDot(WarmInk, 22.dp, fraction = 0.36f)
-                                "CANCELLED" -> Icon(Icons.Default.Close, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
-                                "COMPLETED" -> Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+            ProvidePopupSurface {
+                Column(modifier = Modifier.padding(vertical = 14.dp)) {
+                    Text(
+                        appString(R.string.status),
+                        color = WarmInk,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                    )
+                    TaskStatusOptions.forEach { value ->
+                        val label = taskStatusOptionLabel(value)
+                        val selected = value == current
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(value) }
+                                .padding(horizontal = 22.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
+                                when (value) {
+                                    "IN-PROCESS" -> CenteredDot(WarmInk, 22.dp, fraction = 0.36f)
+                                    "CANCELLED" -> Icon(Icons.Default.Close, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+                                    "COMPLETED" -> Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+                                }
                             }
-                        }
-                        Text(
-                            label,
-                            color = WarmInk,
-                            fontSize = 16.sp,
-                            lineHeight = 19.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                            Text(
+                                label,
+                                color = WarmInk,
+                                fontSize = 16.sp,
+                                lineHeight = 19.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }

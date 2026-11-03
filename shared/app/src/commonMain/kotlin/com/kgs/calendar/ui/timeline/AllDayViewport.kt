@@ -1047,7 +1047,8 @@ private fun AllDayViewportChip(
                 leadingExtension = AllDayAbstractionContinuationExtension * if (leadingAbstractionReaches) leadingAbstractionFade else 0f,
                 trailingExtension = AllDayAbstractionContinuationExtension * if (trailingAbstractionReaches) trailingAbstractionFade else 0f,
             )
-            .then(dragModifier),
+            .then(dragModifier)
+            .then(item.event?.let { Modifier.itemContextMenu(it) } ?: item.task?.let { Modifier.itemContextMenu(it) } ?: Modifier),
     ) {
         Box(
             Modifier
@@ -1620,6 +1621,7 @@ private fun OverdueTaskChip(
             .taskPriorityMotion(if (inactive) null else task.priority, color)
             .background(color, shape)
             .then(dragModifier)
+            .itemContextMenu(task)
             .testTag("timeline-overdue-task-${task.resourceHref}"),
     ) {
         Box(
@@ -1719,6 +1721,7 @@ private fun AllDayChip(
             Modifier
                 .matchParentSize()
                 .clip(shape)
+                .then(event?.let { Modifier.itemContextMenu(it) } ?: Modifier)
                 .clickable(onClick = onClick),
         )
         Text(
@@ -1805,6 +1808,7 @@ private fun AllDayTaskChip(
             Modifier
                 .matchParentSize()
                 .clip(shape)
+                .then(task?.let { Modifier.itemContextMenu(it) } ?: Modifier)
                 .clickable(onClick = onClick),
         )
         Row(

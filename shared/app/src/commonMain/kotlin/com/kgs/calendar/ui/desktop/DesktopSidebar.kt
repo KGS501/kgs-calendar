@@ -138,25 +138,27 @@ internal fun DesktopSidebar(
                 softWrap = false,
             )
         }
+        // The month stays put; only the calendars below it scroll.
+        MiniMonth(
+            selectedDate = state.selectedDate,
+            visibleDays = state.visibleDays(yearViewOpen),
+            firstDayOfWeek = state.firstDayOfWeek,
+            today = today,
+            taskColorMode = state.taskColorMode,
+            observeRange = observeRange,
+            onDateSelected = onDateSelected,
+            modifier = Modifier.padding(horizontal = 14.dp),
+        )
+        Spacer(Modifier.height(22.dp))
+        SidebarHeading(stringResource(R.string.desktop_calendars))
         val scroll = rememberScrollState()
+        HorizontalDivider(color = WarmLine.copy(alpha = if (scroll.canScrollBackward) 1f else 0f))
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(scroll)
                 .padding(bottom = 12.dp),
         ) {
-            MiniMonth(
-                selectedDate = state.selectedDate,
-                visibleDays = state.visibleDays(yearViewOpen),
-                firstDayOfWeek = state.firstDayOfWeek,
-                today = today,
-                taskColorMode = state.taskColorMode,
-                observeRange = observeRange,
-                onDateSelected = onDateSelected,
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
-            Spacer(Modifier.height(22.dp))
-            SidebarHeading(stringResource(R.string.desktop_calendars))
             CalendarSourceList(
                 state = state,
                 onCollectionVisibleInViews = onCollectionVisibleInViews,
