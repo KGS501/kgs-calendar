@@ -1,7 +1,9 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.widget.KgsWidgetKind
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal data class WidgetListRow(
     val type: WidgetListRowType,

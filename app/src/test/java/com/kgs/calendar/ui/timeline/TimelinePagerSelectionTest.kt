@@ -1,10 +1,12 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.timelineVisibleAnchor
 import com.kgs.calendar.ui.calendar.toDayPage
-import java.time.DayOfWeek
-import java.time.LocalDate
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

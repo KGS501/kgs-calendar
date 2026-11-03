@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.state
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.content.SharedPreferences
 import com.kgs.calendar.widget.model.MonthCommand
@@ -8,8 +10,8 @@ import com.kgs.calendar.widget.model.MonthNavStorage
 import com.kgs.calendar.widget.model.MonthNavSynchronizationDomain
 import com.kgs.calendar.widget.model.WidgetMonthNavigation
 import java.time.Clock
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 
 internal class WidgetMonthState(private val context: Context) {
     private val synchronization = MonthNavSynchronizationDomain()

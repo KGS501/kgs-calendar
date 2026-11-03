@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import com.kgs.calendar.R
 import com.kgs.calendar.data.query.CalendarQueries
@@ -20,9 +22,9 @@ import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.monthCacheWindow
 import com.kgs.calendar.widget.state.widgetMonthPageModelNamespace
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
 import kotlinx.coroutines.CancellationException
 
 internal class WidgetMonthPageSource(

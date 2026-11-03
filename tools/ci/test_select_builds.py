@@ -196,7 +196,7 @@ class VerificationCommandTest(unittest.TestCase):
                     command.extend(["--console=plain", "-Pexample=two words"])
                     args = subprocess.check_output(command, text=True).splitlines()
                     self.assertEqual(":core:shared:jvmTest" in args, shared)
-                    self.assertEqual(":shared:ui:jvmTest" in args, shared)
+                    self.assertEqual(":shared:ui:testAndroidHostTest" in args, shared)
                     self.assertEqual(":shared:ui:compileCommonMainKotlinMetadata" in args, shared)
                     self.assertEqual(":app:assembleDebug" in args, android)
                     self.assertEqual(":core:data:testDebugUnitTest" in args, android)

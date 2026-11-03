@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.getValue
@@ -19,7 +21,7 @@ import com.kgs.calendar.ui.DayHeaderHeight
 import com.kgs.calendar.ui.MaxHourRowHeightDp
 import com.kgs.calendar.ui.TimelineView
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs

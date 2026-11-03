@@ -106,11 +106,16 @@ class SigningTest(unittest.TestCase):
     def test_signing_identity_is_reused_without_revoking_or_creating_another_certificate(self, log):
         client = mock.Mock()
         certificates = {}
-        profile = {"id": "profile", "attributes": {"profileState": "ACTIVE",
-                   "name": "KGS Calendar TestFlight cert", "profileType": "IOS_APP_STORE",
-                   "profileContent": base64.b64encode(b"test-profile").decode()}}
-        client.list.side_effect = lambda path, query=None: (
-            [{"id": "bundle", "attributes": {"identifier": asc.BUNDLE_ID}}] if path == "/v1/bundleIds" else [profile])
+        profiles = {name: {"id": profile_id, "attributes": {"profileState": "ACTIVE",
+                    "name": name, "profileType": "IOS_APP_STORE",
+                    "profileContent": base64.b64encode(profile_id.encode()).decode()}}
+                    for name, profile_id in [("KGS Calendar TestFlight cert", "profile"),
+                                             ("KGS Calendar Share TestFlight cert", "share-profile")]}
+        def listing(path, query=None):
+            if path == "/v1/bundleIds":
+                return [{"id": query["filter[identifier]"], "attributes": {"identifier": query["filter[identifier]"]}}]
+            return [profiles[query["filter[name]"]]]
+        client.list.side_effect = listing
         def request(method, path, body=None):
             if method == "POST" and path == "/v1/certificates":
                 csr = x509.load_pem_x509_csr(body["data"]["attributes"]["csrContent"].encode())
@@ -127,8 +132,8 @@ class SigningTest(unittest.TestCase):
                 return {"data": certificates["cert"]}
             if method == "GET" and path == "/v1/certificates/cert":
                 return {"data": certificates["cert"]}
-            if method == "GET" and path == "/v1/profiles/profile":
-                return {"data": profile}
+            if method == "GET" and path in ("/v1/profiles/profile", "/v1/profiles/share-profile"):
+                return {"data": next(p for p in profiles.values() if path.endswith("/" + p["id"]))}
             raise AssertionError((method, path))
         client.request.side_effect = request
         with tempfile.TemporaryDirectory() as directory:
@@ -138,6 +143,8 @@ class SigningTest(unittest.TestCase):
             self.assertEqual(first["team_id"], "TEAM123456")
             self.assertEqual(first, second)
             self.assertEqual(original_key, (Path(directory) / "distribution.key").read_bytes())
+            self.assertEqual((Path(directory) / "share-profile.mobileprovision").read_bytes(), b"share-profile")
+            self.assertEqual(first["share_profile_name"], "KGS Calendar Share TestFlight cert")
             password = (Path(directory) / "p12-password").read_bytes()
             key, cert, _ = pkcs12.load_key_and_certificates((Path(directory) / "distribution.p12").read_bytes(), password)
             self.assertEqual(key.public_key().public_numbers(), cert.public_key().public_numbers())
@@ -262,7 +269,7 @@ class DistributionTest(unittest.TestCase):
         client = self.client(beta_state="READY_FOR_BETA_TESTING", notes=False)
         self.assertFalse(asc.check_build(client, "app", "group", "1.1"))
         note_call = next(c for c in client.request.call_args_list if c.args[:2] == ("POST", "/v1/betaBuildLocalizations"))
-        self.assertIn("not a functional calendar", note_call.args[2]["data"]["attributes"]["whatsNew"])
+        self.assertEqual(asc.TEST_NOTES, note_call.args[2]["data"]["attributes"]["whatsNew"])
 
     def test_permanent_beta_errors_fail_instead_of_waiting(self):
         for state in ("EXPIRED", "PROCESSING_EXCEPTION", "MISSING_EXPORT_COMPLIANCE"):

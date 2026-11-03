@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.ical
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.TaskEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,9 +10,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 
 /** Reading and writing back must not change what other clients stored. */
 class IcalRoundTripSafetyTest {
@@ -320,7 +322,7 @@ class IcalRoundTripSafetyTest {
     fun everyWindowsZoneMapsToAKnownZone() {
         WindowsZones.ids.forEach { (name, id) ->
             assertNotNull(name, TimeZoneResolver.resolveKnownId(id))
-            assertEquals(name, ZoneId.of(id).normalized(), TimeZoneResolver.resolveKnownId(name)?.normalized())
+            assertEquals(name, java.time.ZoneId.of(id).normalized(), TimeZoneResolver.resolveKnownId(name)?.id?.let(java.time.ZoneId::of)?.normalized())
         }
     }
 

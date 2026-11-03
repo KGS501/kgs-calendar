@@ -1,14 +1,16 @@
 package com.kgs.calendar.domain.event
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.domain.model.EventStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import com.kgs.calendar.time.ZoneId
 
 class EventRulesTest {
     private val zone = ZoneId.of("Europe/Berlin")

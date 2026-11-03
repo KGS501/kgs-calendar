@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
@@ -16,7 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
-import java.time.Instant
+import kotlin.time.Instant
 
 /** Reading "Recently deleted" items back into events and tasks for display, and the retention the delete dialogs quote. */
 class TrashedItemPreviewTest {

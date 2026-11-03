@@ -8,8 +8,13 @@
          https://kotlinlang.org/docs/multiplatform/multiplatform-privacy-manifest.html -->
     <key>NSPrivacyAccessedAPITypes</key><array>
         <dict>
+            <key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>
+        </dict>
+        <dict>
             <key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key><array><string>0A2A.1</string></array>
+            <!-- 0A2A.1: Compose/Skia; C617.1: the app's database, settings and drafts in its own container. -->
+            <key>NSPrivacyAccessedAPITypeReasons</key><array><string>0A2A.1</string><string>C617.1</string></array>
         </dict>
         <dict>
             <key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategorySystemBootTime</string>

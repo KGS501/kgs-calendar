@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.SampleIcs
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
@@ -11,7 +13,7 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.widget.KgsWidgetKind
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

@@ -1,5 +1,7 @@
 package com.kgs.calendar
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.Application
 import android.database.ContentObserver
 import android.content.Context
@@ -45,7 +47,7 @@ class KgsCalendarApplication : Application() {
     val processForegroundedAt: SharedFlow<Long> = _processForegroundedAt.asSharedFlow()
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            _processForegroundedAt.tryEmit(System.currentTimeMillis())
+            _processForegroundedAt.tryEmit(nowMillis())
             foregroundSyncJob?.cancel()
             foregroundSyncJob = scope.launch {
                 while (isActive) {
@@ -60,7 +62,7 @@ class KgsCalendarApplication : Application() {
         override fun onStop(owner: LifecycleOwner) {
             foregroundSyncJob?.cancel()
             foregroundSyncJob = null
-            val backgroundedAt = System.currentTimeMillis()
+            val backgroundedAt = nowMillis()
             scope.launch {
                 appGraph.settingsStore.setLastBackgroundedAtMillis(backgroundedAt)
             }
@@ -85,6 +87,12 @@ class KgsCalendarApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Enable with `adb shell setprop log.tag.KgsHaptics DEBUG` to verify haptic cues on an emulator.
+        com.kgs.calendar.ui.haptics.KgsHaptics.debugLog = { tag, message ->
+            if (runCatching { android.util.Log.isLoggable(tag, android.util.Log.DEBUG) }.getOrDefault(false)) {
+                android.util.Log.d(tag, message)
+            }
+        }
         appGraph = AppGraph(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         ReminderScheduler.ensureChannel(this)

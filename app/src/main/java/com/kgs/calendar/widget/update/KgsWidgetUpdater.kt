@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.appwidget.AppWidgetManager
 import android.os.SystemClock
 import android.util.Log
@@ -23,7 +25,7 @@ import com.kgs.calendar.widget.model.usesDirectCollectionItems
 import com.kgs.calendar.widget.model.usesDirectDayGridItems
 import com.kgs.calendar.widget.state.WidgetMonthPageFreshness
 import com.kgs.calendar.widget.state.dayAllDayTokenKey
-import java.time.ZoneId
+import com.kgs.calendar.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 

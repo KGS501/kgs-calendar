@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -16,15 +18,15 @@ import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
-import java.time.Instant
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+import kotlin.time.Instant
+import com.kgs.calendar.time.DateTimeFormatter
+import com.kgs.calendar.time.FormatStyle
 import java.util.Locale
 import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.onNodeWithTag
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import org.junit.Rule
 import org.junit.Test
 
@@ -66,7 +68,7 @@ class RecentlyDeletedPageInstrumentedTest {
             timezoneId = zone.id,
             color = 0xFF1B6B5C.toInt(),
         )
-        val deletedAt = System.currentTimeMillis()
+        val deletedAt = nowMillis()
         val trash = TrashUiState(
             entries = listOf(
                 TrashedItemPreview(trashedItem(1, ComponentType.Task, task.title, null, deletedAt), task = task),

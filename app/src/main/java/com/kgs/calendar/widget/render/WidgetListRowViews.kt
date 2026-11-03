@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
@@ -53,8 +55,8 @@ import com.kgs.calendar.widget.theme.blendWith
 import com.kgs.calendar.widget.theme.isDarkColor
 import com.kgs.calendar.widget.theme.withAlpha
 import com.kgs.calendar.widget.update.WidgetPerformanceMonitor
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -323,7 +325,7 @@ private fun WidgetListRow.toAgendaEventRemoteViews(
         views.setViewLayoutHeight(R.id.widget_agenda_date_column, rowHeightDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
         views.setViewLayoutHeight(R.id.widget_agenda_event_art, rowHeightDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
     }
-    val muted = !sourceKindIsDay() && endMillis > 0L && endMillis < System.currentTimeMillis()
+    val muted = !sourceKindIsDay() && endMillis > 0L && endMillis < nowMillis()
     val rowLocale = context.resources.configuration.locales[0] ?: Locale.getDefault()
     if (dayRow) {
         views.bindDayTimeColumn(palette, meta)

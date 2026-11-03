@@ -1,13 +1,15 @@
 package com.kgs.calendar.navigation
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Intent
 import android.net.Uri
 import android.provider.CalendarContract
 import com.kgs.calendar.ui.editorSchedule
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith

@@ -1,0 +1,51 @@
+package com.kgs.calendar.domain.model
+
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+
+data class CalendarRange(
+    val startDate: LocalDate,
+    val endExclusiveDate: LocalDate,
+) {
+    fun startMillis(zoneId: ZoneId = ZoneId.systemDefault()): Long =
+        startDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+    fun endMillis(zoneId: ZoneId = ZoneId.systemDefault()): Long =
+        endExclusiveDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
+}
+
+
+
+fun visibleRangeFor(
+    date: LocalDate,
+    viewMode: CalendarViewMode,
+    multiDayCount: Int = DEFAULT_MULTI_DAY_COUNT,
+    weekViewEnabled: Boolean = false,
+): CalendarRange {
+    return when (viewMode) {
+        CalendarViewMode.Month -> {
+            // The month view scrolls vertically as a continuous grid, so we preload a
+            // generous buffer of months around the centre date. This means events/tasks
+            // are already present when the user scrolls to a neighbouring month instead
+            // of popping in after a reload.
+            val monthStart = date.withDayOfMonth(1)
+            CalendarRange(monthStart.minusMonths(2), monthStart.plusMonths(3))
+        }
+        CalendarViewMode.ThreeDay -> CalendarRange(
+            date,
+            date.plusDays(timelineDayCount(viewMode, weekViewEnabled, multiDayCount).toLong()),
+        )
+        // Load a generous window around the day even though only one is shown. The morphs
+        // into/out of this view keep the *other* days visible while they animate (the 3-day
+        // neighbours sliding out, and the whole surrounding month staying populated while a
+        // tapped cell zooms up), so their events must already be in memory rather than
+        // blinking out the instant the range would otherwise collapse to a single day.
+        // NOTE: the timeline pager anchors on selectedDate (not on this range's start), so a
+        // wide, asymmetric range here is safe.
+        CalendarViewMode.Day -> CalendarRange(date.minusDays(31), date.plusDays(31))
+        CalendarViewMode.Agenda -> AgendaWindowPolicy.around(date)
+        CalendarViewMode.Tasks -> CalendarRange(date.minusMonths(1), date.plusMonths(6))
+    }
+}

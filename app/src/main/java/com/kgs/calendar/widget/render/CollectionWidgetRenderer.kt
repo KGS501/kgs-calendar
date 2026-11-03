@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.title
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.os.Bundle
@@ -28,10 +31,10 @@ import com.kgs.calendar.widget.model.usesDirectCollectionItems
 import com.kgs.calendar.widget.model.widgetLabel
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 import java.util.Locale
 
 internal class CollectionWidgetRenderer(

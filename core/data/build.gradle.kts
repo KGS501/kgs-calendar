@@ -1,7 +1,5 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.room)
 }
 
 android {
@@ -36,8 +34,11 @@ android {
     }
 }
 
-room {
-    schemaDirectory("$projectDir/schemas")
+
+// The database now lives in :core:shared (Room for Android and iOS); its schema history stays here
+// for the migration tests, which read it as androidTest assets.
+extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 }
 
 kotlin {
@@ -55,7 +56,6 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
     implementation(libs.ical4j)

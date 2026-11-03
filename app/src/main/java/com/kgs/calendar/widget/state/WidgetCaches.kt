@@ -1,12 +1,14 @@
 package com.kgs.calendar.widget.state
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.os.SystemClock
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WIDGET_MONTH_RENDER_SIGNATURE_VERSION
 import com.kgs.calendar.widget.model.WidgetCollectionSnapshot
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
-import java.time.YearMonth
+import kotlinx.datetime.YearMonth
 
 internal class WidgetInteractionTokens {
     private val tokens = mutableMapOf<String, Long>()

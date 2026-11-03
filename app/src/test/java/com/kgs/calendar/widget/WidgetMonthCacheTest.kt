@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.widget.data.forEachUncachedWidgetMonth
 import com.kgs.calendar.widget.model.WidgetMonthPage
@@ -8,8 +10,8 @@ import com.kgs.calendar.widget.state.WidgetDataGeneration
 import com.kgs.calendar.widget.state.WidgetMonthPageCache
 import com.kgs.calendar.widget.state.WidgetMonthPageFreshness
 import com.kgs.calendar.widget.state.widgetMonthPageModelNamespace
-import java.time.DayOfWeek
-import java.time.YearMonth
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.YearMonth
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals

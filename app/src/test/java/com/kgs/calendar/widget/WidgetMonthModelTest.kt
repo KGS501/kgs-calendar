@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.widget.model.WidgetMonthCandidate
 import com.kgs.calendar.widget.model.WidgetMonthCellContent
 import com.kgs.calendar.widget.model.WidgetMonthItem
@@ -11,9 +13,9 @@ import com.kgs.calendar.widget.model.WidgetSizeBucket
 import com.kgs.calendar.widget.model.loadingSkeleton
 import com.kgs.calendar.widget.model.monthBottomFadeSegments
 import com.kgs.calendar.widget.model.monthWeekSegments
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -547,8 +549,8 @@ class WidgetMonthModelTest {
         val month = YearMonth.of(2026, 2)
         val source = WidgetMonthModel.page(
             month = month,
-            start = WidgetMonthModel.gridStart(month, java.time.DayOfWeek.MONDAY),
-            rowCount = WidgetMonthModel.rowCount(month, java.time.DayOfWeek.MONDAY),
+            start = WidgetMonthModel.gridStart(month, kotlinx.datetime.DayOfWeek.MONDAY),
+            rowCount = WidgetMonthModel.rowCount(month, kotlinx.datetime.DayOfWeek.MONDAY),
             monthLayout = WidgetMonthLayout(emptyMap(), emptyMap()),
         )
 

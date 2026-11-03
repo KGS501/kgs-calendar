@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.remote.HttpStatusException
 import com.kgs.calendar.data.remote.isSyncConflictError
@@ -20,9 +22,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 @RunWith(RobolectricTestRunner::class)
 class CalDavUploadQueueRepositoryTest {
@@ -449,11 +451,11 @@ class CalDavUploadQueueRepositoryTest {
 
     @Test
     fun pushPendingChangesCreatedSinceOnlyUploadsRecentMutationsWithoutPulling() = runTest {
-        val before = System.currentTimeMillis()
+        val before = nowMillis()
         repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
         val event = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }
 
-        repository.pushPendingChangesCreatedSince(System.currentTimeMillis() + 60_000)
+        repository.pushPendingChangesCreatedSince(nowMillis() + 60_000)
 
         assertTrue(puts().isEmpty())
         assertEquals(1, harness.pendingMutations().size)

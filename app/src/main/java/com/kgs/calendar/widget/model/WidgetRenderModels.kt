@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.widget.RemoteViews
 import com.kgs.calendar.widget.WIDGET_AGENDA_LIST_SIDE_BLEED_DP
 import com.kgs.calendar.widget.WIDGET_COLLECTION_RENDER_SIGNATURE_VERSION
@@ -7,7 +9,7 @@ import com.kgs.calendar.widget.WIDGET_MONTH_RENDER_SIGNATURE_VERSION
 import com.kgs.calendar.widget.WIDGET_TASK_PRIORITY_BITMAP_SCALE
 import com.kgs.calendar.widget.WIDGET_TASK_PRIORITY_OVERDRAW_DP
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal data class MonthWidgetRenderResult(
     val views: RemoteViews,

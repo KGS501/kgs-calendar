@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -17,8 +19,8 @@ import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.ui.AllDayViewportOverlay
 import com.kgs.calendar.ui.calendar.toDayPage
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 import kotlin.math.abs
 import org.junit.Assert.assertTrue
 import org.junit.Rule

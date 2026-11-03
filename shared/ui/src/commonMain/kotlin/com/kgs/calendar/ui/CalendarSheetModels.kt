@@ -1,0 +1,79 @@
+package com.kgs.calendar.ui
+
+import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.trash.TrashedItemPreview
+import com.kgs.calendar.domain.model.EventEditPayload
+import com.kgs.calendar.domain.model.TaskEditPayload
+
+enum class SettingsDestination {
+    Main,
+    Accounts,
+    AddSource,
+    AddAccount,
+    AddReadOnly,
+    AccountDetail,
+    Views,
+    NewItems,
+    Appearance,
+    General,
+    Widgets,
+    WidgetAgenda,
+    WidgetMonth,
+    WidgetTasks,
+    WidgetMulti,
+    WidgetDay,
+    Privacy,
+    About,
+    EventFieldOrder,
+    TaskFieldOrder,
+}
+
+sealed interface CreationSheet {
+    data object EventLow : CreationSheet
+    data object EventFull : CreationSheet
+    data object TaskLow : CreationSheet
+    data object Task : CreationSheet
+    data class TaskForParent(val parent: TaskEntity) : CreationSheet
+    data class EditEvent(val event: EventEntity) : CreationSheet
+    data class EditTask(val task: TaskEntity) : CreationSheet
+    data class DuplicateEvent(val event: EventEntity) : CreationSheet
+    data class DuplicateTask(val task: TaskEntity) : CreationSheet
+}
+
+data class HiddenSaveNotice(
+    val collectionHref: String,
+    val kind: HiddenSaveKind,
+)
+
+enum class HiddenSaveKind {
+    Event,
+    Task,
+}
+
+sealed interface ConversionSource {
+    data class Event(val event: EventEntity) : ConversionSource
+    data class Task(val task: TaskEntity) : ConversionSource
+}
+
+sealed interface RecurringSaveRequest {
+    data class Event(val event: EventEntity, val payload: EventEditPayload) : RecurringSaveRequest
+    data class Task(val task: TaskEntity, val payload: TaskEditPayload) : RecurringSaveRequest
+}
+
+/**
+ * The detail sheet's item. [trashedItem] is set for an item opened from "Recently deleted": the
+ * sheet is then read-only and leads with restore and permanent delete.
+ */
+sealed interface DetailSheet {
+    val trashedItem: TrashedItemEntity?
+
+    data class Event(val event: EventEntity, override val trashedItem: TrashedItemEntity? = null) : DetailSheet
+    data class Task(val task: TaskEntity, override val trashedItem: TrashedItemEntity? = null) : DetailSheet
+}
+
+/** The detail sheet of a "Recently deleted" item. */
+fun TrashedItemPreview.toDetailSheet(): DetailSheet =
+    task?.let { DetailSheet.Task(it, trashedItem = item) }
+        ?: DetailSheet.Event(requireNotNull(event), trashedItem = item)

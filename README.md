@@ -2,7 +2,7 @@
 
 <img width="1794" height="876" alt="KGS Calendar screenshot" src="https://github.com/user-attachments/assets/b2c5feb6-cbca-4330-bf6d-fe05e6e2ead8" />
 
-KGS Calendar is an Android calendar and task app for managing events, tasks, reminders, and synchronized calendar sources. It can be used offline with local app data, with Android device calendars, or with CalDAV/Nextcloud calendars and task lists.
+KGS Calendar is a calendar and task app for Android and iOS for managing events, tasks, reminders, and synchronized calendar sources. It can be used offline with local app data, with the device's own calendars (Android device calendars, iPhone calendars), or with CalDAV/Nextcloud calendars and task lists.
 
 If you like the App and want to support me continuing the development, consider sponsoring the project!
 
@@ -19,7 +19,7 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 - Events and tasks in one app
 - Agenda, day, 3-day, month, and task-list views
 - Local calendar support without a server
-- Android device calendar access when permission is granted
+- Device calendar access when permission is granted (Android device calendars, iPhone calendars)
 - CalDAV and Nextcloud calendar and task sync
 - Read-only ICS and CalDAV calendar subscriptions
 - Open or share ICS attachments from email and file apps, review the events, and import them into a local or CalDAV calendar
@@ -30,36 +30,39 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 - Optional location search through OpenStreetMap Nominatim
 - Optional map previews using OpenStreetMap tiles
 - Light and dark themes
-- Home screen widget support
+- Home screen widget support (Android)
 - English and German app language support
 
-## iOS port (in progress)
+## iOS app
 
-The iOS port is **not a functional calendar app yet**. `iosApp/KgsCalendar.xcodeproj` is a
-component validation host using the permanent KGS Calendar app name and bundle ID.
-It exercises the existing Android theme palettes, morphing dropdown, dialogs and create-menu
-animations from shared source. It does not create or persist calendar items.
+From V.2.0.0 the iOS app is the Android app's port: the same screens, gestures, animations, sync,
+editors and settings, built from the same Kotlin code with Compose Multiplatform. It uses the
+system font (SF) instead of Roboto.
 
-- `:core:shared`: portable settings enums, domain values, reminder offsets and window sizing rules.
-- `:shared:ui`: original visual controls, motion tokens, surface colors, timeline pinch/viewport
-  calculations, header presentation, fold layout rules and reorder scrolling. Android consumes
-  these modules too, so these implementations are not separate iOS copies.
-- `:core:data` and the remaining `:app` code are still Android-specific.
+- `:core:shared` (Kotlin Multiplatform) holds the data layer: Room database, CalDAV/Nextcloud and
+  ICS sync, iCalendar parsing and writing, recurrence expansion, settings and reminders planning.
+  On Android it uses ical4j and OkHttp; on iOS its own iCalendar/RRULE code (checked against ical4j
+  in `CommonIcalVsIcal4jTest`) and NSURLSession.
+- `:shared:ui` holds the whole UI and its view models; `androidMain`/`iosMain` provide the platform
+  parts (permissions, pickers, maps, haptics, window and fold layout, file export).
+- `:core:data` and `:app` keep what only Android has: the calendar provider, encrypted
+  preferences, widgets, WorkManager and AlarmManager.
 
-The existing gesture/layout characterization tests have moved into `commonTest`, making them
-available to JVM and Apple test targets. With JDK 17 and Android SDK 36 configured, run
-`bash tools/verify-port.sh` for shared tests, common metadata compilation, the Android debug
-build and Android unit tests. CI selects the relevant groups from this same command, including
-the relocated shared tests. It uses one Gradle worker, two JVM processors and bounded JVM memory.
-The JVM target is for host verification; it does not establish iOS rendering or behavior parity. The initial
-Linux verification passed all 54 shared tests and common-code metadata compilation. The Android
-APK built successfully, and the Android suites passed 901 tests with 20 live Nextcloud tests
-skipped. One date-dependent widget test was corrected to request a size that displays labels even
-in six-row months; the production widget renderer was unchanged. The debug APK was installed on
-the existing Android emulator, but launch validation was blocked because another device session
-held the emulator. No Android visual comparison or Apple runtime validation has been completed.
+iOS specifics:
 
-### Building the validation host on macOS
+- Passwords are stored in the iOS Keychain for this device only.
+- Reminders are local notifications with Snooze and, for tasks, Mark done. iOS keeps at most 64
+  pending notifications, so the earliest reminders of the next three weeks are scheduled and
+  re-planned after every sync, edit and app start.
+- Changes upload right away; while the app is open it refreshes every minute, in the background
+  through `BGTaskScheduler` (`com.kgs501.kgscalendar.refresh`) when iOS allows it.
+- iPhone calendars (iCloud, Google, Exchange accounts of the Calendar app) come from EventKit.
+- `.ics` files opened with the app (Files, Mail, the share sheet) can be imported.
+- The `KgsShare` share extension creates an event from shared text, like Android's share target;
+  it opens the app through the `kgscalendar://share` URL.
+- Home-screen widgets are not available on iOS yet.
+
+### Building the iOS app on macOS
 
 Requires an Apple Silicon Mac, Xcode 26.0.x with an iOS Simulator runtime, JDK 17 and Android SDK 36
 (the root build still includes the Android application). Set `JAVA_HOME` and `ANDROID_HOME`,
@@ -67,12 +70,12 @@ or configure the SDK in local, untracked `local.properties`. Open
 `iosApp/KgsCalendar.xcodeproj`, select the `KgsCalendar` scheme and an iPhone simulator, and
 build/run. The Xcode build phase compiles the Kotlin framework automatically through
 `tools/build-apple-framework.sh`, which locates JDK 17 when `JAVA_HOME` is unset and limits
-the build to one worker, two JVM processors and a 3 GiB heap for Native release optimization. Simulator
+the build to one worker, two JVM processors and a 5 GiB heap (`KGS_APPLE_FRAMEWORK_HEAP` overrides it) for Native release optimization. Simulator
 builds need no development team; physical devices need your own signing configuration.
 
 Shared tests on an Apple Silicon simulator: `bash gradlew :core:shared:iosSimulatorArm64Test
-:shared:ui:iosSimulatorArm64Test --max-workers=1` (one command). Intel simulator targets are
-not configured. The `iOS device archive` job in the `CI` workflow builds an unsigned Release
+:shared:ui:iosSimulatorArm64Test --max-workers=1` (one command). Intel Macs use the `iosX64`
+target: build with `ARCHS=x86_64` for an Intel simulator. The `iOS device archive` job in the `CI` workflow builds an unsigned Release
 archive for physical iPhone/iPad devices on an Apple Silicon macOS runner using Xcode 26.0.1.
 It validates the packaged icon, privacy manifest, device support and app identity. It is a build
 and packaging gate, not a visual or interaction test. Check that workflow before merging;
@@ -82,8 +85,7 @@ Linux cannot run Apple's iOS Simulator; installing another Android emulator does
 ### TestFlight development builds
 
 The [TestFlight workflow](.github/workflows/testflight.yml) uploads the **KGS Calendar**
-component host for internal testing on iPhone and iPad. It does not deliver the full calendar
-features listed below. The app record and bundle ID `com.kgs501.kgscalendar` are also used for
+iOS app for internal testing on iPhone and iPad. The app record and bundle IDs `com.kgs501.kgscalendar` and `com.kgs501.kgscalendar.share` (share extension) are also used for
 the eventual App Store release. Uploads use standard App Store Connect distribution, so a
 tested release candidate can later be submitted to App Review. This workflow only distributes
 to the internal tester group; it does not submit for review or publish an App Store release.
@@ -101,13 +103,14 @@ and signing files outside the repository. With Python 3.12+ and
 `ASC_ISSUER_ID`, then:
 
 1. Run `python3 tools/ios/app_store.py register-bundle` to register
-   `com.kgs501.kgscalendar`.
+   `com.kgs501.kgscalendar` and the share extension's `com.kgs501.kgscalendar.share`.
 2. Create an iOS app record in [App Store Connect](https://appstoreconnect.apple.com/apps) using
    that bundle ID, the name **KGS Calendar**, English (U.S.), and SKU
    `kgs-calendar-ios`. Apple's public API cannot create the initial app record.
 3. Run `python3 tools/ios/app_store.py prepare-signing --directory /private/path/kgs-signing`.
-   This creates one distribution certificate and App Store provisioning profile and reuses
-   that identity on subsequent runs. It does not revoke existing certificates. The directory
+   This creates one distribution certificate and App Store provisioning profiles for the app and
+   its share extension (`profile.mobileprovision`, `share-profile.mobileprovision`), and reuses
+   that identity on subsequent runs; rerunning it on an existing setup only adds what is missing. It does not revoke existing certificates. The directory
    contains the private key, encrypted `.p12`, password, profile and non-secret signing metadata.
 4. Run `python3 tools/ios/app_store.py configure-testflight --email your-apple-account-email`.
    The email must belong to an eligible App Store Connect user with access to this app. If
@@ -127,6 +130,7 @@ and signing files outside the repository. With Python 3.12+ and
    | `APPLE_DISTRIBUTION_P12_BASE64` | Base64-encoded `distribution.p12` |
    | `APPLE_P12_PASSWORD` | Contents of `p12-password` |
    | `APPLE_PROFILE_BASE64` | Base64-encoded `profile.mobileprovision` |
+   | `APPLE_SHARE_PROFILE_BASE64` | Optional: base64-encoded `share-profile.mobileprovision`. Without it the upload creates or reuses the share extension's profile through the API key. |
 
 Pass secret values via GitHub's encrypted secret UI or CLI standard input, not command-line
 arguments, commits or logs. Signing uses a temporary macOS keychain and removes signing files
@@ -137,21 +141,6 @@ After successful delivery, accept Apple's invitation on the iPad and install the
 [TestFlight](https://testflight.apple.com/). Internal builds are available for 90 days and do not
 require an external beta review. Tooling tests can run without Apple credentials or Xcode:
 `python3 -m unittest discover -s tools/ios -p 'test_*.py' -v`.
-
-### Remaining work before an iOS release
-
-1. Port the full calendar screens, editors and application state. Replace Android text/canvas,
-   locale/resource, haptic, keyboard and window integrations while keeping gesture semantics.
-2. Migrate Java date/time usage, `ical4j` parsing, recurrence/time-zone handling and ICS
-   round-trip preservation. Reuse the current calendar correctness fixtures as acceptance tests.
-3. Migrate Room setup, settings, network/XML operations and files; implement Keychain credential
-   storage and preserve CalDAV conflict, offline mutation, deletion and recovery behavior.
-4. Implement EventKit device calendars, local notifications, background refresh, incoming ICS
-   files and WidgetKit widgets. iOS background execution and widget behavior require platform
-   adaptations; Android WorkManager/AlarmManager/RemoteViews do not carry over.
-5. Build and run on a Mac, compare the actual calendar interactions against Android, test both
-   orientations, safe areas, keyboard, accessibility/font scale and real devices, then complete
-   signing and distribution setup.
 
 ## Continuous integration
 

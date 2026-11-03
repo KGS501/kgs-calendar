@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.os.Build
@@ -24,8 +26,8 @@ import com.kgs.calendar.widget.model.dayGridContentWidthDp
 import com.kgs.calendar.widget.model.shouldHideWidgetTitle
 import com.kgs.calendar.widget.model.usesDirectDayGridItems
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 
 internal class DayWidgetRenderer(
     private val context: Context,

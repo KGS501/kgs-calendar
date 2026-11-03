@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.recurrence
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -7,9 +9,9 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 
 class RecurrenceExpanderTest {
     private val zone = ZoneId.of("Europe/Berlin")
@@ -199,7 +201,7 @@ class RecurrenceExpanderTest {
                 LocalDate.of(2026, 2, 27),
                 LocalDate.of(2026, 3, 31),
             ),
-            out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).toLocalDate() },
+            out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).toLocalDate() },
         )
     }
 
@@ -214,7 +216,7 @@ class RecurrenceExpanderTest {
 
         val out = expander.expand(master, s, e)
 
-        assertEquals(listOf(9, 10, 11, 12), out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
+        assertEquals(listOf(9, 10, 11, 12), out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
     }
 
     @Test
@@ -228,7 +230,7 @@ class RecurrenceExpanderTest {
 
         val out = expander.expand(master, s, e)
 
-        assertEquals(listOf(9, 9, 9), out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
+        assertEquals(listOf(9, 9, 9), out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
     }
 
     @Test
@@ -280,7 +282,7 @@ class RecurrenceExpanderTest {
             out.map { it.startsAtMillis.atZoneDate() to it.endsAtMillis.atZoneDate() },
         )
         out.forEach { occurrence ->
-            assertEquals(LocalTime.MIDNIGHT, java.time.Instant.ofEpochMilli(occurrence.endsAtMillis).atZone(zone).toLocalTime())
+            assertEquals(LocalTime.MIDNIGHT, kotlin.time.Instant.ofEpochMilli(occurrence.endsAtMillis).atZone(zone).toLocalTime())
         }
     }
 
@@ -344,5 +346,5 @@ class RecurrenceExpanderTest {
         }
     }
 
-    private fun Long.atZoneDate(): LocalDate = java.time.Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
+    private fun Long.atZoneDate(): LocalDate = kotlin.time.Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 }

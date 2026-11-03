@@ -9,8 +9,10 @@ if [[ -z "${JAVA_HOME:-}" ]]; then
   export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
 fi
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-# Native Release optimization needs more heap than the JVM/Android checks.
-# Bound the heap at 3 GiB on the 7 GB macOS runner, with one worker and two processors.
+# Native Release optimization of the whole app needs more heap than the JVM/Android checks:
+# 3 GiB ran out of memory once the full app was shared. 5 GiB leaves ~2 GB of the 7 GB macOS
+# runner for Xcode; one worker and two processors. KGS_APPLE_FRAMEWORK_HEAP overrides it.
+heap="${KGS_APPLE_FRAMEWORK_HEAP:-5120m}"
 exec bash ./gradlew :shared:ui:embedAndSignAppleFrameworkForXcode --no-daemon --max-workers=1 \
   -Pkotlin.compiler.execution.strategy=in-process \
-  -Dorg.gradle.jvmargs='-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8'
+  -Dorg.gradle.jvmargs="-Xmx$heap -XX:MaxMetaspaceSize=768m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8"

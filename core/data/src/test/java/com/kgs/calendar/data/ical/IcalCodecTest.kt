@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.ical
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.SampleIcs
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -9,9 +11,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import kotlin.time.Instant
 
 class IcalCodecTest {
     private val zone = ZoneId.of("Europe/Berlin")
@@ -36,7 +38,7 @@ class IcalCodecTest {
         assertNotNull(parsed)
         assertEquals(ComponentType.Event, parsed!!.componentType)
         assertTrue(parsed.event!!.allDay)
-        assertEquals("Project day", parsed.event.title)
+        assertEquals("Project day", parsed.event!!.title)
     }
 
     @Test
@@ -81,12 +83,12 @@ class IcalCodecTest {
         assertNotNull(parsed)
         assertEquals(ComponentType.Task, parsed!!.componentType)
         assertTrue(parsed.task!!.isCompleted)
-        assertEquals("Ship MVP", parsed.task.title)
-        assertEquals(5, parsed.task.priority)
-        assertEquals("Studio", parsed.task.location)
-        assertEquals("https://nextcloud.test/tasks/1", parsed.task.url)
-        assertEquals("Music,Work", parsed.task.categories)
-        assertEquals(100, parsed.task.percentComplete)
+        assertEquals("Ship MVP", parsed.task!!.title)
+        assertEquals(5, parsed.task!!.priority)
+        assertEquals("Studio", parsed.task!!.location)
+        assertEquals("https://nextcloud.test/tasks/1", parsed.task!!.url)
+        assertEquals("Music,Work", parsed.task!!.categories)
+        assertEquals(100, parsed.task!!.percentComplete)
     }
 
     @Test
@@ -226,7 +228,7 @@ class IcalCodecTest {
         assertNotNull(parsed)
         assertEquals(ComponentType.Task, parsed!!.componentType)
         assertFalse(parsed.task!!.dueHasTime)
-        assertEquals("Renew documents", parsed.task.title)
+        assertEquals("Renew documents", parsed.task!!.title)
     }
 
     @Test
@@ -307,9 +309,9 @@ class IcalCodecTest {
 
         assertNotNull(parsed)
         assertFalse(parsed!!.event!!.allDay)
-        assertEquals("Review", parsed.event.title)
-        assertEquals("Remote", parsed.event.location)
-        assertTrue(parsed.event.endsAtMillis > parsed.event.startsAtMillis)
+        assertEquals("Review", parsed.event!!.title)
+        assertEquals("Remote", parsed.event!!.location)
+        assertTrue(parsed.event!!.endsAtMillis > parsed.event!!.startsAtMillis)
     }
 
     @Test
@@ -412,7 +414,7 @@ class IcalCodecTest {
 
         assertNotNull(parsed)
         assertEquals("Series master", parsed!!.event!!.title)
-        assertEquals("FREQ=WEEKLY;BYDAY=MO", parsed.event.recurrenceRule)
+        assertEquals("FREQ=WEEKLY;BYDAY=MO", parsed.event!!.recurrenceRule)
     }
 
     @Test
@@ -560,12 +562,12 @@ class IcalCodecTest {
         assertEquals("45", event.remindersCsv)
 
         assertTrue(event.organizerJson!!.contains("\"name\":\"Host Person\""))
-        assertTrue(event.organizerJson.contains("\"email\":\"host@example.com\""))
+        assertTrue(event.organizerJson!!.contains("\"email\":\"host@example.com\""))
         assertTrue(event.attendeesJson!!.contains("\"name\":\"Alice\""))
-        assertTrue(event.attendeesJson.contains("\"partstat\":\"ACCEPTED\""))
-        assertTrue(event.attendeesJson.contains("\"rsvp\":\"TRUE\""))
-        assertTrue(event.attendeesJson.contains("\"role\":\"OPT-PARTICIPANT\""))
-        assertTrue(event.attendeesJson.contains("\"scheduleStatus\":\"3.7\""))
+        assertTrue(event.attendeesJson!!.contains("\"partstat\":\"ACCEPTED\""))
+        assertTrue(event.attendeesJson!!.contains("\"rsvp\":\"TRUE\""))
+        assertTrue(event.attendeesJson!!.contains("\"role\":\"OPT-PARTICIPANT\""))
+        assertTrue(event.attendeesJson!!.contains("\"scheduleStatus\":\"3.7\""))
 
         val serialized = codec.serializeEvent(event)
         assertTrue(serialized.contains("STATUS:TENTATIVE"))
@@ -844,7 +846,7 @@ class IcalCodecTest {
         val event = codec.parse(raw, "/cal/", "/cal/event.ics", 0xff176b5d.toInt())!!.event!!
 
         assertTrue(event.attendeesJson!!.contains("Doe; Alice"))
-        assertTrue(event.attendeesJson.contains("alice@example.test"))
+        assertTrue(event.attendeesJson!!.contains("alice@example.test"))
     }
 
     @Test
@@ -926,7 +928,7 @@ class IcalCodecTest {
                 val event = codec.parse(raw, "/c/", "/c/day.ics", 0)!!.event!!
                 assertEquals(
                     zone,
-                    java.time.LocalDate.of(2026, 10, 10).atStartOfDay(java.time.ZoneId.of(zone)).toInstant().toEpochMilli(),
+                    kotlinx.datetime.LocalDate.of(2026, 10, 10).atStartOfDay(com.kgs.calendar.time.ZoneId.of(zone)).toInstant().toEpochMilli(),
                     event.startsAtMillis,
                 )
             }

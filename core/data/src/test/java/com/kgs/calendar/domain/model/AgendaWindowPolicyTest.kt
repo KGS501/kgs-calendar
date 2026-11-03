@@ -1,6 +1,8 @@
 package com.kgs.calendar.domain.model
 
-import java.time.LocalDate
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue

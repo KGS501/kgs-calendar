@@ -1,8 +1,10 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.task.taskPriorityIntensity
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.max
 
 internal data class WidgetDayTimeline(

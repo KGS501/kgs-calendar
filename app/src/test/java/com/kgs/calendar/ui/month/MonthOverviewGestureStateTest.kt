@@ -1,7 +1,9 @@
 package com.kgs.calendar.ui.month
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.ui.geometry.Offset
-import java.time.YearMonth
+import kotlinx.datetime.YearMonth
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

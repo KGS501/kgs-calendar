@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.editor
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,8 +14,8 @@ import com.kgs.calendar.R
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.ui.TaskScheduleEditor
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

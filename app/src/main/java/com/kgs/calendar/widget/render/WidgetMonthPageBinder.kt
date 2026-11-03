@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Typeface
@@ -29,9 +31,9 @@ import com.kgs.calendar.widget.theme.monthChipMaskRes
 import com.kgs.calendar.widget.theme.monthChipStyle
 import com.kgs.calendar.widget.theme.monthSpanChipLayout
 import com.kgs.calendar.widget.theme.monthSpanTextStartPaddingDp
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.TextStyle
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.TextStyle
 import kotlin.math.roundToInt
 
 internal class WidgetMonthPageBinder(

@@ -124,7 +124,7 @@ fun SharedCalendarTheme(
     val tokens = remember(colors, themeMode, priorityAnimationsEnabled) {
         CalendarUiTokens.forTheme(colors, themeMode, priorityAnimationsEnabled)
     }
-    MaterialTheme(colorScheme = colors, typography = Typography()) {
+    MaterialTheme(colorScheme = colors, typography = platformTypography()) {
         CompositionLocalProvider(LocalCalendarUiTokens provides tokens, content = content)
     }
 }

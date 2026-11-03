@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.month
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,10 +20,10 @@ import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.MonthOverview
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import org.junit.Assert.assertEquals

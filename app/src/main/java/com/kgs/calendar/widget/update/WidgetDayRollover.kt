@@ -1,11 +1,13 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.kgs.calendar.widget.KgsWidgetRefreshReceiver
-import java.time.ZonedDateTime
+import com.kgs.calendar.time.ZonedDateTime
 
 /**
  * Wakes the widgets shortly after local midnight so "today" moves on even when no data changes.

@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.shell
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import android.os.Parcel
 import androidx.compose.runtime.saveable.SaverScope
@@ -30,8 +32,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 @RunWith(RobolectricTestRunner::class)
 class SavedShellStateTest {

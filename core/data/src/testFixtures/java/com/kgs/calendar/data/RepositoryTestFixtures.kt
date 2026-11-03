@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -29,9 +31,9 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -482,7 +484,7 @@ class FakeCalDavServer(
     fun stored(href: String): StoredResource? = synchronized(lock) { collectionFor(href)?.resources?.get(href) }
 
     /** Deletes a resource into the trash bin as if another client or the web UI had deleted it. Returns the trash object href. */
-    fun trashRemote(href: String, deletedAtEpochSeconds: Long = System.currentTimeMillis() / 1000): String = synchronized(lock) {
+    fun trashRemote(href: String, deletedAtEpochSeconds: Long = nowMillis() / 1000): String = synchronized(lock) {
         val collection = collectionFor(href) ?: error("No collection for $href")
         moveToTrash(collection, collection.resources.getValue(href), deletedAtEpochSeconds).objectHref
     }
@@ -623,7 +625,7 @@ class FakeCalDavServer(
                 val ifMatch = request.header("If-Match")
                 if (ifMatch != null && ifMatch != existing.etag) return MockResponse().setResponseCode(412)
                 if (trashBinEnabled) {
-                    moveToTrash(collection, existing, System.currentTimeMillis() / 1000)
+                    moveToTrash(collection, existing, nowMillis() / 1000)
                 } else {
                     collection.resources.remove(path)
                     collection.version++

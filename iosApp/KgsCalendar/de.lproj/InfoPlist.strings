@@ -1,0 +1,4 @@
+/* Texte der Berechtigungsdialoge. */
+"NSCalendarsFullAccessUsageDescription" = "Zeigt die Kalender der Konten deines iPhones (iCloud, Google, Exchange) neben deinen anderen Kalendern an und bearbeitet sie.";
+"NSCalendarsUsageDescription" = "Zeigt die Kalender der Konten deines iPhones (iCloud, Google, Exchange) neben deinen anderen Kalendern an und bearbeitet sie.";
+"NSLocationWhenInUseUsageDescription" = "Schlägt Orte in deiner Nähe vor, wenn du den Ort eines Termins eingibst.";

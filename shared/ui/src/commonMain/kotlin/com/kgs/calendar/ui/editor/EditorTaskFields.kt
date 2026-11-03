@@ -1,0 +1,715 @@
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+
+package com.kgs.calendar.ui
+
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import com.kgs.calendar.ui.components.ClearableOutlinedTextField as OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import com.kgs.calendar.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.kgs.calendar.ui.res.Res
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.domain.task.TaskParentLookup
+import com.kgs.calendar.domain.task.isInactive
+import com.kgs.calendar.ui.editor.EditorScheduleState
+import com.kgs.calendar.ui.model.taskDate
+import kotlin.math.max
+
+@Composable
+fun TaskScheduleEditor(
+    schedule: EditorScheduleState,
+    onScheduleChange: (EditorScheduleState) -> Unit,
+    endIsError: Boolean = false,
+) {
+    val scheduled = schedule.hasStartDate || schedule.hasEndDate
+    Column(
+        modifier = Modifier.animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard)),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (scheduled) {
+            EditorLine(Icons.Default.AccessTime) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(Res.string.all_day), color = WarmInk, fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    Switch(
+                        checked = schedule.allDay,
+                        onCheckedChange = { allDay ->
+                            onScheduleChange(
+                                schedule.copy(
+                                    allDay = allDay,
+                                    hasStartTime = if (allDay) false else schedule.hasStartDate,
+                                    hasEndTime = if (allDay) false else schedule.hasEndDate,
+                                ).recalculatePreview(),
+                            )
+                        },
+                    )
+                }
+            }
+        } else {
+            Text(stringResource(Res.string.task_no_date), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, lineHeight = 17.sp)
+        }
+        TaskScheduleRow(
+            label = stringResource(Res.string.start_date),
+            addLabel = stringResource(Res.string.add_field, stringResource(Res.string.start_date)),
+            removeLabel = stringResource(Res.string.remove_field, stringResource(Res.string.start_date)),
+            timeLabel = stringResource(Res.string.start),
+            hasDate = schedule.hasStartDate,
+            onHasDateChange = { hasDate ->
+                val allDay = if (hasDate && !schedule.hasStartDate && !schedule.hasEndDate) true else schedule.allDay
+                onScheduleChange(
+                    schedule.copy(
+                        hasStartDate = hasDate,
+                        hasStartTime = hasDate && !allDay,
+                        allDay = allDay,
+                    ).recalculatePreview(),
+                )
+            },
+            dateText = schedule.startDateText,
+            onDateTextChange = { onScheduleChange(schedule.copy(startDateText = it).recalculatePreview()) },
+            hasTime = schedule.hasStartTime,
+            timeText = schedule.startTimeText,
+            onTimeTextChange = { onScheduleChange(schedule.copy(startTimeText = it).recalculatePreview()) },
+            allDay = schedule.allDay,
+        )
+        TaskScheduleRow(
+            label = stringResource(Res.string.end_date),
+            addLabel = stringResource(Res.string.add_field, stringResource(Res.string.end_date)),
+            removeLabel = stringResource(Res.string.remove_field, stringResource(Res.string.end_date)),
+            timeLabel = stringResource(Res.string.end),
+            hasDate = schedule.hasEndDate,
+            onHasDateChange = { hasDate ->
+                val allDay = if (hasDate && !schedule.hasStartDate && !schedule.hasEndDate) true else schedule.allDay
+                onScheduleChange(
+                    schedule.copy(
+                        hasEndDate = hasDate,
+                        hasEndTime = hasDate && !allDay,
+                        allDay = allDay,
+                    ).recalculatePreview(),
+                )
+            },
+            dateText = schedule.endDateText,
+            onDateTextChange = { onScheduleChange(schedule.copy(endDateText = it).recalculatePreview()) },
+            hasTime = schedule.hasEndTime,
+            timeText = schedule.endTimeText,
+            onTimeTextChange = { onScheduleChange(schedule.copy(endTimeText = it).recalculatePreview()) },
+            allDay = schedule.allDay,
+            isError = endIsError,
+        )
+    }
+}
+
+@Composable
+fun TaskParentSelector(
+    selectedParentUid: String?,
+    candidates: List<TaskEntity>,
+    taskColorMode: TaskColorMode,
+    onSelected: (String?) -> Unit,
+) {
+    var pickerOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val selected = candidates.firstOrNull { it.uid == selectedParentUid }
+    LaunchedEffect(pickerOpen) {
+        if (pickerOpen) query = ""
+    }
+    val parentTaskLabel = stringResource(Res.string.parent_task)
+    EditorSection(onClick = { pickerOpen = true }) {
+        EditorLine(Icons.Default.TaskAlt) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(parentTaskLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 16.sp)
+                    if (selected == null) {
+                        Text(
+                            stringResource(Res.string.no_parent_task),
+                            color = WarmInk,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+        // The parent shows as its task card. It is only a picture of the task: a tap anywhere on it
+        // opens the parent picker again, and its checkbox cannot be ticked from here.
+        selected?.let { parent ->
+            Box(Modifier.fillMaxWidth()) {
+                TaskRow(
+                    task = parent,
+                    taskColorMode = taskColorMode,
+                    onTaskStatusChanged = { _, _ -> },
+                    prominent = true,
+                    outerHorizontalPadding = 0.dp,
+                    outerVerticalPadding = 0.dp,
+                    priorityMotionEnabled = false,
+                    statusToggleEnabled = false,
+                    onClick = { pickerOpen = true },
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+                // Above the card, which lifts itself by priority and depth (zIndex), so it takes every touch.
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .zIndex(ParentCardOverlayZ)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClickLabel = parentTaskLabel) { pickerOpen = true }
+                        .semantics { contentDescription = "$parentTaskLabel: ${parent.title}" },
+                )
+            }
+        }
+    }
+    if (pickerOpen) {
+        TaskParentPickerDialog(
+            selectedParentUid = selectedParentUid,
+            candidates = candidates,
+            query = query,
+            onQueryChange = { query = it },
+            taskColorMode = taskColorMode,
+            onDismiss = { pickerOpen = false },
+            onSelected = {
+                onSelected(it)
+                pickerOpen = false
+            },
+        )
+    }
+}
+
+@Composable
+fun TaskParentPickerDialog(
+    selectedParentUid: String?,
+    candidates: List<TaskEntity>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    taskColorMode: TaskColorMode,
+    onDismiss: () -> Unit,
+    onSelected: (String?) -> Unit,
+) {
+    val filteredCandidates = remember(candidates, query) { candidates.filterForParentPicker(query) }
+    val hierarchy = rememberTaskHierarchyPresentation(filteredCandidates, expandedByDefault = true)
+    Dialog(onDismissRequest = onDismiss, properties = WideDialogProperties) {
+        Surface(
+            modifier = Modifier.wideDialogWidth(),
+            shape = DialogShape,
+            color = popupSurfaceColor(),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(Res.string.parent_task),
+                        color = WarmInk,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(Res.string.close), tint = WarmInk)
+                    }
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    placeholder = { Text(stringResource(Res.string.search_ellipsis)) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = dialogFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DialogChoiceGroup {
+                    DialogChoiceRow(
+                        label = stringResource(Res.string.no_parent_task),
+                        selected = selectedParentUid == null,
+                        leading = { Icon(Icons.Default.TaskAlt, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp)) },
+                        onClick = { onSelected(null) },
+                    )
+                }
+                if (filteredCandidates.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(116.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (candidates.isEmpty()) stringResource(Res.string.no_parent_task) else stringResource(Res.string.no_matches),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            lineHeight = 17.sp,
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 430.dp)
+                            .verticalScroll(rememberScrollState())
+                            .animateContentSize(animationSpec = tween(MotionMedium, easing = MotionStandard))
+                            .graphicsLayer { clip = false },
+                    ) {
+                        hierarchy.entries.forEach { entry ->
+                            AnimatedTaskHierarchyEntry(entry) {
+                                TaskRow(
+                                    task = entry.task,
+                                    taskColorMode = taskColorMode,
+                                    onTaskStatusChanged = { _, _ -> onSelected(entry.task.uid) },
+                                    prominent = true,
+                                    hierarchyDepth = entry.depth,
+                                    hierarchyContinuationLevels = entry.continuationLevels,
+                                    hierarchyLastSibling = entry.lastSibling,
+                                    hasSubtasks = entry.hasChildren,
+                                    subtasksExpanded = entry.expanded,
+                                    onToggleSubtasks = { hierarchy.toggle(entry.task) },
+                                    outerHorizontalPadding = 0.dp,
+                                    outerVerticalPadding = 3.dp,
+                                    connectorStemInset = TaskHierarchyStemInset,
+                                    onClick = { onSelected(entry.task.uid) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun List<TaskEntity>.filterForParentPicker(query: String): List<TaskEntity> {
+    val normalized = query.trim().lowercase()
+    if (normalized.isBlank()) return this
+    val parents = TaskParentLookup(this)
+    val included = mutableSetOf<String>()
+
+    fun includeWithAncestors(task: TaskEntity) {
+        parents.selfAndAncestors(task).forEach { included += it.resourceHref }
+    }
+
+    fun TaskEntity.matchesSearch(): Boolean {
+        return listOf(title, notes.orEmpty(), categories.orEmpty(), location.orEmpty())
+            .any { it.lowercase().contains(normalized) }
+    }
+
+    filter { it.matchesSearch() }.forEach(::includeWithAncestors)
+    return filter { it.resourceHref in included }
+}
+
+data class TaskHierarchySubset(
+    val tasks: List<TaskEntity>,
+    val defaultExpandedResourceHrefs: Set<String> = emptySet(),
+)
+
+fun List<TaskEntity>.searchHierarchySubsetForMatches(matches: List<TaskEntity>): TaskHierarchySubset {
+    if (matches.isEmpty()) return TaskHierarchySubset(emptyList())
+    val base = (this + matches).distinctBy { it.resourceHref }
+    val byResource = base.associateBy { it.resourceHref }
+    val parents = TaskParentLookup(base)
+    val childrenByParent = base
+        .filter { !it.parentUid.isNullOrBlank() }
+        .groupBy { it.collectionHref to it.parentUid.orEmpty() }
+    val included = linkedSetOf<String>()
+    val expanded = linkedSetOf<String>()
+
+    fun includeDescendants(task: TaskEntity) {
+        val queue = ArrayDeque<TaskEntity>()
+        val seen = mutableSetOf<String>()
+        queue.add(task)
+        while (queue.isNotEmpty()) {
+            val cursor = queue.removeFirst()
+            if (!seen.add(cursor.resourceHref)) continue
+            included += cursor.resourceHref
+            childrenByParent[cursor.collectionHref to cursor.uid].orEmpty().forEach(queue::add)
+        }
+    }
+
+    matches.forEach { rawMatch ->
+        val match = byResource[rawMatch.resourceHref] ?: rawMatch
+        includeDescendants(parents.rootOf(match))
+        parents.selfAndAncestors(match).drop(1).forEach { expanded += it.resourceHref }
+    }
+    return TaskHierarchySubset(
+        tasks = base.filter { it.resourceHref in included },
+        defaultExpandedResourceHrefs = expanded,
+    )
+}
+
+fun List<TaskEntity>.chainSubsetForTargets(
+    targets: List<TaskEntity>,
+    includeTargetDescendants: Boolean,
+): List<TaskEntity> {
+    if (targets.isEmpty()) return emptyList()
+    val base = (this + targets).distinctBy { it.resourceHref }
+    val byResource = base.associateBy { it.resourceHref }
+    val parents = TaskParentLookup(base)
+    val childrenByParent = base
+        .filter { !it.parentUid.isNullOrBlank() }
+        .groupBy { it.collectionHref to it.parentUid.orEmpty() }
+    val included = linkedSetOf<String>()
+
+    fun includeAncestors(task: TaskEntity) {
+        parents.selfAndAncestors(task).forEach { included += it.resourceHref }
+    }
+
+    fun includeDescendants(task: TaskEntity) {
+        val queue = ArrayDeque<TaskEntity>()
+        queue.add(task)
+        val seen = mutableSetOf<String>()
+        while (queue.isNotEmpty()) {
+            val cursor = queue.removeFirst()
+            if (!seen.add(cursor.resourceHref)) continue
+            included += cursor.resourceHref
+            childrenByParent[cursor.collectionHref to cursor.uid].orEmpty().forEach(queue::add)
+        }
+    }
+
+    targets.forEach { rawTarget ->
+        val target = byResource[rawTarget.resourceHref] ?: rawTarget
+        includeAncestors(target)
+        if (includeTargetDescendants) includeDescendants(target)
+    }
+    return base.filter { it.resourceHref in included }
+}
+
+fun List<TaskEntity>.descendantUids(task: TaskEntity): Set<String> {
+    val childrenByParent = filter { it.collectionHref == task.collectionHref && !it.parentUid.isNullOrBlank() }
+        .groupBy { it.parentUid }
+    val result = mutableSetOf<String>()
+    val queue = ArrayDeque<String>()
+    queue.add(task.uid)
+    while (queue.isNotEmpty()) {
+        val parent = queue.removeFirst()
+        childrenByParent[parent].orEmpty().forEach { child ->
+            if (result.add(child.uid)) queue.add(child.uid)
+        }
+    }
+    return result
+}
+
+fun List<TaskEntity>.descendantsOf(task: TaskEntity): List<TaskEntity> {
+    val childrenByParent = filter { it.collectionHref == task.collectionHref && !it.parentUid.isNullOrBlank() }
+        .groupBy { it.parentUid }
+    val result = mutableListOf<TaskEntity>()
+    val seen = mutableSetOf(task.uid)
+
+    fun append(parentUid: String) {
+        childrenByParent[parentUid].orEmpty().forEach { child ->
+            if (seen.add(child.uid)) {
+                result += child
+                append(child.uid)
+            }
+        }
+    }
+
+    append(task.uid)
+    return result
+}
+
+data class TaskRootActivityPartition(
+    val activeRootTasks: List<TaskEntity>,
+    val inactiveRootTasks: List<TaskEntity>,
+)
+
+fun List<TaskEntity>.partitionByRootActivity(): TaskRootActivityPartition {
+    val distinctTasks = distinctBy { it.resourceHref }
+    val parents = TaskParentLookup(distinctTasks)
+    val tasksByRoot = distinctTasks.groupBy { parents.rootOf(it).resourceHref }
+    val fullyInactiveRoots = tasksByRoot
+        .filterValues { rootTasks -> rootTasks.isNotEmpty() && rootTasks.all { it.isInactive() } }
+        .keys
+    val active = tasksByRoot
+        .filterKeys { it !in fullyInactiveRoots }
+        .values
+        .flatten()
+    val inactive = distinctTasks.filter { it.isInactive() }
+    return TaskRootActivityPartition(
+        activeRootTasks = active,
+        inactiveRootTasks = inactive,
+    )
+}
+
+fun List<TaskEntity>.partitionByRootSchedule(): Pair<List<TaskEntity>, List<TaskEntity>> {
+    val byCollectionUid = associateBy { it.collectionHref to it.uid }
+
+    fun rootOf(task: TaskEntity): TaskEntity {
+        var current = task
+        val seen = mutableSetOf(task.resourceHref)
+        while (!current.parentUid.isNullOrBlank()) {
+            val parent = byCollectionUid[current.collectionHref to current.parentUid] ?: break
+            if (!seen.add(parent.resourceHref)) break
+            current = parent
+        }
+        return current
+    }
+
+    return partition { rootOf(it).taskDate() == null }
+}
+
+@Composable
+fun TaskScheduleRow(
+    label: String,
+    addLabel: String,
+    removeLabel: String,
+    timeLabel: String,
+    hasDate: Boolean,
+    onHasDateChange: (Boolean) -> Unit,
+    dateText: String,
+    onDateTextChange: (String) -> Unit,
+    hasTime: Boolean,
+    timeText: String,
+    onTimeTextChange: (String) -> Unit,
+    allDay: Boolean,
+    isError: Boolean = false,
+) {
+    AnimatedContent(
+        targetState = hasDate,
+        transitionSpec = {
+            (fadeIn(tween(MotionMedium, easing = MotionStandard)) + expandVertically(tween(MotionMedium, easing = MotionStandard))) togetherWith
+                (fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) + shrinkVertically(tween(MotionShort, easing = MotionStandardAccelerate)))
+        },
+        label = "taskScheduleRow-$label",
+    ) { dateVisible ->
+        if (!dateVisible) {
+            AddEditorValueRow(addLabel) { onHasDateChange(true) }
+        } else {
+            EditorScheduleLine(label = timeLabel) {
+                DatePickerField(
+                    value = dateText,
+                    onValueChange = onDateTextChange,
+                    label = label,
+                    isError = isError,
+                    modifier = Modifier.weight(1f),
+                )
+                AnimatedVisibility(
+                    visible = !allDay && hasTime,
+                    enter = fadeIn(tween(MotionMedium, easing = MotionStandard)) +
+                        expandHorizontally(tween(MotionMedium, easing = MotionStandard), expandFrom = Alignment.Start),
+                    exit = fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) +
+                        shrinkHorizontally(tween(MotionShort, easing = MotionStandardAccelerate), shrinkTowards = Alignment.Start),
+                ) {
+                    TimePickerField(
+                        value = timeText,
+                        onValueChange = onTimeTextChange,
+                        label = timeLabel,
+                        isError = isError,
+                        modifier = Modifier.width(editorTimeChipWidth()),
+                    )
+                }
+                IconButton(
+                    onClick = { onHasDateChange(false) },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = removeLabel, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddEditorValueRow(label: String, onClick: () -> Unit) {
+    // A quiet text action on the card: accent plus sign and label, no outline.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Default.Add, contentDescription = label, tint = WarmBrown, modifier = Modifier.size(22.dp))
+        Text(label, color = WarmBrown, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+fun TagEditor(
+    label: String,
+    tags: List<String>,
+    suggestions: List<String>,
+    onTagsChanged: (List<String>) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val normalizedQuery = query.trim()
+    val availableSuggestions = remember(tags, suggestions, normalizedQuery) {
+        suggestions
+            .filterNot { existing -> tags.any { it.equals(existing, ignoreCase = true) } }
+            .filter { normalizedQuery.isBlank() || it.contains(normalizedQuery, ignoreCase = true) }
+            .take(6)
+    }
+    fun addTag(value: String) {
+        val cleaned = value.trim().trim(',')
+        if (cleaned.isBlank() || tags.any { it.equals(cleaned, ignoreCase = true) }) return
+        onTagsChanged(tags + cleaned)
+        query = ""
+    }
+    EditorSection {
+        EditorRowTitle(Icons.AutoMirrored.Filled.Label, label)
+        if (tags.isNotEmpty()) {
+            FadedHorizontalScrollRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                tags.forEach { tag ->
+                    TagPill(
+                        tag = tag,
+                        onRemove = { onTagsChanged(tags.filterNot { it == tag }) },
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+            ) {
+                EditorPlainTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = stringResource(Res.string.add_tag),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                )
+            }
+            IconButton(
+                onClick = { addTag(query) },
+                enabled = normalizedQuery.isNotBlank(),
+                modifier = Modifier.size(UniversalControlHeight),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(Res.string.add_tag), tint = WarmBrown)
+            }
+        }
+        if (availableSuggestions.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                availableSuggestions.forEach { suggestion ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { addTag(suggestion) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(18.dp))
+                        Text(suggestion, color = WarmInk, fontSize = 14.sp, lineHeight = 17.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TagPill(tag: String, onRemove: (() -> Unit)? = null) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = WarmPeach.copy(alpha = 0.84f),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 11.dp, end = if (onRemove == null) 11.dp else 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(tag, color = WarmInk, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1)
+            onRemove?.let {
+                IconButton(onClick = it, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(Res.string.remove_tag, tag), tint = WarmInk, modifier = Modifier.size(15.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryDetailLine(label: String, categories: String) {
+    val tags = remember(categories) { categories.toCategoryTags() }
+    if (tags.isEmpty()) return
+    EditorSection {
+        EditorLine(Icons.AutoMirrored.Filled.Label, verticalAlignment = Alignment.Top, iconDescription = label) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                tags.forEach { TagPill(it) }
+            }
+        }
+    }
+}
+
+private const val ParentCardOverlayZ = 10_000f

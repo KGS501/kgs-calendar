@@ -55,7 +55,7 @@ class CalendarSourceActionsTest {
             withTimeout(30_000) { transient.message.first { it != null } }
         }!!
         // The calendar is added anyway; the notice says it has no data yet and Problems has the reason.
-        assertEquals("string-${R.string.read_only_added_no_data}", message)
+        assertEquals("string-read_only_added_no_data", message)
         val account = harness.database.accountDao().getAll().single { it.sourceType == SourceType.ReadOnlyUrl }
         assertTrue(account.syncError!!.endsWith("URL returned a web page instead of an iCalendar feed."))
         val collection = harness.database.collectionDao().forAccount(account.id).single()

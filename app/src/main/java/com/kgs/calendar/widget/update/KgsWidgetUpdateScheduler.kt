@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.widget.providerClass
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import com.kgs.calendar.widget.KgsWidgetKind

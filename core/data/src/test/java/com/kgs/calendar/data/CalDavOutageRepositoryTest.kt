@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.test.runTest
 import okhttp3.ConnectionPool
@@ -8,14 +10,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
 import okio.Buffer
-import org.json.JSONObject
+import com.kgs.calendar.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.net.UnknownHostException
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger

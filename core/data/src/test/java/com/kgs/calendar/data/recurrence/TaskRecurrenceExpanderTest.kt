@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.recurrence
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -10,8 +12,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 
 class TaskRecurrenceExpanderTest {
     private val zone = ZoneId.of("Europe/Berlin")

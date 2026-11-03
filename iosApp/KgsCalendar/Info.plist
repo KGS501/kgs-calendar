@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>de</string></array>
     <key>CFBundleDisplayName</key><string>KGS Calendar</string>
     <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
@@ -25,4 +27,25 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>CADisableMinimumFrameDurationOnPhone</key><true/>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.</string>
+    <key>NSCalendarsUsageDescription</key><string>Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Suggests places near you when you enter an event's location.</string>
+    <key>NSAppTransportSecurity</key><dict>
+        <!-- As on Android: plain HTTP stays possible for webcal:// feeds and servers on a trusted network. -->
+        <key>NSAllowsArbitraryLoads</key><true/>
+    </dict>
+    <key>UIBackgroundModes</key><array><string>fetch</string></array>
+    <!-- kgscalendar://share opens the event editor with text shared through the KgsShare extension. -->
+    <key>CFBundleURLTypes</key><array><dict>
+        <key>CFBundleURLName</key><string>com.kgs501.kgscalendar</string>
+        <key>CFBundleURLSchemes</key><array><string>kgscalendar</string></array>
+    </dict></array>
+    <key>CFBundleDocumentTypes</key><array><dict>
+        <key>CFBundleTypeName</key><string>Calendar file</string>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+        <key>LSHandlerRank</key><string>Alternate</string>
+        <key>LSItemContentTypes</key><array><string>com.apple.ical.ics</string><string>public.calendar-event</string></array>
+    </dict></array>
+    <key>LSSupportsOpeningDocumentsInPlace</key><false/>
+    <key>BGTaskSchedulerPermittedIdentifiers</key><array><string>com.kgs501.kgscalendar.refresh</string></array>
 </dict></plist>

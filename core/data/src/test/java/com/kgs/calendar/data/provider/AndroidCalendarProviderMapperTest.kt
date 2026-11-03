@@ -1,15 +1,17 @@
 package com.kgs.calendar.data.provider
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.provider.CalendarContract
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.Duration
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ZoneOffset
+import kotlin.time.Duration
 
 class AndroidCalendarProviderMapperTest {
     @Test
