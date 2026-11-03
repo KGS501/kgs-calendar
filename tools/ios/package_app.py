@@ -14,7 +14,7 @@ import uuid
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-from app_store import BUNDLE_ID, api_token, private_write
+from app_store import BUNDLE_ID, SHARE_BUNDLE_ID, Client, api_token, private_write, share_profile_for
 
 
 def check_build_number(value):
@@ -23,7 +23,7 @@ def check_build_number(value):
     return value
 
 
-def validate_profile(profile, certificate_der, team_id, now=None):
+def validate_profile(profile, certificate_der, team_id, now=None, bundle_id=BUNDLE_ID):
     if not re.fullmatch(r"[A-Z0-9]{10}", team_id):
         raise ValueError("Invalid Apple Team ID")
     uuid.UUID(profile["UUID"])
@@ -32,7 +32,7 @@ def validate_profile(profile, certificate_der, team_id, now=None):
         raise ValueError("Provisioning profile has expired")
     if profile.get("TeamIdentifier") != [team_id]:
         raise ValueError("Provisioning profile belongs to another team")
-    if profile["Entitlements"].get("application-identifier") != team_id + "." + BUNDLE_ID:
+    if profile["Entitlements"].get("application-identifier") != team_id + "." + bundle_id:
         raise ValueError("Provisioning profile belongs to another app")
     if profile["Entitlements"].get("get-task-allow", False):
         raise ValueError("A development profile cannot be used for TestFlight")
@@ -65,7 +65,7 @@ def prepare_inputs(directory):
     for variable, filename in [("APPLE_DISTRIBUTION_P12_BASE64", "distribution.p12"),
                                 ("APPLE_PROFILE_BASE64", "profile.mobileprovision")]:
         private_write(directory / filename, base64.b64decode(os.environ[variable], validate=True))
-    prepare_api_key(directory)
+    api_key = prepare_api_key(directory)
     key, cert, _ = pkcs12.load_key_and_certificates((directory / "distribution.p12").read_bytes(),
                                                 os.environ["APPLE_P12_PASSWORD"].encode())
     if key is None or cert is None:
@@ -74,18 +74,30 @@ def prepare_inputs(directory):
         raise ValueError("Distribution identity's private key does not match its certificate")
     if cert.not_valid_after_utc <= dt.datetime.now(dt.timezone.utc):
         raise ValueError("Distribution certificate has expired")
-    profile_bytes = subprocess.check_output(
-        ["security", "cms", "-D", "-i", str(directory / "profile.mobileprovision")], stderr=subprocess.PIPE)
-    profile = plistlib.loads(profile_bytes)
+    # The share extension's profile is optional as a secret: without it, it comes from App Store Connect.
+    if os.environ.get("APPLE_SHARE_PROFILE_BASE64"):
+        share_profile = base64.b64decode(os.environ["APPLE_SHARE_PROFILE_BASE64"], validate=True)
+    else:
+        share_profile = share_profile_for(Client(api_key, os.environ["ASC_KEY_ID"], os.environ["ASC_ISSUER_ID"]), cert)
+    private_write(directory / "share-profile.mobileprovision", share_profile)
     team_id = os.environ["APPLE_TEAM_ID"]
-    validate_profile(profile, cert.public_bytes(serialization.Encoding.DER), team_id)
+    certificate_der = cert.public_bytes(serialization.Encoding.DER)
+    profiles = {}
+    for bundle_id, filename in [(BUNDLE_ID, "profile.mobileprovision"), (SHARE_BUNDLE_ID, "share-profile.mobileprovision")]:
+        profile_bytes = subprocess.check_output(
+            ["security", "cms", "-D", "-i", str(directory / filename)], stderr=subprocess.PIPE)
+        profile = plistlib.loads(profile_bytes)
+        validate_profile(profile, certificate_der, team_id, bundle_id=bundle_id)
+        profiles[bundle_id] = profile
+    app, share = profiles[BUNDLE_ID], profiles[SHARE_BUNDLE_ID]
     private_write(directory / "settings.json", json.dumps({
-        "uuid": profile["UUID"], "profile_name": profile["Name"], "team_id": team_id,
+        "uuid": app["UUID"], "profile_name": app["Name"], "team_id": team_id,
+        "share_uuid": share["UUID"], "share_profile_name": share["Name"],
     }).encode())
     private_write(directory / "ExportOptions.plist", plistlib.dumps({
         "method": "app-store-connect", "destination": "export", "teamID": team_id,
         "signingStyle": "manual", "signingCertificate": "Apple Distribution",
-        "provisioningProfiles": {BUNDLE_ID: profile["Name"]},
+        "provisioningProfiles": {BUNDLE_ID: app["Name"], SHARE_BUNDLE_ID: share["Name"]},
         "manageAppVersionAndBuildNumber": False, "uploadSymbols": True,
         # Keep a tested release candidate eligible for a later App Store submission.
         # Uploading does not submit for review; tester access is configured separately.
@@ -113,6 +125,17 @@ def validate_archive(archive, build_number=None):
         raise ValueError("Unexpected tracking declaration in the validation app")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         raise ValueError("Missing export-compliance declaration for this validation app")
+    share = app / "PlugIns/KgsShare.appex"
+    share_info = plistlib.loads((share / "Info.plist").read_bytes())
+    if share_info["CFBundleIdentifier"] != SHARE_BUNDLE_ID:
+        raise ValueError("Share extension has the wrong bundle identifier")
+    if share_info.get("NSExtension", {}).get("NSExtensionPointIdentifier") != "com.apple.share-services":
+        raise ValueError("Share extension is not a share target")
+    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
+        if share_info.get(key) != info[key]:
+            raise ValueError(f"Share extension {key} differs from the app's")
+    if not (share / share_info["CFBundleExecutable"]).is_file():
+        raise ValueError("Share extension is missing its executable")
     print(f"Validated device archive {info['CFBundleShortVersionString']} ({info['CFBundleVersion']})")
 
 

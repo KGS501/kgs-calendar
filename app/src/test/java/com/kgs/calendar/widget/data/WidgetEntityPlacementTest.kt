@@ -1,11 +1,13 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.EventEntity
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 
 class WidgetEntityPlacementTest {
     private val berlin = ZoneId.of("Europe/Berlin")

@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.content.res.Configuration
@@ -43,11 +45,11 @@ import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
 import com.kgs.calendar.widget.state.WidgetTaskExpansionState
 import com.kgs.calendar.widget.toLocale
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

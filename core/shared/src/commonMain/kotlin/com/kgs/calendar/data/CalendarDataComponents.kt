@@ -1,0 +1,97 @@
+package com.kgs.calendar.data
+
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.data.account.CalendarSourceManager
+import com.kgs.calendar.data.account.SourceImageStore
+import com.kgs.calendar.data.export.CalendarExport
+import com.kgs.calendar.data.ical.IcalCodec
+import com.kgs.calendar.data.ical.IcsEventReader
+import com.kgs.calendar.data.local.KgsDatabase
+import com.kgs.calendar.data.mutation.EventMutations
+import com.kgs.calendar.data.mutation.EventImports
+import com.kgs.calendar.data.mutation.TaskMutations
+import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
+import com.kgs.calendar.data.provider.AndroidProviderWriteShield
+import com.kgs.calendar.data.query.CalendarQueries
+import com.kgs.calendar.data.recurrence.RecurrenceExpander
+import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
+import com.kgs.calendar.data.secure.CredentialsStore
+import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
+import com.kgs.calendar.data.sync.CalDavSyncEngine
+import com.kgs.calendar.data.sync.PendingMutationUploader
+import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
+import com.kgs.calendar.data.sync.RemoteSyncLock
+import com.kgs.calendar.data.sync.SyncConflictResolver
+import com.kgs.calendar.data.sync.SyncOrchestrator
+import com.kgs.calendar.data.sync.SyncRepairs
+import com.kgs.calendar.data.trash.ServerTrashBin
+import com.kgs.calendar.data.trash.TrashBin
+import com.kgs.calendar.data.trash.TrashSnapshots
+import com.kgs.calendar.platform.HttpTransport
+import com.kgs.calendar.time.ZoneId
+
+/**
+ * Wires the calendar data components. The shared in-memory state (the Android provider write
+ * shield and the remote sync lock) exists once here and is handed to the components that need it.
+ */
+class CalendarDataComponents(
+    database: KgsDatabase,
+    credentialsStore: CredentialsStore,
+    loginFlowClient: NextcloudLoginFlowClient,
+    calDavClient: CalDavHttpClient,
+    androidCalendarProviderClient: AndroidCalendarProviderClient,
+    icalCodec: IcalCodec,
+    readOnlyHttpClient: HttpTransport,
+    /** Null follows the device's zone, so a zone change applies while the app runs. */
+    zoneId: ZoneId? = null,
+    recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
+    /** Source and group images; [SourceImageStore.None] keeps none (tests). */
+    val sourceImages: SourceImageStore = SourceImageStore.None,
+) {
+    private val localWrites = LocalWriteSupport(database, icalCodec)
+    private val androidWriteShield = AndroidProviderWriteShield()
+    private val trashSnapshots = TrashSnapshots(database, icalCodec)
+    private val remoteSyncLock = RemoteSyncLock()
+
+    val queries = CalendarQueries(database, recurrenceExpander, zoneId)
+    val eventMutations = EventMutations(database, localWrites, androidCalendarProviderClient, icalCodec, androidWriteShield, trashSnapshots, zoneId)
+    val eventImports = EventImports(database, localWrites, IcsEventReader(icalCodec))
+    val export = CalendarExport(database, icalCodec)
+    val taskMutations = TaskMutations(database, localWrites, icalCodec, trashSnapshots, zoneId)
+
+    val repairs = SyncRepairs(database, localWrites, icalCodec)
+    val uploader = PendingMutationUploader(database, credentialsStore, calDavClient, localWrites)
+    val calDavSyncEngine = CalDavSyncEngine(database, credentialsStore, calDavClient, icalCodec, localWrites, uploader, zoneId, sourceImages)
+    val readOnlyUrlSyncEngine = ReadOnlyUrlSyncEngine(database, localWrites, icalCodec, readOnlyHttpClient, sourceImages)
+    val androidProviderSyncEngine = AndroidProviderSyncEngine(database, localWrites, androidCalendarProviderClient, androidWriteShield)
+
+    private val serverTrash = ServerTrashBin(database, localWrites, credentialsStore, calDavClient, icalCodec, calDavSyncEngine, remoteSyncLock)
+    val trash = TrashBin(database, localWrites, icalCodec, eventMutations, serverTrash, remoteSyncLock)
+
+    // CalDAV claims every account the others don't, so it has to stay last.
+    val syncOrchestrator = SyncOrchestrator(
+        database = database,
+        repairs = repairs,
+        uploader = uploader,
+        engines = listOf(androidProviderSyncEngine, readOnlyUrlSyncEngine, calDavSyncEngine),
+        trash = trash,
+        remoteSyncLock = remoteSyncLock,
+    )
+
+    val conflicts = SyncConflictResolver(database, credentialsStore, calDavClient, uploader, calDavSyncEngine, remoteSyncLock)
+
+    val sources = CalendarSourceManager(
+        database = database,
+        credentialsStore = credentialsStore,
+        loginFlowClient = loginFlowClient,
+        calDavClient = calDavClient,
+        androidCalendarProviderClient = androidCalendarProviderClient,
+        localWrites = localWrites,
+        readOnlyUrlSyncEngine = readOnlyUrlSyncEngine,
+        androidProviderSyncEngine = androidProviderSyncEngine,
+        remoteSyncLock = remoteSyncLock,
+        sourceImages = sourceImages,
+    )
+}

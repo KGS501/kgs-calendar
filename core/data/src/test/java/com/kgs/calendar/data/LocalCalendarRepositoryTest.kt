@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.graphics.Color
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.SourceType
@@ -13,8 +15,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 @RunWith(RobolectricTestRunner::class)
 class LocalCalendarRepositoryTest {

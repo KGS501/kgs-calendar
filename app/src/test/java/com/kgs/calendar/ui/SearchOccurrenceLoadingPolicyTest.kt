@@ -1,10 +1,12 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.CalendarRange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 class SearchOccurrenceLoadingPolicyTest {
     private val today = LocalDate.of(2026, 8, 20)

@@ -1,11 +1,13 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.ZonedDateTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ZonedDateTime
 
 class WidgetDayRolloverTest {
     private val zone = ZoneId.of("Europe/Berlin")

@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
@@ -14,9 +16,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.TimeZone
 
 class CalendarItemVisibilityTest {
@@ -260,7 +262,7 @@ class CalendarItemVisibilityTest {
     }
 
     private fun millisAt(day: LocalDate, hour: Int): Long =
-        day.atTime(hour, 0).atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        day.atTime(hour, 0).atZone(com.kgs.calendar.time.ZoneOffset.UTC).toInstant().toEpochMilli()
 
     private fun task(
         start: Long?,

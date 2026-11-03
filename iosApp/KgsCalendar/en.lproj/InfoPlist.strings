@@ -1,0 +1,4 @@
+/* Permission texts of the system dialogs. */
+"NSCalendarsFullAccessUsageDescription" = "Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.";
+"NSCalendarsUsageDescription" = "Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.";
+"NSLocationWhenInUseUsageDescription" = "Suggests places near you when you enter an event's location.";

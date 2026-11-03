@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.editor
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.os.Parcel
 import androidx.compose.runtime.saveable.SaverScope
 import com.kgs.calendar.ui.CalendarUiState
@@ -37,8 +39,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -520,7 +522,7 @@ class EditorDraftStoreTest {
         files.write("old", DraftRevision(1, mapOf("title" to "Old")))
         files.write("recent", DraftRevision(1, mapOf("title" to "Recent")))
         File(directory, "leftover.json.tmp").writeText("{")
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         File(directory, "old.json").setLastModified(now - TEN_DAYS_MILLIS)
         File(directory, "leftover.json.tmp").setLastModified(now - TEN_DAYS_MILLIS)
         val store = fileStore()
@@ -546,7 +548,7 @@ class EditorDraftStoreTest {
         val saved = with(CalendarShellUiState.saver(today, DefaultColor, store) { loadedState }) {
             SaverScope { true }.save(shell)
         }!!
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         File(directory, "$draftId.json").setLastModified(now - TEN_DAYS_MILLIS)
 
         // Process death: the data has not loaded yet when the shell comes back.
@@ -577,7 +579,7 @@ class EditorDraftStoreTest {
     @Test
     fun cleanUpRacingAWriteCannotDeleteTheFreshRevision() = runBlocking {
         EditorDraftFiles(directory).write("reopened", DraftRevision(1, mapOf("title" to "Old")))
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         File(directory, "reopened.json").setLastModified(now - TEN_DAYS_MILLIS)
         val blocked = BlockingFirstWrite()
         val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

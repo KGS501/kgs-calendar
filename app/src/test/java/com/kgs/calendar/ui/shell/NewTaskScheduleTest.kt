@@ -1,9 +1,11 @@
 package com.kgs.calendar.ui.shell
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.settings.TaskDefaultDates
 import com.kgs.calendar.ui.editor.EditorScheduleState
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

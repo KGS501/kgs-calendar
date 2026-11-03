@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.graphics.RectF
 import com.kgs.calendar.widget.WIDGET_DAY_ALL_DAY_CARD_HEIGHT_DP
 import com.kgs.calendar.widget.WIDGET_DAY_ALL_DAY_LANE_STRIDE_DP
@@ -15,7 +17,7 @@ import com.kgs.calendar.widget.WIDGET_DAY_ROW_SIDE_INSET_DP
 import com.kgs.calendar.widget.WIDGET_DAY_TIME_COLUMN_WIDTH_DP
 import com.kgs.calendar.widget.WIDGET_TASK_MIN_CARD_WIDTH_DP
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.max
 import kotlin.math.min
 

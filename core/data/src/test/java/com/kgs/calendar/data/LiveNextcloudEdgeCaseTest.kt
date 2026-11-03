@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.isSyncConflictError
 import kotlinx.coroutines.runBlocking
@@ -18,10 +20,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.net.URI
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.ZonedDateTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ZonedDateTime
 import java.util.UUID
 
 /**
@@ -153,7 +155,7 @@ class LiveNextcloudEdgeCaseTest {
             other.repository.syncNow()
             val seen = other.repository.eventsSnapshot(other.startOfDay(LocalDate.of(2026, 10, 19)), other.startOfDay(LocalDate.of(2026, 11, 3)))
                 .filter { it.uid == weekly.uid || it.uid == moved.uid }
-                .map { java.time.Instant.ofEpochMilli(it.startsAtMillis) }
+                .map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis) }
                 .sorted()
             // 08:00Z is 10:00 summer time, 09:00Z is 10:00 winter time.
             assertEquals(
@@ -288,7 +290,7 @@ class LiveNextcloudEdgeCaseTest {
             assertEquals(
                 listOf("12 18:00 Gym", "13 20:00 Gym (late)", "15 18:00 Gym"),
                 seen.map {
-                    val start = java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(other.zone)
+                    val start = kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(other.zone)
                     "${start.dayOfMonth} ${start.toLocalTime()} ${it.title}"
                 },
             )
@@ -452,7 +454,7 @@ class LiveNextcloudEdgeCaseTest {
     private fun occurrences(uid: String, from: LocalDate, until: LocalDate) = runBlocking {
         repository.eventsSnapshot(harness.startOfDay(from), harness.startOfDay(until))
             .filter { it.uid == uid }
-            .map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(harness.zone).toLocalDateTime() to it.title }
+            .map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(harness.zone).toLocalDateTime() to it.title }
     }
 
     private fun url(path: String) = URI(base).resolve(path).toString()

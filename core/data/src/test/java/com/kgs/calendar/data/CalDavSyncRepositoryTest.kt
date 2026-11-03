@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.SourceType
@@ -21,8 +23,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
-import java.time.LocalDate
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class CalDavSyncRepositoryTest {

@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SyncState
@@ -11,7 +13,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class SyncReliabilityRepositoryTest {
@@ -244,7 +246,7 @@ class SyncReliabilityRepositoryTest {
         val href = server.putRemote(server.eventsHref, "event.ics", SampleIcs.event("event", "Authoritative title"))
         harness.addSyncedCalDavAccount()
         harness.database.eventDao().upsert(harness.event(href)!!.copy(title = "Old drift"))
-        val capabilities = org.json.JSONObject(harness.collection(server.eventsHref)!!.capabilitiesJson!!)
+        val capabilities = com.kgs.calendar.json.JSONObject(harness.collection(server.eventsHref)!!.capabilitiesJson!!)
         capabilities.remove("kgsReconciliationVersion")
         harness.database.collectionDao().updateCapabilitiesJson(server.eventsHref, capabilities.toString())
         repository.syncNow()

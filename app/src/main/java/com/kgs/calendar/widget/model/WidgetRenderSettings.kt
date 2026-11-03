@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.res.Configuration
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.settings.AppColorMode
@@ -13,7 +15,7 @@ import com.kgs.calendar.data.settings.WidgetTaskSubtaskDefaultMode
 import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.domain.task.statusSortRank
 import com.kgs.calendar.widget.WIDGET_DAY_HOUR_ROW_HEIGHT_DP
-import java.time.DayOfWeek
+import kotlinx.datetime.DayOfWeek
 import java.util.Locale
 
 internal data class WidgetRenderSettings(
@@ -61,4 +63,4 @@ internal data class WidgetRenderSettings(
 }
 
 private fun DayOfWeek.plus(days: Long): DayOfWeek =
-    DayOfWeek.of(((value - 1 + days.toInt()) % 7) + 1)
+    dayOfWeekOf(((value - 1 + days.toInt()) % 7) + 1)

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_interval_help_ios">Deine Änderungen werden sofort hochgeladen. iOS entscheidet, wann die Hintergrundaktualisierung läuft; das Intervall ist der kürzeste Abstand zwischen zwei Synchronisierungen. iPhone-Kalender synchronisieren über ihre eigenen Konten.</string>
+    <string name="privacy_sync_body_ios">Wenn du ein CalDAV-/Nextcloud-Konto, eine ICS-URL oder iPhone-Kalender hinzufügst, nutzt die App den eingerichteten Server, die eingerichtete URL oder die Kalenderdaten des iPhones, damit die Synchronisierung funktioniert. KGS Calendar hat keine Werbung, Analyse-SDKs, Tracking-SDKs oder eigenes Entwickler-Backend.</string>
+    <string name="privacy_storage_body_ios">KGS Calendar speichert Termine, Aufgaben, Erinnerungen, Einstellungen, Quellnamen, Server-URLs, Benutzernamen und zwischengespeicherte Kalenderdaten auf diesem Gerät. CalDAV-Passwörter und App-Passwörter werden im iOS-Schlüsselbund nur für dieses Gerät gespeichert und daher nicht per Backup auf ein anderes Gerät übertragen.</string>
+    <string name="device_calendars_ios">iPhone-Kalender</string>
+</resources>

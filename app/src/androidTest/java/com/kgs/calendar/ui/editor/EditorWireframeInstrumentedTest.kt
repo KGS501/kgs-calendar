@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.editor
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import java.util.Locale
 import com.kgs.calendar.ui.formatEditorDate
 import androidx.compose.foundation.layout.Box
@@ -30,8 +32,8 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.ui.DraftEventWireframe
 import com.kgs.calendar.ui.EventScheduleEditor
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertTrue

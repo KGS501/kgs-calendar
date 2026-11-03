@@ -1,9 +1,11 @@
 package com.kgs.calendar.ui.agenda
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.CalendarRange
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.ZoneOffset
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

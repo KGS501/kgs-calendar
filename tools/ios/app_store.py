@@ -26,12 +26,15 @@ from cryptography.x509.oid import NameOID
 
 
 BUNDLE_ID = "com.kgs501.kgscalendar"
+# The share extension ("Create event" from shared text) is signed with its own App ID and profile.
+SHARE_BUNDLE_ID = BUNDLE_ID + ".share"
 GROUP_NAME = "KGS iOS Development"
 API = "https://api.appstoreconnect.apple.com"
 TEST_NOTES = (
-    "Component validation build for the iOS port, not a functional calendar yet. "
-    "Please test the shared theme, menus, dialogs and animations on iPhone/iPad, "
-    "including portrait and landscape. Calendar screens, persistence and sync are not included."
+    "KGS Calendar 2.0 for iPhone and iPad: the full Android app with CalDAV/Nextcloud and ICS sync, "
+    "iPhone calendars, reminders, .ics import and the share extension. Please compare it with the "
+    "Android app, also in landscape, Split View and Stage Manager on iPad. Home-screen widgets are not "
+    "available on iOS yet."
 )
 
 
@@ -106,19 +109,23 @@ class Client:
         raise AppleError("Apple API pagination exceeded the expected limit")
 
 
-def ensure_bundle(client):
-    bundles = client.list("/v1/bundleIds", {"filter[identifier]": BUNDLE_ID})
+def ensure_bundle(client, identifier=BUNDLE_ID, name="KGS Calendar"):
+    bundles = client.list("/v1/bundleIds", {"filter[identifier]": identifier})
     # Apple can return prefix matches; require the exact app identity.
-    bundles = [b for b in bundles if b["attributes"]["identifier"] == BUNDLE_ID]
+    bundles = [b for b in bundles if b["attributes"]["identifier"] == identifier]
     if len(bundles) > 1:
         raise AppleError("Multiple exact bundle IDs matched; inspect the developer account")
     if bundles:
         return bundles[0]
     return client.request("POST", "/v1/bundleIds", {"data": {
         "type": "bundleIds", "attributes": {
-            "identifier": BUNDLE_ID, "name": "KGS Calendar", "platform": "IOS",
+            "identifier": identifier, "name": name, "platform": "IOS",
         },
     }})["data"]
+
+
+def ensure_share_bundle(client):
+    return ensure_bundle(client, SHARE_BUNDLE_ID, "KGS Calendar Share")
 
 
 def find_app(client):
@@ -175,22 +182,13 @@ def prepare_signing(client, directory):
     if not re.fullmatch(r"[A-Z0-9]{10}", team_id):
         raise AppleError("Could not identify the Apple developer team from its certificate")
     profile_name = "KGS Calendar TestFlight " + state["certificate_id"]
-    profiles = client.list("/v1/profiles", {"filter[name]": profile_name, "filter[profileType]": "IOS_APP_STORE"})
-    active = [p for p in profiles if p["attributes"]["profileState"] == "ACTIVE"
-              and p["attributes"]["name"] == profile_name
-              and p["attributes"]["profileType"] == "IOS_APP_STORE"]
-    if active:
-        profile = client.request("GET", "/v1/profiles/" + active[0]["id"])["data"]
-    else:
-        profile = client.request("POST", "/v1/profiles", {"data": {
-            "type": "profiles", "attributes": {"name": profile_name, "profileType": "IOS_APP_STORE"},
-            "relationships": {
-                "bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}},
-                "certificates": {"data": [{"type": "certificates", "id": state["certificate_id"]}]},
-            },
-        }})["data"]
+    profile = ensure_profile(client, profile_name, bundle, state["certificate_id"])
     private_write(directory / "profile.mobileprovision",
                   base64.b64decode(profile["attributes"]["profileContent"], validate=True))
+    share_profile_name = "KGS Calendar Share TestFlight " + state["certificate_id"]
+    share_profile = ensure_profile(client, share_profile_name, ensure_share_bundle(client), state["certificate_id"])
+    private_write(directory / "share-profile.mobileprovision",
+                  base64.b64decode(share_profile["attributes"]["profileContent"], validate=True))
     password = secrets.token_urlsafe(32)
     private_write(directory / "p12-password", password.encode())
     # macOS security import needs the compatible PKCS#12 format documented by cryptography.
@@ -200,10 +198,46 @@ def prepare_signing(client, directory):
                   .hmac_hash(hashes.SHA1()).build(password.encode()))
     private_write(directory / "distribution.p12", pkcs12.serialize_key_and_certificates(
         b"KGS TestFlight", key, cert, None, encryption))
-    state.update(team_id=team_id, profile_id=profile["id"], profile_name=profile_name, bundle_id=BUNDLE_ID)
+    state.update(team_id=team_id, profile_id=profile["id"], profile_name=profile_name, bundle_id=BUNDLE_ID,
+                 share_profile_id=share_profile["id"], share_profile_name=share_profile_name,
+                 share_bundle_id=SHARE_BUNDLE_ID)
     private_write(state_path, json.dumps(state, indent=2).encode())
     print(f"Signing prepared for team {team_id}; private files are stored in {directory}")
     return state
+
+
+def ensure_profile(client, profile_name, bundle, certificate_id):
+    """Reuses the active App Store profile of this name, or creates it for the bundle and certificate."""
+    profiles = client.list("/v1/profiles", {"filter[name]": profile_name, "filter[profileType]": "IOS_APP_STORE"})
+    active = [p for p in profiles if p["attributes"]["profileState"] == "ACTIVE"
+              and p["attributes"]["name"] == profile_name
+              and p["attributes"]["profileType"] == "IOS_APP_STORE"]
+    if active:
+        return client.request("GET", "/v1/profiles/" + active[0]["id"])["data"]
+    return client.request("POST", "/v1/profiles", {"data": {
+        "type": "profiles", "attributes": {"name": profile_name, "profileType": "IOS_APP_STORE"},
+        "relationships": {
+            "bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}},
+            "certificates": {"data": [{"type": "certificates", "id": certificate_id}]},
+        },
+    }})["data"]
+
+
+def share_profile_for(client, certificate):
+    """The share extension's App Store profile for this distribution certificate, created if needed.
+
+    CI uses this when the APPLE_SHARE_PROFILE_BASE64 secret is not configured, so the app's existing
+    key and certificate are enough. The certificate is found by its serial number, never revoked.
+    """
+    serial = format(certificate.serial_number, "X").lstrip("0").upper()
+    matches = [c for c in client.list("/v1/certificates", {"filter[certificateType]": "DISTRIBUTION"})
+               if c["attributes"].get("serialNumber", "").lstrip("0").upper() == serial]
+    if len(matches) != 1:
+        raise AppleError("The distribution certificate is not in this App Store Connect team")
+    certificate_id = matches[0]["id"]
+    profile = ensure_profile(client, "KGS Calendar Share TestFlight " + certificate_id,
+                             ensure_share_bundle(client), certificate_id)
+    return base64.b64decode(profile["attributes"]["profileContent"], validate=True)
 
 
 def configure_testflight(client, email=None):
@@ -329,8 +363,8 @@ def main():
     client = Client(args.key_file, args.key_id, args.issuer_id)
     try:
         if args.command == "register-bundle":
-            bundle = ensure_bundle(client)
-            print(f"Registered bundle: {bundle['attributes']['identifier']}")
+            for bundle in (ensure_bundle(client), ensure_share_bundle(client)):
+                print(f"Registered bundle: {bundle['attributes']['identifier']}")
         elif args.command == "prepare-signing":
             prepare_signing(client, args.directory)
         elif args.command == "configure-testflight":

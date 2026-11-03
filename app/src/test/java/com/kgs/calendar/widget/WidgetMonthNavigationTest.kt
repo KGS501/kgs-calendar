@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.widget.model.MonthAuthoritativePageDecision
 import com.kgs.calendar.widget.model.MonthCommand
 import com.kgs.calendar.widget.model.MonthNavSnapshot
@@ -12,9 +14,9 @@ import com.kgs.calendar.widget.model.monthCacheWindow
 import com.kgs.calendar.widget.model.selectMonthNavigationInitialPage
 import com.kgs.calendar.widget.update.OnceCompletion
 import java.time.Clock
-import java.time.Instant
-import java.time.YearMonth
-import java.time.ZoneOffset
+import kotlin.time.Instant
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneOffset
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -27,7 +29,7 @@ import org.junit.Test
 
 class WidgetMonthNavigationTest {
     private val widgetId = 42
-    private val clock = Clock.fixed(Instant.parse("2026-01-15T12:00:00Z"), ZoneOffset.UTC)
+    private val clock = Clock.fixed(java.time.Instant.parse("2026-01-15T12:00:00Z"), java.time.ZoneOffset.UTC)
     private val storage = InMemoryMonthNavStorage()
     private val coordinator = WidgetMonthNavigation(storage, clock)
 
@@ -202,7 +204,7 @@ class WidgetMonthNavigationTest {
         coordinator.navigate(widgetId, MonthCommand.Next)
         val target = coordinator.navigate(widgetId, MonthCommand.Previous)
 
-        assertEquals(YearMonth.now(clock), target.month)
+        assertEquals(java.time.YearMonth.now(clock).let { YearMonth(it.year, it.monthValue) }, target.month)
         assertEquals(-1, target.direction)
     }
 
@@ -211,7 +213,7 @@ class WidgetMonthNavigationTest {
         val next = coordinator.navigate(widgetId, MonthCommand.Next)
         val today = coordinator.navigate(widgetId, MonthCommand.Today)
 
-        assertEquals(YearMonth.now(clock), today.month)
+        assertEquals(java.time.YearMonth.now(clock).let { YearMonth(it.year, it.monthValue) }, today.month)
         assertEquals(next.page, today.page)
         assertEquals(0, today.direction)
         assertFalse(coordinator.isCurrent(next))

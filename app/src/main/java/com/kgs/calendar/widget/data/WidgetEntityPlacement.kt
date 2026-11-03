@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -11,10 +13,10 @@ import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.widget.WIDGET_DAY_DEFAULT_TASK_DURATION_MILLIS
 import com.kgs.calendar.widget.WIDGET_DAY_END_HOUR
 import com.kgs.calendar.widget.WIDGET_DAY_START_HOUR
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ChronoUnit
 import kotlin.math.max
 import kotlin.math.min
 

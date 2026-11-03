@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.providerClass
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -47,7 +50,7 @@ import com.kgs.calendar.widget.model.priorityMotionFrameIntervalMillis
 import com.kgs.calendar.widget.model.widgetRequestCode
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.update.WidgetPerformanceMonitor
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal fun WidgetDayGridRow.toRemoteViews(
     context: Context,

@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.Manifest
 import android.content.Context
 import android.os.Build
@@ -43,7 +45,7 @@ class EditorRecreationInstrumentedTest {
 
     @Test
     fun eventEditorAndTypedTitleSurviveActivityRecreation() {
-        val title = "Rotation draft ${System.currentTimeMillis()}"
+        val title = "Rotation draft ${nowMillis()}"
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val create = context.getString(R.string.create)
             composeRule.waitUntil(timeoutMillis = 30_000) {

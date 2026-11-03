@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
@@ -29,9 +31,9 @@ import com.kgs.calendar.ui.model.orderedOverdueTasks
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import java.io.File
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -264,7 +266,7 @@ class CalendarViewModelTest {
         viewModel.selectView(CalendarViewMode.Day)
         viewModel.selectDate(today.minusDays(20))
         viewModel.awaitState { it.selectedDate == today.minusDays(20) }
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         settingsStore.setLastBackgroundedAtMillis(now - 10 * 60_000L)
 
         viewModel.uiEvents.test {

@@ -1,5 +1,7 @@
 package com.kgs.calendar
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -19,7 +21,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import java.time.Instant
+import kotlin.time.Instant
 import java.util.UUID
 
 @SdkSuppress(minSdkVersion = 29)

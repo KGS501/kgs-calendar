@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -8,7 +10,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** Events and tasks always land in a calendar that can hold their kind, so they can sync. */
 @RunWith(RobolectricTestRunner::class)

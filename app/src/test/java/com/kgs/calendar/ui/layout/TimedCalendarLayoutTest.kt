@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.layout
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.ui.model.isFullDayTaskOn
@@ -7,9 +9,9 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.TimeZone
 
 class TimedCalendarLayoutTest {
@@ -126,8 +128,8 @@ class TimedCalendarLayoutTest {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"))
         val day = LocalDate.of(2026, 10, 25)
         // 02:40 summer time to 02:10 winter time: 30 minutes later, yet an earlier clock time.
-        val start = java.time.ZonedDateTime.of(day, LocalTime.of(2, 40), ZoneId.of("Europe/Berlin")).withEarlierOffsetAtOverlap()
-        val end = java.time.ZonedDateTime.of(day, LocalTime.of(2, 10), ZoneId.of("Europe/Berlin")).withLaterOffsetAtOverlap()
+        val start = com.kgs.calendar.time.ZonedDateTime.of(day, LocalTime.of(2, 40), ZoneId.of("Europe/Berlin")).withEarlierOffsetAtOverlap()
+        val end = com.kgs.calendar.time.ZonedDateTime.of(day, LocalTime.of(2, 10), ZoneId.of("Europe/Berlin")).withLaterOffsetAtOverlap()
         val event = event(start = start.toInstant().toEpochMilli(), end = end.toInstant().toEpochMilli())
 
         assertEquals(160 to 190, event.timedPlacementOn(day, hourHeightDp = 60f)!!.let { it.startMinute to it.endMinute })

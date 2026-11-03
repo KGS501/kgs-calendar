@@ -8,8 +8,8 @@ import android.content.Intent
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONArray
-import org.json.JSONObject
+import com.kgs.calendar.json.JSONArray
+import com.kgs.calendar.json.JSONObject
 
 interface ReminderRegistryStorage {
     fun readScheduled(): List<ScheduledReminderRecord>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings used only outside Android (iOS); merged into Res.string with the app's strings. -->
+<resources>
+    <string name="sync_interval_help_ios">Your changes upload right away. iOS decides when background refresh runs, so the interval is the shortest gap between syncs. iPhone calendars sync through their own accounts.</string>
+    <string name="privacy_sync_body_ios">If you add a CalDAV/Nextcloud account, an ICS URL, or iPhone calendars, the app uses the configured server, URL, or the iPhone's calendar data so syncing can work. KGS Calendar has no ads, analytics SDKs, tracking SDKs, or developer-operated backend.</string>
+    <string name="privacy_storage_body_ios">KGS Calendar stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on this device. CalDAV passwords and app passwords are stored in the iOS Keychain for this device only, so they are not moved to another device by a backup.</string>
+    <string name="device_calendars_ios">iPhone calendars</string>
+</resources>

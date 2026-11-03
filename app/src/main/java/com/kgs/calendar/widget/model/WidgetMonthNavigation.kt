@@ -1,7 +1,9 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import java.time.Clock
-import java.time.YearMonth
+import kotlinx.datetime.YearMonth
 import java.util.concurrent.ConcurrentHashMap
 
 internal enum class MonthCommand {
@@ -74,7 +76,7 @@ internal class WidgetMonthNavigation(
 ) {
     fun navigate(widgetId: Int, command: MonthCommand): MonthNavSnapshot =
         storage.update(widgetId) { current ->
-            val currentMonth = current?.month ?: YearMonth.now(clock)
+            val currentMonth = current?.month ?: java.time.YearMonth.now(clock).let { YearMonth(it.year, it.monthValue) }
             val currentPage = current?.page?.coerceIn(0, 1) ?: 0
             val direction = when (command) {
                 MonthCommand.Previous -> -1
@@ -86,7 +88,7 @@ internal class WidgetMonthNavigation(
                 month = when (command) {
                     MonthCommand.Previous -> currentMonth.minusMonths(1)
                     MonthCommand.Next -> currentMonth.plusMonths(1)
-                    MonthCommand.Today -> YearMonth.now(clock)
+                    MonthCommand.Today -> java.time.YearMonth.now(clock).let { YearMonth(it.year, it.monthValue) }
                 },
                 page = if (command == MonthCommand.Today) currentPage else 1 - currentPage,
                 direction = direction,

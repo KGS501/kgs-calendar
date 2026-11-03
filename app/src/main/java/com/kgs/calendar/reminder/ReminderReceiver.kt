@@ -1,5 +1,8 @@
 package com.kgs.calendar.reminder
 
+import com.kgs.calendar.navigation.readFrom
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.Notification
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -78,7 +81,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 // Recorded first, so the alarm is never caught up again as a missed reminder.
                 runCatching {
                     val registry = KgsCalendarApplication.graph(appContext).reminderRegistry
-                    alarmRequestCode?.let { registry.markDelivered(listOf(it), System.currentTimeMillis()) }
+                    alarmRequestCode?.let { registry.markDelivered(listOf(it), nowMillis()) }
                     if (snoozed && alarmRequestCode != null) registry.removeSnoozed(alarmRequestCode)
                 }
                 // The alarm may predate hiding or deactivating the item's calendar.
@@ -120,7 +123,7 @@ class ReminderReceiver : BroadcastReceiver() {
         NotificationManagerCompat.from(context).cancel(notificationKey.tag, notificationKey.id)
         val record = SnoozedReminder(
             alarmRequestCode = ReminderIntents.snoozedRequestCode(notificationKey),
-            triggerAtMillis = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L,
+            triggerAtMillis = nowMillis() + SNOOZE_MINUTES * 60_000L,
             title = title,
             body = intent.getStringExtra(EXTRA_BODY),
             notificationKey = notificationKey,

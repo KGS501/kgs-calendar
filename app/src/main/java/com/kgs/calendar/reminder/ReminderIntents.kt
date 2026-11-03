@@ -1,5 +1,8 @@
 package com.kgs.calendar.reminder
 
+import com.kgs.calendar.navigation.writeTo
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -8,8 +11,8 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchTarget
-import java.time.Instant
-import java.time.ZoneId
+import kotlin.time.Instant
+import com.kgs.calendar.time.ZoneId
 
 object ReminderIntents {
     fun contentIntent(

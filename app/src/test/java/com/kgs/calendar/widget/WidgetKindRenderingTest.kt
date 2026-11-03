@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.appwidget.AppWidgetManager
 import android.os.Bundle
@@ -26,9 +28,9 @@ import com.kgs.calendar.widget.render.KgsWidgetCollectionFactory
 import com.kgs.calendar.widget.render.KgsWidgetDayCollectionFactory
 import com.kgs.calendar.widget.update.WidgetTaskToggle
 import java.io.File
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.YearMonth
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import java.util.TimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +69,7 @@ class WidgetKindRenderingTest {
     @Before
     fun setUp() {
         // Widget code resolves the system zone; keep it in line with the harness zone.
-        TimeZone.setDefault(TimeZone.getTimeZone(TEST_ZONE))
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(TEST_ZONE.id))
         harness = RepositoryHarness()
         dataStoreScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val settingsStore = SettingsStore(

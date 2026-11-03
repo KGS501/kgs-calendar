@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -17,10 +19,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
 
 class MonthGridFontScaleInstrumentedTest {
     @get:Rule

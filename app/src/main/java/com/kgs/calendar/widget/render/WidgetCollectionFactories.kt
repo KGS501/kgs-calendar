@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.appwidget.AppWidgetManager
 import android.os.SystemClock
 import android.util.Log
@@ -21,7 +23,7 @@ import com.kgs.calendar.widget.model.WidgetSize
 import com.kgs.calendar.widget.model.collectionArtWidthDp
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.ZoneId
+import com.kgs.calendar.time.ZoneId
 import kotlinx.coroutines.runBlocking
 
 internal class KgsWidgetDayCollectionFactory(

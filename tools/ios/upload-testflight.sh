@@ -5,17 +5,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 [[ "$(uname -s)" == Darwin ]] || { echo 'TestFlight upload requires macOS and Xcode.' >&2; exit 1; }
 : "${RUNNER_TEMP:?}" "${APPLE_TEAM_ID:?}" "${ASC_KEY_ID:?}" "${ASC_ISSUER_ID:?}"
 : "${APPLE_DISTRIBUTION_P12_BASE64:?}" "${APPLE_PROFILE_BASE64:?}" "${APPLE_P12_PASSWORD:?}"
+# APPLE_SHARE_PROFILE_BASE64 is optional: without it the share extension's profile comes from App Store Connect.
 : "${ASC_PRIVATE_KEY:?}" "${KGS_BUILD_NUMBER:?}"
 : "${ASC_APP_ID:?}" "${TESTFLIGHT_GROUP_ID:?}"
 
 signing_dir=$(mktemp -d "$RUNNER_TEMP/kgs-signing.XXXXXX")
 keychain_path="$signing_dir/signing.keychain-db"
-profile_path=''
-legacy_profile_path=''
+installed_profiles=()
 cleanup() {
   security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
-  if [[ -n "$profile_path" ]]; then rm -f "$profile_path"; fi
-  if [[ -n "$legacy_profile_path" ]]; then rm -f "$legacy_profile_path"; fi
+  # bash 3.2 (macOS) treats an empty array as unset under set -u.
+  for path in ${installed_profiles[@]+"${installed_profiles[@]}"}; do rm -f "$path"; done
   rm -rf "$signing_dir"
 }
 trap cleanup EXIT
@@ -32,8 +32,11 @@ API_PRIVATE_KEYS_DIR="$signing_dir/private_keys" xcrun altool --list-apps \
   --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format json \
   > "$RUNNER_TEMP/kgs-testflight/uploader-auth.log" 2>&1
 echo 'Verified Apple upload authentication.'
-profile_uuid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["uuid"])' "$signing_dir/settings.json")
-profile_name=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["profile_name"])' "$signing_dir/settings.json")
+setting() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$signing_dir/settings.json" "$1"; }
+profile_uuid=$(setting uuid)
+profile_name=$(setting profile_name)
+share_profile_uuid=$(setting share_uuid)
+share_profile_name=$(setting share_profile_name)
 keychain_password=$(openssl rand -base64 32)
 security create-keychain -p "$keychain_password" "$keychain_path"
 security set-keychain-settings -lut 21600 "$keychain_path"
@@ -47,12 +50,19 @@ security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain
 security list-keychains -d user -s "$keychain_path"
 
 # Xcode 16+ uses the Developer directory; retain compatibility with the older location.
-profile_path="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$profile_uuid.mobileprovision"
-legacy_profile_path="$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
-mkdir -p "$(dirname "$profile_path")" "$(dirname "$legacy_profile_path")"
-cp "$signing_dir/profile.mobileprovision" "$profile_path"
-cp "$signing_dir/profile.mobileprovision" "$legacy_profile_path"
-unset APPLE_DISTRIBUTION_P12_BASE64 APPLE_PROFILE_BASE64 APPLE_P12_PASSWORD ASC_PRIVATE_KEY keychain_password
+install_profile() {
+  local source=$1 uuid=$2 directory
+  for directory in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+      "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+    mkdir -p "$directory"
+    cp "$source" "$directory/$uuid.mobileprovision"
+    installed_profiles+=("$directory/$uuid.mobileprovision")
+  done
+}
+install_profile "$signing_dir/profile.mobileprovision" "$profile_uuid"
+install_profile "$signing_dir/share-profile.mobileprovision" "$share_profile_uuid"
+unset APPLE_DISTRIBUTION_P12_BASE64 APPLE_PROFILE_BASE64 APPLE_SHARE_PROFILE_BASE64 APPLE_P12_PASSWORD \
+  ASC_PRIVATE_KEY keychain_password
 
 archive_path="$RUNNER_TEMP/kgs-testflight/KgsCalendar.xcarchive"
 mkdir -p "$RUNNER_TEMP/kgs-testflight"
@@ -60,10 +70,12 @@ xcodebuild -project iosApp/KgsCalendar.xcodeproj -scheme KgsCalendar \
   -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
   -archivePath "$archive_path" -derivedDataPath "$RUNNER_TEMP/kgs-derived" -jobs 1 \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER="$profile_name" \
+  CODE_SIGN_IDENTITY='Apple Distribution' \
+  KGS_APP_PROFILE_SPECIFIER="$profile_name" KGS_SHARE_PROFILE_SPECIFIER="$share_profile_name" \
   CURRENT_PROJECT_VERSION="$KGS_BUILD_NUMBER" \
   archive 2>&1 | tee "$RUNNER_TEMP/kgs-testflight/archive.log"
 python3 tools/ios/package_app.py validate "$archive_path" --build-number "$KGS_BUILD_NUMBER"
+codesign --verify --strict "$archive_path/Products/Applications/KgsCalendar.app/PlugIns/KgsShare.appex"
 codesign --verify --strict "$archive_path/Products/Applications/KgsCalendar.app"
 
 # Export using the installed signing identity. Xcode's account-based upload path

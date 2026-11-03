@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.IcsEventReader
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
@@ -9,7 +11,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
+import kotlin.time.Instant
 
 @RunWith(RobolectricTestRunner::class)
 class EventImportsTest {
@@ -74,8 +76,8 @@ class EventImportsTest {
         assertEquals(2, events.size)
         assertEquals("Team meeting 🗓️", events[0].event.title)
         assertTrue(events[1].event.allDay)
-        assertEquals(harness.startOfDay(java.time.LocalDate.of(2026, 10, 24)), events[1].event.startsAtMillis)
-        assertEquals(harness.startOfDay(java.time.LocalDate.of(2026, 10, 27)), events[1].event.endsAtMillis)
+        assertEquals(harness.startOfDay(kotlinx.datetime.LocalDate.of(2026, 10, 24)), events[1].event.startsAtMillis)
+        assertEquals(harness.startOfDay(kotlinx.datetime.LocalDate.of(2026, 10, 27)), events[1].event.endsAtMillis)
         assertFalse(events[0].rawIcs.contains("UID:two"))
     }
 
@@ -156,10 +158,10 @@ class EventImportsTest {
         """.trimIndent())
         imports.importEvents(raw, LOCAL_COLLECTION)
         val day = harness.eventsIn(LOCAL_COLLECTION).single { it.uid == "dst-day" }
-        assertEquals(harness.startOfDay(java.time.LocalDate.of(2026, 10, 26)), day.endsAtMillis)
+        assertEquals(harness.startOfDay(kotlinx.datetime.LocalDate.of(2026, 10, 26)), day.endsAtMillis)
         val expanded = harness.repository.eventsSnapshot(
-            harness.startOfDay(java.time.LocalDate.of(2026, 10, 24)),
-            harness.startOfDay(java.time.LocalDate.of(2026, 10, 28)),
+            harness.startOfDay(kotlinx.datetime.LocalDate.of(2026, 10, 24)),
+            harness.startOfDay(kotlinx.datetime.LocalDate.of(2026, 10, 28)),
         ).filter { it.uid == "utc-series" }
         assertEquals(listOf("2026-10-24T08:00:00Z", "2026-10-25T08:00:00Z", "2026-10-26T08:00:00Z"),
             expanded.map { Instant.ofEpochMilli(it.startsAtMillis).toString() })

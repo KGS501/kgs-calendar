@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.remote.CalDavTrashBinSupport
@@ -22,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 /** "Recently deleted" against a Nextcloud-style CalDAV trash bin on the fake server. */
 @RunWith(RobolectricTestRunner::class)
@@ -73,7 +75,7 @@ class ServerTrashRepositoryTest {
         harness.addSyncedCalDavAccount()
         val account = harness.account(AccountEntity.PRIMARY_ID)!!
         val oldCache = CalDavTrashBinSupport(account.calendarHomeUrl!!, null,
-            System.currentTimeMillis(), probeVersion = 0)
+            nowMillis(), probeVersion = 0)
         harness.database.accountDao().updateCapabilitiesJson(account.id, oldCache.writeInto(account.capabilitiesJson))
         server.trashBinEnabled = true
         server.clearRequests()
@@ -164,7 +166,7 @@ class ServerTrashRepositoryTest {
         val taskHref = server.putRemote(server.tasksHref, "todo.ics", SampleIcs.task("remote-task", "Write agenda"))
         harness.addSyncedCalDavAccount()
         assertTrue(trash().isEmpty())
-        val deletedAt = System.currentTimeMillis() / 1000 - 3600
+        val deletedAt = nowMillis() / 1000 - 3600
         // Deleted in the Nextcloud web UI or on another device.
         val eventObject = server.trashRemote(eventHref, deletedAt)
         val taskObject = server.trashRemote(taskHref, deletedAt - 60)
@@ -190,7 +192,7 @@ class ServerTrashRepositoryTest {
         assertEquals(SourceType.CalDav, event.sourceType)
         assertEquals(deletedAt * 1000, event.deletedAtMillis)
         assertEquals((deletedAt + 7L * 24 * 60 * 60) * 1000, event.expiresAtMillis)
-        assertEquals(7, TrashRetention.daysLeft(event.expiresAtMillis, System.currentTimeMillis()))
+        assertEquals(7, TrashRetention.daysLeft(event.expiresAtMillis, nowMillis()))
         assertTrue(event.rawIcs.unfoldedIcs().contains("SUMMARY:Kickoff"))
         assertTrue(event.hasTime)
         val task = items.single { it.componentType == ComponentType.Task }

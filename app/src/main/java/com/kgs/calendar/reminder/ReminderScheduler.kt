@@ -1,5 +1,7 @@
 package com.kgs.calendar.reminder
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import java.util.Locale
 import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.app.AlarmManager
@@ -19,10 +21,10 @@ import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 
 /**
  * Schedules local notifications for event/task reminders via AlarmManager.
@@ -69,7 +71,7 @@ object ReminderScheduler {
         val repository = graph.repository
         // Hidden calendars, and hidden events or tasks of a calendar, never notify.
         val (events, tasks) = repository.reminderCandidates(graph.settingsStore.collectionVisibility.first())
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
         // Recent occurrences are planned too, to catch up reminders whose alarm never went off.
         val planFrom = now - MissedReminders.GRACE_MILLIS

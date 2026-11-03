@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import com.kgs.calendar.data.query.CalendarQueries
 import com.kgs.calendar.data.settings.SettingsStore
@@ -9,7 +11,7 @@ import com.kgs.calendar.widget.render.KgsWidgetRenderer
 import com.kgs.calendar.widget.state.WidgetStateStore
 import com.kgs.calendar.widget.update.KgsWidgetUpdateScheduler
 import com.kgs.calendar.widget.update.KgsWidgetUpdater
-import java.time.ZoneId
+import com.kgs.calendar.time.ZoneId
 
 /**
  * Everything the widgets need, owned by [com.kgs.calendar.AppGraph]. Widget entry points

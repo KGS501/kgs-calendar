@@ -152,12 +152,12 @@ class AppGraph(context: Context) {
         }
     }
 
-    val uiStrings = UiStrings { id -> appContext.getString(id) }
+    val uiStrings = UiStrings { id -> id.text(java.util.Locale.getDefault()) }
 
     val calendarFileExporter = CalendarFileExporter { collectionHrefs, target ->
         val result = calendarData.export.export(collectionHrefs)
         withContext(Dispatchers.IO) {
-            val output = appContext.contentResolver.openOutputStream(target, "wt") ?: error("The file can't be written.")
+            val output = appContext.contentResolver.openOutputStream(android.net.Uri.parse(target.value), "wt") ?: error("The file can't be written.")
             output.use { it.write(result.rawIcs.toByteArray(Charsets.UTF_8)) }
         }
         result.items
@@ -166,7 +166,7 @@ class AppGraph(context: Context) {
     val pickedContentReader = PickedContentReader { uri ->
         withContext(Dispatchers.IO) {
             runCatching {
-                appContext.contentResolver.openInputStream(uri)?.use { input ->
+                appContext.contentResolver.openInputStream(android.net.Uri.parse(uri.value))?.use { input ->
                     // Large photos are scaled down anyway; refuse anything unreasonably big.
                     val bytes = input.readBytes()
                     bytes.takeIf { it.size <= MAX_PICKED_IMAGE_BYTES }

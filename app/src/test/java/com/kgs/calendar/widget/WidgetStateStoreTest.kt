@@ -1,11 +1,13 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.kgs.calendar.widget.model.MonthCommand
 import com.kgs.calendar.widget.state.WidgetStateStore
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

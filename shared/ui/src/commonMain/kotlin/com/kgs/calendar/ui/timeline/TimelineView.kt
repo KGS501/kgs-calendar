@@ -1,0 +1,2129 @@
+@file:OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+
+package com.kgs.calendar.ui
+
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.testTag
+import com.kgs.calendar.ui.res.stringResource
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.zIndex
+import com.kgs.calendar.ui.haptics.DragSnapHaptics
+import com.kgs.calendar.ui.res.Res
+import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.data.settings.TaskColorMode
+import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.MAX_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.MIN_MULTI_DAY_COUNT
+import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.domain.model.startOfWeek
+import com.kgs.calendar.domain.model.timelineDayCount
+import com.kgs.calendar.domain.model.timelineVisibleAnchor
+import com.kgs.calendar.ui.calendar.DayEndHour
+import com.kgs.calendar.ui.calendar.DayPagerPageCount
+import com.kgs.calendar.ui.calendar.DayStartHour
+import com.kgs.calendar.ui.calendar.DefaultTaskDurationMillis as DEFAULT_TASK_DURATION_MILLIS
+import com.kgs.calendar.ui.calendar.toDayDate
+import com.kgs.calendar.ui.calendar.toDayPage
+import com.kgs.calendar.ui.timeline.fallbackPagerSnapPageLimit
+import com.kgs.calendar.ui.timeline.FullWeekPagerFlingBehavior
+import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
+import com.kgs.calendar.ui.timeline.pagePosition
+import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
+import com.kgs.calendar.ui.timeline.weekStartPageOffset
+import com.kgs.calendar.ui.layout.collapsedRowsAtViewport
+import com.kgs.calendar.ui.layout.buildAllDayViewportWindow
+import com.kgs.calendar.ui.layout.rightEdgeSquashGeometry
+import com.kgs.calendar.ui.model.orderedOverdueTasks
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemOrigin
+import com.kgs.calendar.ui.timeline.NoOpTimelineTimedDragReporter
+import com.kgs.calendar.ui.timeline.PinchSnapshot
+import com.kgs.calendar.ui.timeline.TimelineDragPoint
+import com.kgs.calendar.ui.timeline.TimelineDragReducer
+import com.kgs.calendar.ui.timeline.TimelineDragSession
+import com.kgs.calendar.ui.timeline.TimelineDraggedItem
+import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineDropTarget
+import com.kgs.calendar.ui.timeline.TimelineTimedDragReporter
+import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
+import com.kgs.calendar.ui.timeline.TimelineViewportState
+import com.kgs.calendar.ui.timeline.updateVerticalPinch
+import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
+import com.kgs.calendar.time.ChronoUnit
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+
+private val OverdueTasksFloatOffset = 6.dp
+private val CalendarWeekMinimumFullLabelWidth = 88.dp
+private val CalendarWeekCompactLabelWidth = 36.dp
+private const val OverduePanelExpandedViewportFraction = 0.4f
+
+private fun Modifier.clipTimelineViewport(topOverflow: Dp): Modifier = drawWithContent {
+    clipRect(
+        left = 0f,
+        top = -topOverflow.toPx().coerceAtLeast(0f),
+        right = size.width,
+        bottom = size.height,
+    ) {
+        this@drawWithContent.drawContent()
+    }
+}
+
+private data class TimelineRootDragLayout(
+    val rootOrigin: TimelineDragPoint,
+    val anchorPage: Int,
+    val anchorOffsetPx: Float,
+    val dayWidthPx: Float,
+    val dayStepPx: Float,
+    val sidebarWidthPx: Float,
+    val dayHeaderHeightPx: Float,
+    val fixedAllDayBoundaryY: Float,
+    val sourceInsetXPx: Float,
+    val initialPointerYPx: Float,
+    val initialTimeScrollPx: Int,
+    val sourceTopPx: Float,
+    val sourceWidthPx: Float,
+    val sourceHeightPx: Float,
+)
+
+private data class ActiveTimelineTimedDrag(
+    val item: TimelineDraggedItem,
+    val session: TimelineDragSession,
+    val layout: TimelineRootDragLayout,
+    val awaitingCommit: Boolean = false,
+)
+
+private interface TimelineVerticalPinchOwner {
+    fun begin(upperY: Float, lowerY: Float): PinchSnapshot?
+    fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float)
+    fun end()
+}
+
+val TimelineHourHeightDpSemanticsKey =
+    SemanticsPropertyKey<Float>("TimelineHourHeightDp")
+val TimelineScrollPxSemanticsKey =
+    SemanticsPropertyKey<Int>("TimelineScrollPx")
+val TimelineSelectedDayOffsetPxSemanticsKey =
+    SemanticsPropertyKey<Int>("TimelineSelectedDayOffsetPx")
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun TimelineView(
+    state: CalendarUiState,
+    // The active timeline view — Day (1 column) or ThreeDay (3 columns). The same composable
+    // serves both; switching between them animates the column width rather than swapping.
+    selectedView: CalendarViewMode,
+    onDateSelected: (LocalDate) -> Unit,
+    onViewSelected: (CalendarViewMode) -> Unit,
+    onMultiDayCountChanged: (Int) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onSlotSelected: (LocalDate, LocalTime) -> Unit,
+    onAllDaySlotSelected: (LocalDate) -> Unit,
+    draftEvent: DraftEventSelection?,
+    onDraftEventChanged: (DraftEventSelection) -> Unit,
+    onDraftInteraction: () -> Unit,
+    onDraftTap: () -> Unit,
+    timelineBottomInset: Dp,
+    onDetail: (DetailSheet) -> Unit,
+    overdueTasksExpanded: Boolean = false,
+    onOverdueTasksExpandedChange: (Boolean) -> Unit = {},
+    // Hoisted so the vertical zoom (pinch) and scroll position are shared between the
+    // 3-day and 1-day instances and survive the morph between them.
+    timeScroll: androidx.compose.foundation.ScrollState,
+    hourHeightDp: Float,
+    onHourHeightChange: (Float) -> Unit,
+    onTimeScrollChanged: (Int) -> Unit = {},
+    initialTimeScrollMinute: Float = 9f * 60f,
+    initialTimeScrollApplied: Boolean,
+    onInitialTimeScrollApplied: () -> Unit,
+    monthMorphDay: LocalDate,
+    isLandscape: Boolean = false,
+    landscapeCompactRequested: Boolean = false,
+) {
+    val scope = rememberCoroutineScope()
+    val calendarTime = LocalCalendarTimeSnapshot.current
+    val now = calendarTime.nowMinute
+    val density = LocalDensity.current
+    val headerPresentation = timelineHeaderPresentation(
+        isLandscape = isLandscape,
+        landscapeCompactRequested = landscapeCompactRequested,
+        showCalendarWeeks = state.showCalendarWeeks,
+    )
+    val animatedDayHeaderHeight by animateDpAsState(
+        targetValue = headerPresentation.height,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineDayHeaderHeight",
+    )
+    val animatedWeekLabelHeight by animateDpAsState(
+        targetValue = headerPresentation.weekLabelHeight,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineWeekLabelHeight",
+    )
+    val animatedMultiDayControlsTopOffset by animateDpAsState(
+        targetValue = headerPresentation.multiDayControlsTopOffset,
+        animationSpec = tween(340, easing = MotionEmphasized),
+        label = "timelineMultiDayControlsTopOffset",
+    )
+    val calendarWeekAlpha by animateFloatAsState(
+        targetValue = if (state.showCalendarWeeks) 1f else 0f,
+        animationSpec = tween(220, easing = MotionStandard),
+        label = "timelineWeekLabelAlpha",
+    )
+    val calendarWeekFontSize = headerPresentation.weekLabelFontSize
+    var timelineRootOffset by remember { mutableStateOf(Offset.Zero) }
+    var activeTimedDrag by remember { mutableStateOf<ActiveTimelineTimedDrag?>(null) }
+    var dayViewportWidthPx by remember { mutableStateOf(0) }
+    var gridViewportHeightPx by remember { mutableStateOf(0) }
+    var timelineViewportHeightPx by remember { mutableStateOf(0) }
+    val currentOnTimeScrollChanged = rememberUpdatedState(onTimeScrollChanged)
+    val bodyScrollableState = rememberScrollableState { delta ->
+        val consumed = timeScroll.dispatchRawDelta(-delta)
+        currentOnTimeScrollChanged.value(timeScroll.value)
+        -consumed
+    }
+    val daySpacingPx = with(density) { DayColumnSpacing.roundToPx().toFloat() }
+    // The tapped day that is currently expanding into / collapsing out of the 1-day view, plus
+    // the 3-day window it morphs within. Non-null only while a header-tap morph is playing; it
+    // drives the in-place "zoom around the tapped column" overlay below. Cleared when the
+    // column-count animation settles.
+    var morphContext by remember { mutableStateOf<DayMorphContext?>(null) }
+    // The timeline's OWN mode (Day vs ThreeDay), held independently of selectedView. When the app
+    // switches away to month/agenda/tasks, the timeline keeps its last mode while it exits — so a
+    // 1-day view collapses back into a month cell (and a 3-day view does NOT pretend to be a day).
+    // selectedView is momentarily "Month" for the outgoing timeline, which would otherwise flip
+    // this to 3-day and break the reverse morph.
+    var timelineMode by remember {
+        mutableStateOf(if (selectedView == CalendarViewMode.Day) CalendarViewMode.Day else CalendarViewMode.ThreeDay)
+    }
+    LaunchedEffect(selectedView) {
+        if (selectedView == CalendarViewMode.Day) timelineMode = CalendarViewMode.Day
+        else if (selectedView == CalendarViewMode.ThreeDay) timelineMode = CalendarViewMode.ThreeDay
+    }
+    val isDayMode = timelineMode == CalendarViewMode.Day
+    val isWeekMode = !isDayMode && state.weekViewEnabled
+    val fullWeekPagingEnabled = isWeekMode && state.fullWeekSwipeEnabled
+    val configuredMultiDayCount = state.multiDayCount.coerceMultiDayCount()
+    val multiDayCount = timelineDayCount(
+        viewMode = CalendarViewMode.ThreeDay,
+        weekViewEnabled = state.weekViewEnabled,
+        multiDayCount = configuredMultiDayCount,
+    )
+    val fallbackSnapPageLimit = fallbackPagerSnapPageLimit(
+        isDayMode = isDayMode,
+        weekViewEnabled = state.weekViewEnabled,
+        configuredMultiDayCount = configuredMultiDayCount,
+    )
+    val targetDayCount = if (isDayMode) 1 else multiDayCount
+    val dayEndGutterPx = daySpacingPx
+    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
+    // Animate the column COUNT as a float between 1 and the configured multi-day count. The pager's fixed page size is
+    // derived from it for the steady states and the back-button morph; the header-tap morph
+    // instead uses [morphContext] + the overlay so the tapped day can expand from ANY column
+    // (the pager can only ever anchor the leftmost page).
+    val animatedDayCount by animateFloatAsState(
+        targetValue = targetDayCount.toFloat(),
+        animationSpec = tween(MorphDurationMs, easing = MorphEasing),
+        label = "dayColumnCount",
+    )
+    // 0 = full multi-day, 1 = full 1-day. Derived from the animating count so the overlay and the
+    // underlying pager are always perfectly in step.
+    val morphSpan = (multiDayCount - 1).coerceAtLeast(1).toFloat()
+    val morphProgress = ((multiDayCount - animatedDayCount) / morphSpan).coerceIn(0f, 1f)
+    // Day indexing (which dates are visible, all-day stacking) uses the integer target so the
+    // content is correct for where we're heading; only the WIDTH interpolates.
+    // Track the in-between count as the width animates (round up) so the visible-day window and
+    // the all-day band reflect the slide — e.g. a neighbour day's all-day chips stay rendered
+    // while it slides out, instead of snapping to the destination count the instant the morph
+    // starts.
+    val clampedDayCount = ceil(animatedDayCount).roundToInt().coerceIn(1, MAX_MULTI_DAY_COUNT)
+    val dayWidthPx = ((dayGeometryViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
+        .coerceAtLeast(with(density) { 32.dp.toPx() })
+    val dayWidthDp = with(density) { dayWidthPx.toDp() }
+    val pagerDayWidthPx = with(density) { dayWidthDp.roundToPx().toFloat() }
+    val pagerDayStepPx = pagerDayWidthPx + with(density) { DayColumnSpacing.roundToPx().toFloat() }
+    // Derive the pager anchor from the active timeline policy, not visibleRange.startDate. The
+    // loaded range is intentionally wider than the displayed window for morphs, so its start may
+    // be several days earlier than either the focused date or the aligned week anchor.
+    val selectedAnchorDate = timelineVisibleAnchor(
+        date = state.selectedDate,
+        viewMode = timelineMode,
+        weekViewEnabled = state.weekViewEnabled,
+        fullWeekSwipeEnabled = state.fullWeekSwipeEnabled,
+        firstDayOfWeek = state.firstDayOfWeek,
+    )
+    val selectedPage = selectedAnchorDate.toDayPage()
+    val pagerState = rememberPagerState(initialPage = selectedPage, pageCount = { DayPagerPageCount })
+    val alignedWeekPageOffset = remember(state.firstDayOfWeek) {
+        weekStartPageOffset(state.firstDayOfWeek)
+    }
+    val fullWeekGestureState = remember(alignedWeekPageOffset, fullWeekPagingEnabled) {
+        FullWeekPagerGestureState(
+            initialAnchorPage = selectedPage,
+            pageCount = DayPagerPageCount,
+            weekStartPageOffset = alignedWeekPageOffset,
+        )
+    }
+    val fullWeekFlingBehavior = remember(pagerState, fullWeekGestureState) {
+        FullWeekPagerFlingBehavior(
+            pagerState = pagerState,
+            gestureState = fullWeekGestureState,
+            animationSpec = tween(durationMillis = 320, easing = MotionEmphasized),
+        )
+    }
+    val fallbackPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = pagerState,
+        pagerSnapDistance = PagerSnapDistance.atMost(fallbackSnapPageLimit),
+        snapAnimationSpec = tween(durationMillis = 240, easing = MotionEmphasized),
+    )
+    var programmaticTargetPage by remember { mutableStateOf<Int?>(null) }
+    var handledWidgetDateNavigationSerial by remember { mutableStateOf(0) }
+    val latestMorphContext by rememberUpdatedState(morphContext)
+    val latestSelectedDate by rememberUpdatedState(state.selectedDate)
+    val latestSelectedPage by rememberUpdatedState(selectedPage)
+
+    LaunchedEffect(selectedPage, fullWeekPagingEnabled, fullWeekGestureState) {
+        if (fullWeekPagingEnabled) fullWeekGestureState.resetAnchor(selectedPage)
+    }
+
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
+        if (!fullWeekPagingEnabled) return@LaunchedEffect
+        pagerState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> fullWeekGestureState.beginGesture(
+                    pagePosition = pagerState.pagePosition(),
+                    settledPage = pagerState.settledPage,
+                )
+                is DragInteraction.Stop ->
+                    fullWeekGestureState.recordGesturePosition(pagerState.pagePosition())
+                is DragInteraction.Cancel -> fullWeekGestureState.cancelGesture()
+            }
+        }
+    }
+
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
+        if (!fullWeekPagingEnabled) return@LaunchedEffect
+        snapshotFlow { pagerState.pagePosition() }
+            .collect(fullWeekGestureState::recordGesturePosition)
+    }
+    // Keep one physical page as the geometry anchor until it actually leaves the viewport.
+    // PagerState.currentPage changes near the middle of a swipe and can briefly get ahead of the
+    // layout offsets, which makes viewport-spanning cards correct their x position at settlement.
+    val allDayAnchorPageInfo = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
+    val allDayAnchorPage = allDayAnchorPageInfo
+        ?.index
+        ?.coerceIn(0, DayPagerPageCount - 1)
+        ?: pagerState.currentPage.coerceIn(0, DayPagerPageCount - 1)
+    val allDayAnchorOffsetPx = allDayAnchorPageInfo
+        ?.offset
+        ?.toFloat()
+        ?: (-pagerState.currentPageOffsetFraction * pagerDayStepPx)
+    val actualVisiblePages = remember(
+        allDayAnchorPage,
+        allDayAnchorOffsetPx,
+        pagerDayWidthPx,
+        pagerDayStepPx,
+        dayViewportWidthPx,
+        clampedDayCount,
+    ) {
+        val pageBuffer = clampedDayCount + 2
+        buildAllDayViewportWindow(
+            anchorPage = allDayAnchorPage,
+            anchorOffsetPx = allDayAnchorOffsetPx,
+            dayWidthPx = pagerDayWidthPx,
+            dayStepPx = pagerDayStepPx,
+            viewportWidthPx = dayViewportWidthPx.toFloat(),
+            bufferStartPage = (allDayAnchorPage - pageBuffer).coerceAtLeast(0),
+            bufferEndPage = (allDayAnchorPage + pageBuffer).coerceAtMost(DayPagerPageCount - 1),
+            renderBleedPx = 0f,
+            layoutViewportWidthPx = dayGeometryViewportWidthPx,
+        ).layoutPages
+    }
+    val calendarWeekDayWidthPx: Float
+    val calendarWeekVisibleDays: List<VisibleTimelineDay>
+    val activeMorphContext = morphContext
+    if (activeMorphContext == null) {
+        calendarWeekDayWidthPx = pagerDayWidthPx
+        calendarWeekVisibleDays = actualVisiblePages.map { page ->
+            VisibleTimelineDay(
+                date = page.toDayDate(),
+                leftPx = allDayAnchorOffsetPx + (page - allDayAnchorPage) * pagerDayStepPx,
+            )
+        }
+    } else {
+        val columnWidthMulti = (
+            (dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount
+            ).coerceAtLeast(1f)
+        val step = columnWidthMulti + daySpacingPx
+        val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+        calendarWeekDayWidthPx = columnWidthMulti * zoom
+        calendarWeekVisibleDays = activeMorphContext.days.mapIndexed { slot, day ->
+            VisibleTimelineDay(
+                date = day,
+                leftPx = (slot - activeMorphContext.expandSlot) * step * zoom +
+                    activeMorphContext.expandSlot * step * (1f - morphProgress),
+            )
+        }
+    }
+    val calendarWeekLabelMode = timelineCalendarWeekLabelMode(
+        dayWidthPx = calendarWeekDayWidthPx,
+        minimumFullLabelWidthPx = with(density) { CalendarWeekMinimumFullLabelWidth.toPx() },
+    )
+    val calendarWeekLabelWidthPx = when (calendarWeekLabelMode) {
+        TimelineCalendarWeekLabelMode.Full -> calendarWeekDayWidthPx
+        TimelineCalendarWeekLabelMode.Compact -> with(density) { CalendarWeekCompactLabelWidth.toPx() }
+    }
+    val calendarWeekPlacements = timelineCalendarWeekPlacements(
+        visibleDays = calendarWeekVisibleDays,
+        dayWidthPx = calendarWeekDayWidthPx,
+        viewportWidthPx = dayViewportWidthPx.toFloat(),
+        firstDayOfWeek = state.firstDayOfWeek,
+        labelWidthPx = calendarWeekLabelWidthPx,
+    )
+    val visibleStartDate = actualVisiblePages.minOrNull()?.toDayDate() ?: state.selectedDate
+    val visibleEndDate = actualVisiblePages.maxOrNull()?.toDayDate() ?: visibleStartDate.plusDays((clampedDayCount - 1).toLong())
+    val pagerVisibleDays = actualVisiblePages.map { it.toDayDate() }
+    val overdueTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, calendarTime.today, calendarTime.revision) {
+        orderedOverdueTasks(
+            tasks = state.scheduledOpenTasks + state.missedTaskOccurrences,
+            today = calendarTime.today,
+            zoneId = ZoneId.systemDefault(),
+        )
+    }
+    val eventsByDay = remember(state.events) { state.events.indexEventsByDay() }
+    val calendarTasks = remember(state.datedTasks, state.showCompletedTasksInCalendar) {
+        if (state.showCompletedTasksInCalendar) state.datedTasks else state.datedTasks.filterNot { it.isCompleted }
+    }
+    val tasksByDay = remember(calendarTasks) { calendarTasks.indexTasksByDay() }
+    var allDayExpanded by remember { mutableStateOf(false) }
+    val allDayAreaLayout = remember(pagerVisibleDays, state.events, calendarTasks, state.maxVisibleAllDayItems, allDayExpanded, draftEvent, clampedDayCount) {
+        pagerVisibleDays.allDayAreaLayout(
+            events = state.events,
+            tasks = calendarTasks,
+            maxVisibleItems = state.maxVisibleAllDayItems,
+            expanded = allDayExpanded,
+            draftDate = draftEvent?.takeIf { it.allDay }?.date,
+            priorityPageCount = clampedDayCount,
+        )
+    }
+    val baseAllDayHeight = allDayAreaLayout.height
+    val collapsedViewportRows = allDayAreaLayout.scene?.collapsedRowsAtViewport(
+        allDayAnchorPage, allDayAnchorOffsetPx, pagerDayWidthPx, pagerDayStepPx, dayGeometryViewportWidthPx,
+        minimumRows = allDayAreaLayout.draftRows,
+    ) ?: 0f
+    val collapsedViewportHeight = if (collapsedViewportRows == 0f) 22.dp else (collapsedViewportRows * 29f + 10f).dp
+    val visibleReservation = activeTimedDrag?.session?.reservation
+        ?.takeIf { reservation -> reservation.date in pagerVisibleDays }
+    val visibleAllDayHeight = visibleReservation
+        ?.minimumViewportHeight()
+        ?.let { reservationHeight -> maxOf(baseAllDayHeight, reservationHeight) }
+        ?: baseAllDayHeight
+    val requestedAllDayHeight = if (headerPresentation.showAllDaySection) visibleAllDayHeight else 0.dp
+    val allDayHasOverflow = headerPresentation.showAllDaySection && remember(
+        clampedDayCount,
+        pagerVisibleDays,
+        state.events,
+        calendarTasks,
+        state.maxVisibleAllDayItems,
+    ) {
+        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems, clampedDayCount)
+    }
+    val allDayArrowRotation by animateFloatAsState(
+        targetValue = if (allDayExpanded) 180f else 0f,
+        animationSpec = tween(MotionMedium, easing = MotionEmphasized),
+        label = "allDayArrowRotation",
+    )
+    // The section boundary keeps its normal easing. While it grows, the overlay is temporarily
+    // allowed to draw the newly active rows below that boundary so they are never clipped.
+    val animatedRestingAllDayHeight by animateDpAsState(
+        targetValue = requestedAllDayHeight,
+        animationSpec = tween(MorphDurationMs, easing = MorphEasing),
+        label = "allDayHeight",
+    )
+    val collapsedHeightWeight by animateFloatAsState(
+        targetValue = if (allDayExpanded) 0f else 1f,
+        animationSpec = tween(MorphDurationMs, easing = MorphEasing),
+        label = "allDayCollapsedHeightWeight",
+    )
+    val reservedViewportHeight = visibleReservation?.minimumViewportHeight()
+        ?.let { maxOf(collapsedViewportHeight, it) } ?: collapsedViewportHeight
+    // Only expansion uses a clock. Releasing an empty row follows the finger exactly,
+    // including holds and reversals, and moves the timed grid with the same boundary.
+    val releasedHeight = if (headerPresentation.showAllDaySection) {
+        val restingRows = allDayAreaLayout.scene?.metrics?.collapsedRowCount ?: 0
+        val restingHeight = if (restingRows == 0) 22.dp else (restingRows * 29 + 10).dp
+        (restingHeight - reservedViewportHeight).coerceAtLeast(0.dp) * collapsedHeightWeight
+    } else 0.dp
+    val animatedAllDayHeight = (animatedRestingAllDayHeight - releasedHeight).coerceAtLeast(0.dp)
+    val allowAllDayVerticalOverflow = requestedAllDayHeight > animatedRestingAllDayHeight
+    val timedGridTopOffset = animatedDayHeaderHeight + animatedAllDayHeight
+    val overdueExpandedHeight = if (timelineViewportHeightPx > 0) {
+        (
+            with(density) { timelineViewportHeightPx.toDp() } -
+                timedGridTopOffset -
+                OverdueTasksFloatOffset
+            ).coerceAtLeast(24.dp)
+    } else {
+        24.dp
+    }
+    BackHandler(enabled = overdueTasksExpanded) {
+        onOverdueTasksExpandedChange(false)
+    }
+    val minHourHeightDp = if (gridViewportHeightPx > 0) {
+        max(AbsoluteMinHourRowHeightDp, with(density) { gridViewportHeightPx.toDp().value } / (DayEndHour - DayStartHour + 1))
+    } else {
+        AbsoluteMinHourRowHeightDp
+    }
+
+    LaunchedEffect(minHourHeightDp) {
+        if (hourHeightDp < minHourHeightDp) onHourHeightChange(minHourHeightDp)
+    }
+
+    LaunchedEffect(selectedPage, morphContext, state.dateNavigationSerial, dayViewportWidthPx, timelineMode) {
+        // A header-tap morph owns the visible timeline until its final handoff. Moving the pager
+        // while that animation is starting makes a middle/right tapped column jump left before it
+        // expands. The handoff effect below settles the still-hidden pager immediately before the
+        // overlay is removed.
+        if (morphContext != null) return@LaunchedEffect
+        if (state.dateNavigationSerial > handledWidgetDateNavigationSerial) {
+            handledWidgetDateNavigationSerial = state.dateNavigationSerial
+            programmaticTargetPage = selectedPage
+            pagerState.scrollToPage(selectedPage)
+            programmaticTargetPage = null
+            return@LaunchedEffect
+        }
+        if (selectedView == CalendarViewMode.Day &&
+            pagerState.currentPage == selectedPage &&
+            abs(pagerState.currentPageOffsetFraction) > 0.001f
+        ) {
+            programmaticTargetPage = selectedPage
+            pagerState.scrollToPage(selectedPage)
+            programmaticTargetPage = null
+            return@LaunchedEffect
+        }
+        if (pagerState.currentPage != selectedPage && pagerState.settledPage != selectedPage) {
+            programmaticTargetPage = selectedPage
+            val distance = selectedPage - pagerState.currentPage
+            if (abs(distance) > 8) {
+                pagerState.scrollToPage(selectedPage - distance.coerceIn(-3, 3))
+            }
+            pagerState.animateScrollToPage(
+                page = selectedPage,
+                animationSpec = tween(durationMillis = 320, easing = MotionEmphasized),
+            )
+            programmaticTargetPage = null
+        }
+    }
+
+    LaunchedEffect(morphContext, animatedDayCount, targetDayCount, selectedPage, state.selectedDate) {
+        val ctx = morphContext
+        if (ctx != null && timelineMode == ctx.targetMode && abs(animatedDayCount - targetDayCount) < 0.001f) {
+            // Keep the overlay visible through one settled pager frame. Clearing it immediately
+            // from animateFloatAsState's completion callback reveals stale pager geometry for a
+            // single frame when the tapped day was not the leftmost 3-day column.
+            val targetDate = ctx.targetAnchorDate
+            programmaticTargetPage = targetDate.toDayPage()
+            pagerState.scrollToPage(targetDate.toDayPage())
+            if (state.selectedDate != targetDate) {
+                // Commit the selected date only after the visual morph has reached its target.
+                // Updating it at tap-time makes middle/right columns relocate to the pager's
+                // left edge before their expansion animation begins.
+                onDateSelected(targetDate)
+                return@LaunchedEffect
+            }
+            withFrameNanos { }
+            morphContext = null
+            programmaticTargetPage = null
+        }
+    }
+
+    LaunchedEffect(gridViewportHeightPx, hourHeightDp, timeScroll.maxValue) {
+        if (!initialTimeScrollApplied && gridViewportHeightPx > 0 && timeScroll.maxValue > 0) {
+            val target = with(density) {
+                (((initialTimeScrollMinute / 60f) - DayStartHour) * hourHeightDp).dp.roundToPx()
+            }
+            timeScroll.scrollTo(target.coerceIn(0, timeScroll.maxValue))
+            currentOnTimeScrollChanged.value(timeScroll.value)
+            onInitialTimeScrollApplied()
+        }
+    }
+    var pinchTargetScrollPx by remember(timeScroll) { mutableFloatStateOf(Float.NaN) }
+    val currentPinchBegin = rememberUpdatedState<(Float, Float) -> PinchSnapshot?>(
+        newValue = pinchBegin@ { upperY, lowerY ->
+            if (gridViewportHeightPx <= 0) return@pinchBegin null
+            scope.launch { timeScroll.stopScroll() }
+            pinchTargetScrollPx = timeScroll.value.toFloat()
+            PinchSnapshot.begin(
+                upperY = upperY,
+                lowerY = lowerY,
+                viewport = TimelineViewportState(
+                    hourHeightPx = with(density) { hourHeightDp.dp.toPx() },
+                    scrollPx = timeScroll.value.toFloat(),
+                ),
+                contentStartMinute = DayStartHour * 60,
+                contentEndMinute = (DayEndHour + 1) * 60,
+                viewportHeightPx = gridViewportHeightPx.toFloat(),
+                minHourHeightPx = with(density) { minHourHeightDp.dp.toPx() },
+                maxHourHeightPx = with(density) { MaxHourRowHeightDp.dp.toPx() },
+                contentTopY = with(density) { timedGridTopOffset.toPx() },
+            )
+        },
+    )
+    val currentPinchUpdate = rememberUpdatedState<(PinchSnapshot, Float, Float) -> Unit>(
+        newValue = { snapshot, upperY, lowerY ->
+            val update = updateVerticalPinch(snapshot, upperY, lowerY)
+            pinchTargetScrollPx = update.viewport.scrollPx
+            onHourHeightChange(with(density) { update.viewport.hourHeightPx.toDp().value })
+            timeScroll.dispatchRawDelta(update.viewport.scrollPx - timeScroll.value)
+            currentOnTimeScrollChanged.value(timeScroll.value)
+        },
+    )
+    val verticalPinchOwner = remember {
+        object : TimelineVerticalPinchOwner {
+            override fun begin(upperY: Float, lowerY: Float): PinchSnapshot? =
+                currentPinchBegin.value(upperY, lowerY)
+
+            override fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float) {
+                currentPinchUpdate.value(snapshot, upperY, lowerY)
+            }
+
+            override fun end() {
+                val targetScrollPx = pinchTargetScrollPx
+                if (!targetScrollPx.isFinite()) return
+                scope.launch {
+                    withFrameNanos { }
+                    timeScroll.scrollTo(targetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue))
+                    currentOnTimeScrollChanged.value(timeScroll.value)
+                    pinchTargetScrollPx = Float.NaN
+                }
+            }
+        }
+    }
+    LaunchedEffect(pinchTargetScrollPx, timeScroll.maxValue) {
+        if (!pinchTargetScrollPx.isFinite()) return@LaunchedEffect
+        val target = pinchTargetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue)
+        timeScroll.dispatchRawDelta((target - timeScroll.value).toFloat())
+        currentOnTimeScrollChanged.value(timeScroll.value)
+    }
+    var previousTimelineInsetPx by remember { mutableStateOf(0) }
+    LaunchedEffect(timelineBottomInset, gridViewportHeightPx) {
+        val insetPx = with(density) { timelineBottomInset.roundToPx() }
+        val delta = insetPx - previousTimelineInsetPx
+        if (delta != 0 && gridViewportHeightPx > 0 && timeScroll.maxValue > 0) {
+            withFrameNanos { }
+            timeScroll.animateScrollTo((timeScroll.value + delta).coerceIn(0, timeScroll.maxValue))
+            currentOnTimeScrollChanged.value(timeScroll.value)
+        }
+        previousTimelineInsetPx = insetPx
+    }
+
+    LaunchedEffect(pagerState, fullWeekGestureState, fullWeekPagingEnabled) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                if (fullWeekPagingEnabled) fullWeekGestureState.onSettled(page)
+                // Header morphs deliberately resize the pager columns. That internal relayout can
+                // change settledPage even though the user did not horizontally scroll. Treating it
+                // like a swipe is the legacy focus behavior that moves a tapped middle/right date
+                // to the left before its 1-day morph. During a morph, the explicit handoff effect
+                // above is the sole owner of selected-date updates.
+                if (latestMorphContext != null) return@collect
+                val target = programmaticTargetPage
+                if (target != null) {
+                    if (page == target) programmaticTargetPage = null
+                    return@collect
+                }
+                // The programmatic move above clears its target as soon as its animation returns,
+                // which can be before this collector sees the new settled page. Comparing with the
+                // current selection's anchor page keeps that late echo from selecting the week's
+                // first day instead of the chosen date.
+                timelineSettledPageSelection(
+                    settledPage = page,
+                    selectedAnchorPage = latestSelectedPage,
+                    selectedDate = latestSelectedDate,
+                )?.let(onDateSelected)
+            }
+    }
+
+    // Tapping a day header morphs between 3-day and 1-day. We capture which day was tapped and
+    // its column slot so the overlay can expand it FROM that position (not force it leftmost).
+    val onHeaderTap: (LocalDate) -> Unit = { day ->
+        if (isDayMode) {
+            // Collapse to multi-day or Week while preserving this day's target column.
+            val targetAnchor = if (state.weekViewEnabled) day.startOfWeek(state.firstDayOfWeek) else day
+            val targetDays = (0 until multiDayCount).map { targetAnchor.plusDays(it.toLong()) }
+            morphContext = DayMorphContext(
+                days = targetDays,
+                expandSlot = targetDays.indexOf(day).coerceAtLeast(0),
+                targetMode = CalendarViewMode.ThreeDay,
+                targetAnchorDate = targetAnchor,
+            )
+            scope.launch {
+                // First paint the affine overlay at the untouched 1-day geometry. Starting the
+                // width animation in the same frame as the tap lets pager/view state changes win
+                // the first draw and creates a visible snap before the actual morph.
+                withFrameNanos { }
+                timelineMode = CalendarViewMode.ThreeDay
+                onViewSelected(CalendarViewMode.ThreeDay)
+            }
+        } else {
+            // Expand this day to the 1-day view, zooming out of its current column in place.
+            val leftmost = visibleStartDate
+            val slot = ChronoUnit.DAYS.between(leftmost, day).toInt().coerceIn(0, multiDayCount - 1)
+            morphContext = DayMorphContext(
+                days = (0 until multiDayCount).map { leftmost.plusDays(it.toLong()) },
+                expandSlot = slot,
+                targetMode = CalendarViewMode.Day,
+                targetAnchorDate = day,
+            )
+            scope.launch {
+                // Keep one frame of the original 3-day positions before beginning the local
+                // animation. The persisted view setting follows the local mode instead of driving
+                // the animation, so a tapped middle/right date cannot be focused left first.
+                withFrameNanos { }
+                timelineMode = CalendarViewMode.Day
+                onViewSelected(CalendarViewMode.Day)
+            }
+        }
+    }
+
+    val todayDate = calendarTime.today
+    val todayPage = todayDate.toDayPage()
+    val currentLineGeometry = morphContext?.let { ctx ->
+        val todaySlot = ctx.days.indexOf(todayDate)
+        if (todaySlot >= 0 && dayGeometryViewportWidthPx > 0f) {
+            val columnWidthMulti = ((dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
+            val step = columnWidthMulti + daySpacingPx
+            val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+            val e = ctx.expandSlot
+            CurrentLineGeometry(
+                leftPx = (todaySlot - e) * step * zoom + e * step * (1f - morphProgress),
+                widthPx = columnWidthMulti * zoom,
+            )
+        } else {
+            null
+        }
+    } ?: if (morphContext == null && dayViewportWidthPx > 0) {
+        CurrentLineGeometry(
+            leftPx = ((todayPage - pagerState.currentPage) - pagerState.currentPageOffsetFraction) * pagerDayStepPx,
+            widthPx = pagerDayWidthPx,
+        )
+    } else {
+        null
+    }
+    val visibleTodayGeometry = currentLineGeometry?.let { geometry ->
+        val visibleLeftPx = max(geometry.leftPx, 0f)
+        val visibleRightPx = min(geometry.leftPx + geometry.widthPx, dayViewportWidthPx.toFloat())
+        val visibleWidthPx = (visibleRightPx - visibleLeftPx).coerceAtLeast(0f)
+        if (visibleWidthPx > 0f) {
+            VisibleTodayGeometry(
+                full = geometry,
+                leftPx = visibleLeftPx,
+                widthPx = visibleWidthPx,
+                visibleFraction = (visibleWidthPx / geometry.widthPx.coerceAtLeast(1f)).coerceIn(0f, 1f),
+            )
+        } else {
+            null
+        }
+    }
+    LaunchedEffect(overdueTasks.isEmpty(), visibleTodayGeometry == null) {
+        if (overdueTasks.isEmpty() || visibleTodayGeometry == null) {
+            onOverdueTasksExpandedChange(false)
+        }
+    }
+    val overduePanelExpansionProgress by animateFloatAsState(
+        targetValue = if (overdueTasksExpanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (overdueTasksExpanded) 380 else 320,
+            easing = MotionEmphasized,
+        ),
+        label = "overduePanelExpansionProgress",
+    )
+
+    val timedDragReducer = remember(density) {
+        TimelineDragReducer(
+            entryMarginPx = with(density) { 12.dp.toPx() },
+            exitMarginPx = with(density) { 16.dp.toPx() },
+        )
+    }
+    val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Unit>(
+        newValue = dragStart@ { start ->
+            if (morphContext != null || dayWidthPx <= 0f) return@dragStart
+            val firstPage = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
+            val anchorPage = firstPage?.index ?: pagerState.currentPage
+            val anchorOffsetPx = firstPage?.offset?.toFloat() ?: 0f
+            val sidebarWidthPx = with(density) { TimeSidebarWidth.toPx() }
+            val dayStepPx = dayWidthPx + daySpacingPx
+            val rootOrigin = TimelineDragPoint(timelineRootOffset.x, timelineRootOffset.y)
+            val sourcePageLeft = sidebarWidthPx + anchorOffsetPx +
+                (start.item.sourceDate.toDayPage() - anchorPage) * dayStepPx
+            val sourceLeft = start.cardBoundsInRoot.left - rootOrigin.x
+            val layout = TimelineRootDragLayout(
+                rootOrigin = rootOrigin,
+                anchorPage = anchorPage,
+                anchorOffsetPx = anchorOffsetPx,
+                dayWidthPx = dayWidthPx,
+                dayStepPx = dayStepPx,
+                sidebarWidthPx = sidebarWidthPx,
+                dayHeaderHeightPx = with(density) { animatedDayHeaderHeight.toPx() },
+                fixedAllDayBoundaryY = with(density) { (animatedDayHeaderHeight + animatedAllDayHeight).toPx() },
+                sourceInsetXPx = sourceLeft - sourcePageLeft,
+                initialPointerYPx = start.pointerInRoot.y - rootOrigin.y,
+                initialTimeScrollPx = timeScroll.value,
+                sourceTopPx = start.cardBoundsInRoot.top - rootOrigin.y,
+                sourceWidthPx = start.cardBoundsInRoot.width,
+                sourceHeightPx = start.cardBoundsInRoot.height,
+            )
+            activeTimedDrag = ActiveTimelineTimedDrag(
+                item = start.item,
+                session = TimelineDragSession(
+                    target = TimelineDropTarget.Timed(
+                        date = start.item.sourceDate,
+                        startMinute = start.item.startMinute,
+                        endMinute = start.item.endMinute,
+                    ),
+                ),
+                layout = layout,
+            )
+        },
+    )
+    val currentDragUpdate = rememberUpdatedState<(TimelineDragPoint) -> Unit>(
+        newValue = dragUpdate@ { pointerInRoot ->
+            val active = activeTimedDrag ?: return@dragUpdate
+            if (active.awaitingCommit) return@dragUpdate
+            val layout = active.layout
+            val pointerX = pointerInRoot.x - layout.rootOrigin.x
+            val pointerY = pointerInRoot.y - layout.rootOrigin.y
+            val dayAreaX = pointerX - layout.sidebarWidthPx
+            val pageDelta = floor((dayAreaX - layout.anchorOffsetPx) / layout.dayStepPx).toInt()
+            val targetPage = (layout.anchorPage + pageDelta).coerceIn(0, DayPagerPageCount - 1)
+            val targetDate = targetPage.toDayDate()
+            val duration = (active.item.endMinute - active.item.startMinute)
+                .coerceAtLeast(DraftMinDurationMinutes)
+            val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }.coerceAtLeast(1f)
+            val pointerDeltaY = pointerY - layout.initialPointerYPx + (timeScroll.value - layout.initialTimeScrollPx)
+            val minuteDelta = ((pointerDeltaY / hourHeightPx) * 60f).roundToInt().snapDraftMinute()
+            val startMinute = (active.item.startMinute + minuteDelta)
+                .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - duration)
+            val timedTarget = TimelineDropTarget.Timed(
+                date = targetDate,
+                startMinute = startMinute,
+                endMinute = startMinute + duration,
+            )
+            val reservation = allDayReservationFor(
+                date = targetDate,
+                events = state.events,
+                tasks = calendarTasks,
+                taskColorMode = state.taskColorMode,
+            )
+            val allDayTarget = TimelineDropTarget.AllDay(
+                date = reservation.date,
+                lane = reservation.lane,
+            )
+            activeTimedDrag = active.copy(
+                session = timedDragReducer.update(
+                    pointerY = pointerY,
+                    boundaryY = layout.fixedAllDayBoundaryY,
+                    timedTarget = timedTarget,
+                    allDayTarget = allDayTarget,
+                    previous = active.session,
+                ),
+            )
+        },
+    )
+    val currentDragEnd = rememberUpdatedState<() -> Unit>(
+        newValue = dragEnd@ {
+            val active = activeTimedDrag ?: return@dragEnd
+            activeTimedDrag = active.copy(awaitingCommit = true)
+            when (val target = active.session.target) {
+                is TimelineDropTarget.AllDay -> when (active.item.kind) {
+                    TimelineDraggedItemKind.Event -> onEventMovedAllDay(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                    )
+
+                    TimelineDraggedItemKind.Task -> onTaskMovedAllDay(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                    )
+                }
+
+                is TimelineDropTarget.Timed -> when (active.item.kind) {
+                    TimelineDraggedItemKind.Event -> onEventMoved(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                        target.startMinute.toDraftLocalTime(),
+                        target.endMinute.toDraftLocalTime(),
+                    )
+
+                    TimelineDraggedItemKind.Task -> onTaskMoved(
+                        active.item.resourceHref,
+                        active.item.occurrenceMillis,
+                        target.date,
+                        target.startMinute.toDraftLocalTime(),
+                        target.endMinute.toDraftLocalTime(),
+                    )
+                }
+            }
+            scope.launch {
+                delay(1_200)
+                val current = activeTimedDrag
+                if (
+                    current?.awaitingCommit == true &&
+                    current.item.resourceHref == active.item.resourceHref &&
+                    current.item.occurrenceMillis == active.item.occurrenceMillis
+                ) {
+                    activeTimedDrag = null
+                }
+            }
+        },
+    )
+    val currentDragCancel = rememberUpdatedState<() -> Unit>(newValue = { activeTimedDrag = null })
+    val timedDragReporter = remember {
+        object : TimelineTimedDragReporter {
+            override val usesRootOverlay: Boolean = true
+            override fun start(start: TimelineTimedDragStart) = currentDragStart.value(start)
+            override fun update(pointerInRoot: TimelineDragPoint) = currentDragUpdate.value(pointerInRoot)
+            override fun end() = currentDragEnd.value()
+            override fun cancel() = currentDragCancel.value()
+        }
+    }
+    // One light tick each time a dragged event or task snaps to another slot, day or all-day lane.
+    activeTimedDrag?.takeUnless { it.awaitingCommit }?.let { DragSnapHaptics(slot = it.session.target) }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned {
+                timelineRootOffset = it.positionInRoot()
+                timelineViewportHeightPx = it.size.height
+            }
+            .timelineVerticalPinch(verticalPinchOwner)
+            .semantics {
+                this[TimelineHourHeightDpSemanticsKey] = hourHeightDp
+                this[TimelineScrollPxSemanticsKey] = timeScroll.value
+                this[TimelineSelectedDayOffsetPxSemanticsKey] =
+                    pagerState.layoutInfo.visiblePagesInfo.firstOrNull { it.index == selectedPage }?.offset
+                        ?: Int.MIN_VALUE
+            }
+            .testTag("timeline-gesture-surface")
+            // The WHOLE 1-day timeline — time bar, all-day band and grid together — is the shared
+            // element for the month-cell <-> day morph, so the entire view scales up out of (and
+            // back into) the tapped month cell as one unit. Only enabled in 1-day mode: 3-day uses
+            // the affine overlay instead, and when this is disabled the modifier is a plain no-op.
+            // No solid backing: the real elements (grid, time bar, cards) fade in from transparency
+            // and the month cross-fades out underneath, so nothing flashes to a flat colour.
+            .morphBounds("dayblock-$monthMorphDay", enabled = isDayMode)
+            .clipTimelineViewport(
+                topOverflow = if (headerPresentation.allowTopOverflow) {
+                    -headerPresentation.weekLabelTopOffset
+                } else {
+                    0.dp
+                },
+            ),
+    ) {
+        Row(Modifier.matchParentSize()) {
+            Column(Modifier.width(TimeSidebarWidth)) {
+                Spacer(
+                    modifier = Modifier
+                        .height(animatedDayHeaderHeight)
+                        .fillMaxWidth(),
+                )
+                Spacer(Modifier.height(animatedAllDayHeight))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(timeScroll),
+                ) {
+                    Column {
+                        TimeSidebar(
+                            hours = DayStartHour..DayEndHour,
+                            hourHeightDp = hourHeightDp,
+                        )
+                        if (timelineBottomInset > 0.dp) {
+                            Spacer(Modifier.height(timelineBottomInset + 20.dp))
+                        }
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { dayViewportWidthPx = it.width },
+            ) {
+            // Enable per-item (event/task) morphs out of the month cell only for the real pager in
+            // 1-day mode and only when NOT doing the 3-day affine morph — so the selected day's
+            // cards pair up with the month pills, without the affine overlay's copies registering
+            // duplicate keys.
+            val itemMorphDay = if (morphContext == null && isDayMode) state.selectedDate else null
+            CompositionLocalProvider(
+                LocalMorphItemDay provides itemMorphDay,
+                LocalTimedDragReporter provides timedDragReporter,
+            ) {
+            HorizontalPager(
+                state = pagerState,
+                // Calculate from this measure pass, not the previous onSizeChanged callback.
+                // On first entry the callback still reports zero (and month morphs resize this
+                // viewport). Measuring tiny placeholder pages first lets Pager preserve an
+                // obsolete scroll offset when the real one-day width arrives.
+                pageSize = remember(animatedDayCount) {
+                    object : PageSize {
+                        override fun Density.calculateMainAxisPageSize(availableSpace: Int, pageSpacing: Int): Int =
+                            (availableSpace / animatedDayCount - pageSpacing).roundToInt()
+                                .coerceAtLeast(32.dp.roundToPx())
+                    }
+                },
+                pageSpacing = DayColumnSpacing,
+                flingBehavior = if (fullWeekPagingEnabled) {
+                    fullWeekFlingBehavior
+                } else {
+                    fallbackPagerFlingBehavior
+                },
+                // Keep both neighbours composed so they're ready to slide in when the 1-day
+                // view widens out to 3-day, instead of popping in once they reach the viewport.
+                beyondViewportPageCount = multiDayCount.coerceAtLeast(2),
+                // Hidden (but kept composed, so scroll/zoom state survive) while a header-tap
+                // morph plays — the affine overlay below renders that transition instead.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(1f)
+                    .alpha(if (morphContext != null) 0f else 1f),
+            ) { page ->
+                val day = page.toDayDate()
+                val containsTimedDraft = draftEvent?.let { !it.allDay && it.date == day } == true
+                Box(modifier = Modifier.zIndex(if (containsTimedDraft) 2f else 0f)) {
+                DayPagerColumn(
+                    day = day,
+                    visibleStartDate = visibleStartDate,
+                    visibleEndDate = visibleEndDate,
+                    allDayHeight = animatedAllDayHeight,
+                    hourHeightDp = hourHeightDp,
+                    dayWidthPx = pagerDayWidthPx,
+                    taskColorMode = state.taskColorMode,
+                    events = eventsByDay[day].orEmpty(),
+                    tasks = tasksByDay[day].orEmpty(),
+                    draftEvent = draftEvent.forDay(day),
+                    onDraftEventChanged = onDraftEventChanged,
+                    timeScroll = timeScroll,
+                    bottomObscuredHeight = timelineBottomInset,
+                    bodyScrollableState = bodyScrollableState,
+                    onDateSelected = onDateSelected,
+                    onDayHeaderClick = onHeaderTap,
+                    onSlotSelected = onSlotSelected,
+                    onDraftInteraction = onDraftInteraction,
+                    onDraftTap = onDraftTap,
+                    onTaskStatusChanged = onTaskStatusChanged,
+                    onEventMoved = onEventMoved,
+                    onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
+                    onDetail = onDetail,
+                    onGridViewportHeight = { gridViewportHeightPx = it },
+                    drawTimedGrid = true,
+                    dayHeaderHeight = animatedDayHeaderHeight,
+                    weekLabelHeight = animatedWeekLabelHeight,
+                    dayHeaderMode = headerPresentation.mode,
+                )
+                }
+            }
+            }
+            // In-place "zoom around the tapped column" overlay. While a header-tap morph plays it
+            // replaces the hidden pager so the tapped day expands FROM its own position (the pager
+            // can only ever anchor the leftmost page) and the other two columns slide off WITH
+            // their events. At progress 0 it matches the 3-day pager exactly and at 1 the 1-day
+            // pager, so swapping back to the real pager at either end is seamless. The expanding
+            // column's rect is mapped to the full viewport; every column scales around it.
+            morphContext?.let { ctx ->
+                val columnWidthMulti = ((dayGeometryViewportWidthPx - (multiDayCount - 1f) * daySpacingPx) / multiDayCount).coerceAtLeast(1f)
+                val step = columnWidthMulti + daySpacingPx
+                val zoom = 1f + (dayGeometryViewportWidthPx / columnWidthMulti - 1f) * morphProgress
+                val e = ctx.expandSlot
+                // Clip only the affine day-column layer. The all-day overlay owns continuation
+                // fades that intentionally extend into the left gutter during this morph.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clipToBounds(),
+                ) {
+                    ctx.days.forEachIndexed { slot, day ->
+                    val leftPx = (slot - e) * step * zoom + e * step * (1f - morphProgress)
+                    val columnWidthPx = columnWidthMulti * zoom
+                    val containsTimedDraft = draftEvent?.let { !it.allDay && it.date == day } == true
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(leftPx.roundToInt(), 0) }
+                            .width(with(density) { columnWidthPx.toDp() })
+                            .fillMaxHeight()
+                            .zIndex(
+                                when {
+                                    containsTimedDraft -> 2f
+                                    slot == e -> 1f
+                                    else -> 0f
+                                },
+                            ),
+                    ) {
+                        DayPagerColumn(
+                            day = day,
+                            visibleStartDate = day,
+                            visibleEndDate = day,
+                            allDayHeight = animatedAllDayHeight,
+                            hourHeightDp = hourHeightDp,
+                            dayWidthPx = columnWidthPx,
+                            taskColorMode = state.taskColorMode,
+                            events = eventsByDay[day].orEmpty(),
+                            tasks = tasksByDay[day].orEmpty(),
+                            draftEvent = draftEvent.forDay(day),
+                            onDraftEventChanged = onDraftEventChanged,
+                            timeScroll = timeScroll,
+                            bottomObscuredHeight = timelineBottomInset,
+                            bodyScrollableState = bodyScrollableState,
+                            onDateSelected = onDateSelected,
+                            onDayHeaderClick = onHeaderTap,
+                            onSlotSelected = onSlotSelected,
+                            onDraftInteraction = onDraftInteraction,
+                            onDraftTap = onDraftTap,
+                            onTaskStatusChanged = onTaskStatusChanged,
+                            onEventMoved = onEventMoved,
+                            onTaskMoved = onTaskMoved,
+                            onEventMovedAllDay = onEventMovedAllDay,
+                            onTaskMovedAllDay = onTaskMovedAllDay,
+                            onDetail = onDetail,
+                            onGridViewportHeight = {},
+                            dayHeaderHeight = animatedDayHeaderHeight,
+                            weekLabelHeight = animatedWeekLabelHeight,
+                            dayHeaderMode = headerPresentation.mode,
+                        )
+                    }
+                }
+                }
+                // The all-day band morphs WITH the columns: drive the same overlay off the affine
+                // geometry — anchor at the first column's animated left edge, with the animated
+                // gap between adjacent days as the step. Card bounds remain viewport-clamped,
+                // while continuation fades may render into the gutter.
+                AllDayViewportOverlay(
+                    events = state.events,
+                    tasks = calendarTasks,
+                    taskColorMode = state.taskColorMode,
+                    anchorPage = ctx.days.first().toDayPage(),
+                    anchorOffsetPx = -e * step * zoom + e * step * (1f - morphProgress),
+                    dayWidthPx = columnWidthMulti * zoom,
+                    dayStepPx = step * zoom,
+                    viewportWidthPx = dayViewportWidthPx.toFloat(),
+                    layoutViewportWidthPx = dayGeometryViewportWidthPx,
+                    topOffset = animatedDayHeaderHeight,
+                    height = animatedAllDayHeight,
+                    timedGridTopPadding = 0.dp,
+                    hourHeightDp = hourHeightDp,
+                    timeScrollPx = timeScroll.value,
+                    defaultEventDurationMinutes = state.defaultEventDurationMinutes,
+                    draftEvent = draftEvent,
+                    onDraftTap = onDraftTap,
+                    onAllDaySlotSelected = onAllDaySlotSelected,
+                    onEventMoved = onEventMoved,
+                    onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
+                    maxVisibleItems = state.maxVisibleAllDayItems,
+                    expanded = allDayExpanded,
+                    onExpandedChange = { allDayExpanded = it },
+                    onTaskStatusChanged = onTaskStatusChanged,
+                    onDetail = onDetail,
+                    priorityPageCount = ctx.days.size,
+                    reservation = visibleReservation,
+                    allowVerticalOverflow = allowAllDayVerticalOverflow,
+                )
+            }
+            CalendarWeekHeaderBand(
+                placements = calendarWeekPlacements,
+                labelWidthPx = calendarWeekLabelWidthPx,
+                height = animatedWeekLabelHeight,
+                alpha = calendarWeekAlpha,
+                fontSize = calendarWeekFontSize,
+                labelMode = calendarWeekLabelMode,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(y = headerPresentation.weekLabelTopOffset)
+                    .zIndex(12f),
+            )
+            // Normal pager-driven current-time line + all-day band, only when NOT morphing (during
+            // the morph the affine all-day overlay above takes over and the time line is hidden).
+            if (morphContext == null) {
+                AllDayViewportOverlay(
+                    events = state.events,
+                    tasks = calendarTasks,
+                    taskColorMode = state.taskColorMode,
+                    anchorPage = allDayAnchorPage,
+                    anchorOffsetPx = allDayAnchorOffsetPx,
+                    dayWidthPx = pagerDayWidthPx,
+                    dayStepPx = pagerDayStepPx,
+                    viewportWidthPx = dayViewportWidthPx.toFloat(),
+                    layoutViewportWidthPx = dayGeometryViewportWidthPx,
+                    topOffset = animatedDayHeaderHeight,
+                    height = animatedAllDayHeight,
+                    timedGridTopPadding = 0.dp,
+                    hourHeightDp = hourHeightDp,
+                    timeScrollPx = timeScroll.value,
+                    defaultEventDurationMinutes = state.defaultEventDurationMinutes,
+                    draftEvent = draftEvent,
+                    onDraftTap = onDraftTap,
+                    onAllDaySlotSelected = onAllDaySlotSelected,
+                    onEventMoved = onEventMoved,
+                    onTaskMoved = onTaskMoved,
+                    onEventMovedAllDay = onEventMovedAllDay,
+                    onTaskMovedAllDay = onTaskMovedAllDay,
+                    maxVisibleItems = state.maxVisibleAllDayItems,
+                    expanded = allDayExpanded,
+                    onExpandedChange = { allDayExpanded = it },
+                    onTaskStatusChanged = onTaskStatusChanged,
+                    onDetail = onDetail,
+                    priorityPageCount = targetDayCount,
+                    reservation = visibleReservation,
+                    allowVerticalOverflow = allowAllDayVerticalOverflow,
+                )
+            }
+            }
+        }
+        if (allDayHasOverflow || allDayExpanded) {
+            Box(
+                modifier = Modifier
+                    .offset(y = animatedDayHeaderHeight)
+                    .width(TimeSidebarWidth)
+                    .height(animatedAllDayHeight)
+                    .padding(bottom = 4.dp)
+                    .zIndex(14f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { allDayExpanded = !allDayExpanded },
+                    ),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (allDayExpanded) stringResource(Res.string.collapse_all_day_items) else stringResource(Res.string.expand_all_day_items),
+                    tint = WarmInk.copy(alpha = 0.82f),
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer {
+                            rotationZ = allDayArrowRotation
+                            val arrowScale = 0.94f + 0.06f * abs(allDayArrowRotation - 90f) / 90f
+                            scaleX = arrowScale
+                            scaleY = arrowScale
+                        },
+                )
+            }
+        }
+        if (overdueTasksExpanded) {
+            val dismissInteraction = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .zIndex(39f)
+                    .clickable(
+                        interactionSource = dismissInteraction,
+                        indication = null,
+                    ) { onOverdueTasksExpandedChange(false) }
+                    .testTag("timeline-overdue-dismiss-layer"),
+            )
+        }
+        visibleTodayGeometry?.let { todayGeometry ->
+            CurrentTimeLine(
+                now = now,
+                todayPageOffset = with(density) { todayGeometry.full.leftPx.toDp() },
+                dayWidth = with(density) { todayGeometry.full.widthPx.toDp() },
+                hourHeightDp = hourHeightDp,
+                topOffset = timedGridTopOffset,
+                scrollOffset = with(density) { timeScroll.value.toDp() },
+                modifier = Modifier
+                    .matchParentSize()
+                    .alpha(todayGeometry.visibleFraction)
+                    .zIndex(30f),
+            )
+        }
+        visibleTodayGeometry?.let { todayGeometry ->
+            if (overdueTasks.isNotEmpty()) {
+                val expandedGeometry = expandedOverduePanelGeometry(
+                    fullLeftPx = todayGeometry.full.leftPx,
+                    fullWidthPx = todayGeometry.full.widthPx,
+                    viewportWidthPx = dayViewportWidthPx.toFloat(),
+                )
+                val collapsedPanelLeftPx = todayGeometry.leftPx
+                val collapsedPanelWidthPx = todayGeometry.widthPx
+                val panelLeftPx = collapsedPanelLeftPx +
+                    (expandedGeometry.leftPx - collapsedPanelLeftPx) * overduePanelExpansionProgress
+                val panelWidthPx = collapsedPanelWidthPx +
+                    (expandedGeometry.widthPx - collapsedPanelWidthPx) * overduePanelExpansionProgress
+                val footerLayoutWidthPx = todayGeometry.full.widthPx +
+                    (expandedGeometry.widthPx - todayGeometry.full.widthPx) * overduePanelExpansionProgress
+                val trailingSurfaceOverflowPx = (
+                    todayGeometry.full.leftPx + todayGeometry.full.widthPx -
+                        (todayGeometry.leftPx + todayGeometry.widthPx)
+                    ).coerceAtLeast(0f)
+                val panelRightPx = panelLeftPx + panelWidthPx
+                val panelSquashGeometry = rightEdgeSquashGeometry(
+                    visibleLeftX = panelLeftPx,
+                    visibleRightX = panelRightPx,
+                    minimumLayoutWidthPx = with(density) { 16.dp.toPx() },
+                    enabled = trailingSurfaceOverflowPx > 0f && !overdueTasksExpanded,
+                )
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = TimeSidebarWidth + with(density) { panelSquashGeometry.layoutLeftX.toDp() },
+                            y = timedGridTopOffset + OverdueTasksFloatOffset,
+                        )
+                        .width(with(density) { panelSquashGeometry.layoutWidthPx.toDp() })
+                        .zIndex(40f),
+                ) {
+                    val defaultTaskDurationMinutes = (DEFAULT_TASK_DURATION_MILLIS / 60_000L).toInt()
+                    val hourHeightPx = with(density) { hourHeightDp.dp.toPx() }.coerceAtLeast(1f)
+                    val overdueOffsetPx = with(density) { OverdueTasksFloatOffset.toPx() }
+                    val overdueDragStartMinute = (
+                        DayStartHour * 60 +
+                            (((timeScroll.value + overdueOffsetPx) / hourHeightPx) * 60f).roundToInt()
+                                .snapDraftMinute()
+                        ).coerceIn(
+                        DayStartHour * 60,
+                        (DayEndHour + 1) * 60 - defaultTaskDurationMinutes,
+                    )
+                    CompositionLocalProvider(LocalTimedDragReporter provides timedDragReporter) {
+                        OverdueTasksBand(
+                            tasks = overdueTasks,
+                            layoutWidth = with(density) { footerLayoutWidthPx.toDp() },
+                            taskColorMode = state.taskColorMode,
+                            animateHighestPriority = state.overdueSummaryPriorityAnimationEnabled,
+                            expanded = overdueTasksExpanded,
+                            maxExpandedHeight = overdueExpandedHeight,
+                            dragSourceDate = todayDate,
+                            dragStartMinute = overdueDragStartMinute,
+                            onExpandedChange = onOverdueTasksExpandedChange,
+                            onTaskStatusChanged = onTaskStatusChanged,
+                            onTaskClick = { task -> onDetail(DetailSheet.Task(task)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !isLandscape &&
+                !isDayMode &&
+                !state.weekViewEnabled &&
+                state.multiDaySidebarControlsEnabled,
+            enter = slideInHorizontally(
+                initialOffsetX = { -it },
+                animationSpec = tween(280, easing = MotionEmphasized),
+            ) + fadeIn(animationSpec = tween(180, easing = MotionStandard)),
+            exit = slideOutHorizontally(
+                targetOffsetX = { -it },
+                animationSpec = tween(280, easing = MotionEmphasized),
+            ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(y = animatedMultiDayControlsTopOffset)
+                .width(TimeSidebarWidth)
+                .height(headerPresentation.multiDayControlsHeight)
+                .zIndex(4f),
+        ) {
+            MultiDayCountControls(
+                dayCount = multiDayCount,
+                onDayCountChanged = onMultiDayCountChanged,
+            )
+        }
+        activeTimedDrag?.let { active ->
+            TimelineTimedDragOverlay(
+                active = active,
+                hourHeightDp = hourHeightDp,
+                timeScrollPx = timeScroll.value,
+            )
+        }
+    }
+}
+
+@Composable
+fun MultiDayCountControls(
+    dayCount: Int,
+    onDayCountChanged: (Int) -> Unit,
+) {
+    val safeDayCount = dayCount.coerceMultiDayCount()
+    val canIncrease = safeDayCount < MAX_MULTI_DAY_COUNT
+    val canDecrease = safeDayCount > MIN_MULTI_DAY_COUNT
+    val railShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 16.dp, bottomEnd = 16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("multiDayCountRail")
+            .clip(railShape)
+            .background(multiDayCountRailColor())
+            .fillMaxWidth()
+            .padding(end = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+    ) {
+        MultiDayCountIconButton(
+            icon = Icons.Default.Add,
+            contentDescription = stringResource(Res.string.increase_multi_day_count),
+            enabled = canIncrease,
+            onClick = { onDayCountChanged(safeDayCount + 1) },
+        )
+        MultiDayCountIconButton(
+            icon = Icons.Default.Remove,
+            contentDescription = stringResource(Res.string.decrease_multi_day_count),
+            enabled = canDecrease,
+            onClick = { onDayCountChanged(safeDayCount - 1) },
+        )
+    }
+}
+
+@Composable
+private fun MultiDayCountIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val tint = if (enabled) WarmInk else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+fun multiDayCountRailColor(): Color =
+    if (MaterialTheme.colorScheme.background.isDark()) {
+        MaterialTheme.colorScheme.surface.blendWith(Color.White, 0.08f)
+    } else {
+        Color.White
+    }
+
+/** A header-tap morph in progress: which multi-day columns are involved and which one
+ * expands to fill / collapses from the 1-day view. */
+private data class DayMorphContext(
+    val days: List<LocalDate>,
+    val expandSlot: Int,
+    val targetMode: CalendarViewMode,
+    val targetAnchorDate: LocalDate,
+)
+
+private data class CurrentLineGeometry(
+    val leftPx: Float,
+    val widthPx: Float,
+)
+
+private data class VisibleTodayGeometry(
+    val full: CurrentLineGeometry,
+    val leftPx: Float,
+    val widthPx: Float,
+    val visibleFraction: Float,
+)
+
+data class OverduePanelGeometry(
+    val leftPx: Float,
+    val widthPx: Float,
+)
+
+fun expandedOverduePanelGeometry(
+    fullLeftPx: Float,
+    fullWidthPx: Float,
+    viewportWidthPx: Float,
+): OverduePanelGeometry {
+    val viewportWidth = viewportWidthPx.coerceAtLeast(0f)
+    if (viewportWidth == 0f) return OverduePanelGeometry(leftPx = 0f, widthPx = 0f)
+    val sourceWidth = fullWidthPx.coerceIn(0f, viewportWidth)
+    val targetWidth = max(sourceWidth, viewportWidth * OverduePanelExpandedViewportFraction).coerceAtMost(viewportWidth)
+    val sourceCenter = fullLeftPx + fullWidthPx / 2f
+    val targetLeft = (sourceCenter - targetWidth / 2f).coerceIn(0f, viewportWidth - targetWidth)
+    return OverduePanelGeometry(leftPx = targetLeft, widthPx = targetWidth)
+}
+
+private fun DraftEventSelection?.forDay(day: LocalDate): DraftEventSelection? {
+    val draft = this ?: return null
+    return draft.takeIf { draft.date == day }
+}
+
+@Composable
+private fun CalendarWeekHeaderBand(
+    placements: List<TimelineCalendarWeekPlacement>,
+    labelWidthPx: Float,
+    height: Dp,
+    alpha: Float,
+    fontSize: Float,
+    labelMode: TimelineCalendarWeekLabelMode,
+    modifier: Modifier = Modifier,
+) {
+    if (height <= 0.dp || alpha <= 0f || labelWidthPx <= 0f) return
+
+    val density = LocalDensity.current
+    val labelWidth = with(density) { labelWidthPx.toDp() }
+    Box(
+        modifier = modifier
+            .height(height)
+            .alpha(alpha),
+    ) {
+        placements.forEach { placement ->
+            key(placement.weekStart) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(placement.leftPx.roundToInt(), 0) }
+                        .width(labelWidth)
+                        .fillMaxHeight()
+                        .alpha(placement.visualAlpha)
+                        .testTag("timeline-calendar-week-${placement.weekStart}"),
+                    contentAlignment = Alignment.TopStart,
+                ) {
+                    when (labelMode) {
+                        TimelineCalendarWeekLabelMode.Full -> Text(
+                            text = stringResource(Res.string.calendar_week_label, placement.weekNumber),
+                            modifier = Modifier.padding(start = 6.dp, end = 4.dp),
+                            color = WarmInk.copy(alpha = 0.72f),
+                            fontSize = fontSize.sp,
+                            lineHeight = fontSize.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Start,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                        )
+                        TimelineCalendarWeekLabelMode.Compact -> CalendarWeekNumberPill(
+                            weekNumber = placement.weekNumber,
+                            modifier = Modifier.padding(start = 6.dp),
+                            backgroundColor = multiDayCountRailColor(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayHeader(
+    day: LocalDate,
+    selected: Boolean,
+    mode: TimelineDayHeaderMode,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val compact = maxWidth < 44.dp
+        val selectedDayTextColor = if (MaterialTheme.colorScheme.background.isDark()) {
+            DefaultUiTokens.warmBrown
+        } else {
+            Color.White
+        }
+        val circleSize = if (compact) 32.dp else 40.dp
+        val weekdayFont = if (compact) 11.sp else 14.sp
+        val weekdayLine = if (compact) 13.sp else 16.sp
+        val dayFont = if (compact) 17.sp else 22.sp
+        val dayLine = if (compact) 19.sp else 24.sp
+        val weekday = day.format(DateTimeFormatter.ofPattern("EE", LocalAppLocale.current)).replace(".", "")
+        when (mode) {
+            TimelineDayHeaderMode.Portrait -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    weekday,
+                    color = if (selected) WarmBrown else WarmInk,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = weekdayFont,
+                    lineHeight = weekdayLine,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+                Box(
+                    modifier = Modifier
+                        .size(circleSize)
+                        .clip(CircleShape)
+                        .background(if (selected) WarmBrown else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        day.dayOfMonth.toString(),
+                        color = if (selected) selectedDayTextColor else WarmInk,
+                        fontSize = dayFont,
+                        lineHeight = dayLine,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+            TimelineDayHeaderMode.Landscape,
+            TimelineDayHeaderMode.LandscapeCompact -> {
+                val landscapeCompact = mode == TimelineDayHeaderMode.LandscapeCompact
+                val horizontalPadding by animateDpAsState(
+                    targetValue = if (landscapeCompact || compact) 3.dp else 7.dp,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateHorizontalPadding",
+                )
+                val weekdaySize by animateFloatAsState(
+                    targetValue = if (landscapeCompact || compact) 9f else 13f,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateWeekdaySize",
+                )
+                val dateSize by animateFloatAsState(
+                    targetValue = if (landscapeCompact || compact) 14f else 19f,
+                    animationSpec = tween(300, easing = MotionEmphasized),
+                    label = "dayDateDateSize",
+                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (selected) WarmBrown else Color.Transparent)
+                        .padding(horizontal = horizontalPadding, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(if (landscapeCompact || compact) 2.dp else 4.dp),
+                ) {
+                    val landscapeTextColor = if (selected) selectedDayTextColor else WarmInk
+                    Text(
+                        weekday,
+                        color = landscapeTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = weekdaySize.sp,
+                        lineHeight = (weekdaySize + 2f).sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        day.dayOfMonth.toString(),
+                        color = landscapeTextColor,
+                        fontSize = dateSize.sp,
+                        lineHeight = (dateSize + 2f).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Reports when a timed card inside a 3-day pager page starts/stops being dragged.
+ * The pager parent uses this to boost the dragging page's zIndex so the card can
+ * visually escape the page bounds — without this, dragging an event to a future
+ * day renders behind the next page's background, since pager pages are drawn in
+ * index order by default.
+ */
+val LocalTimedDragReporter = compositionLocalOf<TimelineTimedDragReporter> {
+    NoOpTimelineTimedDragReporter
+}
+
+@Composable
+private fun DayPagerColumn(
+    day: LocalDate,
+    visibleStartDate: LocalDate,
+    visibleEndDate: LocalDate,
+    allDayHeight: Dp,
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+    draftEvent: DraftEventSelection?,
+    onDraftEventChanged: (DraftEventSelection) -> Unit,
+    onDraftInteraction: () -> Unit,
+    onDraftTap: () -> Unit,
+    hourHeightDp: Float,
+    dayWidthPx: Float,
+    timeScroll: androidx.compose.foundation.ScrollState,
+    bottomObscuredHeight: Dp,
+    bodyScrollableState: androidx.compose.foundation.gestures.ScrollableState,
+    onDateSelected: (LocalDate) -> Unit,
+    onDayHeaderClick: (LocalDate) -> Unit,
+    onSlotSelected: (LocalDate, LocalTime) -> Unit,
+    onTaskStatusChanged: (TaskEntity, String) -> Unit,
+    onEventMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onTaskMoved: (String, Long, LocalDate, LocalTime, LocalTime) -> Unit,
+    onEventMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onTaskMovedAllDay: (String, Long, LocalDate) -> Unit,
+    onDetail: (DetailSheet) -> Unit,
+    onGridViewportHeight: (Int) -> Unit,
+    taskColorMode: TaskColorMode,
+    drawTimedGrid: Boolean = true,
+    dayHeaderHeight: Dp = DayHeaderHeight,
+    weekLabelHeight: Dp = 0.dp,
+    dayHeaderMode: TimelineDayHeaderMode = TimelineDayHeaderMode.Portrait,
+) {
+    // Just the day's own content (header + timed grid + cards). The month-cell <-> day morph is
+    // now applied one level up, on the whole timeline Row (so the time bar and all-day band scale
+    // out of the tapped cell too); the 3-day <-> 1-day morph is the affine overlay. So this column
+    // no longer carries a shared element itself.
+    val headerInteraction = remember(day) { MutableInteractionSource() }
+    val density = LocalDensity.current
+    var localGridViewportHeightPx by remember { mutableStateOf(0) }
+    val bottomObscuredPx = with(density) { bottomObscuredHeight.roundToPx() }
+    val effectiveGridViewportHeightPx = (localGridViewportHeightPx - bottomObscuredPx).coerceAtLeast(0)
+    LaunchedEffect(effectiveGridViewportHeightPx) {
+        if (effectiveGridViewportHeightPx > 0) onGridViewportHeight(effectiveGridViewportHeightPx)
+    }
+    Column(Modifier.fillMaxSize()) {
+        DayHeader(
+            day = day,
+            selected = day == LocalCalendarTimeSnapshot.current.today,
+            mode = dayHeaderMode,
+            modifier = Modifier
+                .zIndex(4f)
+                .height(dayHeaderHeight)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(
+                    interactionSource = headerInteraction,
+                    indication = null,
+                    onClick = { onDayHeaderClick(day) },
+                )
+                .padding(top = weekLabelHeight),
+        )
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(allDayHeight)
+                .zIndex(4f),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .onSizeChanged {
+                    localGridViewportHeightPx = it.height
+                    onGridViewportHeight((it.height - bottomObscuredPx).coerceAtLeast(0))
+                }
+                .verticalClipAllowHorizontalOverflow()
+                .scrollable(state = bodyScrollableState, orientation = Orientation.Vertical),
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .pointerInput(day, hourHeightDp, timeScroll.value) {
+                        val rowHeightPx = with(density) { hourHeightDp.dp.toPx() }
+                        detectTapGestures { offset ->
+                            val scrolledY = offset.y + timeScroll.value
+                            val totalVisibleMinutes = ((scrolledY / rowHeightPx) * 60f)
+                                .roundToInt()
+                                .snapDraftMinute()
+                            val minuteOfDay = (DayStartHour * 60 + totalVisibleMinutes)
+                                .coerceIn(DayStartHour * 60, (DayEndHour + 1) * 60 - DraftMinDurationMinutes)
+                            onSlotSelected(day, minuteOfDay.toDraftLocalTime())
+                        }
+                    },
+            )
+            DayTimedColumn(
+                day = day,
+                hourHeightDp = hourHeightDp,
+                dayWidthPx = dayWidthPx,
+                taskColorMode = taskColorMode,
+                events = events,
+                tasks = tasks,
+                draftEvent = draftEvent,
+                onDraftEventChanged = onDraftEventChanged,
+                onDraftInteraction = onDraftInteraction,
+                onDraftTap = onDraftTap,
+                timeScroll = timeScroll,
+                gridViewportHeightPx = effectiveGridViewportHeightPx,
+                onSlotSelected = onSlotSelected,
+                onTaskStatusChanged = onTaskStatusChanged,
+                onEventMoved = onEventMoved,
+                onTaskMoved = onTaskMoved,
+                onEventMovedAllDay = onEventMovedAllDay,
+                onTaskMovedAllDay = onTaskMovedAllDay,
+                onDetail = onDetail,
+                drawGrid = drawTimedGrid,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, -timeScroll.value) }
+                    .height(((DayEndHour - DayStartHour + 1) * hourHeightDp).dp),
+            )
+        }
+    }
+}
+
+private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): Modifier =
+    pointerInput(owner) {
+        awaitEachGesture {
+            var snapshot: PinchSnapshot? = null
+            var ownsGesture = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val pressed = event.changes.filter { it.pressed }
+                if (!ownsGesture && pressed.size >= 2) {
+                    val upperY = pressed.minOf { it.position.y }
+                    val lowerY = pressed.maxOf { it.position.y }
+                    snapshot = owner.begin(upperY, lowerY)
+                    ownsGesture = snapshot != null
+                }
+                val currentSnapshot = snapshot
+                if (ownsGesture && currentSnapshot != null && pressed.size >= 2) {
+                    val upperY = pressed.minOf { it.position.y }
+                    val lowerY = pressed.maxOf { it.position.y }
+                    owner.update(currentSnapshot, upperY, lowerY)
+                    event.changes.forEach { it.consume() }
+                } else if (ownsGesture && pressed.size < 2) {
+                    owner.end()
+                    ownsGesture = false
+                    snapshot = null
+                }
+                if (event.changes.none { it.pressed }) break
+            }
+        }
+    }
+
+@Composable
+private fun TimeSidebar(hours: IntRange, hourHeightDp: Float) {
+    val hourCount = hours.count()
+    val textColor = WarmInk
+    Box(
+        modifier = Modifier
+            .width(TimeSidebarWidth)
+            .height((hourHeightDp * hourCount).dp),
+    ) {
+        TimeSidebarLabels(hours, hourHeightDp, textColor, Modifier.matchParentSize())
+    }
+}
+
+
+@Composable
+private fun TimelineTimedDragOverlay(
+    active: ActiveTimelineTimedDrag,
+    hourHeightDp: Float,
+    timeScrollPx: Int,
+) {
+    val density = LocalDensity.current
+    val layout = active.layout
+    val target = active.session.target
+    val targetPageLeft = layout.anchorOffsetPx +
+        (target.date.toDayPage() - layout.anchorPage) * layout.dayStepPx
+    val horizontalInsetPx = with(density) { 2.dp.toPx() }
+    val targetX = when (target) {
+        is TimelineDropTarget.AllDay -> layout.sidebarWidthPx + targetPageLeft + horizontalInsetPx
+        is TimelineDropTarget.Timed -> layout.sidebarWidthPx + targetPageLeft +
+            if (active.item.origin == TimelineDraggedItemOrigin.OverduePanel) {
+                horizontalInsetPx
+            } else {
+                layout.sourceInsetXPx
+            }
+    }
+    val targetY = when (target) {
+        is TimelineDropTarget.AllDay -> layout.dayHeaderHeightPx + with(density) {
+            (7.dp + (target.lane * 29).dp).toPx()
+        }
+
+        is TimelineDropTarget.Timed -> layout.fixedAllDayBoundaryY +
+            ((target.startMinute - DayStartHour * 60) / 60f) * with(density) { hourHeightDp.dp.toPx() } -
+            timeScrollPx
+    }
+    val targetWidth = when (target) {
+        is TimelineDropTarget.AllDay -> (layout.dayWidthPx - horizontalInsetPx * 2f).coerceAtLeast(1f)
+        is TimelineDropTarget.Timed -> if (active.item.origin == TimelineDraggedItemOrigin.OverduePanel) {
+            (layout.dayWidthPx - horizontalInsetPx * 2f).coerceAtLeast(1f)
+        } else {
+            layout.sourceWidthPx.coerceAtMost(layout.dayWidthPx).coerceAtLeast(1f)
+        }
+    }
+    val targetHeight = when (target) {
+        is TimelineDropTarget.AllDay -> with(density) { 24.dp.toPx() }
+        is TimelineDropTarget.Timed -> if (active.item.origin == TimelineDraggedItemOrigin.OverduePanel) {
+            ((active.item.endMinute - active.item.startMinute) / 60f) * with(density) { hourHeightDp.dp.toPx() }
+        } else {
+            layout.sourceHeightPx
+        }
+    }
+    val animatedX by animateFloatAsState(
+        targetValue = targetX,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayX",
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = targetY,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayY",
+    )
+    val animatedWidth by animateFloatAsState(
+        targetValue = targetWidth,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayWidth",
+    )
+    val animatedHeight by animateFloatAsState(
+        targetValue = targetHeight,
+        animationSpec = tween(MotionShort, easing = MotionEmphasized),
+        label = "timedDragOverlayHeight",
+    )
+    val color = Color(active.item.colorArgb)
+    val contentColor = if (color.isDark()) Color.White else Color(0xFF1C1A18)
+    val shape = RoundedCornerShape(if (target is TimelineDropTarget.AllDay) 8.dp else 10.dp)
+    val cardHeightDp = with(density) { targetHeight.toDp().value }
+    val timedTitleScale = ((cardHeightDp - if (active.item.kind == TimelineDraggedItemKind.Task) 18f else 13f) / 20f)
+        .coerceIn(0f, 1f)
+    val timedVerticalPadding = (1.5f + timedTitleScale * 1.5f).dp
+    val timedTitleMaxLines = if (cardHeightDp >= 43f) 2 else 1
+    val showLocation = target is TimelineDropTarget.Timed &&
+        cardHeightDp >= (if (active.item.kind == TimelineDraggedItemKind.Task) 42f else 40f) &&
+        active.item.location.isNotBlank()
+    val locationMaxLines = when {
+        cardHeightDp >= 86f -> 4
+        cardHeightDp >= 68f -> 3
+        cardHeightDp >= 52f -> 2
+        else -> 1
+    }
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(animatedX.roundToInt(), animatedY.roundToInt()) }
+            .width(with(density) { animatedWidth.toDp() })
+            .height(with(density) { animatedHeight.toDp() })
+            .zIndex(100f)
+            .shadow(7.dp, shape)
+            .then(
+                if (active.item.kind == TimelineDraggedItemKind.Task && !active.item.completed) {
+                    Modifier.taskPriorityMotion(active.item.priority, color)
+                } else {
+                    Modifier
+                },
+            )
+            .background(color, shape)
+            .testTag("timeline-drag-overlay"),
+    ) {
+        if (target is TimelineDropTarget.AllDay) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (active.item.kind == TimelineDraggedItemKind.Task) {
+                    Icon(
+                        imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    text = active.item.title,
+                    color = contentColor,
+                    fontSize = 12.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(start = if (active.item.kind == TimelineDraggedItemKind.Task) 5.dp else 6.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                if (active.item.kind == TimelineDraggedItemKind.Task) {
+                    Icon(
+                        imageVector = if (active.item.completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.padding(top = timedVerticalPadding).size(15.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(if (timedTitleMaxLines > 1 || showLocation) Modifier.bottomEdgeFadeMask() else Modifier)
+                        .padding(top = timedVerticalPadding),
+                ) {
+                    FadingTimedText(
+                        text = active.item.title,
+                        color = contentColor,
+                        fontSize = 12.sp,
+                        lineHeight = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = timedTitleMaxLines,
+                        textScale = 0.9f + timedTitleScale * 0.1f,
+                        modifier = Modifier.testTag("timeline-drag-overlay-title"),
+                    )
+                    if (showLocation) {
+                        FadingTimedText(
+                            text = active.item.location,
+                            color = contentColor.copy(alpha = 0.86f),
+                            fontSize = 11.sp,
+                            lineHeight = 12.sp,
+                            maxLines = locationMaxLines,
+                            modifier = Modifier.testTag("timeline-drag-overlay-location"),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CurrentTimeLine(
+    now: LocalTime,
+    todayPageOffset: Dp,
+    dayWidth: Dp,
+    hourHeightDp: Float,
+    topOffset: Dp,
+    scrollOffset: Dp,
+    modifier: Modifier = Modifier,
+) {
+    if (now.hour !in DayStartHour..DayEndHour) return
+    val minuteOffset = (now.hour * 60 + now.minute) - DayStartHour * 60
+    val pillHeight = 18.dp
+    val lineCenterY = topOffset + (minuteOffset / 60f * hourHeightDp).dp - scrollOffset
+    val lineTopY = lineCenterY - (pillHeight / 2f)
+    if (lineTopY < topOffset) return
+    val darkPalette = MaterialTheme.colorScheme.background.isDark()
+    val indicatorColor = if (darkPalette) Color.White else Color(0xFF1D1511)
+    val pillBackground = if (darkPalette) Color.White.copy(alpha = 0.86f) else Color(0xFF1D1511).copy(alpha = 0.72f)
+    val pillTextColor = if (darkPalette) Color(0xFF151515) else Color.White
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .offset(x = todayPageOffset)
+                .offset(y = lineTopY)
+                .width(TimeSidebarWidth)
+                .height(pillHeight)
+                .padding(horizontal = 2.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(pillBackground),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = pillTextColor, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Normal)
+        }
+        Box(
+            modifier = Modifier
+                .offset(x = TimeSidebarWidth + todayPageOffset, y = lineCenterY)
+                .height(1.dp)
+                .width(dayWidth)
+                .background(indicatorColor.copy(alpha = if (darkPalette) 0.62f else 0.52f)),
+        )
+    }
+}
+
+/** "07:00"…"22:00" down the time column, one per [hourHeightDp]; 10 sp bold, centred. */
+@Composable
+expect fun TimeSidebarLabels(hours: IntRange, hourHeightDp: Float, textColor: Color, modifier: Modifier)

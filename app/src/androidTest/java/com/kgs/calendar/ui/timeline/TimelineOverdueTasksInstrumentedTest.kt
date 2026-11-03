@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -27,9 +29,9 @@ import com.kgs.calendar.ui.TimelineView
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Rule

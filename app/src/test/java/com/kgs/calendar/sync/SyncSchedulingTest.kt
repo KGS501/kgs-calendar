@@ -1,5 +1,7 @@
 package com.kgs.calendar.sync
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.NetworkType
@@ -61,7 +63,7 @@ class SyncSchedulingTest {
         assertEquals(0L, context.getSharedPreferences("kgs_sync_worker", Context.MODE_PRIVATE)
             .getLong("last_sync_activity_at", 0))
         context.getSharedPreferences("kgs_sync_worker", Context.MODE_PRIVATE).edit()
-            .putLong("last_sync_activity_at", System.currentTimeMillis()).commit()
+            .putLong("last_sync_activity_at", nowMillis()).commit()
         manager.cancelUniqueWork("kgs_foreground_sync").result.get(5, TimeUnit.SECONDS)
         SyncWorker.enqueueForegroundRefreshIfStale(context)
         assertTrue(work("kgs_foreground_sync").all { it.state == WorkInfo.State.CANCELLED })

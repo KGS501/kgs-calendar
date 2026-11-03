@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -19,8 +21,8 @@ import com.kgs.calendar.widget.update.WidgetTaskToggle
 import com.kgs.calendar.widget.update.WidgetUpdateCause
 import com.kgs.calendar.widget.update.animateTasksSubtaskToggle
 import com.kgs.calendar.widget.update.refreshTasksWidgetRows
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 

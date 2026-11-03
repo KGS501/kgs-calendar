@@ -1,12 +1,14 @@
 package com.kgs.calendar.ui.layout
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.ui.buildAllDayOverlayItems
 import com.kgs.calendar.ui.calendar.toDayPage
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 import org.junit.Assert.*
 import org.junit.Test
 

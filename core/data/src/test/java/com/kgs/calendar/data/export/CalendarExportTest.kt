@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.export
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.LOCAL_COLLECTION
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.eventPayload
@@ -13,8 +15,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 @RunWith(RobolectricTestRunner::class)
 class CalendarExportTest {

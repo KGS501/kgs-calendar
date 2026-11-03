@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import kotlinx.coroutines.test.runTest
@@ -11,9 +13,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /**
  * Which occurrences a queued change marks as waiting for sync (#29): edits to one occurrence mark

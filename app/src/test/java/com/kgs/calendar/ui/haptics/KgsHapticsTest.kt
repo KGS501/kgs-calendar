@@ -1,8 +1,10 @@
 package com.kgs.calendar.ui.haptics
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.kgs.calendar.ui.timeline.TimelineDropTarget
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
