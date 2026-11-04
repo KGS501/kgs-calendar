@@ -1,13 +1,16 @@
 package com.kgs.calendar.sync
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.kgs.calendar.MainActivity
 import com.kgs.calendar.R
 import com.kgs.calendar.data.local.entity.AccountEntity
@@ -58,8 +61,9 @@ internal object OriginApprovalNotifier {
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
-        // POST_NOTIFICATIONS may be revoked at any moment; that only costs this notice.
-        runCatching { manager.notify(NOTIFICATION_TAG, notice.key.hashCode(), notification) }
+        val mayPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (mayPost) manager.notify(NOTIFICATION_TAG, notice.key.hashCode(), notification)
     }
 
     private fun ensureChannel(context: Context) {
