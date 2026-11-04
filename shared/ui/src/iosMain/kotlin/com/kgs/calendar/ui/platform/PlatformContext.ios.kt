@@ -220,8 +220,12 @@ actual fun PlatformContext.is24HourFormat(): Boolean {
 
 actual fun PlatformContext.systemLocale(): AppLocale = com.kgs.calendar.time.defaultAppLocale()
 
+private val dateTimePatterns = com.kgs.calendar.platform.LockedMap<String, String>()
+
 actual fun bestDateTimePattern(locale: AppLocale, skeleton: String): String =
-    NSDateFormatter.dateFormatFromTemplate(skeleton, options = 0u, locale = platform.Foundation.NSLocale(localeIdentifier = locale.toLanguageTag())) ?: skeleton
+    dateTimePatterns.getOrPut("${locale.toLanguageTag()}|$skeleton") {
+        NSDateFormatter.dateFormatFromTemplate(skeleton, options = 0u, locale = platform.Foundation.NSLocale(localeIdentifier = locale.toLanguageTag())) ?: skeleton
+    }
 
 @Composable
 actual fun TransparentNavigationBarEffect() = Unit

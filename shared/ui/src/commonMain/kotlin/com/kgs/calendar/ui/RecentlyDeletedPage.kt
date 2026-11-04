@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,7 +89,7 @@ fun RecentlyDeletedPage(
 ) {
     LaunchedEffect(Unit) { onOpened() }
     var emptyTrashConfirmOpen by rememberSaveable { mutableStateOf(false) }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val entries = remember(trash.entries) {
         trash.entries.map { it to it.searchResult() }

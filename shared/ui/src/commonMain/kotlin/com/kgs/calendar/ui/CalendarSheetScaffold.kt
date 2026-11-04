@@ -35,7 +35,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -733,12 +733,12 @@ fun KgsModalBottomSheet(
                             .then(
                                 if (inTopPanel) {
                                     Modifier
-                                        .windowInsetsPadding(WindowInsets.statusBars)
+                                        .windowInsetsPadding(WindowInsets.appStatusBars)
                                         .tabletopPanelImePadding(panelBottomPx = topPanelHeightPx, windowHeightPx = screenHeightPx)
                                 } else if (inBookPane) {
                                     // The keyboard spans both panes, so a pane pads for it exactly like a bottom sheet.
                                     Modifier
-                                        .windowInsetsPadding(WindowInsets.statusBars)
+                                        .windowInsetsPadding(WindowInsets.appStatusBars)
                                         .imePadding()
                                 } else if (sheetInsetPolicy.respectsImeBottomInset) {
                                     Modifier.imePadding()

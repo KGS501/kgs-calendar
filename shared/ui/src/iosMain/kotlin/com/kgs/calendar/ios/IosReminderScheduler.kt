@@ -7,7 +7,9 @@ import com.kgs.calendar.reminder.planReminders
 import com.kgs.calendar.time.defaultAppLocale
 import com.kgs.calendar.time.nowMillis
 import com.kgs.calendar.ui.res.Res
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import platform.UserNotifications.UNAuthorizationOptionAlert
@@ -54,7 +56,10 @@ class IosReminderScheduler(private val graph: IosAppGraph) {
         )
     }
 
-    suspend fun reschedule() = mutex.withLock {
+    /** Off the main thread: planning expands every recurring item of the next weeks. */
+    suspend fun reschedule() = withContext(Dispatchers.Default) { mutex.withLock { replanLocked() } }
+
+    private suspend fun replanLocked() {
         val now = nowMillis()
         val locale = defaultAppLocale()
         val planning = planReminders(

@@ -42,7 +42,7 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
     fun expand(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> {
         val rule = master.recurrenceRule?.takeIf { it.isNotBlank() }
         val eventZone = master.timezoneId
-            ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+            ?.let { runCatching { zoneOf(it) }.getOrNull() }
             ?: zoneId
         if (rule == null) {
             val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)

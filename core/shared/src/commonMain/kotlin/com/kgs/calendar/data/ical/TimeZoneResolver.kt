@@ -48,7 +48,7 @@ class TimeZoneResolver private constructor(
         private fun zoneOrNull(id: String): ZoneId? {
             // ZoneId.of also accepts bare offsets like "+01:00", which are no zone a client could mean.
             if (id.firstOrNull()?.isLetter() != true) return null
-            return runCatching { ZoneId.of(id) }.getOrNull()
+            return runCatching { zoneOf(id) }.getOrNull()
         }
 
         private val definitionMatches = LockedMap<String, ZoneIdHolder>()

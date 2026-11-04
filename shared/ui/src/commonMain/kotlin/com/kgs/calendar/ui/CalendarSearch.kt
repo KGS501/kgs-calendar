@@ -37,7 +37,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
@@ -533,7 +533,7 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             ),
         )
     }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }

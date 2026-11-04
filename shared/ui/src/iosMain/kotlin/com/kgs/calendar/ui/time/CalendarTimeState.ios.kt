@@ -6,6 +6,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.kgs.calendar.time.nowMillis
+import com.kgs.calendar.time.refreshSystemZone
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -13,8 +14,6 @@ import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSSystemClockDidChangeNotification
 import platform.Foundation.NSSystemTimeZoneDidChangeNotification
-import platform.Foundation.NSTimeZone
-import platform.Foundation.resetSystemTimeZone
 import platform.UIKit.UIApplicationSignificantTimeChangeNotification
 
 @Composable
@@ -31,8 +30,8 @@ actual fun rememberCalendarTimeState(): CalendarTimeSnapshot {
             UIApplicationSignificantTimeChangeNotification,
         ).map { name ->
             center.addObserverForName(name, `object` = null, queue = NSOperationQueue.mainQueue) { _ ->
-                // The system zone is cached by the platform; drop it so the new zone applies.
-                NSTimeZone.resetSystemTimeZone()
+                // The system zone is cached; drop it so the new zone applies.
+                refreshSystemZone()
                 refresh()
             }
         }
