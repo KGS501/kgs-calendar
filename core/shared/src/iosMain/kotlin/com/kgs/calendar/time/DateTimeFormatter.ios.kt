@@ -24,6 +24,7 @@ import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import platform.Foundation.timeZoneWithName
 import platform.Foundation.localeIdentifier
+import com.kgs.calendar.platform.LockedMap
 import kotlin.time.Instant
 
 actual class AppLocale(private val tag: String) {
@@ -56,11 +57,23 @@ private fun FormatStyle.toNs() = when (this) {
     FormatStyle.SHORT -> NSDateFormatterShortStyle
 }
 
+/** Creating an NSDateFormatter is slow and it is thread-safe, so each setup is built once. */
+private val formatters = LockedMap<String, NSDateFormatter>()
+private val literalText = Regex("'[^']*'")
+private val namedFields = Regex("""E|MMM|LLL|a|G|z|Z{4}|v""")
+
 private fun DateTimeFormatter.toNs(hasTime: Boolean, hasDate: Boolean, zone: TimeZone?): NSDateFormatter {
+    val language = (locale ?: defaultAppLocale()).toLanguageTag()
+    return formatters.getOrPut("$pattern|$dateStyle|$timeStyle|$language|${zone?.id}|$hasTime|$hasDate") {
+        newFormatter(hasTime, hasDate, zone)
+    }
+}
+
+private fun DateTimeFormatter.newFormatter(hasTime: Boolean, hasDate: Boolean, zone: TimeZone?): NSDateFormatter {
     val f = NSDateFormatter()
     // As java.time: Gregorian dates and ASCII digits whatever the user's calendar and numbering. A
     // pattern without names (weekday, month text, AM/PM, era) gets the POSIX locale.
-    val hasNames = pattern != null && Regex("""E|MMM|LLL|a|G|z|Z{4}|v""").containsMatchIn(pattern.replace(Regex("'[^']*'"), ""))
+    val hasNames = pattern != null && namedFields.containsMatchIn(pattern.replace(literalText, ""))
     f.locale = when {
         locale != null -> locale.toNSLocale()
         pattern != null && !hasNames -> NSLocale(localeIdentifier = "en_US_POSIX")
@@ -98,44 +111,55 @@ internal actual fun platformParse(formatter: DateTimeFormatter, text: String, ha
     return if (timeOnly) LocalDateTime(kotlinx.datetime.LocalDate(2000, 1, 1), local.time) else local
 }
 
-private fun symbolFormatter(locale: AppLocale) = NSDateFormatter().apply {
-    this.locale = locale.toNSLocale()
-    calendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian)
+private val symbolFormatters = LockedMap<String, NSDateFormatter>()
+private val nameLists = LockedMap<String, List<String>>()
+
+private fun symbolFormatter(locale: AppLocale) = symbolFormatters.getOrPut(locale.toLanguageTag()) {
+    NSDateFormatter().apply {
+        this.locale = locale.toNSLocale()
+        calendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian)
+    }
 }
 
 actual fun DayOfWeek.getDisplayName(style: TextStyle, locale: AppLocale): String {
-    val f = symbolFormatter(locale)
-    @Suppress("UNCHECKED_CAST")
-    val symbols = when (style) {
-        TextStyle.FULL -> f.weekdaySymbols
-        TextStyle.FULL_STANDALONE -> f.standaloneWeekdaySymbols
-        TextStyle.SHORT -> f.shortWeekdaySymbols
-        TextStyle.SHORT_STANDALONE -> f.shortStandaloneWeekdaySymbols
-        TextStyle.NARROW -> f.veryShortWeekdaySymbols
-        TextStyle.NARROW_STANDALONE -> f.veryShortStandaloneWeekdaySymbols
-    } as List<String>
+    val symbols = nameLists.getOrPut("day|$style|${locale.toLanguageTag()}") {
+        val f = symbolFormatter(locale)
+        @Suppress("UNCHECKED_CAST")
+        when (style) {
+            TextStyle.FULL -> f.weekdaySymbols
+            TextStyle.FULL_STANDALONE -> f.standaloneWeekdaySymbols
+            TextStyle.SHORT -> f.shortWeekdaySymbols
+            TextStyle.SHORT_STANDALONE -> f.shortStandaloneWeekdaySymbols
+            TextStyle.NARROW -> f.veryShortWeekdaySymbols
+            TextStyle.NARROW_STANDALONE -> f.veryShortStandaloneWeekdaySymbols
+        } as List<String>
+    }
     // Foundation lists Sunday first.
     return symbols[isoDayNumber % 7]
 }
 
 actual fun Month.getDisplayName(style: TextStyle, locale: AppLocale): String {
-    val f = symbolFormatter(locale)
-    @Suppress("UNCHECKED_CAST")
-    val symbols = when (style) {
-        TextStyle.FULL -> f.monthSymbols
-        TextStyle.FULL_STANDALONE -> f.standaloneMonthSymbols
-        TextStyle.SHORT -> f.shortMonthSymbols
-        TextStyle.SHORT_STANDALONE -> f.shortStandaloneMonthSymbols
-        TextStyle.NARROW -> f.veryShortMonthSymbols
-        TextStyle.NARROW_STANDALONE -> f.veryShortStandaloneMonthSymbols
-    } as List<String>
+    val symbols = nameLists.getOrPut("month|$style|${locale.toLanguageTag()}") {
+        val f = symbolFormatter(locale)
+        @Suppress("UNCHECKED_CAST")
+        when (style) {
+            TextStyle.FULL -> f.monthSymbols
+            TextStyle.FULL_STANDALONE -> f.standaloneMonthSymbols
+            TextStyle.SHORT -> f.shortMonthSymbols
+            TextStyle.SHORT_STANDALONE -> f.shortStandaloneMonthSymbols
+            TextStyle.NARROW -> f.veryShortMonthSymbols
+            TextStyle.NARROW_STANDALONE -> f.veryShortStandaloneMonthSymbols
+        } as List<String>
+    }
     return symbols[number - 1]
 }
 
-actual fun firstDayOfWeekFor(locale: AppLocale): DayOfWeek {
-    val calendar = NSCalendar.currentCalendar
+private val firstDays = LockedMap<String, DayOfWeek>()
+
+actual fun firstDayOfWeekFor(locale: AppLocale): DayOfWeek = firstDays.getOrPut(locale.toLanguageTag()) {
+    val calendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian)
     calendar.locale = locale.toNSLocale()
     // NSCalendar: 1 = Sunday … 7 = Saturday.
     val first = calendar.firstWeekday.toInt()
-    return DayOfWeek(if (first == 1) 7 else first - 1)
+    DayOfWeek(if (first == 1) 7 else first - 1)
 }

@@ -105,6 +105,7 @@ import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.domain.time.toTimeText
 import com.kgs.calendar.ui.calendar.DayEndHour
 import com.kgs.calendar.ui.calendar.DayStartHour
+import com.kgs.calendar.ui.calendar.toDayDate
 import com.kgs.calendar.ui.calendar.toDayPage
 import com.kgs.calendar.ui.editor.EditorSchedulePreview
 import com.kgs.calendar.ui.editor.EditorScheduleState
@@ -889,16 +890,22 @@ data class EventEditorCapabilities(
     }
 }
 
+// Used for every card on screen, so they are compiled once.
+private val PercentEscape = Regex("%[0-9A-Fa-f]{2}")
+private val LineBreakTag = Regex("(?i)<br\\s*/?>")
+private val ParagraphEndTag = Regex("(?i)</p\\s*>")
+private val AnyHtmlTag = Regex("(?s)<[^>]+>")
+
 fun String.cleanCalendarDisplayText(): String {
     var normalized = trim().trimHtmlDataPrefixForDisplay()
-    if (normalized.contains(Regex("%[0-9A-Fa-f]{2}"))) {
+    if (normalized.contains(PercentEscape)) {
         normalized = runCatching { percentDecode(normalized) }.getOrDefault(normalized).trimHtmlDataPrefixForDisplay()
     }
     if ('<' in normalized && '>' in normalized) {
         normalized = normalized
-            .replace(Regex("(?i)<br\\s*/?>"), "\n")
-            .replace(Regex("(?i)</p\\s*>"), "\n")
-            .replace(Regex("(?s)<[^>]+>"), "")
+            .replace(LineBreakTag, "\n")
+            .replace(ParagraphEndTag, "\n")
+            .replace(AnyHtmlTag, "")
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
@@ -1275,7 +1282,11 @@ internal fun monthMarkerColors(
         }
     }
 
+    // Events of other months are skipped without converting their times: there can be thousands.
+    val monthStartMillis = first.startOfDayMillis()
+    val nextMonthStartMillis = last.plusDays(1).startOfDayMillis()
     events.forEach { event ->
+        if (event.startsAtMillis >= nextMonthStartMillis || event.endsAtMillis - 1 < monthStartMillis) return@forEach
         val start = event.startsAtMillis.toDate().coerceAtLeast(first)
         val end = (event.endsAtMillis - 1).toDate().coerceAtMost(last)
         var day = start
@@ -1409,8 +1420,12 @@ fun buildAllDayOverlayItems(
         var lane: Int,
     )
 
+    // Two days of margin cover the zone differences between dates and instants.
+    val earliestMillis = (visibleStartPage - 2).toDayDate().startOfDayMillis()
+    val latestMillis = (visibleEndPage + 3).toDayDate().startOfDayMillis()
     val candidates = buildList {
         events.forEach { event ->
+            if (event.startsAtMillis >= latestMillis || event.endsAtMillis < earliestMillis) return@forEach
             val topStart = event.allDayTopStartDate() ?: return@forEach
             val topEnd = event.allDayTopEndDate() ?: return@forEach
             val startPage = topStart.toDayPage()

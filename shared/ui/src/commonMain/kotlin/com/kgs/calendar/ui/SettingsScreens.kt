@@ -43,7 +43,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -297,7 +297,7 @@ fun SettingsPage(
     var newGroupOpen by remember { mutableStateOf(false) }
     var expandedGroupKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
     var navigatingForward by remember { mutableStateOf(true) }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val currentDestination = remember(navigationStack) {
         runCatching { SettingsDestination.valueOf(navigationStack.last()) }.getOrDefault(SettingsDestination.Main)
@@ -1827,7 +1827,7 @@ fun ProblemsPage(
     onClose: () -> Unit,
     onResolveConflict: (resourceHref: String, keepLocal: Boolean) -> Unit = { _, _ -> },
 ) {
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Surface(
         modifier = Modifier

@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -128,7 +128,7 @@ fun CalendarDrawer(
     onGroupSettings: (String) -> Unit,
     onAppSettings: () -> Unit,
 ) {
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     SharedDrawerSheet(visible = visible, onDismiss = onDismiss) {
             // Settings (and problems, when there are any) stay pinned below the scrolling list.
@@ -665,7 +665,7 @@ private fun TaskSidebarContent(
     /** The completed tasks open inside the sidebar (the desktop) instead of as their own page. */
     completedInline: Boolean = false,
 ) {
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     var showingCompleted by remember { mutableStateOf(false) }
     AnimatedContent(
         targetState = completedInline && showingCompleted,

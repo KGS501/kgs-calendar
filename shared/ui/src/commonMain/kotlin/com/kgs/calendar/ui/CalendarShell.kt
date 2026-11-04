@@ -42,7 +42,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import com.kgs.calendar.ui.platform.appStatusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -202,7 +202,7 @@ fun CalendarShell(
             tabletopShellLayout(
                 hingeTop = (posture.hingeTopPx - shellTopInRootPx).toDp(),
                 hingeBottom = (posture.hingeBottomPx - shellTopInRootPx).toDp(),
-                toolbarBottom = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 58.dp,
+                toolbarBottom = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding() + 58.dp,
             )
         }
     }
@@ -278,7 +278,7 @@ fun CalendarShell(
             onTimelineHourHeightChanged(true, landscapeHourHeightDp)
         }
     }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val landscapeHeaderPresentation = timelineHeaderPresentation(
         isLandscape = true,
         landscapeCompactRequested = landscapeTimelineCompactRequested,
@@ -338,7 +338,7 @@ fun CalendarShell(
     val monthOverviewExpandedHeight = if (tabletopSplit && tabletopLayout != null) {
         tabletopLayout.monthOverviewHeight
     } else if (monthOverviewSideBySide) {
-        val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
         (windowLayout.heightDp.dp - 58.dp - statusTop).coerceAtLeast(0.dp)
     } else {
         overviewMonth.overviewPanelHeight(state.firstDayOfWeek)
@@ -791,7 +791,7 @@ private fun CalendarToolbar(
     onMonthClick: () -> Unit,
 ) {
     val quietInteraction = remember { MutableInteractionSource() }
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
     val today = LocalCalendarTimeSnapshot.current.today
     val hasOpenTasks = remember(state.scheduledOpenTasks, state.missedTaskOccurrences, state.datedTasks, today) {
         hasTaskToolbarAttention(

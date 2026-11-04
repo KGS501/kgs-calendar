@@ -8,6 +8,7 @@ import com.kgs.calendar.time.nowMillis
 import com.kgs.calendar.time.systemDefault
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,6 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import platform.BackgroundTasks.BGAppRefreshTaskRequest
 import platform.BackgroundTasks.BGTask
 import platform.BackgroundTasks.BGTaskScheduler
@@ -50,29 +52,36 @@ class IosSync internal constructor(private val graph: IosAppGraph) {
                 .debounce(500)
                 .collect { ids ->
                     if (ids.isEmpty()) return@collect
-                    val error = attempt { syncLock.withLock { graph.repository.pushAllPendingChanges() } }
+                    val error = attempt { background { syncLock.withLock { graph.repository.pushAllPendingChanges() } } }
                     log("upload of ${ids.size} changes ${error ?: "ok"}")
                 }
         }
         graph.scope.launch {
-            reparseCachedIcalIfNeeded(
-                storedVersion = graph.settingsStore.parserReparseVersion.first(),
-                reparseTaskResources = graph.repository::reparseLocalTaskResources,
-                reparseAllResources = graph.repository::reparseLocalResources,
-                recordVersion = graph.settingsStore::setParserReparseVersion,
-            )
-            val reparsed = reparseForZoneChangeIfNeeded(
-                storedZoneId = graph.settingsStore.parsedZoneId.first(),
-                currentZoneId = ZoneId.systemDefault().id,
-                reparseAllResources = graph.repository::reparseLocalResources,
-                reloadDeviceCalendars = {},
-                recordZone = graph.settingsStore::setParsedZoneId,
-            )
-            if (reparsed) attempt { graph.reminders.reschedule() }
+            background { startUpRepairs() }
         }
         graph.scope.launch {
             graph.settingsStore.syncIntervalMinutes.distinctUntilChanged().collect { scheduleBackgroundRefresh(it) }
         }
+    }
+
+    /** Parsing and saving must not run on the main thread: the UI would stop while they do. */
+    private suspend fun <T> background(block: suspend () -> T): T = withContext(Dispatchers.Default) { block() }
+
+    private suspend fun startUpRepairs() {
+        reparseCachedIcalIfNeeded(
+            storedVersion = graph.settingsStore.parserReparseVersion.first(),
+            reparseTaskResources = graph.repository::reparseLocalTaskResources,
+            reparseAllResources = graph.repository::reparseLocalResources,
+            recordVersion = graph.settingsStore::setParserReparseVersion,
+        )
+        val reparsed = reparseForZoneChangeIfNeeded(
+            storedZoneId = graph.settingsStore.parsedZoneId.first(),
+            currentZoneId = ZoneId.systemDefault().id,
+            reparseAllResources = graph.repository::reparseLocalResources,
+            reloadDeviceCalendars = {},
+            recordZone = graph.settingsStore::setParsedZoneId,
+        )
+        if (reparsed) attempt { graph.reminders.reschedule() }
     }
 
     fun onForeground() {
@@ -97,7 +106,7 @@ class IosSync internal constructor(private val graph: IosAppGraph) {
 
     /** A full sync, then reminders are planned again whatever the outcome. Returns the sync error. */
     suspend fun syncAll(): Throwable? {
-        val error = attempt { syncLock.withLock { graph.repository.syncNow() } }
+        val error = attempt { background { syncLock.withLock { graph.repository.syncNow() } } }
         log("sync ${error ?: "ok"}")
         if (error == null) lastSyncActivityAt = nowMillis()
         attempt { graph.reminders.reschedule() }

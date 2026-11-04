@@ -332,12 +332,9 @@ fun MonthOverview(
                     ) {
                         MonthGrid(
                             month = visibleMonth,
-                            markersByDay = monthMarkersFor(
-                                visibleMonth,
-                                state.events,
-                                calendarTasks,
-                                state.taskColorMode,
-                            ),
+                            markersByDay = remember(visibleMonth, state.events, calendarTasks, state.taskColorMode) {
+                                monthMarkersFor(visibleMonth, state.events, calendarTasks, state.taskColorMode)
+                            },
                             firstDayOfWeek = firstDayOfWeek,
                             showCalendarWeeks = state.showCalendarWeeks,
                             selectedStart = state.selectedDate,
