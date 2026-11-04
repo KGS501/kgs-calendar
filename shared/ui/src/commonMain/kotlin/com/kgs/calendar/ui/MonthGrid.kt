@@ -105,7 +105,7 @@ import com.kgs.calendar.time.*
 import kotlinx.datetime.*
 
 @Composable
-internal fun MonthBlock(
+fun MonthBlock(
     month: YearMonth,
     firstDayOfWeek: DayOfWeek,
     showCalendarWeeks: Boolean,
