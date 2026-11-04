@@ -102,6 +102,19 @@ import com.kgs.calendar.ui.sources.label
 import com.kgs.calendar.ui.sources.subtitle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import com.kgs.calendar.ui.platform.onSecondaryClick
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 
 @Composable
 fun CalendarDrawer(
@@ -140,34 +153,50 @@ fun CalendarDrawer(
                     DrawerViewItem(stringResource(Res.string.month), Icons.Default.CalendarMonth, CalendarViewMode.Month, state.selectedView, onViewSelected)
                     DrawerActionRow(stringResource(Res.string.refresh), Icons.Default.Refresh, onSync)
                     HorizontalDivider(color = WarmLine, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 6.dp))
-                    val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
-                    val visibleGroups = state.calendarGroups
-                        .map { group -> group to group.collections.filter { it.isEnabled } }
-                        .filter { (_, collections) -> collections.isNotEmpty() }
-                    visibleGroups.forEachIndexed { index, (group, collections) ->
-                        if (index > 0) {
-                            Spacer(Modifier.height(10.dp))
-                        }
-                        DrawerSourceSection(
-                            group = group,
-                            image = group.image(state.sourceImages),
-                            avatarColor = group.avatarColor(state.calendarGroupSettings),
-                            collections = collections,
-                            feedStatus = { collection ->
-                                readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
-                            },
-                            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
-                            onGroupSettings = { onGroupSettings(group.key) },
-                            onCollectionVisibleInViews = onCollectionVisibleInViews,
-                            onCollectionSettings = onCollectionSettings,
-                        )
-                    }
+                    CalendarSourceList(
+                        state = state,
+                        onCollectionVisibleInViews = onCollectionVisibleInViews,
+                        onCollectionSettings = onCollectionSettings,
+                        onGroupSettings = onGroupSettings,
+                    )
                 }
                 // The line only shows while calendars scroll underneath the pinned rows.
                 HorizontalDivider(color = WarmLine.copy(alpha = if (listScroll.canScrollForward) 1f else 0f))
                 Spacer(Modifier.height(6.dp))
                 DrawerActionRow(stringResource(Res.string.app_settings), Icons.Default.Settings, onAppSettings)
             }
+    }
+}
+
+/** The calendars by source, each with its visibility switch and settings, as in the drawer. */
+@Composable
+internal fun CalendarSourceList(
+    state: CalendarUiState,
+    onCollectionVisibleInViews: (String, Boolean) -> Unit,
+    onCollectionSettings: (CollectionEntity) -> Unit,
+    onGroupSettings: (String) -> Unit,
+) {
+    val accounts = state.accounts.ifEmpty { state.account?.let(::listOf).orEmpty() }
+    val visibleGroups = state.calendarGroups
+        .map { group -> group to group.collections.filter { it.isEnabled } }
+        .filter { (_, collections) -> collections.isNotEmpty() }
+    visibleGroups.forEachIndexed { index, (group, collections) ->
+        if (index > 0) {
+            Spacer(Modifier.height(10.dp))
+        }
+        DrawerSourceSection(
+            group = group,
+            image = group.image(state.sourceImages),
+            avatarColor = group.avatarColor(state.calendarGroupSettings),
+            collections = collections,
+            feedStatus = { collection ->
+                readOnlyFeedStatus(accounts.firstOrNull { it.id == collection.accountId }, collection)
+            },
+            hiddenCollectionHrefs = state.hiddenCollectionHrefs,
+            onGroupSettings = { onGroupSettings(group.key) },
+            onCollectionVisibleInViews = onCollectionVisibleInViews,
+            onCollectionSettings = onCollectionSettings,
+        )
     }
 }
 
@@ -188,6 +217,7 @@ private fun DrawerSourceSection(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClickLabel = stringResource(Res.string.calendar_group_edit), onClick = onGroupSettings)
+            .onSecondaryClick { onGroupSettings() }
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -261,6 +291,7 @@ private fun DrawerCollectionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSettings)
+            .onSecondaryClick { onSettings() }
             // Indented under the group's picture, so each group's calendars read as one set.
             .padding(start = 42.dp, end = 24.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -491,6 +522,9 @@ fun TaskDrawer(
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
+    /** Pins the sidebar as a permanent pane (the desktop); null where it can't be pinned. */
+    onPin: (() -> Unit)? = null,
+    completedInline: Boolean = false,
 ) {
     val drawerProgress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
@@ -561,6 +595,9 @@ fun TaskDrawer(
                 onTaskClick = onTaskClick,
                 onShowCompleted = onShowCompleted,
                 onCreateTask = onCreateTask,
+                pinned = false,
+                onPinnedChange = onPin?.let { pin -> { pinned: Boolean -> if (pinned) pin() } },
+                completedInline = completedInline,
             )
         }
     }
@@ -578,6 +615,11 @@ fun TaskPane(
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The hairline on the pane's calendar side; the desktop draws its own seam there. */
+    showDivider: Boolean = true,
+    pinned: Boolean = false,
+    onPinnedChange: ((Boolean) -> Unit)? = null,
+    completedInline: Boolean = false,
 ) {
     Surface(
         modifier = modifier
@@ -593,8 +635,11 @@ fun TaskPane(
                 onTaskClick = onTaskClick,
                 onShowCompleted = onShowCompleted,
                 onCreateTask = onCreateTask,
+                pinned = pinned,
+                onPinnedChange = onPinnedChange,
+                completedInline = completedInline,
             )
-            Box(
+            if (showDivider) Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
@@ -615,8 +660,36 @@ private fun TaskSidebarContent(
     onTaskClick: (TaskEntity) -> Unit,
     onShowCompleted: () -> Unit,
     onCreateTask: () -> Unit,
+    pinned: Boolean = false,
+    onPinnedChange: ((Boolean) -> Unit)? = null,
+    /** The completed tasks open inside the sidebar (the desktop) instead of as their own page. */
+    completedInline: Boolean = false,
 ) {
     val statusTop = WindowInsets.appStatusBars.asPaddingValues().calculateTopPadding()
+    var showingCompleted by remember { mutableStateOf(false) }
+    AnimatedContent(
+        targetState = completedInline && showingCompleted,
+        transitionSpec = {
+            val forward = targetState
+            (slideInHorizontally(tween(MotionMedium, easing = MotionEmphasized)) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(MotionMedium))) togetherWith
+                (slideOutHorizontally(tween(MotionShort, easing = MotionStandardAccelerate)) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(MotionShort)))
+        },
+        label = "taskSidebarCompleted",
+    ) { completed ->
+    if (completed) {
+        CompletedTasksView(
+            tasks = remember(state.taskHierarchyTasks) {
+                state.taskHierarchyTasks.partitionByRootActivity().inactiveRootTasks
+            },
+            taskColorMode = state.taskColorMode,
+            subtasksExpandedByDefault = state.subtasksExpandedByDefault,
+            onTaskStatusChanged = onTaskStatusChanged,
+            onTaskClick = onTaskClick,
+            onClose = { showingCompleted = false },
+            embedded = true,
+        )
+        return@AnimatedContent
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -629,9 +702,38 @@ private fun TaskSidebarContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmInk, modifier = Modifier.size(24.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(Res.string.tasks), color = WarmInk, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold)
+            // One word that shrinks to fit a narrow sidebar rather than breaking.
+            BasicText(
+                stringResource(Res.string.tasks),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    color = WarmInk,
+                    fontSize = 21.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 21.sp, stepSize = 0.5.sp),
+                modifier = Modifier.weight(1f),
+            )
+            if (onPinnedChange != null) {
+                // Pinned, the sidebar stays beside the calendar like the left one.
+                // Active, only the pin itself takes the accent color.
+                val pinTint by animateColorAsState(
+                    targetValue = if (pinned) WarmBrown else WarmInk,
+                    animationSpec = tween(MotionMedium, easing = MotionStandard),
+                    label = "taskPinTint",
+                )
+                IconButton(
+                    onClick = { onPinnedChange(!pinned) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = stringResource(if (pinned) Res.string.desktop_unpin_tasks else Res.string.desktop_pin_tasks),
+                        tint = pinTint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
             IconButton(
                 onClick = onCreateTask,
@@ -654,7 +756,12 @@ private fun TaskSidebarContent(
             onDetail = { detail ->
                 if (detail is DetailSheet.Task) onTaskClick(detail.task)
             },
-            onShowCompleted = onShowCompleted,
+            onShowCompleted = if (completedInline) {
+                { showingCompleted = true }
+            } else {
+                onShowCompleted
+            },
         )
+    }
     }
 }

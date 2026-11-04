@@ -75,6 +75,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import com.kgs.calendar.ui.platform.onSecondaryClick
 
 const val TaskDetailMorphDurationMs = 460
 const val TaskDetailControlsRevealDelayMs = 220
@@ -484,7 +485,7 @@ enum class PlannedTaskSort(val label: String) {
  * Shared task checkbox used in the day view, sidebar, detail sheet and editor.
  *
  * - Tap toggles between COMPLETED and NEEDS-ACTION, unless the caller requests the picker.
- * - Long-press opens a status menu (Offen / In Bearbeitung / Erledigt / Abgebrochen).
+ * - Long-press or a right click opens a status menu (Offen / In Bearbeitung / Erledigt / Abgebrochen).
  * - The glyph reflects the status: empty circle (open), slow indeterminate spinner
  *   (in progress), filled check (completed) and an X (cancelled).
  */
@@ -506,6 +507,8 @@ fun TaskStatusCheckbox(
         modifier = modifier
             .size(boxSize)
             .clip(CircleShape)
+            // A right click opens the status menu too, as a long press does.
+            .onSecondaryClick(enabled = enabled) { menuOpen = true }
             .combinedClickable(
                 enabled = enabled,
                 onClick = {
@@ -541,12 +544,8 @@ fun TaskStatusCheckbox(
             )
             // Inner glyph centered inside the ring.
             when (status) {
-                "IN-PROCESS" -> Box(
-                    modifier = Modifier
-                        .size(iconSize * 0.34f)
-                        .clip(CircleShape)
-                        .background(tint),
-                )
+                // Drawn in the ring's own bounds, so it sits exactly at the ring's center.
+                "IN-PROCESS" -> CenteredDot(tint, iconSize, fraction = 0.34f)
                 "CANCELLED" -> Icon(
                     Icons.Default.Close,
                     contentDescription = null,
@@ -583,46 +582,48 @@ private fun TaskStatusPickerDialog(
         Surface(
             shape = DialogShape,
             color = popupSurfaceColor(),
-            modifier = Modifier.wideDialogWidth(),
+            modifier = Modifier.wideDialogWidth().dialogEntrance(),
         ) {
-            Column(modifier = Modifier.padding(vertical = 14.dp)) {
-                Text(
-                    appString(Res.string.status),
-                    color = WarmInk,
-                    fontSize = 20.sp,
-                    lineHeight = 26.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
-                )
-                TaskStatusOptions.forEach { value ->
-                    val label = taskStatusOptionLabel(value)
-                    val selected = value == current
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(value) }
-                            .padding(horizontal = 22.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
-                            when (value) {
-                                "IN-PROCESS" -> Box(Modifier.size(8.dp).clip(CircleShape).background(WarmInk))
-                                "CANCELLED" -> Icon(Icons.Default.Close, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
-                                "COMPLETED" -> Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+            ProvidePopupSurface {
+                Column(modifier = Modifier.padding(vertical = 14.dp)) {
+                    Text(
+                        appString(Res.string.status),
+                        color = WarmInk,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                    )
+                    TaskStatusOptions.forEach { value ->
+                        val label = taskStatusOptionLabel(value)
+                        val selected = value == current
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(value) }
+                                .padding(horizontal = 22.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = WarmInk, modifier = Modifier.size(22.dp))
+                                when (value) {
+                                    "IN-PROCESS" -> CenteredDot(WarmInk, 22.dp, fraction = 0.36f)
+                                    "CANCELLED" -> Icon(Icons.Default.Close, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+                                    "COMPLETED" -> Icon(Icons.Default.Check, contentDescription = null, tint = WarmInk, modifier = Modifier.size(13.dp))
+                                }
                             }
-                        }
-                        Text(
-                            label,
-                            color = WarmInk,
-                            fontSize = 16.sp,
-                            lineHeight = 19.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                            Text(
+                                label,
+                                color = WarmInk,
+                                fontSize = 16.sp,
+                                lineHeight = 19.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = WarmBrown, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }
@@ -754,4 +755,12 @@ private fun EventEntity.estimatedParticipantsDetailHeight(): Int {
         if (ownParticipationControls > 0) 2 else 0,
     ).sum()
     return surfacePadding + header + organizerHeight + attendeeRows + ownParticipationControls + spacingCount * 10
+}
+
+/** A dot at the exact center of a [size] square, e.g. inside a status ring of that size. */
+@Composable
+internal fun CenteredDot(color: Color, size: Dp, fraction: Float) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        drawCircle(color, radius = this.size.minDimension * fraction / 2f, center = center)
+    }
 }

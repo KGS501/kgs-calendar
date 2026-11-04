@@ -117,7 +117,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.cos
-
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
 
 @Composable
 fun DayTimedColumn(
@@ -282,7 +282,7 @@ fun FadingTimedText(
             lineHeight = scaledLineHeight,
             fontWeight = fontWeight,
             textDecoration = textDecoration,
-            style = TextStyle(shadow = shadow),
+            style = TextStyle(shadow = shadow, fontFamily = LocalAppFontFamily.current),
             maxLines = maxLines,
             softWrap = softWrap,
             overflow = TextOverflow.Clip,
@@ -335,6 +335,7 @@ fun tentativeReadableTextStyle(enabled: Boolean): TextStyle =
     if (enabled) {
         val backdrop = if (MaterialTheme.colorScheme.background.isDark()) Color.Black else Color.White
         TextStyle(
+            fontFamily = LocalAppFontFamily.current,
             shadow = Shadow(
                 color = backdrop.copy(alpha = 0.88f),
                 offset = Offset(0f, 1f),
@@ -342,7 +343,7 @@ fun tentativeReadableTextStyle(enabled: Boolean): TextStyle =
             ),
         )
     } else {
-        TextStyle.Default
+        TextStyle(fontFamily = LocalAppFontFamily.current)
     }
 
 private enum class ParticipantDisplayMode { Hidden, Compact, Full }
@@ -571,7 +572,8 @@ private fun TimedEventBlock(
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-event-${event.resourceHref}")
-                .then(dragModifier),
+                .then(dragModifier)
+                .itemContextMenu(event),
         ) {
             Box(
                 Modifier
@@ -902,7 +904,8 @@ private fun TimedTaskBlock(
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-task-${task.resourceHref}")
-                .then(dragModifier),
+                .then(dragModifier)
+                .itemContextMenu(task),
         ) {
             TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())
             Box(

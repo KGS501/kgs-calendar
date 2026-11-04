@@ -133,7 +133,6 @@ import com.kgs.calendar.ui.timeline.FullWeekPagerGestureState
 import com.kgs.calendar.ui.timeline.pagePosition
 import com.kgs.calendar.ui.timeline.timelineSettledPageSelection
 import com.kgs.calendar.ui.timeline.weekStartPageOffset
-import com.kgs.calendar.ui.layout.collapsedRowsAtViewport
 import com.kgs.calendar.ui.layout.buildAllDayViewportWindow
 import com.kgs.calendar.ui.layout.rightEdgeSquashGeometry
 import com.kgs.calendar.ui.model.orderedOverdueTasks
@@ -166,6 +165,14 @@ import kotlin.math.roundToInt
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+import com.kgs.calendar.ui.platform.mouseDragScroll
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import kotlin.math.pow
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
 
 private val OverdueTasksFloatOffset = 6.dp
 private val CalendarWeekMinimumFullLabelWidth = 88.dp
@@ -211,6 +218,9 @@ private interface TimelineVerticalPinchOwner {
     fun begin(upperY: Float, lowerY: Float): PinchSnapshot?
     fun update(snapshot: PinchSnapshot, upperY: Float, lowerY: Float)
     fun end()
+
+    /** Ctrl and the mouse wheel: zooms by [factor] around [anchorY], gliding there like a pinch. */
+    fun zoomBy(anchorY: Float, factor: Float)
 }
 
 val TimelineHourHeightDpSemanticsKey =
@@ -290,7 +300,7 @@ fun TimelineView(
     val calendarWeekFontSize = headerPresentation.weekLabelFontSize
     var timelineRootOffset by remember { mutableStateOf(Offset.Zero) }
     var activeTimedDrag by remember { mutableStateOf<ActiveTimelineTimedDrag?>(null) }
-    var dayViewportWidthPx by remember { mutableStateOf(0) }
+    var rawDayViewportWidthPx by remember { mutableStateOf(0) }
     var gridViewportHeightPx by remember { mutableStateOf(0) }
     var timelineViewportHeightPx by remember { mutableStateOf(0) }
     val currentOnTimeScrollChanged = rememberUpdatedState(onTimeScrollChanged)
@@ -333,7 +343,6 @@ fun TimelineView(
     )
     val targetDayCount = if (isDayMode) 1 else multiDayCount
     val dayEndGutterPx = daySpacingPx
-    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
     // Animate the column COUNT as a float between 1 and the configured multi-day count. The pager's fixed page size is
     // derived from it for the steady states and the back-button morph; the header-tap morph
     // instead uses [morphContext] + the overlay so the tapped day can expand from ANY column
@@ -353,11 +362,22 @@ fun TimelineView(
     // the all-day band reflect the slide — e.g. a neighbour day's all-day chips stay rendered
     // while it slides out, instead of snapping to the destination count the instant the morph
     // starts.
+    // The days' area as wide as the pager: whole-pixel days rarely add up to the measured width,
+    // and the spare pixels (fewer than one per day) stay empty instead of showing the next day.
+    val dayViewportWidthPx = if (rawDayViewportWidthPx <= 0) {
+        0
+    } else {
+        val spacing = daySpacingPx.roundToInt()
+        val page = floor(rawDayViewportWidthPx / animatedDayCount - spacing).toInt().coerceAtLeast(with(density) { 32.dp.roundToPx() })
+        ceil(animatedDayCount * (page + spacing)).toInt().coerceAtMost(rawDayViewportWidthPx)
+    }
+    val dayGeometryViewportWidthPx = (dayViewportWidthPx - dayEndGutterPx).coerceAtLeast(0f)
     val clampedDayCount = ceil(animatedDayCount).roundToInt().coerceIn(1, MAX_MULTI_DAY_COUNT)
     val dayWidthPx = ((dayGeometryViewportWidthPx - ((animatedDayCount - 1f) * daySpacingPx)) / animatedDayCount)
         .coerceAtLeast(with(density) { 32.dp.toPx() })
     val dayWidthDp = with(density) { dayWidthPx.toDp() }
-    val pagerDayWidthPx = with(density) { dayWidthDp.roundToPx().toFloat() }
+    // Whole pixels, rounded down like the pager's pages, so the days fill the pager exactly.
+    val pagerDayWidthPx = floor(dayWidthPx).coerceAtLeast(with(density) { 32.dp.toPx() })
     val pagerDayStepPx = pagerDayWidthPx + with(density) { DayColumnSpacing.roundToPx().toFloat() }
     // Derive the pager anchor from the active timeline policy, not visibleRange.startDate. The
     // loaded range is intentionally wider than the displayed window for morphs, so its start may
@@ -520,14 +540,11 @@ fun TimelineView(
             maxVisibleItems = state.maxVisibleAllDayItems,
             expanded = allDayExpanded,
             draftDate = draftEvent?.takeIf { it.allDay }?.date,
-            priorityPageCount = clampedDayCount,
         )
     }
     val baseAllDayHeight = allDayAreaLayout.height
-    val collapsedViewportRows = allDayAreaLayout.scene?.collapsedRowsAtViewport(
-        allDayAnchorPage, allDayAnchorOffsetPx, pagerDayWidthPx, pagerDayStepPx, dayGeometryViewportWidthPx,
-        minimumRows = allDayAreaLayout.draftRows,
-    ) ?: 0f
+    val collapsedViewportRows = allDayAreaLayout.scene
+        ?.let { maxOf(it.metrics.collapsedRowCount, allDayAreaLayout.draftRows).toFloat() } ?: 0f
     val collapsedViewportHeight = if (collapsedViewportRows == 0f) 22.dp else (collapsedViewportRows * 29f + 10f).dp
     val visibleReservation = activeTimedDrag?.session?.reservation
         ?.takeIf { reservation -> reservation.date in pagerVisibleDays }
@@ -543,7 +560,7 @@ fun TimelineView(
         calendarTasks,
         state.maxVisibleAllDayItems,
     ) {
-        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems, clampedDayCount)
+        pagerVisibleDays.hasAllDayOverflow(state.events, calendarTasks, state.maxVisibleAllDayItems)
     }
     val allDayArrowRotation by animateFloatAsState(
         targetValue = if (allDayExpanded) 180f else 0f,
@@ -609,8 +626,10 @@ fun TimelineView(
             programmaticTargetPage = null
             return@LaunchedEffect
         }
-        if (selectedView == CalendarViewMode.Day &&
-            pagerState.currentPage == selectedPage &&
+        // A resized viewport (e.g. a desktop pane dragged wider) keeps the pager's offset as a
+        // fraction of the old page: snap back, so no sliver of the neighbouring day shows.
+        if (pagerState.currentPage == selectedPage &&
+            !pagerState.isScrollInProgress &&
             abs(pagerState.currentPageOffsetFraction) > 0.001f
         ) {
             programmaticTargetPage = selectedPage
@@ -712,6 +731,39 @@ fun TimelineView(
                     timeScroll.scrollTo(targetScrollPx.roundToInt().coerceIn(0, timeScroll.maxValue))
                     currentOnTimeScrollChanged.value(timeScroll.value)
                     pinchTargetScrollPx = Float.NaN
+                }
+            }
+
+            // The wheel zoom is a pinch whose fingers glide apart (or together) over a few frames.
+            private var wheelSnapshot: PinchSnapshot? = null
+            private var wheelAnchorY = 0f
+            private var wheelScale = 1f
+            private var wheelTarget = 1f
+            private var wheelGliding = false
+
+            override fun zoomBy(anchorY: Float, factor: Float) {
+                val snapshot = wheelSnapshot ?: begin(anchorY - WheelZoomSpanPx, anchorY + WheelZoomSpanPx)?.also {
+                    wheelSnapshot = it
+                    wheelAnchorY = anchorY
+                    wheelScale = 1f
+                    wheelTarget = 1f
+                } ?: return
+                val startHeight = snapshot.initialViewport.hourHeightPx
+                wheelTarget = (wheelTarget * factor)
+                    .coerceIn(snapshot.minHourHeightPx / startHeight, snapshot.maxHourHeightPx / startHeight)
+                if (wheelGliding) return
+                wheelGliding = true
+                scope.launch {
+                    while (true) {
+                        withFrameNanos { }
+                        val remaining = wheelTarget - wheelScale
+                        wheelScale = if (abs(remaining) < 0.002f) wheelTarget else wheelScale + remaining * 0.3f
+                        update(snapshot, wheelAnchorY - WheelZoomSpanPx * wheelScale, wheelAnchorY + WheelZoomSpanPx * wheelScale)
+                        if (wheelScale == wheelTarget) break
+                    }
+                    wheelSnapshot = null
+                    wheelGliding = false
+                    end()
                 }
             }
         }
@@ -865,12 +917,13 @@ fun TimelineView(
     }
     val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Unit>(
         newValue = dragStart@ { start ->
-            if (morphContext != null || dayWidthPx <= 0f) return@dragStart
+            if (morphContext != null || pagerDayWidthPx <= 0f) return@dragStart
             val firstPage = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
             val anchorPage = firstPage?.index ?: pagerState.currentPage
             val anchorOffsetPx = firstPage?.offset?.toFloat() ?: 0f
             val sidebarWidthPx = with(density) { TimeSidebarWidth.toPx() }
-            val dayStepPx = dayWidthPx + daySpacingPx
+            // The pager's whole-pixel days, so a dragged card stays on the columns it crosses.
+            val dayStepPx = pagerDayStepPx
             val rootOrigin = TimelineDragPoint(timelineRootOffset.x, timelineRootOffset.y)
             val sourcePageLeft = sidebarWidthPx + anchorOffsetPx +
                 (start.item.sourceDate.toDayPage() - anchorPage) * dayStepPx
@@ -879,7 +932,7 @@ fun TimelineView(
                 rootOrigin = rootOrigin,
                 anchorPage = anchorPage,
                 anchorOffsetPx = anchorOffsetPx,
-                dayWidthPx = dayWidthPx,
+                dayWidthPx = pagerDayWidthPx,
                 dayStepPx = dayStepPx,
                 sidebarWidthPx = sidebarWidthPx,
                 dayHeaderHeightPx = with(density) { animatedDayHeaderHeight.toPx() },
@@ -1070,7 +1123,7 @@ fun TimelineView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .onSizeChanged { dayViewportWidthPx = it.width },
+                    .onSizeChanged { rawDayViewportWidthPx = it.width },
             ) {
             // Enable per-item (event/task) morphs out of the month cell only for the real pager in
             // 1-day mode and only when NOT doing the 3-day affine morph — so the selected day's
@@ -1081,6 +1134,7 @@ fun TimelineView(
                 LocalMorphItemDay provides itemMorphDay,
                 LocalTimedDragReporter provides timedDragReporter,
             ) {
+            val pagerFlingBehavior = if (fullWeekPagingEnabled) fullWeekFlingBehavior else fallbackPagerFlingBehavior
             HorizontalPager(
                 state = pagerState,
                 // Calculate from this measure pass, not the previous onSizeChanged callback.
@@ -1090,16 +1144,12 @@ fun TimelineView(
                 pageSize = remember(animatedDayCount) {
                     object : PageSize {
                         override fun Density.calculateMainAxisPageSize(availableSpace: Int, pageSpacing: Int): Int =
-                            (availableSpace / animatedDayCount - pageSpacing).roundToInt()
+                            floor(availableSpace / animatedDayCount - pageSpacing).toInt()
                                 .coerceAtLeast(32.dp.roundToPx())
                     }
                 },
                 pageSpacing = DayColumnSpacing,
-                flingBehavior = if (fullWeekPagingEnabled) {
-                    fullWeekFlingBehavior
-                } else {
-                    fallbackPagerFlingBehavior
-                },
+                flingBehavior = pagerFlingBehavior,
                 // Keep both neighbours composed so they're ready to slide in when the 1-day
                 // view widens out to 3-day, instead of popping in once they reach the viewport.
                 beyondViewportPageCount = multiDayCount.coerceAtLeast(2),
@@ -1107,8 +1157,19 @@ fun TimelineView(
                 // morph plays — the affine overlay below renders that transition instead.
                 modifier = Modifier
                     .fillMaxSize()
+                    // Whole-pixel pages rarely add up to the viewport: the pager is exactly as wide
+                    // as its days, so no sliver of the next day shows; the few spare pixels stay empty.
+                    .layout { measurable, constraints ->
+                        val spacing = DayColumnSpacing.roundToPx()
+                        val page = floor(constraints.maxWidth / animatedDayCount - spacing).toInt()
+                            .coerceAtLeast(32.dp.roundToPx())
+                        val width = ceil(animatedDayCount * (page + spacing)).toInt().coerceAtMost(constraints.maxWidth)
+                        val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+                        layout(constraints.maxWidth, placeable.height) { placeable.place(0, 0) }
+                    }
                     .zIndex(1f)
-                    .alpha(if (morphContext != null) 0f else 1f),
+                    .alpha(if (morphContext != null) 0f else 1f)
+                    .mouseDragScroll(pagerState, Orientation.Horizontal, pagerFlingBehavior),
             ) { page ->
                 val day = page.toDayDate()
                 val containsTimedDraft = draftEvent?.let { !it.allDay && it.date == day } == true
@@ -1249,7 +1310,6 @@ fun TimelineView(
                     onExpandedChange = { allDayExpanded = it },
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
-                    priorityPageCount = ctx.days.size,
                     reservation = visibleReservation,
                     allowVerticalOverflow = allowAllDayVerticalOverflow,
                 )
@@ -1297,7 +1357,6 @@ fun TimelineView(
                     onExpandedChange = { allDayExpanded = it },
                     onTaskStatusChanged = onTaskStatusChanged,
                     onDetail = onDetail,
-                    priorityPageCount = targetDayCount,
                     reservation = visibleReservation,
                     allowVerticalOverflow = allowAllDayVerticalOverflow,
                 )
@@ -1865,6 +1924,12 @@ private fun DayPagerColumn(
     }
 }
 
+/** Half the distance between the imagined fingers of a wheel zoom; any positive value works. */
+private const val WheelZoomSpanPx = 100f
+
+/** How much one wheel notch zooms. */
+private const val WheelZoomStep = 1.18f
+
 private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): Modifier =
     pointerInput(owner) {
         awaitEachGesture {
@@ -1872,6 +1937,16 @@ private fun Modifier.timelineVerticalPinch(owner: TimelineVerticalPinchOwner): M
             var ownsGesture = false
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
+                    val change = event.changes.firstOrNull()
+                    val delta = change?.scrollDelta?.y ?: 0f
+                    if (change != null && delta != 0f) {
+                        // Wheel up zooms in (taller hours), as in the year and month views.
+                        owner.zoomBy(change.position.y, WheelZoomStep.pow(-delta.coerceIn(-3f, 3f)))
+                        change.consume()
+                    }
+                    continue
+                }
                 val pressed = event.changes.filter { it.pressed }
                 if (!ownsGesture && pressed.size >= 2) {
                     val upperY = pressed.minOf { it.position.y }

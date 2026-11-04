@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kgs.calendar.ui.res.Res
 import com.kgs.calendar.ui.labels.RecurrenceOption
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
 
 private val RecurrenceUnits = listOf(RecurrenceOption.Daily, RecurrenceOption.Weekly, RecurrenceOption.Monthly, RecurrenceOption.Yearly)
 
@@ -235,7 +236,7 @@ fun TypeableAmount(value: Int, range: IntRange, onValueChange: (Int) -> Unit, ta
                     text.toIntOrNull()?.takeIf { it in range }?.let(onValueChange)
                 },
                 singleLine = true,
-                textStyle = TextStyle(color = WarmBrown, fontSize = fontSizeSp.sp, lineHeight = (fontSizeSp + 4).sp, fontWeight = FontWeight.SemiBold),
+                textStyle = TextStyle(fontFamily = LocalAppFontFamily.current, color = WarmBrown, fontSize = fontSizeSp.sp, lineHeight = (fontSizeSp + 4).sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(WarmBrown),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { editing = false }),

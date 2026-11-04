@@ -138,9 +138,12 @@ fun SettingsFootnote(text: String, modifier: Modifier = Modifier) {
 val LocalSettingsRowColor = compositionLocalOf<Color?> { null }
 
 @Composable
-fun settingsControlColor(): Color =
-    LocalSettingsRowColor.current
+fun settingsControlColor(): Color = when {
+    // White rows would vanish on a white popup, and the sheet's tint is not the popup's.
+    LocalOnPopupSurface.current -> popupFieldColor()
+    else -> LocalSettingsRowColor.current
         ?: if (MaterialTheme.colorScheme.background.isDark()) MaterialTheme.colorScheme.surface else Color.White
+}
 
 @Composable
 fun accentContainerContentColor(): Color =
@@ -272,9 +275,15 @@ fun SettingsNavRow(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
-    // Selected: the section open beside the main page in two-column settings.
+    // Selected: the section open beside the main page in two-column settings. In dark mode the
+    // accent container is light, so the row is tinted instead to keep its light text readable.
+    val selectedContainer = if (MaterialTheme.colorScheme.background.isDark()) {
+        settingsControlColor().blendWith(WarmBrown, 0.28f)
+    } else {
+        accentContainerColor()
+    }
     val container by animateColorAsState(
-        targetValue = if (selected) accentContainerColor() else settingsControlColor(),
+        targetValue = if (selected) selectedContainer else settingsControlColor(),
         animationSpec = tween(MotionShort, easing = MotionStandard),
         label = "settingsNavRowContainer",
     )

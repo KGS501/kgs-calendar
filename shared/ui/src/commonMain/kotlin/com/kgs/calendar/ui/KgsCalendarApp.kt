@@ -30,6 +30,7 @@ import com.kgs.calendar.ui.theme.LocalCalendarUiTokens
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import com.kgs.calendar.ui.time.rememberCalendarTimeState
 import com.kgs.calendar.time.AppLocale as Locale
+import com.kgs.calendar.ui.platform.systemLocale
 
 val LocalExitingResourceHrefs = compositionLocalOf<Set<String>> { emptySet() }
 val LocalTaskHierarchyExitProgress = compositionLocalOf { 0f }

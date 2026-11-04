@@ -14,8 +14,14 @@ expect object PlatformFeatures {
     /** Home-screen widgets. */
     val homeScreenWidgets: Boolean
 
-    /** A palette taken from the system (Android 12+ wallpaper colours). */
+    /** A palette taken from the system (Android 12+ wallpaper colours, Windows' accent colour). */
     val systemColors: Boolean
+
+    /** The system palette's name in the colour choice. */
+    val systemColorsLabel: StringResource
+
+    /** Vibration on touch (not on the desktop). */
+    val haptics: Boolean
 }
 
 /** The device's own calendars by the platform's name: "Android device calendars", "iPhone calendars". */

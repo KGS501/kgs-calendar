@@ -118,6 +118,7 @@ import com.kgs.calendar.time.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import com.kgs.calendar.ui.res.stringResource
 
 data class TimelineToolbarMonthOffset(
     val x: Dp,
@@ -164,6 +165,15 @@ fun CalendarShell(
     onLoadLaterAgenda: () -> Unit = {},
     timelineViewportMemory: TimelineOrientationViewportMemory? = null,
     foregroundRecenterRequest: Int = 0,
+    /** False where the window has its own toolbar and month navigation (the desktop). */
+    showToolbar: Boolean = true,
+    /** A date to move the month grid or agenda to, requested from outside, e.g. the desktop toolbar. */
+    dateRequest: com.kgs.calendar.ui.shell.DateRequest? = null,
+    /** The desktop's year view, shown instead of the selected view while [yearViewOpen]. */
+    yearViewOpen: Boolean = false,
+    yearView: (@Composable (morphDay: LocalDate, onOpenDay: (LocalDate) -> Unit) -> Unit)? = null,
+    /** A day of the year view opens: the year view closes as the day view comes in. */
+    onYearViewDayOpened: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -283,10 +293,20 @@ fun CalendarShell(
         state.selectedView.group() == CalendarViewGroup.Timeline &&
         (tabletopSplit || (!monthOverviewOpen && !monthOverviewGestureClosing))
     val showLandscapeMultiDayControls = showLandscapeTimelineControl &&
+        !yearViewOpen &&
         state.selectedView == CalendarViewMode.ThreeDay &&
         !state.weekViewEnabled &&
         state.multiDaySidebarControlsEnabled
     val today = LocalCalendarTimeSnapshot.current.today
+
+    LaunchedEffect(dateRequest) {
+        val date = dateRequest?.date ?: return@LaunchedEffect
+        when (state.selectedView) {
+            CalendarViewMode.Agenda -> requestAgendaNavigation(date)
+            CalendarViewMode.Month -> monthJumpRequest = YearMonth.from(date)
+            else -> Unit
+        }
+    }
 
     LaunchedEffect(foregroundRecenterRequest) {
         if (foregroundRecenterRequest <= handledForegroundRecenterSerial) return@LaunchedEffect
@@ -456,7 +476,7 @@ fun CalendarShell(
                     onVerticalEnd = ::settleMonthOverviewDismissDrag,
                 ),
         ) {
-        CalendarToolbar(
+        if (showToolbar) CalendarToolbar(
             state = state,
             onMenu = {
                 if (overdueTasksExpanded) onOverdueTasksExpandedChange(false) else onMenu()
@@ -561,13 +581,28 @@ fun CalendarShell(
         ) {
             SharedTransitionLayout(modifier = Modifier.matchParentSize()) {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+                    // A day opens out of the month and year grids the same way.
+                    fun openDayFromGrid(day: LocalDate, fromYear: Boolean) {
+                        if (monthDayTransitionPending) return
+                        monthDayTransitionPending = true
+                        monthMorphDayText = day.toString()
+                        scope.launch {
+                            withFrameNanos { }
+                            onDateSelected(day)
+                            withFrameNanos { }
+                            if (fromYear) onYearViewDayOpened()
+                            onViewSelected(CalendarViewMode.Day)
+                            monthDayTransitionPending = false
+                        }
+                    }
                     AnimatedContent(
-                        targetState = state.selectedView.group(),
+                        targetState = if (yearViewOpen && yearView != null) CalendarViewGroup.Year else state.selectedView.group(),
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                         transitionSpec = {
+                            val grids = setOf(CalendarViewGroup.MonthGrid, CalendarViewGroup.Year)
                             val timelineMonth =
-                                (initialState == CalendarViewGroup.Timeline && targetState == CalendarViewGroup.MonthGrid) ||
-                                    (initialState == CalendarViewGroup.MonthGrid && targetState == CalendarViewGroup.Timeline)
+                                (initialState == CalendarViewGroup.Timeline && targetState in grids) ||
+                                    (initialState in grids && targetState == CalendarViewGroup.Timeline)
                             if (timelineMonth) {
                                 fadeIn(animationSpec = tween(MorphDurationMs, easing = MorphEasing)) togetherWith
                                     fadeOut(animationSpec = tween(MorphDurationMs, easing = MorphEasing))
@@ -650,19 +685,7 @@ fun CalendarShell(
                                     onMonthChanged = { month ->
                                         if (YearMonth.from(state.selectedDate) != month) onDateSelected(month.atDay(1))
                                     },
-                                    onOpenDay = { day ->
-                                        if (!monthDayTransitionPending) {
-                                            monthDayTransitionPending = true
-                                            monthMorphDayText = day.toString()
-                                            scope.launch {
-                                                withFrameNanos { }
-                                                onDateSelected(day)
-                                                withFrameNanos { }
-                                                onViewSelected(CalendarViewMode.Day)
-                                                monthDayTransitionPending = false
-                                            }
-                                        }
-                                    },
+                                    onOpenDay = { day -> openDayFromGrid(day, fromYear = false) },
                                     morphDay = monthMorphDay,
                                     jumpRequest = monthJumpRequest,
                                     onJumpConsumed = { monthJumpRequest = null },
@@ -677,6 +700,7 @@ fun CalendarShell(
                                     onLoadLater = onLoadLaterAgenda,
                                 )
                                 CalendarViewGroup.Tasks -> TaskInbox(state, onTaskStatusChanged, onDetail)
+                                CalendarViewGroup.Year -> yearView?.invoke(monthMorphDay) { day -> openDayFromGrid(day, fromYear = true) }
                             }
                         }
                     }
@@ -696,7 +720,7 @@ fun CalendarShell(
             ) + fadeOut(animationSpec = tween(180, easing = MotionStandard)),
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .offset(y = statusTop + 58.dp + landscapeMultiDayControlsTopOffset + tabletopViewTop)
+                .offset(y = (if (showToolbar) statusTop + 58.dp else 0.dp) + landscapeMultiDayControlsTopOffset + tabletopViewTop)
                 .width(TimeSidebarWidth)
                 .height(landscapeHeaderPresentation.multiDayControlsHeight)
                 .zIndex(40f),
@@ -972,7 +996,7 @@ private fun CalendarToolbar(
 /** The box holding the selected view; in the tabletop posture its top edge sits at the hinge. */
 const val CalendarViewContainerTag = "calendar-view-container"
 
-private enum class CalendarViewGroup { Timeline, MonthGrid, Agenda, Tasks }
+private enum class CalendarViewGroup { Timeline, MonthGrid, Agenda, Tasks, Year }
 
 private fun CalendarViewMode.group(): CalendarViewGroup = when (this) {
     CalendarViewMode.Day, CalendarViewMode.ThreeDay -> CalendarViewGroup.Timeline

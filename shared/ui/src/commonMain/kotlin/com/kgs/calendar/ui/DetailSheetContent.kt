@@ -150,6 +150,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 
 @Composable
 private fun ParentTaskPeek(
@@ -1279,7 +1288,7 @@ private fun DetailOverflowMenu(
 }
 
 @Composable
-private fun CopyTargetDialog(
+internal fun CopyTargetDialog(
     copyTargets: List<CollectionEntity>,
     hiddenCollectionHrefs: Set<String> = emptySet(),
     onDismiss: () -> Unit,
@@ -1352,7 +1361,7 @@ fun RecurringSaveScopeDialog(
 }
 
 @Composable
-private fun DeleteConfirmationDialog(
+internal fun DeleteConfirmationDialog(
     itemLabel: String,
     recurringScopes: Boolean,
     /** How long the deleted item can be restored; null when that isn't known yet. */

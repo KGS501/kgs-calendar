@@ -205,11 +205,9 @@ fun WelcomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.weight(0.35f))
-            Image(
-                painter = rememberVectorPainter(KgsDrawables.kgsLogoVector),
+            KgsAppLogo(
                 contentDescription = stringResource(Res.string.app_name),
                 modifier = Modifier.size(104.dp),
-                contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.height(22.dp))
             Text(

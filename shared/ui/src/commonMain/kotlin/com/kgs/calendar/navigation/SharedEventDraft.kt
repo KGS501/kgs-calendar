@@ -1,6 +1,7 @@
 package com.kgs.calendar.navigation
 
 
+
 /**
  * A new event prefilled from text shared to the app, e.g. an email: the subject becomes the title
  * and the text the description. Only the text extras of a share are read; streams, URIs and

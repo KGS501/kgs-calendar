@@ -5,6 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 shared_tasks=(
   :core:shared:jvmTest :shared:ui:testAndroidHostTest
   :shared:ui:compileCommonMainKotlinMetadata
+  :shared:ui:compileKotlinJvm :desktopApp:compileKotlinJvm
 )
 android_tasks=(:app:assembleDebug :core:data:testDebugUnitTest :app:testDebugUnitTest)
 # No selector keeps the original full local verification command.

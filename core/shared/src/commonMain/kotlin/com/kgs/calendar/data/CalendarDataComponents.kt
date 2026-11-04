@@ -49,6 +49,8 @@ class CalendarDataComponents(
     recurrenceExpander: RecurrenceExpander = RecurrenceExpander(zoneId),
     /** Source and group images; [SourceImageStore.None] keeps none (tests). */
     val sourceImages: SourceImageStore = SourceImageStore.None,
+    /** Where syncs run (see [SyncOrchestrator]); empty where they are called. */
+    syncContext: kotlin.coroutines.CoroutineContext = kotlin.coroutines.EmptyCoroutineContext,
 ) {
     private val localWrites = LocalWriteSupport(database, icalCodec)
     private val androidWriteShield = AndroidProviderWriteShield()
@@ -78,6 +80,7 @@ class CalendarDataComponents(
         engines = listOf(androidProviderSyncEngine, readOnlyUrlSyncEngine, calDavSyncEngine),
         trash = trash,
         remoteSyncLock = remoteSyncLock,
+        syncContext = syncContext,
     )
 
     val conflicts = SyncConflictResolver(database, credentialsStore, calDavClient, uploader, calDavSyncEngine, remoteSyncLock)

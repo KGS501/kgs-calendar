@@ -101,6 +101,11 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.abs
+import com.kgs.calendar.ui.desktop.LocalPaneLayout
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.input.pointer.PointerEventType
 
 data class SheetInsetPolicy(
     val respectsImeBottomInset: Boolean,
@@ -514,6 +519,43 @@ fun KgsModalBottomSheet(
                 }
             }
 
+            // Scrolling up with the mouse wheel on a sheet whose content is already at its top lowers it: a
+            // sheet that closes on an outside tap closes, an editor goes down one stop (it never closes, its
+            // draft would go). A gesture that scrolled the content up to its top never does: only a new
+            // one can, and it has to turn the wheel a little more than one notch, so a slip doesn't close it.
+            val wheelPull = remember { WheelPull() }
+            fun pullSheetByWheel(notches: Float) {
+                if (!wheelPull.active) {
+                    wheelPull.active = true
+                    wheelPull.notches = 0f
+                    wheelPull.startOffsetPx = sheetOffsetPx
+                }
+                wheelPull.notches += notches
+                if (wheelPull.notches >= WheelCloseNotches) {
+                    wheelPull.active = false
+                    wheelPull.settleJob?.cancel()
+                    val start = wheelPull.startOffsetPx
+                    if (dismissOnOutsideTap) {
+                        closeSheet()
+                    } else {
+                        val lower = sheetAnchors().firstOrNull { it > start + 8f && it < hiddenAnchor - 1f }
+                        scope.launch { animateSheetTo(lower ?: start) }
+                    }
+                    wheelPull.ignoreUntilNewGesture = true
+                    return
+                }
+                dragSheetBy(wheelPull.startOffsetPx + with(density) { WheelPullPerNotch.toPx() } * wheelPull.notches - sheetOffsetPx)
+                wheelPull.settleJob?.cancel()
+                // Let go before closing: the sheet springs back.
+                wheelPull.settleJob = scope.launch {
+                    delay(WheelGestureGapMillis)
+                    if (wheelPull.active) {
+                        wheelPull.active = false
+                        animateSheetTo(wheelPull.startOffsetPx)
+                    }
+                }
+            }
+
             val openProgress = ((hiddenAnchor - sheetOffsetPx) / (hiddenAnchor - quarterAnchor)).coerceIn(0f, 1f)
             // A resting sheet takes its stop's position in the same frame, so it moves exactly with the
             // keyboard; a frame late, a focused field would count as covered and scroll the sheet away.
@@ -595,37 +637,17 @@ fun KgsModalBottomSheet(
             // Phones, rotated ones included, keep the full window width.
             val sheetMaxWidth = largeScreenMaxWidth(SheetMaxWidth)
             val separationShadowDark = MaterialTheme.colorScheme.background.isDark()
-            if (separationShadow && !inPanel) {
-                val shadowHeight = if (separationShadowDark) 42.dp else 34.dp
-                val shadowHeightPx = with(density) { shadowHeight.toPx() }
-                val cornerRadiusPx = with(density) { cornerRadius.toPx() }
-                val topAlpha = if (separationShadowDark) 0.2f else 0.075f
-                val bottomAlpha = if (separationShadowDark) 0.36f else 0.15f
-                Canvas(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .widthIn(max = sheetMaxWidth)
-                        .fillMaxWidth()
-                        .height(shadowHeight + cornerRadius)
-                        .offset {
-                            IntOffset(
-                                x = 0,
-                                y = (effectiveSheetOffsetPx - shadowHeightPx).roundToInt(),
-                            )
-                        },
-                ) {
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.42f to Color.Black.copy(alpha = topAlpha),
-                            1f to Color.Black.copy(alpha = bottomAlpha),
-                        ),
-                        topLeft = Offset.Zero,
-                        size = Size(width = size.width, height = size.height + cornerRadiusPx),
-                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                    )
-                }
+            // On screens wider than a sheet, the sheet sits where the user last put it (dragging its
+            // handle sideways); every sheet opens there.
+            val paneLayout = LocalPaneLayout.current
+            val sheetWidthPx = if (sheetMaxWidth == Dp.Unspecified) {
+                constraints.maxWidth.toFloat()
+            } else {
+                min(constraints.maxWidth.toFloat(), with(density) { sheetMaxWidth.toPx() })
             }
+            val sheetFreeWidthPx = (constraints.maxWidth - sheetWidthPx).coerceAtLeast(0f)
+            val sheetMovable = !inPanel && sheetFreeWidthPx > 1f
+            val sheetXPx = if (sheetMovable) sheetFreeWidthPx * paneLayout.sheetPosition else 0f
 
             // Fold panels round only the corners next to the hinge.
             val panelShape = when {
@@ -646,6 +668,11 @@ fun KgsModalBottomSheet(
                                     )
                                 }
                                 .width(bookPaneWidth)
+                        } else if (sheetMovable) {
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .offset { IntOffset(x = sheetXPx.roundToInt(), y = 0) }
+                                .width(with(density) { sheetWidthPx.toDp() })
                         } else {
                             Modifier
                                 .align(Alignment.TopCenter)
@@ -680,13 +707,23 @@ fun KgsModalBottomSheet(
                         },
                     )
                     .then(
-                        if (separationShadow && !inPanel) {
-                            Modifier.shadow(
-                                elevation = if (separationShadowDark) 30.dp else 18.dp,
+                        if (!inPanel) {
+                            // A soft, blurred shadow around the whole sheet: no edge where it ends, also
+                            // beside a sheet narrower than the screen.
+                            Modifier.dropShadow(
                                 shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
-                                clip = false,
-                                ambientColor = Color.Black.copy(alpha = if (separationShadowDark) 0.24f else 0.13f),
-                                spotColor = Color.Black.copy(alpha = if (separationShadowDark) 0.28f else 0.17f),
+                                // Strong enough to show clearly where the sheet ends, also over the dimmed calendar.
+                                shadow = Shadow(
+                                    radius = 32.dp,
+                                    spread = 4.dp,
+                                    color = Color.Black,
+                                    alpha = when {
+                                        separationShadow && separationShadowDark -> 0.62f
+                                        separationShadow -> 0.36f
+                                        separationShadowDark -> 0.55f
+                                        else -> 0.34f
+                                    },
+                                ),
                             )
                         } else {
                             Modifier
@@ -706,6 +743,31 @@ fun KgsModalBottomSheet(
                                     }
                                 }
                                 .nestedScroll(sheetNestedScrollConnection)
+                                // After the content had its turn (see pullSheetByWheel).
+                                .pointerInput(wheelPull) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Final)
+                                            if (event.type != PointerEventType.Scroll) continue
+                                            val change = event.changes.firstOrNull() ?: continue
+                                            val newGesture = change.uptimeMillis - wheelPull.lastEventMillis > WheelGestureGapMillis
+                                            wheelPull.lastEventMillis = change.uptimeMillis
+                                            if (newGesture) {
+                                                wheelPull.contentScrolled = false
+                                                wheelPull.ignoreUntilNewGesture = false
+                                            }
+                                            // Consumed: the content scrolled, or the sheet rose a stop.
+                                            if (change.isConsumed) {
+                                                wheelPull.contentScrolled = true
+                                                continue
+                                            }
+                                            val up = change.scrollDelta.y
+                                            if (up >= 0f || wheelPull.contentScrolled || wheelPull.ignoreUntilNewGesture || fingerOnSheet.down) continue
+                                            change.consume()
+                                            pullSheetByWheel(-up)
+                                        }
+                                    }
+                                }
                         },
                     ),
                 shape = if (inPanel) {
@@ -726,6 +788,12 @@ fun KgsModalBottomSheet(
                         },
                         LocalSheetCloseAnimator provides closeAnimator,
                         LocalSheetExpander provides expandSheet,
+                        // On the desktop a sheet floats over the calendar like a popup, and its fields and
+                        // switch rows take the popup's colors to stand out from it (see popupFieldColor).
+                        LocalOnPopupSurface provides (
+                            LocalOnPopupSurface.current ||
+                                com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
+                            ),
                     ) {
                     Column(
                         Modifier
@@ -749,7 +817,41 @@ fun KgsModalBottomSheet(
                     ) {
                         if (!inPanel) {
                             KgsSheetHandle(
-                                modifier = sheetHeaderModifier,
+                                modifier = if (sheetMovable) {
+                                    // Up and down as everywhere, and sideways where the screen is wider than the sheet.
+                                    Modifier
+                                        .pointerInput(screenHeightPx) {
+                                            detectTapGestures(onTap = { scope.launch { animateSheetTo(expandedAnchor) } })
+                                        }
+                                        .pointerInput(sheetFreeWidthPx) {
+                                            var velocityY = 0f
+                                            var lastNanos = 0L
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    velocityY = 0f
+                                                    lastNanos = com.kgs.calendar.time.nowMillis()
+                                                },
+                                                onDragEnd = {
+                                                    settleSheet(velocityY)
+                                                    paneLayout.commit()
+                                                },
+                                                onDragCancel = {
+                                                    settleSheet(0f)
+                                                    paneLayout.commit()
+                                                },
+                                            ) { change, amount ->
+                                                change.consume()
+                                                val now = com.kgs.calendar.time.nowMillis()
+                                                val seconds = ((now - lastNanos) / 1_000f).coerceAtLeast(0.001f)
+                                                lastNanos = now
+                                                velocityY = velocityY * 0.6f + (amount.y / seconds) * 0.4f
+                                                dragSheetBy(amount.y)
+                                                paneLayout.dragSheet(amount.x, sheetFreeWidthPx)
+                                            }
+                                        }
+                                } else {
+                                    sheetHeaderModifier
+                                },
                             )
                         }
                         Column(
@@ -790,6 +892,24 @@ fun KgsModalBottomSheet(
 const val KgsModalBottomSheetSurfaceTag = "kgs-modal-bottom-sheet"
 
 private val SheetHandleHeight = 18.dp
+
+/** A mouse wheel lowering the sheet (see pullSheetByWheel); read by its event handling, so it is not state. */
+private class WheelPull {
+    var active = false
+    var notches = 0f
+    var startOffsetPx = 0f
+    var lastEventMillis = Long.MIN_VALUE / 2
+    var contentScrolled = false
+    var ignoreUntilNewGesture = false
+    var settleJob: Job? = null
+}
+
+/** Wheel events further apart than this are separate gestures. */
+private const val WheelGestureGapMillis = 300L
+/** How far the wheel has to turn to lower the sheet: more than the first notch. */
+private const val WheelCloseNotches = 1.6f
+/** How far the sheet follows each notch before it lets go: a visible resistance. */
+private val WheelPullPerNotch = 22.dp
 
 /** Whether a finger touches the sheet; read by its scroll handling, so it is not state. */
 private class FingerTracker {

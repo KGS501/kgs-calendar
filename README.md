@@ -33,6 +33,42 @@ Get automatic updates and don't risk downloading any unstable pre-release versio
 - Home screen widget support (Android)
 - English and German app language support
 
+## Windows app
+
+The Windows app (`:desktopApp`) runs the same screens, view models, sync and database as the
+Android and iOS apps, built from the same Kotlin code with Compose Multiplatform. `:core:shared`
+and `:shared:ui` have a desktop (JVM) target for it; their `jvmMain` folders hold the Windows
+parts:
+
+- Passwords are encrypted with Windows' data protection (DPAPI) for the signed-in user.
+- Reminders appear while the app runs. Closing the window keeps it in the notification area
+  (Settings → General can turn that off); quit it from the tray icon's menu.
+- The data lives in `%LOCALAPPDATA%\KGS501\KGS Calendar`, apart from the program folder, so
+  installing an update keeps it. Previews before V.2.0.0 kept it in the program folder.
+- Running the installer while the app is open closes it and starts the new version afterwards.
+  Windows only installs over a lower version, so every build handed out needs a higher
+  `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0-1 becomes installer version 2.0.1).
+
+Windows at least 760 dp wide get the desktop layout (`ui/desktop`): a sidebar with the month and
+the calendars, a toolbar with back/today/forward, search, views, create and tasks, a task pane
+that can be pinned beside the calendar, and a desktop-only year view. The seams between sidebar,
+calendar, task pane and the settings' two columns can be dragged (kept in `layout.properties`).
+Cards, tasks' circles and calendars have right-click menus. Narrower windows use the phone layout.
+
+Keyboard: Ctrl+N new event, Ctrl+Shift+N new task, Ctrl+F search, T today, Page Up/Down previous
+and next range, ←/→ a day in the multi-day view (a range elsewhere), ↑/↓ a row in the month and
+year views, D/W/M/Y/A day, multi-day, month, year and agenda, +/− days shown, F5 refresh,
+Escape back. All but the arrows and Escape can be changed under Settings → Keyboard shortcuts.
+
+Run it with JDK 17 from the repository root (the Android SDK is still needed to configure the
+build). Use a separate profile and synthetic items for testing:
+
+```
+KGS_DESKTOP_DATA_DIR=<empty folder> KGS_DESKTOP_DEMO=1 ./gradlew :desktopApp:run
+./gradlew :desktopApp:createDistributable   # portable app in desktopApp/build/compose/binaries
+./gradlew :desktopApp:packageMsi            # installer; needs the WiX 3 toolset on PATH
+```
+
 ## iOS app
 
 From V.2.0.0 the iOS app is the Android app's port: the same screens, gestures, animations, sync,

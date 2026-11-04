@@ -41,6 +41,7 @@ import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.domain.source.isReadOnlyCollectionHref
 import kotlinx.datetime.DayOfWeek
 import com.kgs.calendar.time.AppLocale as Locale
+import com.kgs.calendar.ui.platform.PlatformFeatures
 
 @Composable
 fun CalendarViewMode.localizedLabel(weekViewEnabled: Boolean = false): String =
@@ -82,7 +83,7 @@ fun AppThemeMode.localizedLabel(): String = when (this) {
     AppThemeMode.KgsBlue -> appString(Res.string.kgs_blue)
     AppThemeMode.KgsWarm -> appString(Res.string.kgs_warm)
     AppThemeMode.KgsFresh -> appString(Res.string.kgs_fresh)
-    AppThemeMode.SystemDynamic -> appString(Res.string.android_colors)
+    AppThemeMode.SystemDynamic -> appString(PlatformFeatures.systemColorsLabel)
 }
 
 @Composable

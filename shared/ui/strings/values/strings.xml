@@ -1,8 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Strings used only outside Android (iOS); merged into Res.string with the app's strings. -->
+<!-- Strings the Android app doesn't have (iOS, Windows, and Good to know); merged into Res.string with the app's strings. -->
 <resources>
     <string name="sync_interval_help_ios">Your changes upload right away. iOS decides when background refresh runs, so the interval is the shortest gap between syncs. iPhone calendars sync through their own accounts.</string>
     <string name="privacy_sync_body_ios">If you add a CalDAV/Nextcloud account, an ICS URL, or iPhone calendars, the app uses the configured server, URL, or the iPhone's calendar data so syncing can work. KGS Calendar has no ads, analytics SDKs, tracking SDKs, or developer-operated backend.</string>
     <string name="privacy_storage_body_ios">KGS Calendar stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on this device. CalDAV passwords and app passwords are stored in the iOS Keychain for this device only, so they are not moved to another device by a backup.</string>
     <string name="device_calendars_ios">iPhone calendars</string>
+
+    <!-- The Windows app: tray, keyboard shortcuts, year view, Good to know. -->
+    <string name="desktop_quit">Quit</string>
+    <string name="tray_open">Open KGS Calendar</string>
+    <string name="tray_up_next">Up next</string>
+    <string name="tray_nothing_planned">Nothing else planned</string>
+    <string name="tray_tomorrow">Tomorrow</string>
+    <string name="tray_quit">Quit KGS Calendar</string>
+    <plurals name="tray_tasks_due">
+        <item quantity="one">%1$d task due today</item>
+        <item quantity="other">%1$d tasks due today</item>
+    </plurals>
+    <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
+    <string name="desktop_year">Year</string>
+    <string name="desktop_close_to_tray">Keep running when closed</string>
+    <string name="desktop_close_to_tray_help">Closing the window keeps KGS Calendar in the notification area, so reminders still appear and it opens again at once. Turned off, closing the window quits the app.</string>
+    <string name="desktop_year_rows_lower">Lower month rows</string>
+    <string name="desktop_year_rows_taller">Taller month rows</string>
+    <string name="desktop_calendars">Calendars</string>
+    <string name="desktop_pin_tasks">Keep the tasks open beside the calendar</string>
+    <string name="desktop_unpin_tasks">Close the tasks pane</string>
+    <string name="settings_shortcuts">Keyboard shortcuts</string>
+    <string name="settings_shortcuts_summary">Keys for creating, searching and the views</string>
+    <string name="shortcuts_help">Click an action, then press its keys. Backspace removes a shortcut, Escape keeps the old one. The arrow keys always move through the calendar.</string>
+    <string name="shortcut_press_keys">Press keys…</string>
+    <string name="shortcut_none">None</string>
+    <string name="shortcuts_reset">Restore the default keys</string>
+    <string name="shortcut_new_event">New event</string>
+    <string name="shortcut_new_task">New task</string>
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_today">Go to today</string>
+    <string name="shortcut_previous">Previous range</string>
+    <string name="shortcut_next">Next range</string>
+    <string name="shortcut_day_view">Day view</string>
+    <string name="shortcut_multi_day_view">Multi-day view</string>
+    <string name="shortcut_month_view">Month view</string>
+    <string name="shortcut_year_view">Year view</string>
+    <string name="shortcut_agenda_view">Agenda</string>
+    <string name="shortcut_more_days">Show one day more</string>
+    <string name="shortcut_fewer_days">Show one day fewer</string>
+    <string name="shortcut_tasks">Tasks</string>
+    <string name="shortcut_refresh">Sync now</string>
+    <string name="shortcut_settings">Settings</string>
+    <string name="settings_good_to_know">Good to know</string>
+    <string name="settings_good_to_know_summary">Gestures and shortcuts worth knowing</string>
+    <string name="tip_move_title">Move events and tasks</string>
+    <string name="tip_move_body">Press and hold an event or task in the day or multi-day view, then drag it to another time or day, or up into the all-day row.</string>
+    <string name="tip_status_title">Set a task\'s status</string>
+    <string name="tip_status_body">Tap a task\'s circle to complete it. Press and hold the circle to mark it as in progress, cancelled or open instead.</string>
+    <string name="tip_day_title">One day or several</string>
+    <string name="tip_day_body">Tap a date at the top of the multi-day view to show only that day. Tap it again to see all days.</string>
+    <string name="tip_sheet_title">Move sheets aside</string>
+    <string name="tip_sheet_body">Drag the handle at the top of a sheet up or down to show more or less of it, or sideways to see more of the calendar. Sheets open where you last put them.</string>
+    <string name="tip_seam_title">Resize the columns</string>
+    <string name="tip_seam_body">Drag the small pill between two columns to give either side more room. The sizes are kept for next time.</string>
+    <string name="tip_keys_title">Keyboard shortcuts</string>
+    <string name="tip_keys_body">Most actions have a key: T jumps to today, D, W, M, Y and A switch the view and Ctrl+N creates an event. You can change them under Keyboard shortcuts.</string>
+    <string name="desktop_previous">Previous</string>
+    <string name="desktop_next">Next</string>
+    <string name="desktop_days">%1$d days</string>
+    <string name="windows_colors">Windows colors</string>
 </resources>

@@ -69,6 +69,8 @@ import kotlinx.datetime.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
+import com.kgs.calendar.ui.theme.LocalAppFontFamily
+import androidx.compose.foundation.layout.BoxWithConstraints
 
 data class AgendaTimelineSnapshot(
     val navigation: AgendaNavigationSnapshot<CalendarSearchResult>,
@@ -265,13 +267,15 @@ fun AgendaTimeline(
     }
     val taskHierarchy = rememberTaskHierarchyPresentation(emptyList(), expandedByDefault = false)
 
-    // The list spans the window so it scrolls from anywhere; its content stays centred on wide screens.
+    val listMaxWidth = largeScreenMaxWidth(ListContentMaxWidth)
+    // The list spans its pane so it scrolls from anywhere; its content stays centred on wide screens.
+    // The pane can be narrower than the window (the desktop's sidebars), so it measures itself.
+    BoxWithConstraints(modifier.fillMaxSize()) {
     val listSidePadding = centeredContentPadding(
-        availableWidth = currentCalendarWindowLayout().widthDp.dp,
-        maxWidth = largeScreenMaxWidth(ListContentMaxWidth),
+        availableWidth = maxWidth,
+        maxWidth = listMaxWidth,
         basePadding = 18.dp,
     )
-    Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -312,6 +316,7 @@ fun AgendaTimeline(
                                     .heightIn(min = agendaDateStackHeight)
                                     .padding(start = 62.dp, top = 18.dp),
                                 style = androidx.compose.ui.text.TextStyle(
+                                    fontFamily = LocalAppFontFamily.current,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 16.sp,
                                     lineHeight = 20.sp,
@@ -345,7 +350,7 @@ fun AgendaTimeline(
             topSpacing = headerTopSpacing,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .centeredMaxWidth(largeScreenMaxWidth(ListContentMaxWidth)),
+                .centeredMaxWidth(listMaxWidth),
         )
     }
 }

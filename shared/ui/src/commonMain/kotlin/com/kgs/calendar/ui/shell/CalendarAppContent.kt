@@ -37,6 +37,12 @@ import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.kgs.calendar.ui.desktop.steppedDate
+import com.kgs.calendar.ui.CalendarUiState
+import com.kgs.calendar.ui.SettingsDestination
+import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.ui.platform.ProvideCalendarShortcuts
+import com.kgs.calendar.ui.platform.CalendarShortcuts
 
 /**
  * The themed app body: derives the render state, owns the shell navigation state and composes
@@ -47,6 +53,20 @@ fun CalendarAppContent(
     viewModel: CalendarViewModel,
     state: CalendarUiState,
     today: LocalDate,
+) {
+    // Cards anywhere below open their right-click menu here (see itemContextMenu).
+    val itemMenu = remember { ItemContextMenuState() }
+    CompositionLocalProvider(LocalItemContextMenu provides itemMenu) {
+        CalendarAppBody(viewModel, state, today, itemMenu)
+    }
+}
+
+@Composable
+private fun CalendarAppBody(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    today: LocalDate,
+    itemMenu: ItemContextMenuState,
 ) {
     val defaultWireframeColor = WarmBrown.toArgb()
     val context = LocalPlatformContext.current
@@ -260,6 +280,53 @@ fun CalendarAppContent(
         onOpenDetail = shell::openLaunchedDetail,
         onForegroundRecentered = { foregroundRecenterRequest += 1 },
     )
+    val paneLayout = com.kgs.calendar.ui.desktop.LocalPaneLayout.current
+    fun showDate(date: LocalDate) {
+        viewModel.selectDate(date)
+        shell.requestDate(date)
+    }
+    ProvideCalendarShortcuts(
+        shortcuts = CalendarShortcuts(
+            newEvent = { openEventCreation(state.defaultFabCreationDate()) },
+            newTask = { openTaskCreation(state.defaultFabCreationDate(), scheduledForDay = true) },
+            search = shell::openSearch,
+            tasks = { if (paneLayout.tasksPanePinned) paneLayout.pinTasksPane(false) else shell.openTaskDrawer() },
+            menu = shell::openMenuDrawer,
+            settings = { shell.openSettings(SettingsDestination.Main) },
+            today = {
+                viewModel.today()
+                shell.requestDate(LocalDate.now())
+            },
+            step = { direction -> showDate(state.steppedDate(direction, shell.yearViewOpen)) },
+            nudge = { direction ->
+                // The multi-day view moves by a day; a week view keeps its weeks and other views their pages.
+                if (!shell.yearViewOpen && state.selectedView == CalendarViewMode.ThreeDay && !state.weekViewEnabled) {
+                    showDate(state.selectedDate.plusDays(direction.toLong()))
+                } else {
+                    showDate(state.steppedDate(direction, shell.yearViewOpen))
+                }
+            },
+            nudgeVertical = { direction ->
+                when {
+                    shell.yearViewOpen -> shell.requestScrollStep(direction)
+                    state.selectedView == CalendarViewMode.Month -> showDate(state.steppedDate(direction))
+                }
+            },
+            selectView = { view ->
+                shell.yearViewOpen = false
+                viewModel.selectView(view)
+            },
+            yearView = { shell.yearViewOpen = true },
+            changeDayCount = { delta ->
+                if (state.selectedView == CalendarViewMode.ThreeDay && !shell.yearViewOpen) {
+                    viewModel.settings.setMultiDayCount((state.multiDayCount + delta).coerceMultiDayCount())
+                }
+            },
+            refresh = viewModel.sources::syncNow,
+        ),
+        // Only while nothing covers the calendar; a view switch (which back can undo) keeps them on.
+        enabled = !shell.anyOverlayOpen,
+    )
 
     CompositionLocalProvider(
         LocalPendingMutations provides state.pendingMutationItems,
@@ -301,6 +368,7 @@ fun CalendarAppContent(
         shell = shell,
         today = today,
     )
+    ItemContextMenuHost(menu = itemMenu, viewModel = viewModel, state = state, shell = shell, today = today)
     SettingsOverlay(viewModel = viewModel, state = state, shell = shell, problemCount = problemItems.size)
     WelcomeOverlay(
         viewModel = viewModel,
@@ -318,5 +386,13 @@ fun CalendarAppContent(
         shell = shell,
         showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
     )
-    StartupOverlay(visible = !state.initialDataLoaded)
+    val desktop = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
+    var startupDone by remember { mutableStateOf(false) }
+    if (desktop) {
+        IdleWarmUp(
+            active = startupDone,
+            views = com.kgs.calendar.ui.desktop.desktopWarmUpViews(viewModel, state, today),
+        )
+    }
+    StartupOverlay(ready = state.initialDataLoaded, alwaysShow = desktop, onGone = { startupDone = true })
 }

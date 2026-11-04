@@ -1,5 +1,9 @@
 package com.kgs.calendar.ui
 
+
+// The full-screen pages and dialogs of the shell. KgsCalendarApp composes them in a fixed order
+// between the sheets, which decides what draws on top of what.
+
 import androidx.compose.ui.layout.layout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -40,9 +44,13 @@ import com.kgs.calendar.ui.sources.displayName
 import com.kgs.calendar.ui.sources.groupOf
 import com.kgs.calendar.widget.KgsWidgetKind
 import kotlinx.coroutines.delay
-
-// The full-screen pages and dialogs of the shell. KgsCalendarApp composes them in a fixed order
-// between the sheets, which decides what draws on top of what.
+import com.kgs.calendar.ui.MotionStandardAccelerate
+import com.kgs.calendar.ui.MotionEmphasized
+import com.kgs.calendar.ui.MotionStandard
+import com.kgs.calendar.ui.MotionShort
+import com.kgs.calendar.ui.MotionMedium
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
 
 @Composable
 fun ProblemsOverlay(
@@ -153,7 +161,16 @@ fun SettingsOverlay(
     problemCount: Int,
 ) {
     // "Recently deleted" opens from the settings and covers them; closing it returns there.
-    if (shell.settingsOpen && !shell.trashOpen) {
+    // The settings grow in over the calendar and fade away again, rather than appearing at once.
+    AnimatedVisibility(
+        visible = shell.settingsOpen && !shell.trashOpen,
+        enter = fadeIn(tween(MotionMedium, easing = MotionStandard)) +
+            scaleIn(tween(MotionMedium, easing = MotionEmphasized), initialScale = 0.96f),
+        exit = fadeOut(tween(MotionShort, easing = MotionStandardAccelerate)) +
+            scaleOut(tween(MotionShort, easing = MotionStandardAccelerate), targetScale = 0.97f),
+        // Above the calendar's layers, as the page itself is.
+        modifier = Modifier.zIndex(40f),
+    ) {
         val trash by viewModel.trash.state.collectAsStateWithLifecycle()
         // Problems opens from the settings too. They stay composed but are not placed underneath it,
         // so closing Problems returns to the same settings page.
@@ -236,6 +253,18 @@ fun SettingsOverlay(
             onRestoreAccountImage = viewModel.sources::restoreAccountImage,
             trashCount = trash.entries.size,
             onRecentlyDeleted = shell::openTrash,
+            recentlyDeletedPane = {
+                RecentlyDeletedPage(
+                    trash = trash,
+                    taskColorMode = state.taskColorMode,
+                    onItemClick = shell::openTrashedDetail,
+                    onEmptyTrash = viewModel.trash::emptyTrash,
+                    onDismissNotice = viewModel.trash::dismissNotice,
+                    onOpened = viewModel.trash::refresh,
+                    onClose = {},
+                    embedded = true,
+                )
+            },
             problemCount = problemCount,
             onProblems = shell::openProblems,
             covered = covered,
@@ -430,47 +459,6 @@ fun RecurringSaveDialogHost(
                 shell.finishRecurringSave()
             },
         )
-    }
-}
-
-@Composable
-fun StartupOverlay(visible: Boolean) {
-    AnimatedVisibility(
-        visible = visible,
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(1000f),
-        enter = fadeIn(animationSpec = tween(90, easing = MotionStandard)),
-        exit = fadeOut(animationSpec = tween(180, easing = MotionStandardAccelerate)),
-    ) {
-        StartupDataOverlay()
-    }
-}
-
-@Composable
-private fun StartupDataOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier.size(124.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.primary,
-                strokeWidth = 4.dp,
-            )
-            Image(
-                painter = rememberVectorPainter(KgsDrawables.kgsLogoVector),
-                contentDescription = stringResource(Res.string.app_name),
-                modifier = Modifier.size(82.dp),
-                contentScale = ContentScale.Fit,
-            )
-        }
     }
 }
 

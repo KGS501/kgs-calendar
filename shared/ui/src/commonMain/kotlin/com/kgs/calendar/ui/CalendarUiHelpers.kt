@@ -115,7 +115,6 @@ import com.kgs.calendar.ui.labels.recurrencePart
 import com.kgs.calendar.ui.labels.toIsoUntilDate
 import com.kgs.calendar.ui.layout.AllDayOverlayItem
 import com.kgs.calendar.ui.layout.AllDayScene
-import com.kgs.calendar.ui.layout.allDayViewportPriorityTier
 import com.kgs.calendar.ui.layout.buildAllDayScene
 import com.kgs.calendar.ui.model.allDayTopEndDate
 import com.kgs.calendar.ui.model.allDayTopStartDate
@@ -141,6 +140,10 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.tan
+import androidx.compose.ui.graphics.Paint as ComposePaint
+import androidx.compose.ui.graphics.Canvas as ComposeCanvas
+import com.kgs.calendar.ui.layout.AllDayLaneLookaheadPages
+import com.kgs.calendar.ui.layout.AllDayLaneLookbackPages
 
 fun Modifier.dashedBorder(color: Color): Modifier = drawWithContent {
     drawContent()
@@ -1145,21 +1148,16 @@ fun List<LocalDate>.allDayAreaLayout(
     maxVisibleItems: Int,
     expanded: Boolean,
     draftDate: LocalDate?,
-    priorityPageCount: Int = size,
 ): AllDayAreaLayout {
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return AllDayAreaLayout(22.dp, null, 0)
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
-    val priorityEndPage = min(visibleEndPage, visibleStartPage + priorityPageCount.coerceAtLeast(1) - 1)
-    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage,
-        priorityStartPage = visibleStartPage, priorityEndPage = priorityEndPage)
     val scene = buildAllDayScene(
-        overlayItems = overlayItems,
+        overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage),
         visibleStartPage = visibleStartPage,
         visibleEndPage = visibleEndPage,
-        priorityStartPage = visibleStartPage,
-        priorityEndPage = priorityEndPage,
         maxVisibleItems = maxVisibleItems,
     )
+    val overlayItems = scene.overlayItems
     val displayedRows = if (expanded) scene.metrics.expandedRowCount else scene.metrics.collapsedRowCount
     val draftPage = draftDate
         ?.takeIf { date -> any { it == date } }
@@ -1198,19 +1196,13 @@ fun List<LocalDate>.hasAllDayOverflow(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     maxVisibleItems: Int,
-    priorityPageCount: Int = size,
 ): Boolean {
     val visibleStartPage = minOfOrNull { it.toDayPage() } ?: return false
     val visibleEndPage = maxOfOrNull { it.toDayPage() } ?: visibleStartPage
-    val priorityEndPage = min(visibleEndPage, visibleStartPage + priorityPageCount.coerceAtLeast(1) - 1)
-    val overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage,
-        priorityStartPage = visibleStartPage, priorityEndPage = priorityEndPage)
     return buildAllDayScene(
-        overlayItems = overlayItems,
+        overlayItems = buildAllDayOverlayItems(events, tasks, TaskColorMode.Collection, visibleStartPage, visibleEndPage),
         visibleStartPage = visibleStartPage,
         visibleEndPage = visibleEndPage,
-        priorityStartPage = visibleStartPage,
-        priorityEndPage = priorityEndPage,
         maxVisibleItems = maxVisibleItems,
     ).metrics.hasCollapsedOverflow
 }
@@ -1268,7 +1260,18 @@ fun monthMarkersFor(
     events: List<EventEntity>,
     tasks: List<TaskEntity>,
     taskColorMode: TaskColorMode,
-): Map<LocalDate, MonthDayMarkers> {
+): Map<LocalDate, MonthDayMarkers> =
+    monthMarkerColors(month, events, tasks, taskColorMode).mapValues { (_, colors) ->
+        MonthDayMarkers(colors = colors.take(3), hasMore = colors.size > 3)
+    }
+
+/** The colors of every item of each day of [month], events first, in their order. */
+internal fun monthMarkerColors(
+    month: YearMonth,
+    events: List<EventEntity>,
+    tasks: List<TaskEntity>,
+    taskColorMode: TaskColorMode,
+): Map<LocalDate, List<Int>> {
     val first = month.atDay(1)
     val last = month.atEndOfMonth()
     val colorsByDay = linkedMapOf<LocalDate, MutableList<Int>>()
@@ -1300,9 +1303,7 @@ fun monthMarkersFor(
             .forEach { addMarker(it, task.displayColor(taskColorMode)) }
     }
 
-    return colorsByDay.mapValues { (_, colors) ->
-        MonthDayMarkers(colors = colors.take(3), hasMore = colors.size > 3)
-    }
+    return colorsByDay
 }
 
 private fun String.toDisplayDate(): String = runCatching {
@@ -1399,9 +1400,11 @@ fun buildAllDayOverlayItems(
     taskColorMode: TaskColorMode,
     visibleStartPage: Int,
     visibleEndPage: Int,
-    priorityStartPage: Int = visibleStartPage,
-    priorityEndPage: Int = visibleEndPage,
 ): List<AllDayOverlayItem> {
+    // Items of the days around the window take part, so the visible ones keep their lanes while
+    // the view scrolls; the scene leaves them out and closes the rows they used (see buildAllDayScene).
+    val layoutStartPage = visibleStartPage - AllDayLaneLookbackPages
+    val layoutEndPage = visibleEndPage + AllDayLaneLookaheadPages
     data class Candidate(
         val id: String,
         val title: String,
@@ -1418,8 +1421,8 @@ fun buildAllDayOverlayItems(
     )
 
     // Two days of margin cover the zone differences between dates and instants.
-    val earliestMillis = (visibleStartPage - 2).toDayDate().startOfDayMillis()
-    val latestMillis = (visibleEndPage + 3).toDayDate().startOfDayMillis()
+    val earliestMillis = (layoutStartPage - 2).toDayDate().startOfDayMillis()
+    val latestMillis = (layoutEndPage + 3).toDayDate().startOfDayMillis()
     val candidates = buildList {
         events.forEach { event ->
             if (event.startsAtMillis >= latestMillis || event.endsAtMillis < earliestMillis) return@forEach
@@ -1427,7 +1430,7 @@ fun buildAllDayOverlayItems(
             val topEnd = event.allDayTopEndDate() ?: return@forEach
             val startPage = topStart.toDayPage()
             val endPage = topEnd.toDayPage()
-            if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
+            if (endPage >= layoutStartPage && startPage <= layoutEndPage) {
                 add(
                     Candidate(
                         id = "event:${event.resourceHref}:${event.occurrenceStartForEdit()}",
@@ -1450,7 +1453,7 @@ fun buildAllDayOverlayItems(
                 val startPage = (task.startAtMillis ?: task.dueAtMillis)?.toDate()?.toDayPage() ?: return@forEach
                 val endPage = ((task.dueAtMillis ?: task.startAtMillis)?.toDate()?.toDayPage() ?: startPage)
                     .coerceAtLeast(startPage)
-                if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
+                if (endPage >= layoutStartPage && startPage <= layoutEndPage) {
                     add(
                         Candidate(
                             id = "task:${task.resourceHref}:${task.occurrenceRecurrenceIdMillis()}",
@@ -1470,7 +1473,7 @@ fun buildAllDayOverlayItems(
             val middle = task.timedMultiDayMiddleDates() ?: return@forEach
             val startPage = middle.start.toDayPage()
             val endPage = middle.endInclusive.toDayPage()
-            if (endPage >= visibleStartPage && startPage <= visibleEndPage) {
+            if (endPage >= layoutStartPage && startPage <= layoutEndPage) {
                 add(
                     Candidate(
                         id = "task-middle:${task.resourceHref}:${task.occurrenceRecurrenceIdMillis()}",
@@ -1486,9 +1489,9 @@ fun buildAllDayOverlayItems(
             }
         }
     }.sortedWith(
-        compareBy<Candidate> { allDayViewportPriorityTier(it.startPage, it.endPage, priorityStartPage, priorityEndPage) }
+        // The order of AllDayItemOrder: earlier starts first, then longer items.
+        compareBy<Candidate> { it.startPage }
             .thenByDescending { it.endPage }
-            .thenBy { it.startPage }
             .thenBy { it.title }
             .thenBy { it.id },
     )
