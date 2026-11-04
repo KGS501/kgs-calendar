@@ -333,7 +333,8 @@ class CalDavSyncRepositoryTest {
 
         repository.syncNow()
 
-        assertNotNull(harness.resource(goneHref)!!.syncError)
+        // Nothing arrived, so there is nothing to keep; an empty body would only look like an item.
+        assertNull(harness.resource(goneHref))
         assertNotEquals(before.syncToken, harness.collection(server.eventsHref)!!.syncToken)
     }
 

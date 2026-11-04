@@ -19,9 +19,11 @@ import com.kgs.calendar.data.toMinutesList
 import com.kgs.calendar.data.trash.TrashSnapshots
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.model.ComponentType
+import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.TaskEditPayload
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isLocalCollectionHref
+import com.kgs.calendar.domain.task.hasRecurrence
 import com.kgs.calendar.domain.source.isReadOnlyCollection
 import com.kgs.calendar.domain.sync.PendingOccurrenceScope
 import com.kgs.calendar.domain.time.toDate
@@ -143,13 +145,18 @@ class TaskMutations internal constructor(
             manualColor = payload.manualColor,
             sequence = existing.sequence + 1,
         ).withValidIcalSchedule()
-        val raw = icalCodec.serializeTask(updated, originalRawIcs = resource?.rawIcs.takeUnless { moved })
+        // The stored resource goes along, so a move keeps what the app doesn't show.
+        val raw = icalCodec.serializeTask(updated, originalRawIcs = resource?.rawIcs)
         if (moved) {
+            // The source goes only after the server has acknowledged the destination. Until then
+            // its resource stays: the DELETE's precondition and a cancelled move need it.
             database.taskDao().deleteByResource(existing.resourceHref)
-            database.resourceDao().delete(existing.resourceHref)
-            localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Task, resource?.etag)
+            val putId = localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, null)
             localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Task, updated.uid, raw)
-            localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, null)
+            localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Task, resource?.etag, putId)
+            if (database.pendingMutationDao().forResource(existing.resourceHref).none { it.action == MutationAction.Delete }) {
+                database.resourceDao().delete(existing.resourceHref)
+            }
         } else {
             localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Task, updated.uid, raw)
             localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Task, raw, resource?.etag)
@@ -159,7 +166,7 @@ class TaskMutations internal constructor(
 
     suspend fun updateTaskOccurrence(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = localWrites.writeTransaction {
         val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             updateTask(uid, payload)
             return@writeTransaction
         }
@@ -234,7 +241,7 @@ class TaskMutations internal constructor(
 
     suspend fun updateTaskFollowing(uid: String, occurrenceStartMillis: Long, payload: TaskEditPayload): Unit = localWrites.writeTransaction {
         val existing = database.taskDao().get(uid) ?: return@writeTransaction
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             updateTask(uid, payload)
             return@writeTransaction
         }
@@ -245,7 +252,7 @@ class TaskMutations internal constructor(
         }
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only task lists cannot be edited.")
         val resource = database.resourceDao().get(existing.resourceHref)
-        val newRule = existing.recurrenceRule.withRecurrenceUntilBefore(occurrenceStartMillis, existing.startHasTime.not() && existing.dueHasTime.not(), zoneId)
+        val newRule = existing.recurrenceRule?.withRecurrenceUntilBefore(occurrenceStartMillis, existing.startHasTime.not() && existing.dueHasTime.not(), zoneId)
         val keptEx = existing.exDatesCsv
             ?.split(',')
             ?.mapNotNull { it.trim().toLongOrNull() }

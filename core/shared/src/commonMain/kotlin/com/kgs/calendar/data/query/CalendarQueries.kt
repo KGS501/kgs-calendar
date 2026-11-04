@@ -6,7 +6,9 @@ import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.domain.task.isOpen
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
@@ -231,6 +233,36 @@ class CalendarQueries(
             is CalendarOccurrenceId.Task -> visibility.showsTasksOf(collectionHref)
         }
     }
+
+    /**
+     * Whether a reminder that is due may still reach the user: its item exists, that occurrence
+     * wasn't removed, cancelled or finished, and its calendar is showing. Alarms and snoozes are
+     * set well before they fire, so all of this may have changed.
+     */
+    suspend fun isReminderDeliverable(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean {
+        if (isReminderStillVisible(occurrenceId, visibility) != true) return false
+        val recurrenceId = occurrenceId.recurrenceIdMillis
+        return when (occurrenceId) {
+            is CalendarOccurrenceId.Event -> {
+                val event = database.eventDao().byResource(occurrenceId.resourceHref) ?: return false
+                val override = RecurrenceOverrideCodec.decodeEvents(event.recurrenceOverridesJson)
+                    .firstOrNull { it.recurrenceIdMillis == recurrenceId }
+                !event.excludes(recurrenceId) &&
+                    !(override?.status ?: event.status).equals("CANCELLED", ignoreCase = true)
+            }
+            is CalendarOccurrenceId.Task -> {
+                val task = database.taskDao().byResource(occurrenceId.resourceHref) ?: return false
+                val override = RecurrenceOverrideCodec.decodeTasks(task.recurrenceOverridesJson)
+                    .firstOrNull { it.recurrenceIdMillis == recurrenceId }
+                !task.exDatesCsv.containsMillis(recurrenceId) && (override?.applyTo(task) ?: task).isOpen()
+            }
+        }
+    }
+
+    private fun EventEntity.excludes(recurrenceId: Long): Boolean = exDatesCsv.containsMillis(recurrenceId)
+
+    private fun String?.containsMillis(millis: Long): Boolean =
+        this?.split(',')?.any { it.trim().toLongOrNull() == millis } == true
 
     suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> {
         val events = database.eventDao().notificationCandidates(nowMillis, windowEndMillis)

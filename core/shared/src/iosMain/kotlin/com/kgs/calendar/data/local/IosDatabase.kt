@@ -14,6 +14,7 @@ fun buildIosKgsDatabase(fileName: String = "kgs-calendar.db"): KgsDatabase {
     val path = requireNotNull(documents.path) + "/" + fileName
     return Room.databaseBuilder<KgsDatabase>(name = path)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(*KgsSharedMigrations.ALL)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 }

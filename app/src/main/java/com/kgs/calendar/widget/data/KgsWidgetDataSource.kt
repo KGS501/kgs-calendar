@@ -16,6 +16,7 @@ import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.event.hasRecurrence
 import com.kgs.calendar.domain.event.displayColor
 import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.event.isAllDayTopItemOn
@@ -158,6 +159,7 @@ internal class KgsWidgetDataSource(
                             location = event.location,
                             eventStatus = event.status,
                             eventResourceHref = event.resourceHref,
+                            eventOccurrenceMillis = event.startsAtMillis.takeIf { event.hasRecurrence() },
                         ),
                     )
                 }
@@ -195,6 +197,7 @@ internal class KgsWidgetDataSource(
                         location = event.location,
                         eventStatus = event.status,
                         eventResourceHref = event.resourceHref,
+                        eventOccurrenceMillis = event.startsAtMillis.takeIf { event.hasRecurrence() },
                     )
                     add(WidgetDayTimedItem(item, placement.first, placement.second))
                 }
@@ -547,6 +550,7 @@ internal class KgsWidgetDataSource(
             launchKind = launchKind,
             stableKey = "event:$resourceHref",
             eventResourceHref = resourceHref,
+            eventOccurrenceMillis = startsAtMillis.takeIf { hasRecurrence() },
             location = location?.takeIf { it.isNotBlank() },
             eventStatus = status,
             endMillis = endsAtMillis,
@@ -671,6 +675,7 @@ internal class KgsWidgetDataSource(
             launchKind = KgsWidgetKind.Agenda,
             stableKey = "event:$resourceHref:${startDate.toEpochDay()}:${endDate.toEpochDay()}",
             eventResourceHref = resourceHref,
+            eventOccurrenceMillis = startsAtMillis.takeIf { hasRecurrence() },
             location = location?.takeIf { it.isNotBlank() },
             eventStatus = status,
             endMillis = endsAtMillis,

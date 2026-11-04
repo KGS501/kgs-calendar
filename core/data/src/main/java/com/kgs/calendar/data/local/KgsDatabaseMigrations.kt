@@ -28,6 +28,7 @@ object KgsDatabaseMigrations {
         MIGRATION_19_20,
         MIGRATION_20_21,
         MIGRATION_21_22,
+        *KgsSharedMigrations.ALL,
     )
 
     private val MIGRATION_1_2 = object : Migration(1, 2) {

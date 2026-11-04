@@ -14,6 +14,7 @@ import com.kgs.calendar.data.local.entity.TrashedItemEntity
 import com.kgs.calendar.data.local.entity.withValidIcalSchedule
 import com.kgs.calendar.data.mutation.EventMutations
 import com.kgs.calendar.data.newResourceHref
+import com.kgs.calendar.data.sync.RemoteReconciliationGuard
 import com.kgs.calendar.data.sync.RemoteSyncLock
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
@@ -71,10 +72,12 @@ sealed interface TrashRestoreResult {
  * "Recently deleted", one list over two kinds of items ([TrashedItemEntity.origin]):
  * - [TrashOrigin.LocalSnapshot]: whole events and tasks the user deleted in the app, for every
  *   source. The deletes themselves write the snapshots ([TrashSnapshots]); remote deletes found by
- *   a sync never become snapshots. They are purged [TrashRetention.DAYS] days after the delete.
+ *   a sync only become snapshots when they look like a server fault ([RemoteReconciliationGuard]).
+ *   They are purged [TrashRetention.DAYS] days after the delete.
  * - [TrashOrigin.ServerTrashBin]: the objects of Nextcloud CalDAV trash bins ([ServerTrashBin]),
  *   including ones deleted elsewhere. The server expires them; the cache follows on refresh.
- * A snapshot is dropped in favour of the server's copy once its DELETE has been uploaded.
+ * A snapshot is dropped in favour of the server's copy once its DELETE has been uploaded, unless it
+ * holds changes that never reached the server.
  */
 class TrashBin internal constructor(
     private val database: KgsDatabase,
@@ -209,8 +212,8 @@ class TrashBin internal constructor(
         val sameCalendar = target.href == item.collectionHref
         val remainingResource = database.resourceDao().get(item.resourceHref)
             ?.takeIf { it.collectionHref == target.href }
+        // Its resource can be gone while the DELETE is still queued; that DELETE must not outlive this.
         val withdrawsQueuedDelete = sameCalendar &&
-            remainingResource != null &&
             database.pendingMutationDao().forResource(item.resourceHref).any { it.action == MutationAction.Delete }
         if (!withdrawsQueuedDelete && uidExistsIn(target.href, item.uid, item.componentType)) {
             return@writeTransaction TrashRestoreResult.AlreadyExists
@@ -223,6 +226,7 @@ class TrashBin internal constructor(
         val parsed = icalCodec.parse(item.rawIcs, target.href, resourceHref, target.color)
             ?: return@writeTransaction TrashRestoreResult.Unreadable
         // Withdrawing a queued DELETE: the server still has the item, so the PUT replaces it (If-Match).
+        // Without a resource left the server reported it gone, and the PUT is a create.
         val baseEtag = remainingResource?.takeIf { withdrawsQueuedDelete }?.etag
         if (withdrawsQueuedDelete) {
             database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Delete)

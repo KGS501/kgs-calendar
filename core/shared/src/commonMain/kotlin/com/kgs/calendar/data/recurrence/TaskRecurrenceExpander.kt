@@ -2,7 +2,9 @@ package com.kgs.calendar.data.recurrence
 
 import com.kgs.calendar.time.*
 import kotlinx.datetime.*
+import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
+import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
@@ -23,7 +25,15 @@ import com.kgs.calendar.time.ChronoUnit
 class TaskRecurrenceExpander(
     private val eventExpander: RecurrenceExpander,
 ) {
-    fun expand(master: TaskEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<TaskEntity> {
+    fun expand(master: TaskEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<TaskEntity> =
+        expandWithIdentity(master, rangeStartMillis, rangeEndMillis).map { it.item }
+
+    /** Occurrences with their recurrence identity, which an exception's move doesn't change. */
+    fun expandWithIdentity(
+        master: TaskEntity,
+        rangeStartMillis: Long,
+        rangeEndMillis: Long,
+    ): List<CalendarOccurrenceEnvelope<TaskEntity>> {
         val anchor = master.startAtMillis ?: master.dueAtMillis ?: return emptyList()
         val end = when {
             master.startAtMillis != null && master.dueAtMillis != null && master.dueAtMillis > master.startAtMillis ->
@@ -48,36 +58,42 @@ class TaskRecurrenceExpander(
             color = master.color,
         )
         val overrides = RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
-            .associateBy { it.recurrenceIdMillis }
-        return eventExpander.expand(recurrenceEvent, rangeStartMillis, rangeEndMillis).mapNotNull { occurrence ->
-            val recurrenceId = occurrence.startsAtMillis
+        val exact = overrides.associateBy { it.recurrenceIdMillis }
+        val following = overrides.filter { it.thisAndFuture }.sortedBy { it.recurrenceIdMillis }
+        val recurrenceSet = recurrenceEvent.copy(
+            recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(
+                overrides.map { it.asTimingOverride(master, recurrenceEvent) },
+            ),
+        )
+        return eventExpander.expandEntries(recurrenceSet, rangeStartMillis, rangeEndMillis).map { entry ->
+            val recurrenceId = entry.recurrenceIdMillis
             val expanded = master.shiftedToAnchor(recurrenceId, eventExpander.zoneId)
-            val override = overrides[recurrenceId]
-            when {
-                override != null -> override.applyTo(expanded)
+            val own = exact[recurrenceId]
+            val inherited = following.lastOrNull { it.recurrenceIdMillis < recurrenceId }
+            val occurrence = when {
+                own != null -> own.applyTo(expanded)
+                inherited != null -> inherited.applyToLater(expanded, entry.occurrence.startsAtMillis - recurrenceId)
                 else -> expanded
             }
+            CalendarOccurrenceEnvelope(CalendarOccurrenceId.Task(master.resourceHref, recurrenceId), occurrence)
         }
     }
 
-    fun expandWithIdentity(
-        master: TaskEntity,
-        rangeStartMillis: Long,
-        rangeEndMillis: Long,
-    ): List<CalendarOccurrenceEnvelope<TaskEntity>> {
-        val overrides = RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
-        return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
-            val recurrenceIdMillis = overrides.firstOrNull { override ->
-                override.startAtMillis == occurrence.startAtMillis &&
-                    override.dueAtMillis == occurrence.dueAtMillis &&
-                    override.title == occurrence.title
-            }?.recurrenceIdMillis ?: occurrence.startAtMillis ?: occurrence.dueAtMillis ?: 0L
-            CalendarOccurrenceEnvelope(
-                occurrenceId = CalendarOccurrenceId.Task(master.resourceHref, recurrenceIdMillis),
-                item = occurrence,
-            )
-        }
+    /** Only where the task's exception puts it matters for the recurrence set; its status doesn't. */
+    private fun TaskRecurrenceOverride.asTimingOverride(master: TaskEntity, series: EventEntity): EventRecurrenceOverride {
+        val start = (if (master.startAtMillis != null) startAtMillis else dueAtMillis) ?: recurrenceIdMillis
+        val end = dueAtMillis?.takeIf { master.startAtMillis != null && it > start } ?: (start + DEFAULT_TASK_DURATION_MILLIS)
+        return EventRecurrenceOverride.fromEvent(
+            recurrenceIdMillis,
+            series.copy(startsAtMillis = start, endsAtMillis = end, status = null),
+            thisAndFuture,
+        )
     }
+
+    private fun TaskRecurrenceOverride.applyToLater(expanded: TaskEntity, shiftMillis: Long): TaskEntity = applyTo(expanded).copy(
+        startAtMillis = expanded.startAtMillis?.plus(shiftMillis),
+        dueAtMillis = expanded.dueAtMillis?.plus(shiftMillis),
+    )
 
     /**
      * Materializes terminal per-occurrence overrides without expanding the whole series.

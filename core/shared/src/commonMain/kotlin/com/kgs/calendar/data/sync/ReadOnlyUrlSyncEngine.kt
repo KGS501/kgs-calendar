@@ -21,7 +21,11 @@ import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import com.kgs.calendar.platform.HttpRequest
 import com.kgs.calendar.platform.HttpRequestBuilder
 import com.kgs.calendar.platform.HttpTransport
 import com.kgs.calendar.platform.use
@@ -36,6 +40,8 @@ class ReadOnlyUrlSyncEngine internal constructor(
     private val icalCodec: IcalCodec,
     private val readOnlyHttpClient: HttpTransport,
     private val sourceImages: SourceImageStore = SourceImageStore.None,
+    /** Budget of each feed or image download; a body may trickle in slowly enough to pass every read timeout. */
+    private val downloadTimeoutMillis: Long = HttpRequest.DEFAULT_TOTAL_TIMEOUT_MILLIS,
 ) : CalendarSourceSyncEngine {
     override fun handles(account: AccountEntity): Boolean = account.id.startsWith(READ_ONLY_PREFIX)
 
@@ -91,8 +97,10 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 HttpRequestBuilder()
                     .url(readOnlyCalendarTransportUrl(account.serverUrl))
                     .header("Accept", READ_ONLY_CALENDAR_ACCEPT)
+                    .totalTimeoutMillis(downloadTimeoutMillis)
                     .apply {
-                        if (existing?.externalId == account.serverUrl) {
+                        // A cache from before the current resource keys is fetched again in full.
+                        if (existing?.externalId == account.serverUrl && existing.hasCurrentFeedKeys()) {
                             existing.ctag?.let { header("If-None-Match", it) }
                             existing.syncToken?.let { header("If-Modified-Since", it) }
                         }
@@ -104,7 +112,7 @@ class ReadOnlyUrlSyncEngine internal constructor(
             val feedEtag = response.header("ETag")
             val feedLastModified = response.header("Last-Modified")
             val raw = response.use { body ->
-                if (body.code == 304 && existing?.externalId == account.serverUrl) {
+                if (body.code == 304 && existing?.externalId == account.serverUrl && existing.hasCurrentFeedKeys()) {
                     database.accountDao().updateSyncState(SyncState.Idle, null, nowMillis(), account.id)
                     return
                 }
@@ -123,11 +131,14 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 ?: existing?.color?.takeIf { existing.customColor == null }
                 ?: fallbackColor
             val color = existing?.customColor ?: automaticColor
+            // Parsing doesn't suspend; these checks let a stopped sync end inside a large feed.
+            val job = currentCoroutineContext()[Job]
             val parsed = icalCodec.parseAll(
                 rawIcs = raw,
                 collectionHref = collectionHref,
                 resourceHrefPrefix = collectionHref.trimEnd('/'),
                 collectionColor = color,
+                checkpoint = { job?.ensureActive() },
             )
             val feedProperties = IcsCalendarProperties.parse(raw)
             val collection = CollectionEntity(
@@ -153,9 +164,11 @@ class ReadOnlyUrlSyncEngine internal constructor(
                 externalId = account.serverUrl,
                 capabilitiesJson = JSONObject(existing?.capabilitiesJson ?: "{}")
                     .put(FEED_ITEM_COUNT_KEY, parsed.size)
+                    .put(FEED_KEY_VERSION_KEY, FEED_KEY_VERSION)
                     .toString(),
             )
             val components = parsed.mapNotNull { component ->
+                job?.ensureActive()
                 val resourceHref = component.event?.resourceHref ?: component.task?.resourceHref ?: return@mapNotNull null
                 val rawComponent = when {
                     component.event != null -> icalCodec.serializeEvent(component.event)
@@ -172,10 +185,12 @@ class ReadOnlyUrlSyncEngine internal constructor(
                     localWrites.upsertLocalResource(collection.href, resourceHref, null, component.componentType, component.uid, rawComponent)
                     component.event?.let {
                         val current = database.eventDao().byResource(resourceHref)
+                            ?: database.eventDao().byUidInCollection(collection.href, it.uid)
                         database.eventDao().upsert(it.copy(manualColor = current?.manualColor))
                     }
                     component.task?.let {
                         val current = database.taskDao().byResource(resourceHref)
+                            ?: database.taskDao().byUidInCollection(collection.href, it.uid)
                         database.taskDao().upsert(it.copy(manualColor = current?.manualColor))
                     }
                 }
@@ -210,17 +225,26 @@ class ReadOnlyUrlSyncEngine internal constructor(
         runCatching {
             val bytes = properties.imageBytes ?: properties.imageUrl?.let { downloadImage(it) }
             when {
+                // A rejected image leaves the previous one in place.
                 bytes != null -> sourceImages.save(key, bytes)
                 properties.imageUrl == null -> sourceImages.delete(key)
             }
             sourceImages.markChecked(key, now)
-        }
+        }.onFailure { if (it is CancellationException) throw it }
     }
+
+    private fun CollectionEntity.hasCurrentFeedKeys(): Boolean =
+        runCatching { JSONObject(capabilitiesJson ?: "{}").optInt(FEED_KEY_VERSION_KEY, 0) }.getOrDefault(0) >= FEED_KEY_VERSION
 
     private suspend fun downloadImage(url: String): ByteArray? {
         val response = runCatching {
-            readOnlyHttpClient.execute(HttpRequestBuilder().url(url).get().maxResponseBytes(MAX_IMAGE_BYTES.toLong()).build())
-        }.getOrNull() ?: return null
+            readOnlyHttpClient.execute(
+                HttpRequestBuilder().url(url).get()
+                    .maxResponseBytes(MAX_IMAGE_BYTES.toLong())
+                    .totalTimeoutMillis(downloadTimeoutMillis)
+                    .build(),
+            )
+        }.onFailure { if (it is CancellationException) throw it }.getOrNull() ?: return null
         if (!response.isSuccessful) return null
         return response.body.takeIf { it.size <= MAX_IMAGE_BYTES }
     }
@@ -232,6 +256,10 @@ class ReadOnlyUrlSyncEngine internal constructor(
 
         /** How many events and tasks the feed held at its last successful download (in capabilitiesJson). */
         const val FEED_ITEM_COUNT_KEY = "feedItemCount"
+
+        /** Which key scheme the cached rows use; a change makes the next sync reload the feed. */
+        private const val FEED_KEY_VERSION_KEY = "feedKeyVersion"
+        private const val FEED_KEY_VERSION = 2
 
         fun collectionHref(account: AccountEntity): String = "$READ_ONLY_PREFIX${account.id}"
     }

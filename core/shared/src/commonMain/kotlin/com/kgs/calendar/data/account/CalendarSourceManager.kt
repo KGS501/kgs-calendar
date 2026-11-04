@@ -14,7 +14,12 @@ import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.normalizeReadOnlyCalendarUrl
 import com.kgs.calendar.data.normalizeServer
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
+import com.kgs.calendar.data.findCause
 import com.kgs.calendar.data.remote.CalDavHttpClient
+import com.kgs.calendar.data.remote.CalDavOriginApprovalRequired
+import com.kgs.calendar.data.remote.CalDavOriginNotApprovedException
+import com.kgs.calendar.data.remote.DavOrigins
+import com.kgs.calendar.data.remote.canonicalOrigin
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.resolvedAutomaticColor
 import com.kgs.calendar.data.secure.CredentialsStore
@@ -52,8 +57,27 @@ class CalendarSourceManager internal constructor(
         return saveAccount(result.serverUrl, result.loginName, result.appPassword)
     }
 
-    suspend fun saveManualAccount(serverUrl: String, username: String, appPassword: String): AccountEntity =
-        saveAccount(normalizeServer(serverUrl), username.trim(), appPassword)
+    suspend fun saveManualAccount(
+        serverUrl: String,
+        username: String,
+        appPassword: String,
+        approvedOrigins: Set<String> = emptySet(),
+    ): AccountEntity = saveAccount(normalizeServer(serverUrl), username.trim(), appPassword, approvedOrigins)
+
+    /** Lets the account send its login to [origin], which its server named and the user reviewed. */
+    suspend fun approveAccountOrigin(accountId: String, origin: String) {
+        val credentials = credentialsStore.get(accountId) ?: error("CalDAV credentials are missing.")
+        val canonical = canonicalOrigin(origin) ?: error("Not a server address: $origin")
+        // Plain HTTP stays out of reach of an account set up over HTTPS, whoever asks.
+        require(!(credentials.serverUrl.startsWith("https:", ignoreCase = true) && canonical.startsWith("http:"))) {
+            "An HTTPS account can't be moved to an unencrypted address."
+        }
+        credentialsStore.save(accountId, credentials.copy(origins = credentials.origins.copy(approved = credentials.origins.approved + canonical)))
+    }
+
+    fun credentialsReadable(): Boolean = credentialsStore.isReadable()
+
+    fun resetUnreadableCredentials() = credentialsStore.resetUnreadable()
 
     suspend fun addReadOnlyCalendar(url: String, displayName: String? = null): AccountEntity {
         val normalizedUrl = normalizeReadOnlyCalendarUrl(url)
@@ -221,17 +245,28 @@ class CalendarSourceManager internal constructor(
             )
         }
         if (existing.username != READ_ONLY_USERNAME && password != null) {
-            credentialsStore.save(accountId, StoredCredentials(normalizedServer, normalizedUsername, password))
+            // A different server or login starts over with what it may reach.
+            val kept = credentialsStore.get(accountId)?.origins?.takeIf {
+                normalizedServer == existing.serverUrl && normalizedUsername == existing.username
+            }
+            credentialsStore.save(accountId, StoredCredentials(normalizedServer, normalizedUsername, password, kept ?: DavOrigins.None))
         }
     }
 
-    suspend fun deleteAccount(accountId: String) {
+    /**
+     * Removes the source. Its server trash bin can't be reached any more, so those cached items go.
+     * The local snapshots of its items in "Recently deleted" stay until they expire, so a removal
+     * can't take away the way back, unless [purgeRecentlyDeleted] asks for them to go as well.
+     */
+    suspend fun deleteAccount(accountId: String, purgeRecentlyDeleted: Boolean = false) {
         sourceImages.delete(SourceImageKeys.account(accountId))
         sourceImages.delete(SourceImageKeys.accountCustom(accountId))
         credentialsStore.clear(accountId)
-        database.accountDao().delete(accountId)
-        // Its server trash bin can't be reached any more; local snapshots of its items stay.
-        database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
+        localWrites.writeTransaction {
+            database.accountDao().delete(accountId)
+            database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
+            if (purgeRecentlyDeleted) database.trashDao().deleteForAccount(accountId, TrashOrigin.LocalSnapshot)
+        }
     }
 
     suspend fun setCollectionEnabled(href: String, enabled: Boolean) {
@@ -282,6 +317,7 @@ class CalendarSourceManager internal constructor(
             appPassword = credentials.appPassword,
             displayName = collection.displayName,
             color = collection.color,
+            origins = credentials.origins,
         )
     }
 
@@ -300,6 +336,7 @@ class CalendarSourceManager internal constructor(
             serverUrl = credentials.serverUrl,
             username = credentials.username,
             appPassword = credentials.appPassword,
+            origins = credentials.origins,
         )
         calDavClient.createCalendar(
             discovery = discovery,
@@ -309,6 +346,7 @@ class CalendarSourceManager internal constructor(
             color = color,
             supportsEvents = supportsEvents,
             supportsTasks = supportsTasks,
+            origins = credentials.origins,
         )
     }
 
@@ -321,6 +359,7 @@ class CalendarSourceManager internal constructor(
             collectionHref = collection.href,
             username = credentials.username,
             appPassword = credentials.appPassword,
+            origins = credentials.origins,
         )
         localWrites.writeTransaction {
             database.pendingMutationDao().deleteForCollection(collection.href)
@@ -328,23 +367,36 @@ class CalendarSourceManager internal constructor(
         }
     }
 
-    private suspend fun saveAccount(serverUrl: String, username: String, appPassword: String): AccountEntity {
+    private suspend fun saveAccount(
+        serverUrl: String,
+        username: String,
+        appPassword: String,
+        approvedOrigins: Set<String> = emptySet(),
+    ): AccountEntity {
         val normalizedServer = normalizeServer(serverUrl)
         val normalizedUsername = username.trim()
+        val origins = DavOrigins(approved = approvedOrigins)
         val validation = runCatching {
             val discovery = calDavClient.discoverAccount(
                 serverUrl = normalizedServer,
                 username = normalizedUsername,
                 appPassword = appPassword,
+                origins = origins,
             )
             val collections = calDavClient.discoverCollections(
                 discovery = discovery,
                 username = normalizedUsername,
                 appPassword = appPassword,
+                origins = origins,
             )
             require(collections.isNotEmpty()) { "No CalDAV calendars or task lists were found for this account." }
             discovery
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            error.findCause<CalDavOriginNotApprovedException>()?.let { refused ->
+                if (refused.isDowngrade) throw refused
+                throw CalDavOriginApprovalRequired(refused.origin, normalizedServer, normalizedUsername, appPassword, approvedOrigins)
+            }
             throw IllegalStateException(
                 "Could not verify this CalDAV login. Check the server URL, username, and password/app password.",
                 error,
@@ -365,10 +417,10 @@ class CalendarSourceManager internal constructor(
             calendarHomeUrl = validation.calendarHomeUrl,
             capabilitiesJson = validation.toCapabilitiesJson(),
         )
-        credentialsStore.save(account.id, StoredCredentials(account.serverUrl, normalizedUsername, appPassword))
-        if (account.id == AccountEntity.PRIMARY_ID) {
-            credentialsStore.save(StoredCredentials(account.serverUrl, normalizedUsername, appPassword))
-        }
+        val credentials = StoredCredentials(account.serverUrl, normalizedUsername, appPassword, origins)
+            .withDiscoveredDavOrigin(validation.calendarHomeUrl)
+        credentialsStore.save(account.id, credentials)
+        if (account.id == AccountEntity.PRIMARY_ID) credentialsStore.save(credentials)
         database.accountDao().upsert(account)
         return account
     }

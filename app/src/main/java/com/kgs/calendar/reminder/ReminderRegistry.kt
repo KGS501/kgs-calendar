@@ -6,10 +6,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.navigation.CalendarLaunchTarget
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.kgs.calendar.json.JSONArray
 import com.kgs.calendar.json.JSONObject
+
+/** The occurrence a snoozed reminder belongs to, or null for a reminder without one. */
+internal fun SnoozedReminder.occurrenceId(): CalendarOccurrenceId? =
+    CalendarLaunchTarget.decode(encodedTarget)?.occurrence
 
 interface ReminderRegistryStorage {
     fun readScheduled(): List<ScheduledReminderRecord>
@@ -52,6 +57,12 @@ class ReminderRegistry(
         storage.writeSnoozed(storage.readSnoozed().filterNot { it.alarmRequestCode == alarmRequestCode })
     }
 
+    /** Takes back a snooze whose item is gone or finished, with its alarm. */
+    suspend fun cancelSnoozed(alarmRequestCode: Int) {
+        cancelAlarm(alarmRequestCode)
+        removeSnoozed(alarmRequestCode)
+    }
+
     /** Snoozed reminders still to come or missed only recently; older ones are dropped. */
     suspend fun pendingSnoozed(nowMillis: Long): List<SnoozedReminder> = mutex.withLock {
         val pending = storage.readSnoozed().filter { it.triggerAtMillis >= nowMillis - MissedReminders.GRACE_MILLIS }
@@ -80,6 +91,11 @@ class ReminderRegistry(
         val active = storage.readActive()
         active.filter { matches(it.occurrenceId) }.forEach { cancelNotification(it.notificationKey) }
         storage.writeActive(active.filterNot { matches(it.occurrenceId) })
+
+        // A snooze outlives its notification and is set again after a restart, so it goes as well.
+        val (ended, kept) = storage.readSnoozed().partition { record -> record.occurrenceId()?.let(matches) == true }
+        ended.forEach { cancelAlarm(it.alarmRequestCode) }
+        if (ended.isNotEmpty()) storage.writeSnoozed(kept)
     }
 
     companion object {

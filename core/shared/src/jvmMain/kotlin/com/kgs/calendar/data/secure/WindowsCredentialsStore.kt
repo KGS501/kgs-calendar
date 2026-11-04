@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.secure
 
+import com.kgs.calendar.data.remote.DavOrigins
 import com.sun.jna.platform.win32.Crypt32Util
 import java.io.File
 import java.util.Base64
@@ -21,13 +22,19 @@ class WindowsCredentialsStore(private val file: File) : CredentialsStore {
         setProperty(key(accountId, KEY_SERVER), seal(credentials.serverUrl))
         setProperty(key(accountId, KEY_USERNAME), seal(credentials.username))
         setProperty(key(accountId, KEY_APP_PASSWORD), seal(credentials.appPassword))
+        setProperty(key(accountId, KEY_APPROVED_ORIGINS), seal(credentials.origins.approved.joinToString(" ")))
+        setProperty(key(accountId, KEY_DAV_ORIGIN), seal(credentials.origins.davOrigin.orEmpty()))
     }
 
     override fun get(accountId: String): StoredCredentials? = synchronized(lock) {
         val server = open(values.getProperty(key(accountId, KEY_SERVER))) ?: return null
         val username = open(values.getProperty(key(accountId, KEY_USERNAME))) ?: return null
         val password = open(values.getProperty(key(accountId, KEY_APP_PASSWORD))) ?: return null
-        StoredCredentials(server, username, password)
+        val origins = DavOrigins(
+            approved = open(values.getProperty(key(accountId, KEY_APPROVED_ORIGINS))).orEmpty().split(' ').filter { it.isNotBlank() }.toSet(),
+            davOrigin = open(values.getProperty(key(accountId, KEY_DAV_ORIGIN)))?.takeIf { it.isNotBlank() },
+        )
+        StoredCredentials(server, username, password, origins)
     }
 
     override fun clear() = edit { clear() }
@@ -36,6 +43,8 @@ class WindowsCredentialsStore(private val file: File) : CredentialsStore {
         remove(key(accountId, KEY_SERVER))
         remove(key(accountId, KEY_USERNAME))
         remove(key(accountId, KEY_APP_PASSWORD))
+        remove(key(accountId, KEY_APPROVED_ORIGINS))
+        remove(key(accountId, KEY_DAV_ORIGIN))
     }
 
     private fun edit(change: Properties.() -> Unit) = synchronized(lock) {
@@ -71,6 +80,8 @@ class WindowsCredentialsStore(private val file: File) : CredentialsStore {
         const val KEY_SERVER = "server"
         const val KEY_USERNAME = "username"
         const val KEY_APP_PASSWORD = "app_password"
+        const val KEY_APPROVED_ORIGINS = "approved_origins"
+        const val KEY_DAV_ORIGIN = "dav_origin"
 
         fun key(accountId: String, name: String): String = "account.$accountId.$name"
     }

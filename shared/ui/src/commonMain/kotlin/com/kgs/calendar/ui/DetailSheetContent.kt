@@ -93,6 +93,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -144,6 +145,10 @@ import com.kgs.calendar.domain.task.treeParents
 import com.kgs.calendar.domain.task.withoutHiddenClosedSubtasks
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
+import com.kgs.calendar.data.recurrence.RecurrenceBudget
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.nowMillis
+import com.kgs.calendar.time.systemDefault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -1516,7 +1521,10 @@ private fun EventMetadata(
                         ),
                     )
                 }
-                "recurrence" -> event.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(Res.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "recurrence" -> event.recurrenceRule?.takeIf { it.isNotBlank() }?.let {
+                    DetailLine(stringResource(Res.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat)
+                    RecurrenceBudgetNote(it, event.allDay, event.startsAtMillis, event.timezoneId)
+                }
                 "reminders" -> event.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(Res.string.reminders), it, Icons.Default.Notifications) }
             }
         }
@@ -1600,7 +1608,12 @@ private fun TaskMetadata(
                     if (editable) EditableProgressLine(progress, onProgressChanged) else ReadOnlyProgressLine(progress)
                 }
                 "tags" -> task.categories?.takeIf { it.isNotBlank() }?.let { CategoryDetailLine(stringResource(Res.string.categories), it) }
-                "recurrence" -> task.recurrenceRule?.takeIf { it.isNotBlank() }?.let { DetailLine(stringResource(Res.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat) }
+                "recurrence" -> task.recurrenceRule?.takeIf { it.isNotBlank() }?.let {
+                    DetailLine(stringResource(Res.string.recurrence), it.toLocalizedRecurrenceLabel(), Icons.Default.Repeat)
+                    (task.startAtMillis ?: task.dueAtMillis)?.let { start ->
+                        RecurrenceBudgetNote(it, !(task.startHasTime || task.dueHasTime), start, task.timezoneId)
+                    }
+                }
                 "reminders" -> task.remindersCsv.localizedReminderSummary()?.let { DetailLine(stringResource(Res.string.reminders), it, Icons.Default.Notifications) }
             }
         }
@@ -1638,6 +1651,27 @@ private fun EditableProgressLine(progress: Int, onProgressChanged: (Int) -> Unit
  * One field of the detail card: its icon, then the value. The label is only shown where the icon
  * alone would not say what the value is; otherwise it is read out with the icon.
  */
+/** Said on an item whose series the views can't show in full; the series itself stays as it is. */
+@Composable
+private fun RecurrenceBudgetNote(rule: String, allDay: Boolean, startMillis: Long, timezoneId: String?) {
+    val exceeded by produceState(false, rule, startMillis, timezoneId) {
+        value = withContext(Dispatchers.Default) {
+            val zone = timezoneId?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+            RecurrenceBudget.isExceeded(rule, allDay, startMillis, zone, nowMillis())
+        }
+    }
+    if (exceeded) {
+        EditorSection {
+            Text(
+                stringResource(Res.string.recurrence_too_frequent),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+            )
+        }
+    }
+}
+
 @Composable
 private fun DetailLine(label: String, value: String, icon: ImageVector, showLabel: Boolean = false) {
     val displayValue = remember(value) { value.cleanCalendarDisplayText() }

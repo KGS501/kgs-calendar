@@ -45,6 +45,8 @@ internal data class WidgetDayItem(
     val priority: Int? = null,
     /** RECURRENCE-ID of the task occurrence this item shows; null for single tasks and events. */
     val taskOccurrenceMillis: Long? = null,
+    /** Start of the recurring event occurrence this item shows; null for single events. */
+    val eventOccurrenceMillis: Long? = null,
 )
 
 internal data class WidgetDayTimedItem(

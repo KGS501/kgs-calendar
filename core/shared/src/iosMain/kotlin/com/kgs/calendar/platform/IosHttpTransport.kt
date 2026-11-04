@@ -3,6 +3,7 @@ package com.kgs.calendar.platform
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import platform.Foundation.NSData
 import platform.Foundation.create
 import platform.Foundation.NSError
@@ -51,10 +52,15 @@ class IosHttpTransport(
         NSURLSession.sessionWithConfiguration(configuration, redirectBlocker, null)
     }
 
-    override suspend fun execute(request: HttpRequest): HttpResponse {
+    override suspend fun execute(request: HttpRequest): HttpResponse =
+        withTimeoutOrNull(request.totalTimeoutMillis) { executeFollowingRedirects(request) }
+            ?: throw SocketTimeoutException("The request took longer than ${request.totalTimeoutMillis / 1000} s.")
+
+    private suspend fun executeFollowingRedirects(request: HttpRequest): HttpResponse {
         var current = request
         repeat(maxRedirects + 1) {
             val response = executeOnce(current)
+            if (!request.followRedirects) return response
             val location = response.header("Location")
             if (response.code !in setOf(300, 301, 302, 303, 307, 308) || location.isNullOrBlank()) return response
             current = followUp(current, response.code, resolveUri(response.url, location))
@@ -81,6 +87,7 @@ class IosHttpTransport(
             body = if (keepsBody && !toGet) previous.body else null,
             contentType = if (keepsBody && !toGet) previous.contentType else null,
             maxResponseBytes = previous.maxResponseBytes,
+            totalTimeoutMillis = previous.totalTimeoutMillis,
         )
     }
 

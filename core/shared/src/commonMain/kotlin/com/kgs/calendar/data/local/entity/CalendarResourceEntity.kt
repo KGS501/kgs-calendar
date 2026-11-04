@@ -30,4 +30,11 @@ data class CalendarResourceEntity(
     val uid: String,
     val rawIcs: String,
     val syncError: String? = null,
+    /**
+     * The server's newer version when it could not be imported. [etag], [rawIcs] and the event or
+     * task row stay at the last version that could, so a local edit based on them fails its If-Match
+     * instead of silently overwriting a version nobody saw here.
+     */
+    val quarantinedEtag: String? = null,
+    val quarantinedRawIcs: String? = null,
 )

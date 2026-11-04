@@ -26,6 +26,8 @@ import com.kgs.calendar.domain.source.CollectionVisibility
 import com.kgs.calendar.lifecycle.ForegroundRecenterPolicy
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.reminder.TaskMutationCoordinator
+import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
 import com.kgs.calendar.navigation.SharedEventDraft
@@ -65,6 +67,8 @@ data class CalendarWidgetLaunchTarget(
     val createTaskScheduled: Boolean? = null,
     val openEventUid: String? = null,
     val openTaskUid: String? = null,
+    /** Which occurrence of the item to open; null for single items and older widgets. */
+    val openOccurrenceMillis: Long? = null,
 )
 
 private data class TimelinePolicySettings(
@@ -498,6 +502,7 @@ class CalendarViewModel(
                 createTaskScheduled = initialWidgetLaunchTarget.createTaskScheduled,
                 openEventUid = initialWidgetLaunchTarget.openEventUid,
                 openTaskUid = initialWidgetLaunchTarget.openTaskUid,
+                openOccurrenceMillis = initialWidgetLaunchTarget.openOccurrenceMillis,
             )
         }
         if (initialSharedEvent != null && deliverInitialLaunchEvents) {
@@ -533,6 +538,7 @@ class CalendarViewModel(
         createTaskScheduled: Boolean? = null,
         openEventUid: String? = null,
         openTaskUid: String? = null,
+        openOccurrenceMillis: Long? = null,
     ) {
         suppressAutomaticRecenterForExplicitLaunch()
         selectedViewOverride.value = viewMode
@@ -541,7 +547,7 @@ class CalendarViewModel(
         }
         selectedDateOverride.value = date
         dateNavigationSerial.update { it + 1 }
-        sendWidgetLaunchEvents(date, createEvent, createTaskScheduled, openEventUid, openTaskUid)
+        sendWidgetLaunchEvents(date, createEvent, createTaskScheduled, openEventUid, openTaskUid, openOccurrenceMillis)
         persistWidgetSelection(date, viewMode)
     }
 
@@ -597,7 +603,12 @@ class CalendarViewModel(
         createTaskScheduled: Boolean?,
         openEventUid: String?,
         openTaskUid: String?,
+        openOccurrenceMillis: Long?,
     ) {
+        if (openOccurrenceMillis != null) {
+            openOccurrence(openEventUid, openTaskUid, openOccurrenceMillis)
+            return
+        }
         if (createEvent) {
             uiEventChannel.trySend(CalendarUiEvent.CreateEvent(date))
         }
@@ -621,6 +632,24 @@ class CalendarViewModel(
                     .first()
                 uiEventChannel.send(CalendarUiEvent.OpenTask(task))
             }
+        }
+    }
+
+    /** Opens exactly the tapped occurrence; a row that outlived its occurrence opens nothing else. */
+    private fun openOccurrence(eventHref: String?, taskHref: String?, occurrenceMillis: Long) {
+        val occurrence = when {
+            !taskHref.isNullOrBlank() -> CalendarOccurrenceId.Task(taskHref, occurrenceMillis)
+            !eventHref.isNullOrBlank() -> CalendarOccurrenceId.Event(eventHref, occurrenceMillis)
+            else -> return
+        }
+        pendingOpenEventJob?.cancel()
+        pendingOpenTaskJob?.cancel()
+        pendingOpenEventJob = viewModelScope.launch {
+            val resolved = calendarLaunchResolver.resolve(
+                CalendarLaunchTarget(action = CalendarLaunchAction.OpenOccurrence, occurrence = occurrence),
+            ) ?: return@launch
+            val open = resolved.event?.let(CalendarUiEvent::OpenEvent) ?: resolved.task?.let(CalendarUiEvent::OpenTask)
+            open?.let { uiEventChannel.send(it) }
         }
     }
 

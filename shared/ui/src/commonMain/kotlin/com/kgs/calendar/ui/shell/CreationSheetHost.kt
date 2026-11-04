@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -52,6 +54,7 @@ fun CreationSheetHost(
             bookPane = shell.creationBookPane,
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
+            val trackSave = editorSaveTracker(viewModel, shell, closeAnimated, showHiddenSaveNotice)
             EditorTypeTransition(shell.creationSheet ?: creationSheet, shell) { target, transferDraft, draftId ->
             when (target) {
                 CreationSheet.EventLow -> EventEditorSheet(
@@ -66,9 +69,9 @@ fun CreationSheetHost(
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
                     onSave = { payload ->
-                        viewModel.edits.createEvent(payload)
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        closeAnimated(shell::finishCreation)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Event, finishCreation = true) {
+                            viewModel.edits.createEvent(payload)
+                        }
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -92,9 +95,9 @@ fun CreationSheetHost(
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
-                        viewModel.edits.createTask(payload)
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        closeAnimated(shell::finishCreation)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Task, finishCreation = true) {
+                            viewModel.edits.createTask(payload)
+                        }
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -137,6 +140,7 @@ fun CreationSheetHost(
             },
         ) {
             val closeAnimated = LocalSheetCloseAnimator.current
+            val trackSave = editorSaveTracker(viewModel, shell, closeAnimated, showHiddenSaveNotice)
             EditorTypeTransition(currentSheet, shell) { sheet, transferDraft, draftId ->
             when (sheet) {
                 CreationSheet.EventLow,
@@ -155,12 +159,12 @@ fun CreationSheetHost(
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     requestTitleFocus = state.focusTitleOnCreate,
                     onSave = { payload ->
-                        when (val source = shell.conversionSource) {
-                            is ConversionSource.Task -> viewModel.edits.convertTaskToEvent(source.task.resourceHref, payload)
-                            else -> viewModel.edits.createEvent(payload)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Event, finishCreation = true) {
+    when (val source = shell.conversionSource) {
+                                is ConversionSource.Task -> viewModel.edits.convertTaskToEvent(source.task.resourceHref, payload)
+                                else -> viewModel.edits.createEvent(payload)
+                            }
                         }
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -186,15 +190,15 @@ fun CreationSheetHost(
                     requestTitleFocus = false,
                     onSave = { payload ->
                         if (state.collections.firstOrNull { it.href == sheet.event.collectionHref }?.isReadOnlyCollection() == true) {
-                            viewModel.edits.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
-                            showHiddenSaveNotice(sheet.event.collectionHref, HiddenSaveKind.Event)
-                            closeAnimated(shell::closeCreationSheet)
+                            trackSave.track(sheet.event.collectionHref, HiddenSaveKind.Event, finishCreation = false) {
+                                viewModel.edits.updateEventManualColor(sheet.event.resourceHref, payload.manualColor)
+                            }
                         } else if (!sheet.event.recurrenceRule.isNullOrBlank() || sheet.event.isRecurring) {
                             shell.requestRecurringSave(RecurringSaveRequest.Event(sheet.event, payload))
                         } else {
-                            viewModel.edits.updateEvent(sheet.event.resourceHref, payload)
-                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                            closeAnimated(shell::closeCreationSheet)
+                            trackSave.track(payload.collectionHref, HiddenSaveKind.Event, finishCreation = false) {
+                                viewModel.edits.updateEvent(sheet.event.resourceHref, payload)
+                            }
                         }
                     },
                     onSwitchToTask = { transfer ->
@@ -220,9 +224,9 @@ fun CreationSheetHost(
                     requestTitleFocus = state.focusTitleOnCreate,
                     headerTitle = stringResource(Res.string.duplicate_event),
                     onSave = { payload ->
-                        viewModel.edits.createEvent(payload)
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Event)
-                        closeAnimated(shell::finishCreation)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Event, finishCreation = true) {
+                            viewModel.edits.createEvent(payload)
+                        }
                     },
                     onSwitchToTask = { transfer ->
                         shell.switchEditor(
@@ -246,12 +250,12 @@ fun CreationSheetHost(
                     transferDraft = transferDraft,
                     onDraftCollectionColorChanged = { shell.draftWireframeColor = it },
                     onSave = { payload ->
-                        when (val source = shell.conversionSource) {
-                            is ConversionSource.Event -> viewModel.edits.convertEventToTask(source.event.resourceHref, payload)
-                            else -> viewModel.edits.createTask(payload)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Task, finishCreation = true) {
+    when (val source = shell.conversionSource) {
+                                is ConversionSource.Event -> viewModel.edits.convertEventToTask(source.event.resourceHref, payload)
+                                else -> viewModel.edits.createTask(payload)
+                            }
                         }
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        closeAnimated(shell::finishCreation)
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -275,9 +279,9 @@ fun CreationSheetHost(
                     forcedParentTask = sheet.parent,
                     headerTitle = stringResource(Res.string.add_subtask),
                     onSave = { payload ->
-                        viewModel.edits.createTask(payload)
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        closeAnimated(shell::closeCreationSheet)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Task, finishCreation = false) {
+                            viewModel.edits.createTask(payload)
+                        }
                     },
                     onSwitchToEvent = {},
                     onOpenCalendarSources = shell::openAddCalendarSources,
@@ -295,15 +299,15 @@ fun CreationSheetHost(
                     transferDraft = null,
                     onSave = { payload ->
                         if (state.collections.firstOrNull { it.href == sheet.task.collectionHref }?.isReadOnlyCollection() == true) {
-                            viewModel.edits.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
-                            showHiddenSaveNotice(sheet.task.collectionHref, HiddenSaveKind.Task)
-                            closeAnimated(shell::closeCreationSheet)
+                            trackSave.track(sheet.task.collectionHref, HiddenSaveKind.Task, finishCreation = false) {
+                                viewModel.edits.updateTaskManualColor(sheet.task.resourceHref, payload.manualColor)
+                            }
                         } else if (!sheet.task.recurrenceRule.isNullOrBlank()) {
                             shell.requestRecurringSave(RecurringSaveRequest.Task(sheet.task, payload))
                         } else {
-                            viewModel.edits.updateTask(sheet.task.resourceHref, payload)
-                            showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                            closeAnimated(shell::closeCreationSheet)
+                            trackSave.track(payload.collectionHref, HiddenSaveKind.Task, finishCreation = false) {
+                                viewModel.edits.updateTask(sheet.task.resourceHref, payload)
+                            }
                         }
                     },
                     onSwitchToEvent = { transfer ->
@@ -328,9 +332,9 @@ fun CreationSheetHost(
                     transferDraft = null,
                     headerTitle = stringResource(Res.string.duplicate_task),
                     onSave = { payload ->
-                        viewModel.edits.createTask(payload)
-                        showHiddenSaveNotice(payload.collectionHref, HiddenSaveKind.Task)
-                        closeAnimated(shell::finishCreation)
+                        trackSave.track(payload.collectionHref, HiddenSaveKind.Task, finishCreation = true) {
+                            viewModel.edits.createTask(payload)
+                        }
                     },
                     onSwitchToEvent = { transfer ->
                         shell.switchEditor(
@@ -402,4 +406,36 @@ private fun EditorTypeTransition(
             content(target, transferDraft, draftId)
         }
     }
+}
+
+/**
+ * Starts editor saves and finishes them: the sheet closes, and takes its draft along, only once the
+ * save is stored on this device. After a failure it stays open with everything still in it.
+ */
+@Composable
+private fun editorSaveTracker(
+    viewModel: CalendarViewModel,
+    shell: CalendarShellUiState,
+    closeAnimated: (() -> Unit) -> Unit,
+    showHiddenSaveNotice: (collectionHref: String?, kind: HiddenSaveKind) -> Unit,
+): EditorSaveTracker {
+    val saveState by viewModel.edits.editorSave.collectAsState()
+    LaunchedEffect(saveState) {
+        when (val state = saveState) {
+            is EditorSaveState.Saved -> {
+                viewModel.edits.editorSaveHandled()
+                showHiddenSaveNotice(state.outcome.collectionHref, state.outcome.kind)
+                closeAnimated(if (state.outcome.finishCreation) shell::finishCreation else shell::closeCreationSheet)
+            }
+            EditorSaveState.Failed -> viewModel.edits.editorSaveHandled()
+            EditorSaveState.Idle, EditorSaveState.Saving -> Unit
+        }
+    }
+    return EditorSaveTracker { collectionHref, kind, finishCreation, save ->
+        viewModel.edits.trackEditorSave(EditorSaveOutcome(collectionHref, kind, finishCreation), save)
+    }
+}
+
+private fun interface EditorSaveTracker {
+    fun track(collectionHref: String?, kind: HiddenSaveKind, finishCreation: Boolean, save: () -> Unit)
 }

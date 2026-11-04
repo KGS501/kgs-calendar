@@ -38,6 +38,9 @@ class KgsWidgetActionReceiver : BroadcastReceiver() {
                     intent.getStringExtra(EXTRA_WIDGET_ACTION)?.let { putExtra(EXTRA_WIDGET_ACTION, it) }
                     intent.getStringExtra(EXTRA_WIDGET_TASK_UID)?.let { putExtra(EXTRA_WIDGET_TASK_UID, it) }
                     intent.getStringExtra(EXTRA_WIDGET_EVENT_UID)?.let { putExtra(EXTRA_WIDGET_EVENT_UID, it) }
+                    if (intent.hasExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS)) {
+                        putExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, intent.getLongExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, 0L))
+                    }
                     data = Uri.parse("kgs-calendar://widget-router/${SystemClock.elapsedRealtime()}")
                 },
             )

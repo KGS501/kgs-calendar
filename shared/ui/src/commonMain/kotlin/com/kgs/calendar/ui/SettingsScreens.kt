@@ -159,7 +159,14 @@ import com.kgs.calendar.ui.layout.currentCalendarWindowLayout
 import com.kgs.calendar.ui.layout.largeScreenMaxWidth
 import com.kgs.calendar.ui.sources.SourceAvatar
 import com.kgs.calendar.ui.sources.displayName
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.semantics.Role
 import com.kgs.calendar.data.account.SourceImageKeys
+import com.kgs.calendar.data.remote.unapprovedDavOrigin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.kgs.calendar.ui.sources.AccountAvatarDialog
 import com.kgs.calendar.ui.sources.NewCalendarGroupDialog
 import com.kgs.calendar.ui.sources.groupOf
@@ -242,7 +249,10 @@ fun SettingsPage(
     onAddAndroidCalendars: () -> Unit,
     onDisabledAndroidProviderCalendarsVisibleChanged: (Boolean) -> Unit,
     onUpdateAccount: (String, String, String, String, String?) -> Unit,
-    onDeleteAccount: (String) -> Unit,
+    onDeleteAccount: (String, Boolean) -> Unit,
+    onApproveAccountOrigin: (String, String) -> Unit = { _, _ -> },
+    credentialsReadable: () -> Boolean = { true },
+    onResetCredentials: () -> Unit = {},
     onCreateCalDavCalendar: (String, String, Boolean, Boolean) -> Unit,
     onSync: () -> Unit,
     onSyncIntervalChanged: (Int) -> Unit = {},
@@ -284,6 +294,11 @@ fun SettingsPage(
     var defaultEventCollectionDialogOpen by remember { mutableStateOf(false) }
     var defaultTaskCollectionDialogOpen by remember { mutableStateOf(false) }
     var deleteAccountCandidateId by remember { mutableStateOf<String?>(null) }
+    var purgeRecentlyDeleted by remember(deleteAccountCandidateId) { mutableStateOf(false) }
+    var originToApprove by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var savedLoginsReadable by remember { mutableStateOf(true) }
+    var confirmCredentialsReset by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { savedLoginsReadable = withContext(Dispatchers.Default) { credentialsReadable() } }
     var readOnlyUrl by rememberSaveable { mutableStateOf("") }
     var addServerUrl by rememberSaveable { mutableStateOf("") }
     var addUsername by rememberSaveable { mutableStateOf("") }
@@ -345,8 +360,7 @@ fun SettingsPage(
     }
     fun exportAccount(accountId: String, name: String) {
         exportAccountId = accountId
-        val fileName = name.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().ifBlank { "calendar" }
-        exportLauncher("$fileName.ics")
+        exportLauncher("${name.exportFileName()}.ics")
     }
     val calDavValidationFailedText = stringResource(Res.string.caldav_validation_failed)
     val calendarPermissionLauncher = rememberDeviceCalendarPermissionRequest { granted ->
@@ -969,6 +983,27 @@ fun SettingsPage(
                                     )
                                 }
                             }
+                        }
+                    }
+                    account.syncError.unapprovedDavOrigin()?.let { origin ->
+                        SettingsGroup(footer = stringResource(Res.string.source_allow_origin_footer)) {
+                            SettingsRow(
+                                title = stringResource(Res.string.source_allow_origin, origin),
+                                onClick = { originToApprove = account.id to origin },
+                            )
+                        }
+                    }
+                    if (!savedLoginsReadable) {
+                        SettingsGroup(footer = stringResource(Res.string.credentials_unreadable_body)) {
+                            SettingsRow(
+                                title = stringResource(Res.string.credentials_retry),
+                                onClick = { savedLoginsReadable = credentialsReadable() },
+                            )
+                            SettingsRow(
+                                title = stringResource(Res.string.credentials_reset),
+                                titleColor = MaterialTheme.colorScheme.error,
+                                onClick = { confirmCredentialsReset = true },
+                            )
                         }
                     }
                     SettingsGroup(footer = stringResource(Res.string.export_calendar_footer)) {
@@ -1599,6 +1634,19 @@ fun SettingsPage(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(if (local) Res.string.delete_local_calendar_body else Res.string.remove_source_body))
                     if (local) Text(stringResource(Res.string.delete_local_calendar_export_hint))
+                    if (!local) {
+                        Text(stringResource(Res.string.remove_source_trash_note))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(value = purgeRecentlyDeleted, role = Role.Checkbox) { purgeRecentlyDeleted = it },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(checked = purgeRecentlyDeleted, onCheckedChange = null)
+                            Text(stringResource(Res.string.remove_source_purge_trash))
+                        }
+                    }
                     if (!local && unsentChanges > 0) {
                         Text(
                             pluralStringResource(Res.plurals.remove_source_unsent_changes, unsentChanges, unsentChanges),
@@ -1612,7 +1660,7 @@ fun SettingsPage(
                     text = stringResource(if (local) Res.string.delete else Res.string.remove),
                     destructive = true,
                     onClick = {
-                        if (local) onDeleteLocalCalendar() else onDeleteAccount(accountId)
+                        if (local) onDeleteLocalCalendar() else onDeleteAccount(accountId, purgeRecentlyDeleted)
                         deleteAccountCandidateId = null
                         navigateBack()
                     },
@@ -1642,7 +1690,51 @@ fun SettingsPage(
             },
         )
     }
+    originToApprove?.let { (accountId, origin) ->
+        val server = accounts.firstOrNull { it.id == accountId }?.serverUrl.orEmpty()
+        KgsAlertDialog(
+            onDismissRequest = { originToApprove = null },
+            title = { Text(stringResource(Res.string.origin_approval_title)) },
+            text = { Text(stringResource(Res.string.origin_approval_body, server, origin)) },
+            confirmButton = {
+                DialogConfirmButton(
+                    text = stringResource(Res.string.origin_approval_allow),
+                    onClick = {
+                        originToApprove = null
+                        onApproveAccountOrigin(accountId, origin)
+                    },
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { originToApprove = null }) { Text(stringResource(Res.string.cancel)) }
+            },
+        )
+    }
+    if (confirmCredentialsReset) {
+        KgsAlertDialog(
+            onDismissRequest = { confirmCredentialsReset = false },
+            title = { Text(stringResource(Res.string.credentials_reset_question)) },
+            text = { Text(stringResource(Res.string.credentials_reset_body)) },
+            confirmButton = {
+                DialogConfirmButton(
+                    text = stringResource(Res.string.credentials_reset),
+                    destructive = true,
+                    onClick = {
+                        confirmCredentialsReset = false
+                        onResetCredentials()
+                        savedLoginsReadable = true
+                    },
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCredentialsReset = false }) { Text(stringResource(Res.string.cancel)) }
+            },
+        )
+    }
 }
+
+private fun String.exportFileName(): String =
+    replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().ifBlank { "calendar" }
 
 private val SettingsFieldShape = RoundedCornerShape(16.dp)
 private val EventDurationPresets = listOf(15, 30, 45, 60, 90, 120)
@@ -2238,8 +2330,10 @@ fun CollectionSettingsSheet(
     onDelete: (() -> Unit)? = null,
     groupName: String? = null,
     onChooseGroup: (() -> Unit)? = null,
+    onExport: (PlatformUri) -> Unit = {},
     onClose: () -> Unit,
 ) {
+    val exportLauncher = rememberCreateDocumentLauncher("text/calendar") { uri -> uri?.let(onExport) }
     var name by remember(collection.href) { mutableStateOf(collection.displayName) }
     var customColor by remember(collection.href) { mutableStateOf(collection.customColor) }
     var enabled by remember(collection.href) { mutableStateOf(collection.isEnabled) }
@@ -2378,6 +2472,15 @@ fun CollectionSettingsSheet(
                         }
                     }
                 }
+            }
+            SettingsGroup(horizontalPadding = 0.dp, footer = stringResource(Res.string.export_single_calendar_footer)) {
+                SettingsRow(
+                    title = stringResource(Res.string.export_calendar),
+                    leading = {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    },
+                    onClick = { exportLauncher("${collection.displayName.exportFileName()}.ics") },
+                )
             }
             if (onDelete != null) {
                 TextButton(

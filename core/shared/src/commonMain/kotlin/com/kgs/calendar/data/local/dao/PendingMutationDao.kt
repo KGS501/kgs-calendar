@@ -44,6 +44,15 @@ interface PendingMutationDao {
     )
     suspend fun latestForResourceAndAction(resourceHref: String, action: MutationAction): PendingMutationEntity?
 
+    @Query("SELECT * FROM pending_mutations WHERE id = :id")
+    suspend fun get(id: Long): PendingMutationEntity?
+
+    @Query("SELECT * FROM pending_mutations WHERE dependsOnMutationId = :id")
+    suspend fun dependingOn(id: Long): List<PendingMutationEntity>
+
+    @Query("UPDATE pending_mutations SET dependsOnMutationId = :newId WHERE dependsOnMutationId = :id")
+    suspend fun replaceDependency(id: Long, newId: Long?)
+
     @Insert
     suspend fun insert(mutation: PendingMutationEntity): Long
 

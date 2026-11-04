@@ -29,9 +29,12 @@ class NextcloudLoginFlowClient(
             if (!response.isSuccessful) error("Login flow failed: HTTP ${response.code}")
             val json = parseJsonObject(response.bodyText())
             val poll = json.optJSONObject("poll") ?: json
+            val pollEndpoint = poll.requireString("endpoint")
+            // The poll token later unlocks an app password: it goes nowhere but back to this server.
+            requireApprovedDavOrigin(pollEndpoint, response.url, DavOrigins(approved = setOfNotNull(canonicalOrigin(normalized))))
             LoginFlowStart(
                 loginUrl = json.requireString("login"),
-                pollEndpoint = poll.requireString("endpoint"),
+                pollEndpoint = pollEndpoint,
                 token = poll.requireString("token"),
             )
         }
@@ -56,6 +59,7 @@ class NextcloudLoginFlowClient(
             .url(pollEndpoint)
             .post(formBody("token" to token).toRequestBody(FORM))
             .header("User-Agent", USER_AGENT)
+            .followRedirects(false)
             .build()
         transport.execute(request).use { response ->
             if (response.code == 404) return@withContext null

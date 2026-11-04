@@ -140,7 +140,7 @@ class AllDayCollisionInstrumentedTest {
                         onEventMoved = { _, _, _, _, _ -> }, onTaskMoved = { _, _, _, _, _ -> },
                         onEventMovedAllDay = { _, _, _ -> }, onTaskMovedAllDay = { _, _, _ -> },
                         maxVisibleItems = 4, expanded = expanded.value, onExpandedChange = { expanded.value = it },
-                        onTaskStatusChanged = { _, _ -> }, onDetail = {}, priorityPageCount = 3)
+                        onTaskStatusChanged = { _, _ -> }, onDetail = {})
                 }
             }
         }

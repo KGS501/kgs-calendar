@@ -18,6 +18,7 @@ import com.kgs.calendar.domain.model.REMINDER_AT_START
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.platform.TextCharset
+import com.kgs.calendar.platform.md5
 import com.kgs.calendar.platform.urlDecode
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -42,85 +43,119 @@ class IcalCodec(
         val zones = TimeZoneResolver.forCalendar(rawIcs)
         val components = components(rawIcs)
         val eventBlocks = components[ComponentType.Event].orEmpty()
-        if (eventBlocks.isNotEmpty()) {
-            val master = eventBlocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } }
-                ?: eventBlocks.first()
-            val parsedMaster = parseEvent(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
-            val masterEvent = parsedMaster.event ?: return parsedMaster
-            val overrides = eventBlocks
-                .filter { it !== master }
-                .mapNotNull { block ->
-                    val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
-                    val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
-                    val parsedOverride = parseEvent(block, collectionHref, resourceHref, collectionColor, zones)?.event
-                        ?: return@mapNotNull null
-                    EventRecurrenceOverride.fromEvent(recurrenceId, parsedOverride)
-                }
-            return parsedMaster.copy(
-                event = masterEvent.copy(
-                    recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(overrides),
-                ),
-            )
-        }
+        if (eventBlocks.isNotEmpty()) return parseEventSeries(eventBlocks, collectionHref, resourceHref, collectionColor, zones)
         val taskBlocks = components[ComponentType.Task].orEmpty()
-        if (taskBlocks.isNotEmpty()) {
-            val master = taskBlocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } }
-                ?: taskBlocks.first()
-            val parsedMaster = parseTask(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
-            val masterTask = parsedMaster.task ?: return parsedMaster
-            val overrides = taskBlocks
-                .filter { it !== master }
-                .mapNotNull { block ->
-                    val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
-                    val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
-                    val parsed = parseTask(block, collectionHref, resourceHref, collectionColor, zones)?.task
-                        ?: return@mapNotNull null
-                    val names = block.lines.map { it.name }.toSet()
-                    val masterAnchor = masterTask.startAtMillis ?: masterTask.dueAtMillis ?: recurrenceId
-                    val shift = recurrenceId - masterAnchor
-                    val parsedOverride = parsed.copy(
-                        title = if ("SUMMARY" in names) parsed.title else masterTask.title,
-                        notes = if ("DESCRIPTION" in names) parsed.notes else masterTask.notes,
-                        location = if ("LOCATION" in names) parsed.location else masterTask.location,
-                        url = if ("URL" in names) parsed.url else masterTask.url,
-                        categories = if ("CATEGORIES" in names) parsed.categories else masterTask.categories,
-                        startAtMillis = if ("DTSTART" in names) parsed.startAtMillis else masterTask.startAtMillis?.plus(shift),
-                        startHasTime = if ("DTSTART" in names) parsed.startHasTime else masterTask.startHasTime,
-                        dueAtMillis = if ("DUE" in names) parsed.dueAtMillis else masterTask.dueAtMillis?.plus(shift),
-                        dueHasTime = if ("DUE" in names) parsed.dueHasTime else masterTask.dueHasTime,
-                        priority = if ("PRIORITY" in names) parsed.priority else masterTask.priority,
-                        percentComplete = if ("PERCENT-COMPLETE" in names) parsed.percentComplete else masterTask.percentComplete,
-                        remindersCsv = if (block.alarms.isNotEmpty()) parsed.remindersCsv else masterTask.remindersCsv,
-                    )
-                    TaskRecurrenceOverride.fromTask(recurrenceId, parsedOverride)
-                }
-            return parsedMaster.copy(
-                task = masterTask.copy(
-                    recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(overrides),
-                ),
-            )
-        }
+        if (taskBlocks.isNotEmpty()) return parseTaskSeries(taskBlocks, collectionHref, resourceHref, collectionColor, zones)
         return null
     }
 
+    /** [blocks] are the components of one UID: a master, if any, and its exceptions. */
+    private fun parseEventSeries(
+        blocks: List<ComponentBlock>,
+        collectionHref: String,
+        resourceHref: String,
+        collectionColor: Int,
+        zones: TimeZoneResolver,
+    ): ParsedCalendarComponent? {
+        val master = blocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } } ?: blocks.first()
+        val parsedMaster = parseEvent(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
+        val masterEvent = parsedMaster.event ?: return parsedMaster
+        val overrides = blocks
+            .filter { it !== master }
+            .mapNotNull { block ->
+                val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
+                val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
+                val parsedOverride = parseEvent(block, collectionHref, resourceHref, collectionColor, zones)?.event
+                    ?: return@mapNotNull null
+                EventRecurrenceOverride.fromEvent(recurrenceId, parsedOverride, recurrenceLine.isThisAndFuture())
+            }
+        return parsedMaster.copy(
+            event = masterEvent.copy(recurrenceOverridesJson = RecurrenceOverrideCodec.encodeEvents(overrides)),
+        )
+    }
+
+    /** [blocks] are the components of one UID: a master, if any, and its exceptions. */
+    private fun parseTaskSeries(
+        blocks: List<ComponentBlock>,
+        collectionHref: String,
+        resourceHref: String,
+        collectionColor: Int,
+        zones: TimeZoneResolver,
+    ): ParsedCalendarComponent? {
+        val master = blocks.firstOrNull { block -> block.lines.none { it.name == "RECURRENCE-ID" } } ?: blocks.first()
+        val parsedMaster = parseTask(master, collectionHref, resourceHref, collectionColor, zones) ?: return null
+        val masterTask = parsedMaster.task ?: return parsedMaster
+        val overrides = blocks
+            .filter { it !== master }
+            .mapNotNull { block ->
+                val recurrenceLine = block.lines.firstOrNull { it.name == "RECURRENCE-ID" } ?: return@mapNotNull null
+                val recurrenceId = parseIcalDate(recurrenceLine, zones)?.epochMillis ?: return@mapNotNull null
+                val parsed = parseTask(block, collectionHref, resourceHref, collectionColor, zones)?.task
+                    ?: return@mapNotNull null
+                val names = block.lines.map { it.name }.toSet()
+                val masterAnchor = masterTask.startAtMillis ?: masterTask.dueAtMillis ?: recurrenceId
+                val shift = recurrenceId - masterAnchor
+                val parsedOverride = parsed.copy(
+                    title = if ("SUMMARY" in names) parsed.title else masterTask.title,
+                    notes = if ("DESCRIPTION" in names) parsed.notes else masterTask.notes,
+                    location = if ("LOCATION" in names) parsed.location else masterTask.location,
+                    url = if ("URL" in names) parsed.url else masterTask.url,
+                    categories = if ("CATEGORIES" in names) parsed.categories else masterTask.categories,
+                    startAtMillis = if ("DTSTART" in names) parsed.startAtMillis else masterTask.startAtMillis?.plus(shift),
+                    startHasTime = if ("DTSTART" in names) parsed.startHasTime else masterTask.startHasTime,
+                    dueAtMillis = if ("DUE" in names) parsed.dueAtMillis else masterTask.dueAtMillis?.plus(shift),
+                    dueHasTime = if ("DUE" in names) parsed.dueHasTime else masterTask.dueHasTime,
+                    priority = if ("PRIORITY" in names) parsed.priority else masterTask.priority,
+                    percentComplete = if ("PERCENT-COMPLETE" in names) parsed.percentComplete else masterTask.percentComplete,
+                    remindersCsv = if (block.alarms.isNotEmpty()) parsed.remindersCsv else masterTask.remindersCsv,
+                )
+                TaskRecurrenceOverride.fromTask(recurrenceId, parsedOverride, recurrenceLine.isThisAndFuture())
+            }
+        return parsedMaster.copy(
+            task = masterTask.copy(recurrenceOverridesJson = RecurrenceOverrideCodec.encodeTasks(overrides)),
+        )
+    }
+
+    private fun IcalLine.isThisAndFuture(): Boolean =
+        params["RANGE"]?.unquoteParam().equals("THISANDFUTURE", ignoreCase = true)
+
+    /**
+     * Every series of a whole calendar, as subscription feeds deliver them. A UID's master and
+     * exceptions become one item; each item gets a key that is unique to its full UID. [checkpoint]
+     * runs between items, so a caller can stop a large feed.
+     */
     fun parseAll(
         rawIcs: String,
         collectionHref: String,
         resourceHrefPrefix: String,
         collectionColor: Int,
+        checkpoint: () -> Unit = {},
     ): List<ParsedCalendarComponent> {
         val zones = TimeZoneResolver.forCalendar(rawIcs)
         val components = components(rawIcs)
-        val events = components[ComponentType.Event].orEmpty().mapNotNull { block ->
-            val uid = block.lines.firstOrNull { it.name == "UID" }?.value ?: return@mapNotNull null
-            parseEvent(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor, zones)
+        fun series(blocks: List<ComponentBlock>): List<Pair<String, List<ComponentBlock>>> = blocks
+            .filter { block -> block.lines.any { it.name == "UID" } }
+            .groupBy { block -> block.lines.first { it.name == "UID" }.value }
+            .toList()
+        val events = series(components[ComponentType.Event].orEmpty()).mapNotNull { (uid, blocks) ->
+            checkpoint()
+            val href = "$resourceHrefPrefix/${feedResourceName(ComponentType.Event, uid)}.ics"
+            parseEventSeries(blocks, collectionHref, href, collectionColor, zones)
         }
-        val tasks = components[ComponentType.Task].orEmpty().mapNotNull { block ->
-            val uid = block.lines.firstOrNull { it.name == "UID" }?.value ?: return@mapNotNull null
-            parseTask(block, collectionHref, "$resourceHrefPrefix/${uid.safeResourceName()}.ics", collectionColor, zones)
+        val tasks = series(components[ComponentType.Task].orEmpty()).mapNotNull { (uid, blocks) ->
+            checkpoint()
+            val href = "$resourceHrefPrefix/${feedResourceName(ComponentType.Task, uid)}.ics"
+            parseTaskSeries(blocks, collectionHref, href, collectionColor, zones)
         }
         return events + tasks
     }
+
+    private fun md5Hex(input: ByteArray): String =
+        md5(input).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+
+    /** Readable, but the digest of the whole UID is what keeps two UIDs from sharing a row. */
+    private fun feedResourceName(type: ComponentType, uid: String): String =
+        "${uid.safeResourceName().take(48)}-${md5Hex("${type.value}\n$uid".encodeToByteArray())}"
 
     fun serializeEvent(event: EventEntity, originalRawIcs: String? = null): String {
         val now = utcStamp(kotlin.time.Clock.System.now().toEpochMilli())
@@ -138,7 +173,10 @@ class IcalCodec(
             appendLine("LAST-MODIFIED:$now")
             appendLine("SEQUENCE:${event.sequence.coerceAtLeast(0)}")
             appendDateProperty("DTSTART", event.startsAtMillis, event.allDay, event.timezoneId)
-            appendDateProperty("DTEND", event.endsAtMillis, event.allDay, event.timezoneId)
+            // DTEND has to lie after DTSTART, so a zero-length event is written without one.
+            if (event.endsAtMillis > event.startsAtMillis) {
+                appendDateProperty("DTEND", event.endsAtMillis, event.allDay, event.timezoneId)
+            }
             appendLine("SUMMARY:${escape(event.title)}")
             event.status?.takeIf { it.isNotBlank() }?.let { appendLine("STATUS:${it.uppercase()}") }
             event.classification?.takeIf { it.isNotBlank() }?.let { appendLine("CLASS:${it.uppercase()}") }
@@ -664,7 +702,8 @@ class IcalCodec(
     }
 
     private fun ParsedDate.plusDefaultDuration(allDay: Boolean): ParsedDate =
-        if (allDay) plusDuration(DAY_MILLIS) else ParsedDate(epochMillis + HOUR_MILLIS, allDay)
+        // RFC 5545 3.6.1: a timed event without DTEND or DURATION takes up no time.
+        if (allDay) plusDuration(DAY_MILLIS) else this
 
     /** Date-only values move by whole calendar days, so a 23h or 25h DST day still ends at midnight. */
     private fun ParsedDate.plusDuration(durationMillis: Long): ParsedDate {
@@ -782,6 +821,9 @@ class IcalCodec(
         if (trimmed.length == 8) LocalDate.parse(trimmed, DATE).atStartOfDay() else LocalDateTime.parse(trimmed, DATE_TIME)
     }.getOrNull()
 
+    private fun EventRecurrenceOverride.recurrenceIdProperty(): String =
+        if (thisAndFuture) RANGE_RECURRENCE_ID else "RECURRENCE-ID"
+
     private fun StringBuilder.appendEventOverride(
         master: EventEntity,
         override: EventRecurrenceOverride,
@@ -793,13 +835,15 @@ class IcalCodec(
         appendLine("LAST-MODIFIED:$now")
         appendLine("SEQUENCE:${master.sequence.coerceAtLeast(0)}")
         appendDateProperty(
-            "RECURRENCE-ID",
+            override.recurrenceIdProperty(),
             override.recurrenceIdMillis,
             master.allDay,
             master.timezoneId,
         )
         appendDateProperty("DTSTART", override.startsAtMillis, override.allDay, override.timezoneId)
-        appendDateProperty("DTEND", override.endsAtMillis, override.allDay, override.timezoneId)
+        if (override.endsAtMillis > override.startsAtMillis) {
+            appendDateProperty("DTEND", override.endsAtMillis, override.allDay, override.timezoneId)
+        }
         appendLine("SUMMARY:${escape(override.title)}")
         override.status?.takeIf { it.isNotBlank() }?.let { appendLine("STATUS:${it.uppercase()}") }
         override.classification?.takeIf { it.isNotBlank() }?.let { appendLine("CLASS:${it.uppercase()}") }
@@ -824,7 +868,7 @@ class IcalCodec(
         appendLine("LAST-MODIFIED:$now")
         appendLine("SEQUENCE:${master.sequence.coerceAtLeast(0)}")
         appendDateProperty(
-            "RECURRENCE-ID",
+            if (override.thisAndFuture) RANGE_RECURRENCE_ID else "RECURRENCE-ID",
             override.recurrenceIdMillis,
             !(master.startHasTime || master.dueHasTime),
             master.timezoneId,
@@ -949,6 +993,7 @@ class IcalCodec(
         val alarms: List<OriginalAlarm>,
         /** The first SUMMARY, DESCRIPTION, LOCATION and URL line, by property name. */
         val textLines: Map<String, String>,
+        val organizerLine: String?,
     )
 
     /** A component's direct children: single property lines, and nested components as whole blocks. */
@@ -996,6 +1041,8 @@ class IcalCodec(
         val unsupported = mutableListOf<String>()
         val alarms = mutableListOf<OriginalAlarm>()
         val textLines = mutableMapOf<String, String>()
+        var organizerLine: String? = null
+        var parentSeen = false
         topLevelItems(block).forEach { item ->
             if (item.size > 1 || item[0].uppercase().startsWith("BEGIN:")) {
                 val offset = alarmOffsetOf(item, anchor)
@@ -1005,11 +1052,18 @@ class IcalCodec(
             val line = item[0]
             val name = propertyName(line)
             if (name in TEXT_PROPERTIES && name !in textLines) textLines[name] = line
-            if (name !in known || (name == "RDATE" && line.substringAfter(':', "").contains('/'))) {
+            if (name == "ORGANIZER" && organizerLine == null) organizerLine = line
+            // Only the first parent is modeled; other relationships aren't this app's to rewrite.
+            val isModeledParent = name == "RELATED-TO" && !parentSeen &&
+                parseLine(line)?.params?.get("RELTYPE")?.unquoteParam()?.uppercase().let { it == null || it == "PARENT" }
+            if (isModeledParent) parentSeen = true
+            if (name !in known || (name == "RDATE" && line.substringAfter(':', "").contains('/')) ||
+                (name == "RELATED-TO" && !isModeledParent)
+            ) {
                 unsupported += line
             }
         }
-        return OriginalComponent(anchor, unsupported, alarms, textLines)
+        return OriginalComponent(anchor, unsupported, alarms, textLines, organizerLine)
     }
 
     private fun injectOriginalData(
@@ -1062,10 +1116,30 @@ class IcalCodec(
             val line = item[0]
             val name = propertyName(line)
             if (name == "RDATE" && unsupportedRDates) return@mapNotNull null
+            if (name == "ORGANIZER") return@mapNotNull listOf(withOriginalOrganizerParams(line, original.organizerLine))
             val originalLine = original.textLines[name]
             if (originalLine != null && textOf(originalLine) == textOf(line)) listOf(originalLine) else item
         }
         return listOf(block.first()) + items.flatten() + original.unsupported + block.last()
+    }
+
+    /**
+     * Keeps what the app doesn't model of an unchanged organizer, above all SCHEDULE-AGENT, which
+     * decides who handles scheduling for this copy. A different organizer starts with a clean slate.
+     */
+    private fun withOriginalOrganizerParams(generated: String, original: String?): String {
+        val originalLine = original ?: return generated
+        val sameAddress = parseLine(generated)?.value?.stripMailto().equals(parseLine(originalLine)?.value?.stripMailto(), ignoreCase = true)
+        if (!sameAddress) return generated
+        val head = generated.substring(0, generated.indexOfUnquoted(':').coerceAtLeast(0))
+        val value = generated.substring(head.length)
+        val present = head.splitUnquoted(';').drop(1).map { it.substringBefore('=').uppercase() }.toSet()
+        val originalHead = originalLine.substring(0, originalLine.indexOfUnquoted(':').coerceAtLeast(0))
+        val kept = originalHead.splitUnquoted(';').drop(1).filter {
+            val name = it.substringBefore('=').uppercase()
+            name !in present && name !in MODELED_ORGANIZER_PARAMS
+        }
+        return (listOf(head) + kept).joinToString(";") + value
     }
 
     private fun textOf(line: String): String? = parseLine(line)?.textValue()
@@ -1075,30 +1149,37 @@ class IcalCodec(
 
     private fun foldIcal(rawIcs: String): String {
         val physicalLines = mutableListOf<String>()
-        rawIcs.replace("\r\n", "\n").replace('\r', '\n').trimEnd().lines().forEach { line ->
-            var remaining = line
-            var first = true
-            var limit = ICAL_LINE_LIMIT_BYTES
-            while (remaining.encodeToByteArray().size > limit) {
-                var splitAt = remaining.length
-                while (splitAt > 1 && remaining.substring(0, splitAt).encodeToByteArray().size > limit) {
-                    splitAt--
-                }
-                if (
-                    splitAt in 1 until remaining.length &&
-                    remaining[splitAt - 1].isHighSurrogate() &&
-                    remaining[splitAt].isLowSurrogate()
-                ) {
-                    splitAt--
-                }
-                physicalLines += (if (first) "" else " ") + remaining.substring(0, splitAt)
-                remaining = remaining.substring(splitAt)
-                first = false
-                limit = ICAL_LINE_LIMIT_BYTES - 1
-            }
-            physicalLines += (if (first) "" else " ") + remaining
-        }
+        rawIcs.replace("\r\n", "\n").replace('\r', '\n').trimEnd().lines().forEach { foldLine(it, physicalLines) }
         return physicalLines.joinToString("\r\n", postfix = "\r\n")
+    }
+
+    /** Walks [line] once, counting UTF-8 bytes; a surrogate pair stays together. */
+    private fun foldLine(line: String, out: MutableList<String>) {
+        var segmentStart = 0
+        var segmentBytes = 0
+        var limit = ICAL_LINE_LIMIT_BYTES
+        var prefix = ""
+        var index = 0
+        while (index < line.length) {
+            val char = line[index]
+            val isPair = char.isHighSurrogate() && index + 1 < line.length && line[index + 1].isLowSurrogate()
+            val bytes = when {
+                isPair -> 4
+                char.code < 0x80 -> 1
+                char.code < 0x800 -> 2
+                else -> 3
+            }
+            if (segmentBytes + bytes > limit && index > segmentStart) {
+                out += prefix + line.substring(segmentStart, index)
+                segmentStart = index
+                segmentBytes = 0
+                limit = ICAL_LINE_LIMIT_BYTES - 1
+                prefix = " "
+            }
+            segmentBytes += bytes
+            index += if (isPair) 2 else 1
+        }
+        out += prefix + line.substring(segmentStart)
     }
 
     private fun StringBuilder.appendCalendarHeader() {
@@ -1282,7 +1363,7 @@ class IcalCodec(
     private fun String.htmlToPlainText(): String =
         replace(Regex("(?i)<br\\s*/?>"), "\n")
             .replace(Regex("(?i)</(p|div|li|tr|h[1-6])\\s*>"), "\n")
-            .replace(Regex("(?s)<[^>]+>"), "")
+            .withoutHtmlTags()
             .replace("&nbsp;", " ")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
@@ -1290,6 +1371,25 @@ class IcalCodec(
             .replace("&#39;", "'")
             .replace("&amp;", "&")
             .trim()
+
+    /** What `<[^>]+>` removes, but in one pass: a backtracking regex rescans the rest for every `<`. */
+    private fun String.withoutHtmlTags(): String {
+        val out = StringBuilder(length)
+        var position = 0
+        while (position < length) {
+            val open = indexOf('<', position)
+            val close = if (open < 0) -1 else indexOf('>', open + 1)
+            if (close < 0) break
+            if (close == open + 1) {
+                out.append(this, position, close + 1)
+            } else {
+                out.append(this, position, open)
+            }
+            position = close + 1
+        }
+        out.append(this, position, length)
+        return out.toString()
+    }
 
     private fun String.trimHtmlDataPrefix(): String {
         val trimmed = trim()
@@ -1354,6 +1454,10 @@ class IcalCodec(
         private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
         private const val HOUR_MILLIS = 60L * 60L * 1000L
         private const val ICAL_LINE_LIMIT_BYTES = 75
+        private const val RANGE_RECURRENCE_ID = "RECURRENCE-ID;RANGE=THISANDFUTURE"
+
+        /** Organizer parameters the model owns, so that an edit may remove them. */
+        private val MODELED_ORGANIZER_PARAMS = setOf("CN", "SENT-BY", "DIR", "LANGUAGE")
         private val TRIGGER_DURATION = Regex("P(?:(\\d+)W)?(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?")
         /** Tags that mark a value as HTML. Plain text with `<` and `>` (e-mail addresses, comparisons) stays text. */
         private val HTML_MARKUP = Regex(

@@ -20,6 +20,7 @@ import com.kgs.calendar.widget.EXTRA_COLLECTION_ACTION
 import com.kgs.calendar.widget.EXTRA_WIDGET_ACTION
 import com.kgs.calendar.widget.EXTRA_WIDGET_DATE
 import com.kgs.calendar.widget.EXTRA_WIDGET_EVENT_UID
+import com.kgs.calendar.widget.EXTRA_WIDGET_OCCURRENCE_MILLIS
 import com.kgs.calendar.widget.EXTRA_WIDGET_KIND
 import com.kgs.calendar.widget.EXTRA_WIDGET_TASK_UID
 import com.kgs.calendar.widget.KgsWidgetKind
@@ -57,6 +58,7 @@ import com.kgs.calendar.widget.theme.withAlpha
 import com.kgs.calendar.widget.update.WidgetPerformanceMonitor
 import kotlinx.datetime.LocalDate
 import com.kgs.calendar.time.DateTimeFormatter
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -354,9 +356,24 @@ private fun WidgetListRow.toAgendaEventRemoteViews(
             muted = muted,
         ) },
     )
+    // Title, time and place are pixels on the card; this is what a screen reader gets instead.
+    views.setContentDescription(R.id.widget_agenda_event_root, accessibilityLabel(context, rowLocale))
     views.setOnClickFillInIntent(R.id.widget_agenda_event_root, openFillInIntent(openTask = false))
     views.setOnClickFillInIntent(R.id.widget_agenda_event_art, openFillInIntent(openTask = false))
     return views
+}
+
+/** The whole card in words: following cards of a day hide their date, so it is always named here. */
+private fun WidgetListRow.accessibilityLabel(context: Context, locale: Locale): String {
+    val dates = listOfNotNull(date, spanEndDate).map { it.format(dayMonthFormatter(locale, weekday = "EEE")) }
+    return listOfNotNull(
+        title.takeIf { it.isNotBlank() } ?: context.getString(R.string.no_title),
+        dates.joinToString(" - "),
+        meta.takeIf { it.isNotBlank() },
+        location?.takeIf { it.isNotBlank() },
+        eventStatus?.takeIf { it.equals("TENTATIVE", ignoreCase = true) }?.let { context.getString(R.string.tentative) },
+        eventStatus?.takeIf { it.equals("CANCELLED", ignoreCase = true) }?.let { context.getString(R.string.cancelled) },
+    ).joinToString(", ")
 }
 
 private fun WidgetListRow.sourceKindIsDay(): Boolean =
@@ -445,9 +462,11 @@ private fun WidgetListRow.openFillInIntent(openTask: Boolean = taskResourceHref 
     if (openTask && !taskResourceHref.isNullOrBlank()) {
         intent.putExtra(EXTRA_WIDGET_ACTION, WIDGET_ACTION_OPEN_TASK)
         intent.putExtra(EXTRA_WIDGET_TASK_UID, taskResourceHref)
+        taskOccurrenceMillis?.let { intent.putExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, it) }
     } else if (!eventResourceHref.isNullOrBlank()) {
         intent.putExtra(EXTRA_WIDGET_ACTION, WIDGET_ACTION_OPEN_EVENT)
         intent.putExtra(EXTRA_WIDGET_EVENT_UID, eventResourceHref)
+        eventOccurrenceMillis?.let { intent.putExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, it) }
     }
     intent.data = Uri.parse("kgs-calendar://widget-row-open/$stableId")
     return intent

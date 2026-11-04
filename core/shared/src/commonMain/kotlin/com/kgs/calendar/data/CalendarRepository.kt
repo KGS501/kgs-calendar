@@ -118,8 +118,18 @@ class CalendarRepository(
     suspend fun completeLoginFlow(pollEndpoint: String, token: String): AccountEntity =
         sources.completeLoginFlow(pollEndpoint, token)
 
-    suspend fun saveManualAccount(serverUrl: String, username: String, appPassword: String): AccountEntity =
-        sources.saveManualAccount(serverUrl, username, appPassword)
+    suspend fun saveManualAccount(
+        serverUrl: String,
+        username: String,
+        appPassword: String,
+        approvedOrigins: Set<String> = emptySet(),
+    ): AccountEntity = sources.saveManualAccount(serverUrl, username, appPassword, approvedOrigins)
+
+    suspend fun approveAccountOrigin(accountId: String, origin: String) = sources.approveAccountOrigin(accountId, origin)
+
+    fun credentialsReadable(): Boolean = sources.credentialsReadable()
+
+    fun resetUnreadableCredentials() = sources.resetUnreadableCredentials()
 
     suspend fun addReadOnlyCalendar(url: String, displayName: String? = null): AccountEntity =
         sources.addReadOnlyCalendar(url, displayName)
@@ -147,7 +157,8 @@ class CalendarRepository(
     suspend fun updateAccount(accountId: String, displayName: String, serverUrl: String, username: String, appPassword: String?) =
         sources.updateAccount(accountId, displayName, serverUrl, username, appPassword)
 
-    suspend fun deleteAccount(accountId: String) = sources.deleteAccount(accountId)
+    suspend fun deleteAccount(accountId: String, purgeRecentlyDeleted: Boolean = false) =
+        sources.deleteAccount(accountId, purgeRecentlyDeleted)
 
     /** Images of sources (synced) and sidebar groups (picked by the user), by [SourceImageKeys] key. */
     fun observeSourceImages(): Flow<Map<String, SourceImage>> = sources.sourceImages.images
@@ -303,6 +314,9 @@ class CalendarRepository(
 
     suspend fun isReminderStillVisible(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean? =
         queries.isReminderStillVisible(occurrenceId, visibility)
+
+    suspend fun isReminderDeliverable(occurrenceId: CalendarOccurrenceId, visibility: CollectionVisibility): Boolean =
+        queries.isReminderDeliverable(occurrenceId, visibility)
 
     suspend fun notificationCandidates(nowMillis: Long, windowEndMillis: Long): Pair<List<EventEntity>, List<TaskEntity>> =
         queries.notificationCandidates(nowMillis, windowEndMillis)

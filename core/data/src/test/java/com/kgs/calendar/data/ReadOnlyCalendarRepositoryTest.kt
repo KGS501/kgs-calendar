@@ -76,7 +76,7 @@ class ReadOnlyCalendarRepositoryTest {
         assertEquals(account.serverUrl, collection.externalId)
         val events = harness.eventsIn(collectionHref).sortedBy { it.title }
         assertEquals(listOf("Harvest festival", "Unity Day"), events.map { it.title })
-        assertEquals("$collectionHref/unity-day.ics", events.single { it.uid == "unity-day" }.resourceHref)
+        assertTrue(events.single { it.uid == "unity-day" }.resourceHref.startsWith("$collectionHref/unity-day-"))
         assertTrue(events.all { it.allDay })
         assertEquals(harness.startOfDay(LocalDate.of(2026, 10, 3)), events.first().startsAtMillis)
         assertTrue(harness.pendingMutations().isEmpty())

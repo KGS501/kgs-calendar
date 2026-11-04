@@ -15,8 +15,9 @@ interface EventDao {
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
           AND (events.recurrenceRule IS NULL OR events.recurrenceRule = '')
+          AND (events.rDatesCsv IS NULL OR events.rDatesCsv = '')
           AND startsAtMillis < :rangeEndMillis
-          AND endsAtMillis > :rangeStartMillis
+          AND (endsAtMillis > :rangeStartMillis OR (endsAtMillis <= startsAtMillis AND startsAtMillis >= :rangeStartMillis))
         ORDER BY startsAtMillis ASC
         """,
     )
@@ -28,8 +29,9 @@ interface EventDao {
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
           AND (events.recurrenceRule IS NULL OR events.recurrenceRule = '')
+          AND (events.rDatesCsv IS NULL OR events.rDatesCsv = '')
           AND startsAtMillis < :rangeEndMillis
-          AND endsAtMillis > :rangeStartMillis
+          AND (endsAtMillis > :rangeStartMillis OR (endsAtMillis <= startsAtMillis AND startsAtMillis >= :rangeStartMillis))
         ORDER BY startsAtMillis ASC
         """,
     )
@@ -40,9 +42,15 @@ interface EventDao {
         SELECT events.* FROM events
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
-          AND events.recurrenceRule IS NOT NULL
-          AND events.recurrenceRule != ''
-          AND startsAtMillis < :rangeEndMillis
+          AND (
+            (events.recurrenceRule IS NOT NULL AND events.recurrenceRule != '')
+            OR (events.rDatesCsv IS NOT NULL AND events.rDatesCsv != '')
+          )
+          AND (
+            startsAtMillis < :rangeEndMillis
+            OR (events.rDatesCsv IS NOT NULL AND events.rDatesCsv != '')
+            OR (events.recurrenceOverridesJson IS NOT NULL AND events.recurrenceOverridesJson != '')
+          )
         ORDER BY startsAtMillis ASC
         """,
     )
@@ -53,9 +61,15 @@ interface EventDao {
         SELECT events.* FROM events
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
-          AND events.recurrenceRule IS NOT NULL
-          AND events.recurrenceRule != ''
-          AND startsAtMillis < :rangeEndMillis
+          AND (
+            (events.recurrenceRule IS NOT NULL AND events.recurrenceRule != '')
+            OR (events.rDatesCsv IS NOT NULL AND events.rDatesCsv != '')
+          )
+          AND (
+            startsAtMillis < :rangeEndMillis
+            OR (events.rDatesCsv IS NOT NULL AND events.rDatesCsv != '')
+            OR (events.recurrenceOverridesJson IS NOT NULL AND events.recurrenceOverridesJson != '')
+          )
         ORDER BY startsAtMillis ASC
         """,
     )
@@ -97,8 +111,10 @@ interface EventDao {
         SELECT events.* FROM events
         INNER JOIN collections ON collections.href = events.collectionHref
         WHERE collections.isEnabled = 1
-          AND events.remindersCsv IS NOT NULL
-          AND events.remindersCsv != ''
+          AND (
+            (events.remindersCsv IS NOT NULL AND events.remindersCsv != '')
+            OR (events.recurrenceOverridesJson IS NOT NULL AND events.recurrenceOverridesJson != '')
+          )
         """,
     )
     suspend fun withReminders(): List<EventEntity>
@@ -111,10 +127,8 @@ interface EventDao {
           AND startsAtMillis < :windowEndMillis
           AND (
             endsAtMillis > :nowMillis
-            OR (
-              events.recurrenceRule IS NOT NULL
-              AND events.recurrenceRule != ''
-            )
+            OR (events.recurrenceRule IS NOT NULL AND events.recurrenceRule != '')
+            OR (events.rDatesCsv IS NOT NULL AND events.rDatesCsv != '')
           )
         ORDER BY startsAtMillis ASC
         """,

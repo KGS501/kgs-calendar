@@ -5,6 +5,7 @@
     android:layout_height="64dp"
     android:clipChildren="false"
     android:clipToPadding="false"
+    android:focusable="true"
     android:gravity="top"
     android:orientation="horizontal">
 
@@ -86,6 +87,7 @@
         android:layout_height="64dp"
         android:layout_weight="1"
         android:contentDescription="@null"
+        android:importantForAccessibility="no"
         android:scaleType="fitXY" />
 
     <TextView

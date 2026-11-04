@@ -621,8 +621,10 @@ class FakeCalDavServer(
                     return MockResponse().setResponseCode(if (trashBin.remove(path) != null) 204 else 404)
                 }
                 val collection = collectionFor(path) ?: return MockResponse().setResponseCode(404)
-                val existing = collection.resources[path] ?: return MockResponse().setResponseCode(404)
+                // As Sabre: a precondition on a target that is gone fails before the method runs.
                 val ifMatch = request.header("If-Match")
+                val existing = collection.resources[path]
+                    ?: return MockResponse().setResponseCode(if (ifMatch != null) 412 else 404)
                 if (ifMatch != null && ifMatch != existing.etag) return MockResponse().setResponseCode(412)
                 if (trashBinEnabled) {
                     moveToTrash(collection, existing, nowMillis() / 1000)

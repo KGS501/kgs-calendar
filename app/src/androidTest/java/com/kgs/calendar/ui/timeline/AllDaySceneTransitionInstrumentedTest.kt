@@ -71,7 +71,6 @@ class AllDaySceneTransitionInstrumentedTest {
                         onExpandedChange = { expanded.value = it },
                         onTaskStatusChanged = { _, _ -> },
                         onDetail = {},
-                        priorityPageCount = 3,
                     )
                 }
             }

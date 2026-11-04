@@ -122,6 +122,21 @@ class KgsDatabaseMigrationTest {
     }
 
     @Test
+    fun migrate22To23KeepsQueuedChangesWithoutMoveLinks() {
+        helper.createDatabase(TEST_DB, 22).use { db ->
+            insertAccountAndPendingMutation(db)
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 23, true, *KgsDatabaseMigrations.ALL).use { db ->
+            assertPendingMutationSurvived(db)
+            db.query("SELECT dependsOnMutationId FROM pending_mutations").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+            }
+        }
+    }
+
+    @Test
     fun migrate19To22ChainsAllMigrations() {
         helper.createDatabase(TEST_DB, 19).use { db ->
             insertAccountAndPendingMutation(db, withOccurrenceScope = false)
@@ -241,6 +256,6 @@ class KgsDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "kgs-migration-test.db"
-        const val CURRENT_VERSION = 22
+        const val CURRENT_VERSION = 23
     }
 }

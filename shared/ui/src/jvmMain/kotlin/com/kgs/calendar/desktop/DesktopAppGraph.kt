@@ -146,7 +146,7 @@ class DesktopAppGraph(val dataDirectory: File) {
         calendarFileExporter = CalendarFileExporter { collectionHrefs, target ->
             val result = calendarData.export.export(collectionHrefs)
             withContext(Dispatchers.IO) { File(target.value).writeText(result.rawIcs, Charsets.UTF_8) }
-            result.items
+            result
         },
         editorDrafts = EditorDraftStore(EditorDraftFiles(File(dataDirectory, "editor-drafts"))),
         // Read up front: this runs before the window appears, which then opens in the user's colours.

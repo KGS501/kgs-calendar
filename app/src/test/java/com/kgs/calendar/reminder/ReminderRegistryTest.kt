@@ -1,6 +1,8 @@
 package com.kgs.calendar.reminder
 
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
+import com.kgs.calendar.navigation.CalendarLaunchAction
+import com.kgs.calendar.navigation.CalendarLaunchTarget
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -55,6 +57,38 @@ class ReminderRegistryTest {
         assertEquals(listOf(firstKey, secondKey), cancelledNotifications)
         assertEquals(emptyList<ScheduledReminderRecord>(), storage.scheduled)
         assertEquals(emptyList<ActiveReminderNotification>(), storage.active)
+    }
+
+    private fun snoozed(alarmCode: Int, occurrence: CalendarOccurrenceId) = SnoozedReminder(
+        alarmRequestCode = alarmCode,
+        triggerAtMillis = 1_700_000_600_000,
+        title = "Task",
+        body = null,
+        notificationKey = firstKey,
+        encodedTarget = CalendarLaunchTarget(action = CalendarLaunchAction.OpenOccurrence, occurrence = occurrence).encode(),
+    )
+
+    @Test
+    fun finishingAnOccurrenceTakesItsSnoozeAlong() = runTest {
+        registry.addSnoozed(snoozed(33, firstId))
+        registry.addSnoozed(snoozed(44, secondId))
+
+        registry.cancelOccurrence(firstId)
+
+        assertEquals(listOf(33), cancelledAlarms)
+        assertEquals(listOf(44), storage.snoozed.map { it.alarmRequestCode })
+    }
+
+    @Test
+    fun removingAResourceTakesEverySnoozeAlong() = runTest {
+        registry.addSnoozed(snoozed(33, firstId))
+        registry.addSnoozed(snoozed(44, secondId))
+        registry.addSnoozed(snoozed(55, CalendarOccurrenceId.Task("tasks/other.ics", 1)))
+
+        registry.cancelResource("tasks/42.ics")
+
+        assertEquals(listOf(33, 44), cancelledAlarms)
+        assertEquals(listOf(55), storage.snoozed.map { it.alarmRequestCode })
     }
 
     @Test

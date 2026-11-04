@@ -160,6 +160,14 @@ fun SettingsOverlay(
     shell: CalendarShellUiState,
     problemCount: Int,
 ) {
+    val originApproval by viewModel.sources.originApproval.collectAsStateWithLifecycle()
+    originApproval?.let { request ->
+        OriginApprovalDialog(
+            request = request,
+            onApprove = { viewModel.sources.approveOrigin(request) },
+            onDecline = viewModel.sources::declineOrigin,
+        )
+    }
     // "Recently deleted" opens from the settings and covers them; closing it returns there.
     // The settings grow in over the calendar and fade away again, rather than appearing at once.
     AnimatedVisibility(
@@ -235,6 +243,9 @@ fun SettingsOverlay(
             onManualLogin = { serverUrl, username, password, onResult ->
                 viewModel.sources.manualLogin(serverUrl, username, password, onResult)
             },
+            onApproveAccountOrigin = viewModel.sources::approveAccountOrigin,
+            credentialsReadable = viewModel.sources::credentialsReadable,
+            onResetCredentials = viewModel.sources::resetCredentials,
             onBrowserLogin = viewModel.sources::startBrowserLogin,
             onAddReadOnlyCalendar = viewModel.sources::addReadOnlyCalendar,
             onAddAndroidCalendars = viewModel.sources::addAndroidDeviceCalendars,
@@ -346,6 +357,7 @@ fun CollectionSettingsHost(
                 },
                 groupName = state.calendarGroups.groupOf(collection)?.displayName(),
                 onChooseGroup = { pickingGroup = true },
+                onExport = { target -> viewModel.sources.exportCollection(collection.href, target) },
                 onClose = shell::closeCollectionEditor,
             )
         }
@@ -411,6 +423,15 @@ fun RecurringSaveDialogHost(
     showHiddenSaveNotice: (collectionHref: String?, kind: HiddenSaveKind) -> Unit,
 ) {
     shell.recurringSaveRequest?.let { request ->
+        // The sheet behind the dialog closes, with its draft, once the save is stored.
+        val saveFromDialog: (() -> Unit) -> Unit = { save ->
+            shell.dismissRecurringSave()
+            val outcome = when (request) {
+                is RecurringSaveRequest.Event -> EditorSaveOutcome(request.payload.collectionHref, HiddenSaveKind.Event, finishCreation = false)
+                is RecurringSaveRequest.Task -> EditorSaveOutcome(request.payload.collectionHref, HiddenSaveKind.Task, finishCreation = false)
+            }
+            viewModel.edits.trackEditorSave(outcome, save)
+        }
         RecurringSaveScopeDialog(
             itemLabel = when (request) {
                 is RecurringSaveRequest.Event -> stringResource(Res.string.event)
@@ -418,45 +439,36 @@ fun RecurringSaveDialogHost(
             },
             onDismiss = shell::dismissRecurringSave,
             onSaveThis = {
-                when (request) {
-                    is RecurringSaveRequest.Event -> viewModel.edits.updateEventOccurrence(
-                        request.event.resourceHref,
-                        request.event.occurrenceStartForEdit(),
-                        request.payload,
-                    )
-                    is RecurringSaveRequest.Task -> viewModel.edits.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                saveFromDialog {
+                    when (request) {
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEventOccurrence(
+                            request.event.resourceHref,
+                            request.event.occurrenceStartForEdit(),
+                            request.payload,
+                        )
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTaskOccurrence(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                    }
                 }
-                when (request) {
-                    is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
-                    is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
-                }
-                shell.finishRecurringSave()
             },
             onSaveFollowing = {
-                when (request) {
-                    is RecurringSaveRequest.Event -> viewModel.edits.updateEventFollowing(
-                        request.event.resourceHref,
-                        request.event.occurrenceStartForEdit(),
-                        request.payload,
-                    )
-                    is RecurringSaveRequest.Task -> viewModel.edits.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                saveFromDialog {
+                    when (request) {
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEventFollowing(
+                            request.event.resourceHref,
+                            request.event.occurrenceStartForEdit(),
+                            request.payload,
+                        )
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTaskFollowing(request.task.resourceHref, request.task.occurrenceStartForEdit(), request.payload)
+                    }
                 }
-                when (request) {
-                    is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
-                    is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
-                }
-                shell.finishRecurringSave()
             },
             onSaveAll = {
-                when (request) {
-                    is RecurringSaveRequest.Event -> viewModel.edits.updateEvent(request.event.resourceHref, request.payload)
-                    is RecurringSaveRequest.Task -> viewModel.edits.updateTask(request.task.resourceHref, request.payload)
+                saveFromDialog {
+                    when (request) {
+                        is RecurringSaveRequest.Event -> viewModel.edits.updateEvent(request.event.resourceHref, request.payload)
+                        is RecurringSaveRequest.Task -> viewModel.edits.updateTask(request.task.resourceHref, request.payload)
+                    }
                 }
-                when (request) {
-                    is RecurringSaveRequest.Event -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Event)
-                    is RecurringSaveRequest.Task -> showHiddenSaveNotice(request.payload.collectionHref, HiddenSaveKind.Task)
-                }
-                shell.finishRecurringSave()
             },
         )
     }

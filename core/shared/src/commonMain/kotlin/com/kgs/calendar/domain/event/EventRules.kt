@@ -56,3 +56,6 @@ fun EventEntity.isTimedMultiDayMiddleOn(date: LocalDate, zoneId: ZoneId = ZoneId
 /** All-day events on their dates, and the full middle days of timed multi-day events. */
 fun EventEntity.isAllDayTopItemOn(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean =
     if (allDay) occursOn(date, zoneId) else isTimedMultiDayMiddleOn(date, zoneId)
+
+/** Recurring by RRULE or by RDATE alone. */
+fun EventEntity.hasRecurrence(): Boolean = !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()

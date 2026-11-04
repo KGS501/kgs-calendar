@@ -2,6 +2,7 @@ package com.kgs.calendar.navigation
 
 import com.kgs.calendar.time.*
 import kotlinx.datetime.*
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.model.CalendarOccurrenceEnvelope
@@ -38,9 +39,15 @@ class CalendarLaunchResolver(
         return when (occurrenceId) {
             is CalendarOccurrenceId.Event -> {
                 val master = eventByResource(occurrenceId.resourceHref) ?: return null
-                val event = expandEvents(master, rangeStart, rangeEnd)
-                    .firstOrNull { it.occurrenceId == occurrenceId }
-                    ?.item
+                // An exception can have moved the occurrence far from its original date.
+                val movedTo = RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson)
+                    .firstOrNull { it.recurrenceIdMillis == occurrenceId.recurrenceIdMillis }
+                    ?.startsAtMillis
+                    ?: occurrenceId.recurrenceIdMillis
+                val found = expandEvents(master, minOf(rangeStart, movedTo - RANGE_PADDING_MILLIS), maxOf(rangeEnd, movedTo + RANGE_PADDING_MILLIS))
+                val event = found.firstOrNull { it.occurrenceId == occurrenceId }?.item
+                    // Widgets know an occurrence by where it is shown, which is its start.
+                    ?: found.firstOrNull { it.item.startsAtMillis == occurrenceId.recurrenceIdMillis }?.item
                     ?: return null
                 CalendarLaunchResolution(
                     date = event.startsAtMillis.localDate(),
@@ -50,7 +57,10 @@ class CalendarLaunchResolver(
             }
             is CalendarOccurrenceId.Task -> {
                 val master = taskByResource(occurrenceId.resourceHref) ?: return null
-                val task = expandTasks(master, rangeStart, rangeEnd)
+                val override = RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson)
+                    .firstOrNull { it.recurrenceIdMillis == occurrenceId.recurrenceIdMillis }
+                val movedTo = override?.startAtMillis ?: override?.dueAtMillis ?: occurrenceId.recurrenceIdMillis
+                val task = expandTasks(master, minOf(rangeStart, movedTo - RANGE_PADDING_MILLIS), maxOf(rangeEnd, movedTo + RANGE_PADDING_MILLIS))
                     .firstOrNull { it.occurrenceId == occurrenceId }
                     ?.item
                     ?: return null

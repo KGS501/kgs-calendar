@@ -21,6 +21,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -615,6 +619,7 @@ fun ColorChoiceRow(
         ItemColorPalette.forEach { color ->
             ColorChoiceChip(
                 label = null,
+                accessibilityName = itemColorName(color),
                 color = Color(color),
                 selected = selectedColor == color,
                 onClick = { onColorSelected(color) },
@@ -638,6 +643,25 @@ fun ColorChoiceRow(
     }
 }
 
+/** The spoken name of a palette color; anything else goes by its code. */
+@Composable
+private fun itemColorName(color: Int): String {
+    val hex = (color and 0xFFFFFF).toString(16).uppercase().padStart(6, '0')
+    return when (ItemColorPalette.indexOf(color)) {
+        0 -> stringResource(Res.string.color_blue)
+        1 -> stringResource(Res.string.color_cyan)
+        2 -> stringResource(Res.string.color_green)
+        3 -> stringResource(Res.string.color_light_green)
+        4 -> stringResource(Res.string.color_yellow)
+        5 -> stringResource(Res.string.color_amber)
+        6 -> stringResource(Res.string.color_orange)
+        7 -> stringResource(Res.string.color_red)
+        8 -> stringResource(Res.string.color_purple)
+        9 -> stringResource(Res.string.color_brown)
+        else -> "#$hex"
+    }
+}
+
 data class CustomColorChipPresentation(
     val displayedColor: Int?,
     val selected: Boolean,
@@ -652,13 +676,21 @@ fun customColorChipPresentation(
 )
 
 @Composable
-fun ColorChoiceChip(label: String?, color: Color, selected: Boolean, onClick: () -> Unit) {
+fun ColorChoiceChip(
+    label: String?,
+    color: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+    /** What a screen reader calls a chip that shows no [label]. */
+    accessibilityName: String? = null,
+) {
     val shape = RoundedCornerShape(17.dp)
     Surface(
         modifier = Modifier
             .height(34.dp)
             .clip(shape)
-            .clickable(onClick = onClick),
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .then(if (accessibilityName != null) Modifier.semantics { contentDescription = accessibilityName } else Modifier),
         shape = shape,
         color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface,
     ) {
@@ -701,7 +733,7 @@ fun ColorEditChip(
             .testTag("customColorChip")
             .height(34.dp)
             .clip(shape)
-            .clickable(onClick = onClick),
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
         shape = shape,
         color = if (selected) WarmPeach else MaterialTheme.colorScheme.surface,
     ) {
@@ -754,13 +786,15 @@ fun ColorPickerDialog(initialColor: Int, onDismiss: () -> Unit, onSave: (Int) ->
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(ItemColorPalette) { color ->
                     val c = Color(color)
+                    val name = itemColorName(color)
                     Box(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
                             .background(c)
                             .border(2.dp, if (c.toArgb() == selected.toArgb()) WarmInk else Color.White.copy(alpha = 0.9f), CircleShape)
-                            .clickable { selectPreset(color) },
+                            .selectable(selected = c.toArgb() == selected.toArgb(), role = Role.RadioButton) { selectPreset(color) }
+                            .semantics { contentDescription = name },
                     )
                 }
             }

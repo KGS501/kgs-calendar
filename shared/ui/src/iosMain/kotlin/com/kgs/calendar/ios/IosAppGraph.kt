@@ -178,7 +178,7 @@ class IosAppGraph private constructor() {
             check(written) { "The file can't be written." }
         }
         withContext(Dispatchers.Main) { IosDocumentExport.offer(target.value) }
-        result.items
+        result
     }
 
     val pickedContentReader = PickedContentReader { uri ->

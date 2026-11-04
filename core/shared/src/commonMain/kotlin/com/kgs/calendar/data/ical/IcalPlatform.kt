@@ -77,14 +77,14 @@ internal object CommonIcal {
             val end = LocalDateTime(Instant.fromEpochMilliseconds(rangeEndMillis).toLocalDateTime(zone).date, LocalTime(0, 0))
                 .let { LocalDateTime(it.date.plusDaysSafe(2), it.time) }
             val searchStart = Instant.fromEpochMilliseconds(searchStartMillis).toLocalDateTime(zone).date
-            recur.occurrences(start, end, null)
-                .filter { it.date >= searchStart }
+            recur.occurrences(start, end, null, searchFrom = LocalDateTime(searchStart, LocalTime(0, 0)))
                 .map { it.date.atStartOfDayIn(zone).toEpochMilliseconds() }
                 .toList()
         } else {
             // As ical4j's getDates, the period end is inclusive.
             val end = Instant.fromEpochMilliseconds(rangeEndMillis + 1000).toLocalDateTime(zone)
-            recur.occurrences(seed, end, zone)
+            val searchFrom = Instant.fromEpochMilliseconds(searchStartMillis).toLocalDateTime(zone)
+            recur.occurrences(seed, end, zone, searchFrom = LocalDateTime(searchFrom.date.plusDaysSafe(-1), searchFrom.time))
                 .map { it.toInstant(zone).toEpochMilliseconds() }
                 .filter { it >= searchStartMillis && it <= rangeEndMillis }
                 .toList()

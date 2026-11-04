@@ -148,6 +148,7 @@ class MainActivity : ComponentActivity() {
             createTaskScheduled = target.createTaskScheduled,
             openEventUid = target.openEventUid,
             openTaskUid = target.openTaskUid,
+            openOccurrenceMillis = target.openOccurrenceMillis,
         )
     }
 
@@ -198,6 +199,7 @@ class MainActivity : ComponentActivity() {
                 ?.takeIf { getStringExtra(EXTRA_WIDGET_ACTION) == WIDGET_ACTION_OPEN_TASK },
             openEventUid = getStringExtra(EXTRA_WIDGET_EVENT_UID)
                 ?.takeIf { getStringExtra(EXTRA_WIDGET_ACTION) == WIDGET_ACTION_OPEN_EVENT },
+            openOccurrenceMillis = EXTRA_WIDGET_OCCURRENCE_MILLIS.takeIf(::hasExtra)?.let { getLongExtra(it, 0L) },
         )
     }
 
@@ -208,6 +210,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_WIDGET_TASK_CREATE_MODE = "kgs_widget_task_create_mode"
         const val EXTRA_WIDGET_TASK_UID = "kgs_widget_task_uid"
         const val EXTRA_WIDGET_EVENT_UID = "kgs_widget_event_uid"
+        const val EXTRA_WIDGET_OCCURRENCE_MILLIS = "kgs_widget_occurrence_millis"
         const val WIDGET_ACTION_CREATE_EVENT = "create_event"
         const val WIDGET_ACTION_CREATE_TASK = "create_task"
         const val WIDGET_ACTION_OPEN_TASK = "open_task"
