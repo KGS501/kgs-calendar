@@ -5,6 +5,7 @@ import com.kgs.calendar.time.*
 import kotlinx.datetime.*
 import com.kgs.calendar.domain.time.orDeviceZone
 import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarOccurrenceEnvelope
@@ -35,25 +36,83 @@ import com.kgs.calendar.time.TemporalAdjusters
  * (e.g. BYSETPOS with complex combinations) falls back to returning just the
  * master event when in range, rather than silently producing wrong dates.
  */
+/** One occurrence and the original recurrence identity it keeps, wherever an exception moved it. */
+internal class RecurrenceEntry(val recurrenceIdMillis: Long, val occurrence: EventEntity)
+
 /** A null [zoneId] follows the device's zone (see [orDeviceZone]). */
 class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
     internal val zoneId: ZoneId get() = fixedZoneId.orDeviceZone()
 
-    fun expand(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> {
+    fun expand(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> =
+        expandEntries(master, rangeStartMillis, rangeEndMillis).map { it.occurrence }
+
+    /**
+     * The recurrence set first, exceptions second, the range last: an exception is part of the set
+     * whatever window its original date falls in, and only where it ended up decides if it shows.
+     */
+    internal fun expandEntries(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<RecurrenceEntry> {
+        val overrides = RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson)
+        val zone = master.seriesZone()
+        val following = overrides.filter { it.thisAndFuture }.sortedBy { it.recurrenceIdMillis }
+        // A RANGE exception can bring occurrences into the window from outside of it.
+        val shifts = following.map { it.startsAtMillis - it.recurrenceIdMillis }
+        val originals = originalOccurrences(
+            master,
+            rangeStartMillis - (shifts.maxOrNull() ?: 0L).coerceAtLeast(0L),
+            rangeEndMillis - (shifts.minOrNull() ?: 0L).coerceAtMost(0L),
+        ).distinctBy { it.startsAtMillis }
+        val exact = overrides.associateBy { it.recurrenceIdMillis }
+        val entries = originals.mapNotNull { occurrence ->
+            val recurrenceId = occurrence.startsAtMillis
+            val own = exact[recurrenceId]
+            val inherited = following.lastOrNull { it.recurrenceIdMillis < recurrenceId }
+            when {
+                own != null -> own.takeUnless { it.isCancelled() }?.let { RecurrenceEntry(recurrenceId, it.applyTo(occurrence)) }
+                inherited != null -> inherited.takeUnless { it.isCancelled() }
+                    ?.let { RecurrenceEntry(recurrenceId, it.applyToLater(occurrence, zone)) }
+                else -> RecurrenceEntry(recurrenceId, occurrence)
+            }
+        }
+        val listed = originals.mapTo(HashSet()) { it.startsAtMillis }
+        val detached = overrides
+            .filter { it.recurrenceIdMillis !in listed && !it.isCancelled() }
+            .filter { intersects(it.startsAtMillis, it.endsAtMillis, rangeStartMillis, rangeEndMillis) }
+            .mapNotNull { override ->
+                val original = originalOccurrences(master, override.recurrenceIdMillis - 1, override.recurrenceIdMillis + 1)
+                    .firstOrNull { it.startsAtMillis == override.recurrenceIdMillis }
+                original?.let { RecurrenceEntry(override.recurrenceIdMillis, override.applyTo(it)) }
+            }
+        return (entries + detached)
+            .filter { intersects(it.occurrence.startsAtMillis, it.occurrence.endsAtMillis, rangeStartMillis, rangeEndMillis) }
+            .sortedBy { it.occurrence.startsAtMillis }
+    }
+
+    private fun EventRecurrenceOverride.isCancelled(): Boolean = status.equals("CANCELLED", ignoreCase = true)
+
+    /** The occurrence moves as far on the clock as the exception that starts its range. */
+    private fun EventRecurrenceOverride.applyToLater(occurrence: EventEntity, zone: ZoneId): EventEntity {
+        val start = shiftedByWallClock(occurrence.startsAtMillis, recurrenceIdMillis, startsAtMillis, zone)
+        return applyTo(occurrence).copy(startsAtMillis = start, endsAtMillis = start + (endsAtMillis - startsAtMillis))
+    }
+
+    private fun EventEntity.seriesZone(): ZoneId =
+        timezoneId?.let { runCatching { zoneOf(it) }.getOrNull() } ?: zoneId
+
+    /** The series without its exceptions; ones starting outside the range may be included. */
+    private fun originalOccurrences(master: EventEntity, rangeStartMillis: Long, rangeEndMillis: Long): List<EventEntity> {
         val rule = master.recurrenceRule?.takeIf { it.isNotBlank() }
-        val eventZone = master.timezoneId
-            ?.let { runCatching { zoneOf(it) }.getOrNull() }
-            ?: zoneId
+        val eventZone = master.seriesZone()
         if (rule == null) {
             val duration = (master.endsAtMillis - master.startsAtMillis).coerceAtLeast(0L)
+            val excluded = master.exDatesCsv?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.toSet().orEmpty()
             val base = masterIfInRange(master, rangeStartMillis, rangeEndMillis)
             val additions = master.rDatesCsv
                 ?.split(',')
                 ?.mapNotNull { it.trim().toLongOrNull() }
                 .orEmpty()
-                .filter { it < rangeEndMillis && it + duration > rangeStartMillis }
+                .filter { intersects(it, it + duration, rangeStartMillis, rangeEndMillis) }
                 .map { master.occurrenceStartingAt(it, duration, eventZone) }
-            return applyOverrides(master, base + additions)
+            return (base + additions).filterNot { it.startsAtMillis in excluded }
         }
         val parts = parseRrule(rule)
         val freq = parts["FREQ"]?.uppercase() ?: return masterIfInRange(master, rangeStartMillis, rangeEndMillis)
@@ -134,29 +193,23 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
             ?.split(',')
             ?.mapNotNull { it.trim().toLongOrNull() }
             .orEmpty()
-            .filter { it < rangeEndMillis && it + duration > rangeStartMillis }
+            .filter { intersects(it, it + duration, rangeStartMillis, rangeEndMillis) }
             .filterNot { it in exDates }
             .map { start -> master.occurrenceStartingAt(start, duration, eventZone) }
-        return applyOverrides(master, out + rDates)
+        return out + rDates
     }
 
     fun expandWithIdentity(
         master: EventEntity,
         rangeStartMillis: Long,
         rangeEndMillis: Long,
-    ): List<CalendarOccurrenceEnvelope<EventEntity>> {
-        val overrides = RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson)
-            .filterNot { it.status.equals("CANCELLED", ignoreCase = true) }
-        return expand(master, rangeStartMillis, rangeEndMillis).map { occurrence ->
-            val recurrenceIdMillis = overrides.firstOrNull { override ->
-                override.matchesOccurrence(occurrence)
-            }?.recurrenceIdMillis ?: occurrence.startsAtMillis
+    ): List<CalendarOccurrenceEnvelope<EventEntity>> =
+        expandEntries(master, rangeStartMillis, rangeEndMillis).map { entry ->
             CalendarOccurrenceEnvelope(
-                occurrenceId = CalendarOccurrenceId.Event(master.resourceHref, recurrenceIdMillis),
-                item = occurrence,
+                occurrenceId = CalendarOccurrenceId.Event(master.resourceHref, entry.recurrenceIdMillis),
+                item = entry.occurrence,
             )
         }
-    }
 
     private fun expandRuleWithIcal4j(
         master: EventEntity,
@@ -172,7 +225,7 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
         val searchStartMillis = rangeStartMillis - duration
         IcalPlatform.recurrenceStarts(rule, master.allDay, master.startsAtMillis, sourceZone, searchStartMillis, rangeEndMillis)!!
             .asSequence()
-            .filter { start -> start < rangeEndMillis && start + duration > rangeStartMillis }
+            .filter { start -> intersects(start, start + duration, rangeStartMillis, rangeEndMillis) }
             .filterNot { start ->
                 start in exDates || Instant.ofEpochMilli(start).atZone(sourceZone).toLocalDate() in exDatesAsLocalDate
             }
@@ -180,22 +233,6 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
             .map { start -> master.occurrenceStartingAt(start, duration, sourceZone) }
             .toList()
     }.getOrNull()
-
-    private fun applyOverrides(master: EventEntity, occurrences: List<EventEntity>): List<EventEntity> {
-        val overrides = RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson)
-            .associateBy { it.recurrenceIdMillis }
-        return occurrences
-            .distinctBy { it.startsAtMillis }
-            .mapNotNull { occurrence ->
-                val override = overrides[occurrence.startsAtMillis]
-                when {
-                    override?.status.equals("CANCELLED", ignoreCase = true) -> null
-                    override != null -> override.applyTo(occurrence)
-                    else -> occurrence
-                }
-            }
-            .sortedBy { it.startsAtMillis }
-    }
 
     private fun canExpandManually(
         freq: String,
@@ -210,16 +247,15 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
         return when (freq) {
             "DAILY" -> byDay.isEmpty() && byMonthDay.isEmpty() && byMonth.isEmpty()
             "WEEKLY" -> byMonthDay.isEmpty() && byMonth.isEmpty() && byDay.all { parseByDay(it)?.first == null }
-            "MONTHLY" -> byMonth.isEmpty() && byDay.all { parseByDay(it) != null }
+            // Both BY parts intersect (RFC 5545 3.3.10); the standards expansion handles that.
+            "MONTHLY" -> byMonth.isEmpty() && (byMonthDay.isEmpty() || byDay.isEmpty()) && byDay.all { parseByDay(it) != null }
             "YEARLY" -> byDay.isEmpty() && byMonthDay.isEmpty() && byMonth.isEmpty()
             else -> false
         }
     }
 
-    private fun masterIfInRange(master: EventEntity, rangeStart: Long, rangeEnd: Long): List<EventEntity> {
-        val ends = if (master.endsAtMillis > master.startsAtMillis) master.endsAtMillis else master.startsAtMillis + HOUR_MILLIS
-        return if (master.startsAtMillis < rangeEnd && ends > rangeStart) listOf(master) else emptyList()
-    }
+    private fun masterIfInRange(master: EventEntity, rangeStart: Long, rangeEnd: Long): List<EventEntity> =
+        if (intersects(master.startsAtMillis, master.endsAtMillis, rangeStart, rangeEnd)) listOf(master) else emptyList()
 
     private class EmitState(
         val master: EventEntity,
@@ -252,9 +288,7 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
         if (startLdt.toLocalDate() in state.exDatesAsLocalDate) return true
         // Range check
         if (startMillis >= state.rangeEnd) return true
-        val endMillis = startMillis + state.duration
-        val endForRange = if (endMillis > startMillis) endMillis else startMillis + HOUR_MILLIS
-        if (endForRange <= state.rangeStart) return true
+        if (!intersects(startMillis, startMillis + state.duration, state.rangeStart, state.rangeEnd)) return true
         state.out += state.master.occurrenceStartingAt(startMillis, state.duration, zone)
         return true
     }
@@ -357,6 +391,8 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
             }
         }
         while (true) {
+            // A month can yield nothing (BYMONTHDAY=31), so no occurrence is guaranteed to end this.
+            if (cursor.atTime(masterTime).atZone(state.zone).toInstant().toEpochMilli() >= state.rangeEnd) return
             if (byMonth.isEmpty() || cursor.monthValue in byMonth) {
                 val dates = monthlyDatesFor(cursor, masterDate, byMonthDay, byDayRaw)
                 for (date in dates) {
@@ -390,6 +426,7 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
             }
         }
         while (true) {
+            if (cursor.atTime(masterTime).atZone(state.zone).toInstant().toEpochMilli() >= state.rangeEnd) return
             val months = if (byMonth.isNotEmpty()) byMonth else listOf(masterDate.monthValue)
             for (m in months.sorted()) {
                 val monthStart = LocalDate.of(cursor.year, monthOf(m), 1)
@@ -415,9 +452,9 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
         val firstOfMonth = anyDayInMonth.withDayOfMonth(1)
         val daysInMonth = firstOfMonth.lengthOfMonth()
         if (byMonthDay.isEmpty() && byDayRaw.isEmpty()) {
-            // Default: same day-of-month as the master (clamped).
-            val d = masterDate.dayOfMonth.coerceAtMost(daysInMonth)
-            return listOf(firstOfMonth.withDayOfMonth(d))
+            // Same day of the month as the master; a month without that day has no occurrence.
+            val d = masterDate.dayOfMonth
+            return if (d <= daysInMonth) listOf(firstOfMonth.withDayOfMonth(d)) else emptyList()
         }
         val out = mutableSetOf<LocalDate>()
         for (d in byMonthDay) {
@@ -487,6 +524,21 @@ class RecurrenceExpander(private val fixedZoneId: ZoneId? = null) {
     }
 
     companion object {
+        /** A zero-length item still occupies its instant, so it isn't lost at a range's start. */
+        internal fun intersects(start: Long, end: Long, rangeStart: Long, rangeEnd: Long): Boolean =
+            start < rangeEnd && (if (end > start) end else start + 1) > rangeStart
+
+        /**
+         * [millis] moved as far on the clock as [fromMillis] to [toMillis]: an occurrence after a
+         * DST change keeps the wall-clock time the exception gave its range.
+         */
+        internal fun shiftedByWallClock(millis: Long, fromMillis: Long, toMillis: Long, zone: ZoneId): Long {
+            fun offsetMillis(at: Long) = Instant.fromEpochMilliseconds(at).offsetIn(zone).totalSeconds * 1000L
+            val clockShift = (toMillis + offsetMillis(toMillis)) - (fromMillis + offsetMillis(fromMillis))
+            val shifted = millis + clockShift
+            return shifted + offsetMillis(millis) - offsetMillis(shifted)
+        }
+
         private val DATE = DateTimeFormatter.BASIC_ISO_DATE
         private val DATE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
         private const val HOUR_MILLIS = 60L * 60L * 1000L

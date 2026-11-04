@@ -30,7 +30,7 @@ import com.kgs.calendar.data.local.entity.TrashedItemEntity
         PendingMutationEntity::class,
         TrashedItemEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 @ConstructedBy(KgsDatabaseConstructor::class)

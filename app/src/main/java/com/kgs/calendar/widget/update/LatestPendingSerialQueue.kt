@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.update
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -10,6 +11,8 @@ import kotlinx.coroutines.launch
 internal class LatestPendingSerialQueue<K : Any, V : Any>(
     private val scope: CoroutineScope,
     private val onSuperseded: (V) -> Unit = {},
+    /** Told about a failed [worker]; the queue itself carries on with what is pending. */
+    private val onFailure: (Throwable) -> Unit = {},
     private val worker: suspend (V) -> Unit,
 ) {
     private data class State<V : Any>(
@@ -51,7 +54,14 @@ internal class LatestPendingSerialQueue<K : Any, V : Any>(
         var value = initial
         try {
             while (currentCoroutineContext().isActive) {
-                worker(value)
+                try {
+                    worker(value)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    // One failed update must not take the newer one waiting behind it down too.
+                    onFailure(error)
+                }
                 val next = synchronized(lock) {
                     val state = states[key] ?: return
                     state.pending.also { pending ->
@@ -65,11 +75,17 @@ internal class LatestPendingSerialQueue<K : Any, V : Any>(
                 value = next
             }
         } finally {
-            synchronized(lock) {
-                if (states[key]?.running === currentJob) {
+            // Whoever waits on what was pending gets an answer, however this drain ended.
+            val abandoned = synchronized(lock) {
+                val state = states[key]
+                if (state?.running === currentJob) {
                     states.remove(key)
+                    state?.pending
+                } else {
+                    null
                 }
             }
+            abandoned?.let(onSuperseded)
         }
     }
 }

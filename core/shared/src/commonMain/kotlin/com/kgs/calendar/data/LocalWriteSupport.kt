@@ -9,6 +9,8 @@ import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.PendingMutationEntity
+import com.kgs.calendar.data.local.entity.withValidIcalSchedule
+import com.kgs.calendar.data.sync.RemoteReconciliationGuard
 import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
@@ -68,14 +70,14 @@ internal class LocalWriteSupport(
         rawIcs: String,
         baseEtag: String?,
         occurrenceScope: String? = null,
-    ) {
-        if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
-        writeTransaction {
-            val replacedScopes = database.pendingMutationDao().forResource(resourceHref)
+    ): Long? {
+        if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return null
+        return writeTransaction {
+            val replaced = database.pendingMutationDao().forResource(resourceHref)
                 .filter { it.action == MutationAction.Put }
-                .map { it.occurrenceScope }
+            val replacedScopes = replaced.map { it.occurrenceScope }
             database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
-            database.pendingMutationDao().insert(
+            val id = database.pendingMutationDao().insert(
                 PendingMutationEntity(
                     accountId = database.collectionDao().get(collectionHref)?.accountId ?: AccountEntity.PRIMARY_ID,
                     collectionHref = collectionHref,
@@ -88,6 +90,9 @@ internal class LocalWriteSupport(
                     occurrenceScope = PendingOccurrenceScope.merge(replacedScopes, occurrenceScope),
                 ),
             )
+            // A move's source keeps waiting for the destination, now under its newest version.
+            replaced.forEach { database.pendingMutationDao().replaceDependency(it.id, id) }
+            id
         }
     }
 
@@ -96,9 +101,14 @@ internal class LocalWriteSupport(
         resourceHref: String,
         componentType: ComponentType,
         baseEtag: String?,
+        dependsOnMutationId: Long? = null,
     ) {
         if (isReadOnlyCollectionHref(collectionHref) || collectionHref.isLocalCollectionHref() || isAndroidProviderCollectionHref(collectionHref)) return
         writeTransaction {
+            // A moved item deleted before its upload: nothing is left to wait for at the destination.
+            database.pendingMutationDao().forResource(resourceHref)
+                .filter { it.action == MutationAction.Put }
+                .forEach { database.pendingMutationDao().replaceDependency(it.id, null) }
             database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Put)
             database.pendingMutationDao().deleteForResourceAndAction(resourceHref, MutationAction.Delete)
             database.pendingMutationDao().insert(
@@ -111,8 +121,27 @@ internal class LocalWriteSupport(
                     payloadIcs = null,
                     baseEtag = baseEtag,
                     createdAtMillis = nowMillis(),
+                    dependsOnMutationId = dependsOnMutationId,
                 ),
             )
+        }
+    }
+
+    /**
+     * Calls off the removal of a move's source because its destination was given up: the source
+     * stayed on the server, so its cached resource becomes a normal item again.
+     */
+    suspend fun cancelSourceRemoval(mutation: PendingMutationEntity) {
+        writeTransaction {
+            val queued = database.pendingMutationDao().get(mutation.id) ?: return@writeTransaction
+            database.pendingMutationDao().delete(queued)
+            val resource = database.resourceDao().get(queued.resourceHref) ?: return@writeTransaction
+            val collection = database.collectionDao().get(resource.collectionHref) ?: return@writeTransaction
+            val parsed = runCatching {
+                icalCodec.parse(resource.rawIcs, collection.href, resource.href, collection.color)
+            }.getOrNull() ?: return@writeTransaction
+            parsed.event?.let { database.eventDao().upsert(it) }
+            parsed.task?.let { database.taskDao().upsert(it.withValidIcalSchedule()) }
         }
     }
 
@@ -123,7 +152,11 @@ internal class LocalWriteSupport(
         href.startsWith(AndroidCalendarProviderClient.ANDROID_CALENDAR_PREFIX) ||
             database.collectionDao().get(href)?.isAndroidProviderCollection() == true
 
-    suspend fun removeStaleRemoteCollections(accountId: String, remoteHrefs: Set<String>) {
+    suspend fun removeStaleRemoteCollections(
+        accountId: String,
+        remoteHrefs: Set<String>,
+        guard: RemoteReconciliationGuard? = null,
+    ) {
         database.collectionDao().forAccount(accountId)
             .filterNot { it.href in remoteHrefs }
             .filterNot { it.href.isLocalCollectionHref() || it.href.startsWith(READ_ONLY_PREFIX) }
@@ -131,6 +164,8 @@ internal class LocalWriteSupport(
                 // Losing access to a remote collection must not discard unsent local work.
                 // Keep the collection visible so its upload error can be inspected/recovered.
                 if (database.pendingMutationDao().allForAccount(accountId).none { it.collectionHref == stale.href }) {
+                    val resources = database.resourceDao().forCollection(stale.href)
+                    guard?.beforeRemoving(stale, resources, totalResources = resources.size)
                     database.collectionDao().delete(stale.href)
                 }
             }

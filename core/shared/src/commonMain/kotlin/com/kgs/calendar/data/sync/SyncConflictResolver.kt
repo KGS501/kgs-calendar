@@ -25,7 +25,7 @@ class SyncConflictResolver internal constructor(
         val credentials = credentialsStore.get(accountId) ?: error("Missing account credentials. Reconnect this calendar account.")
         // The version this change now replaces; none when another device deleted the item.
         val serverEtag = try {
-            calDavClient.getResourceWithEtag(credentials.serverUrl, resourceHref, credentials.username, credentials.appPassword).etag
+            calDavClient.getResourceWithEtag(credentials.serverUrl, resourceHref, credentials.username, credentials.appPassword, credentials.origins).etag
         } catch (error: HttpStatusException) {
             if (error.statusCode != 404 && error.statusCode != 410) throw error
             null
@@ -41,7 +41,8 @@ class SyncConflictResolver internal constructor(
         val collectionHref = pending.firstOrNull()?.collectionHref
             ?: database.resourceDao().get(resourceHref)?.collectionHref
             ?: return@withLock
-        database.pendingMutationDao().deleteForResource(resourceHref)
-        engine.refreshResource(collectionHref, resourceHref)
+        // Nothing changes until the server's version is here and readable: until then the queued
+        // change stays, so a failed attempt can be repeated or settled the other way.
+        engine.replaceWithServerVersion(collectionHref, resourceHref, pending.map { it.id }.toSet())
     }
 }

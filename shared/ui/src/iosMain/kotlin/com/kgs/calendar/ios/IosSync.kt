@@ -1,9 +1,12 @@
 package com.kgs.calendar.ios
 
+import com.kgs.calendar.data.remote.originApprovalNotices
 import com.kgs.calendar.domain.source.isLocalAccount
 import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
 import com.kgs.calendar.sync.reparseForZoneChangeIfNeeded
 import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.ui.res.Res
+import com.kgs.calendar.ui.res.formatAndroidString
 import com.kgs.calendar.time.nowMillis
 import com.kgs.calendar.time.systemDefault
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -26,6 +29,11 @@ import platform.BackgroundTasks.BGTask
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSDate
 import platform.Foundation.NSLog
+import platform.Foundation.NSUserDefaults
+import platform.UserNotifications.UNMutableNotificationContent
+import platform.UserNotifications.UNNotificationRequest
+import platform.UserNotifications.UNTimeIntervalNotificationTrigger
+import platform.UserNotifications.UNUserNotificationCenter
 import platform.Foundation.dateWithTimeIntervalSinceNow
 
 /**
@@ -110,7 +118,25 @@ class IosSync internal constructor(private val graph: IosAppGraph) {
         log("sync ${error ?: "ok"}")
         if (error == null) lastSyncActivityAt = nowMillis()
         attempt { graph.reminders.reschedule() }
+        attempt { announceOriginApprovals() }
         return error
+    }
+
+    /** An account that waits for an origin approval is announced once; see OriginApprovalNotifier on Android. */
+    private suspend fun announceOriginApprovals() {
+        val defaults = NSUserDefaults.standardUserDefaults
+        val announced = defaults.stringArrayForKey(ANNOUNCED_APPROVALS_KEY).orEmpty().filterIsInstance<String>().toSet()
+        val notices = graph.database.accountDao().getAll().originApprovalNotices()
+        notices.filter { it.key !in announced }.forEach { notice ->
+            val content = UNMutableNotificationContent()
+            content.setTitle(formatAndroidString(graph.uiStrings.get(Res.string.origin_approval_notification_title), arrayOf(notice.accountName)))
+            content.setBody(formatAndroidString(graph.uiStrings.get(Res.string.origin_approval_notification_body), arrayOf(notice.origin)))
+            val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(1.0, repeats = false)
+            UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(
+                UNNotificationRequest.requestWithIdentifier("kgs-origin:" + notice.key, content, trigger),
+            ) { _ -> }
+        }
+        defaults.setObject(notices.map { it.key }, forKey = ANNOUNCED_APPROVALS_KEY)
     }
 
     private suspend fun hasRemoteSources(): Boolean = graph.database.accountDao().getAll().any { !it.isLocalAccount() }
@@ -156,6 +182,8 @@ class IosSync internal constructor(private val graph: IosAppGraph) {
 }
 
 /** To the system log (Console, `log show`); variadic NSLog arguments don't take Kotlin strings. */
+private const val ANNOUNCED_APPROVALS_KEY = "kgs_origin_approvals_announced"
+
 private fun log(message: String) = NSLog("KgsSync: " + message.replace("%", "%%"))
 
 private suspend fun attempt(block: suspend () -> Unit): Throwable? =

@@ -66,6 +66,9 @@ object BitmapSquareImageEncoder : SquareImageEncoder {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sampleSize = 1
         while (minOf(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= maxSizePx) sampleSize *= 2
+        // The shorter side decides the quality, but the longer one the memory: a strip of a few
+        // pixels by a hundred thousand must not be decoded whole just to become a small avatar.
+        while ((bounds.outWidth / sampleSize).toLong() * (bounds.outHeight / sampleSize) > MAX_DECODED_PIXELS) sampleSize *= 2
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
             ?: return null
         val side = minOf(decoded.width, decoded.height)
@@ -76,4 +79,7 @@ object BitmapSquareImageEncoder : SquareImageEncoder {
         if (scaled !== cropped) cropped.recycle()
         return scaled
     }
+
+    /** About 16 MB at four bytes per pixel, plenty for a 256 px avatar. */
+    private const val MAX_DECODED_PIXELS = 4_000_000L
 }

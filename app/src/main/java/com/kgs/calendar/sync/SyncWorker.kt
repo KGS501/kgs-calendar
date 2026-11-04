@@ -42,6 +42,8 @@ class SyncWorker(
             rescheduleReminders = { ReminderScheduler.reschedule(applicationContext) },
             refreshWidgets = { KgsCalendarApplication.graph(applicationContext).widgets.scheduler.updateAllAndAwait() },
         )
+        // An account that needs approval only fails quietly in the background otherwise.
+        runCatching { OriginApprovalNotifier.update(applicationContext, graph.repository.observeAccounts().first()) }
         if (syncError == null) {
             if (!inputData.getBoolean(KEY_UPLOAD_ONLY, false)) markRecentSyncActivity(applicationContext)
             return Result.success()

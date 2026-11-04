@@ -15,6 +15,12 @@ import kotlinx.datetime.yearMonth
 import kotlin.time.Instant
 
 /**
+ * A rule needs more work than a calendar view can spend. The series stays stored unchanged; callers
+ * show its first occurrence instead of a partial list.
+ */
+internal class RecurrenceBudgetExceededException : IllegalStateException("This recurrence rule is too expensive to expand.")
+
+/**
  * A complete RFC 5545 RRULE expander (all BYxxx parts, BYSETPOS, WKST, COUNT, UNTIL) on local
  * date-times, following the well-known dateutil algorithm. Used where ical4j isn't available (iOS),
  * and tested against ical4j on the JVM.
@@ -41,6 +47,10 @@ internal class RRule private constructor(
     enum class Freq { SECONDLY, MINUTELY, HOURLY, DAILY, WEEKLY, MONTHLY, YEARLY }
 
     companion object {
+        /** Far beyond any calendar window a person looks at; hostile rules run into these. */
+        const val DEFAULT_MAX_RESULTS = 20_000
+        const val DEFAULT_WORK_BUDGET = 3_000_000L
+
         fun parse(rule: String): RRule {
             val parts = rule.removePrefix("RRULE:").split(';')
                 .filter { it.contains('=') }
@@ -104,9 +114,19 @@ internal class RRule private constructor(
 
     /**
      * Occurrences (local date-times) from [start] on, in order, while they are before
-     * [endExclusive]. [zone] resolves a UTC UNTIL; null treats UNTIL as local.
+     * [endExclusive]. [zone] resolves a UTC UNTIL; null treats UNTIL as local. Without a COUNT,
+     * nothing before [searchFrom] matters and the periods up to it are skipped. Rules that need
+     * more work than [workBudget] end in [RecurrenceBudgetExceededException], as does a window
+     * with more than [maxResults] occurrences: a part of a series would look like the whole of it.
      */
-    fun occurrences(start: LocalDateTime, endExclusive: LocalDateTime, zone: TimeZone?, maxResults: Int = 100_000): Sequence<LocalDateTime> = sequence {
+    fun occurrences(
+        start: LocalDateTime,
+        endExclusive: LocalDateTime,
+        zone: TimeZone?,
+        maxResults: Int = DEFAULT_MAX_RESULTS,
+        searchFrom: LocalDateTime? = null,
+        workBudget: Long = DEFAULT_WORK_BUDGET,
+    ): Sequence<LocalDateTime> = sequence {
         val untilLocal: LocalDateTime? = when {
             untilDateTime != null && untilIsUtc && zone != null ->
                 untilDateTime.toInstant(TimeZone.UTC).toLocalDateTime(zone)
@@ -119,11 +139,15 @@ internal class RRule private constructor(
             else -> null
         }
         val defaults = Defaults(start)
+        val budget = WorkBudget(workBudget)
         var emitted = 0
+        var results = 0
         var periodStart = periodAnchor(start)
+        if (count == null && searchFrom != null) periodStart = fastForwarded(periodStart, searchFrom)
         var emptyPeriods = 0
         while (true) {
-            val candidates = candidatesFor(periodStart, defaults)
+            budget.spend(1)
+            val candidates = candidatesFor(periodStart, defaults, budget)
             var any = false
             for (candidate in candidates) {
                 if (candidate < start) continue
@@ -132,8 +156,10 @@ internal class RRule private constructor(
                 if (candidate >= endExclusive) return@sequence
                 any = true
                 emitted++
-                yield(candidate)
-                if (emitted >= maxResults) return@sequence
+                if (searchFrom == null || candidate >= searchFrom) {
+                    if (++results > maxResults) throw RecurrenceBudgetExceededException()
+                    yield(candidate)
+                }
             }
             // Past the window without any match for a long time: the rule can't match again here.
             emptyPeriods = if (any) 0 else emptyPeriods + 1
@@ -143,6 +169,29 @@ internal class RRule private constructor(
             if (periodStart >= endExclusive) return@sequence
             if (untilLocal != null && periodBeginsAfter(periodStart, untilLocal)) return@sequence
         }
+    }
+
+    private class WorkBudget(private var left: Long) {
+        fun spend(units: Long) {
+            left -= units
+            if (left < 0) throw RecurrenceBudgetExceededException()
+        }
+    }
+
+    /** The last period before [target] in the rule's INTERVAL grid. One period of margin stays for DST. */
+    private fun fastForwarded(period: LocalDateTime, target: LocalDateTime): LocalDateTime {
+        if (target <= period) return period
+        val gapSeconds = target.toInstant(TimeZone.UTC).epochSeconds - period.toInstant(TimeZone.UTC).epochSeconds
+        val stepSeconds = when (freq) {
+            Freq.SECONDLY -> interval.toLong()
+            Freq.MINUTELY -> interval * 60L
+            Freq.HOURLY -> interval * 3_600L
+            Freq.DAILY -> interval * 86_400L
+            Freq.WEEKLY -> interval * 604_800L
+            Freq.MONTHLY, Freq.YEARLY -> return period
+        }
+        val steps = gapSeconds / stepSeconds - 1
+        return if (steps <= 0) period else plusSeconds(period, steps * stepSeconds)
     }
 
     private inner class Defaults(start: LocalDateTime) {
@@ -188,7 +237,8 @@ internal class RRule private constructor(
     }
 
     /** The occurrences of one period, sorted, after every BYxxx rule and BYSETPOS. */
-    private fun candidatesFor(period: LocalDateTime, d: Defaults): List<LocalDateTime> {
+    private fun candidatesFor(period: LocalDateTime, d: Defaults, budget: WorkBudget): List<LocalDateTime> {
+        budget.spend(if (freq == Freq.YEARLY) 366 else if (freq == Freq.MONTHLY) 31 else if (freq == Freq.WEEKLY) 7 else 1)
         val days: List<LocalDate> = when (freq) {
             Freq.YEARLY -> datesBetween(LocalDate(period.year, 1, 1), LocalDate(period.year + 1, 1, 1))
             Freq.MONTHLY -> period.date.let { datesBetween(it, it.plus(1, DateTimeUnit.MONTH)) }
@@ -204,8 +254,12 @@ internal class RRule private constructor(
             Freq.SECONDLY -> if ((byHour.isNotEmpty() && period.hour !in byHour) || (byMinute.isNotEmpty() && period.minute !in byMinute) ||
                 (bySecond.isNotEmpty() && period.second !in bySecond)
             ) emptyList() else listOf(period.time)
-            else -> combos(d.hours, d.minutes, d.seconds)
+            else -> {
+                budget.spend(d.hours.size.toLong() * d.minutes.size * d.seconds.size)
+                combos(d.hours, d.minutes, d.seconds)
+            }
         }
+        budget.spend(days.size.toLong() * times.size)
         var all = days.flatMap { day -> times.map { LocalDateTime(day, it) } }.sorted()
         if (bySetPos.isNotEmpty() && all.isNotEmpty()) {
             all = bySetPos.mapNotNull { pos ->

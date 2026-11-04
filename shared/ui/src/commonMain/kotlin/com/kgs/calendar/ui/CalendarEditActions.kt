@@ -19,6 +19,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 /** Event and task edits: save, push pending changes, then refresh widgets and reminders. */
+/** What the editor does once its save is stored on this device. */
+data class EditorSaveOutcome(
+    val collectionHref: String?,
+    val kind: HiddenSaveKind,
+    /** Forget the converted item as well, as after creating. */
+    val finishCreation: Boolean,
+)
+
+sealed interface EditorSaveState {
+    data object Idle : EditorSaveState
+    data object Saving : EditorSaveState
+    data class Saved(val outcome: EditorSaveOutcome) : EditorSaveState
+
+    /** Nothing was stored: the editor stays open with its draft, and the message says why. */
+    data object Failed : EditorSaveState
+}
+
 class CalendarEditActions constructor(
     private val scope: CoroutineScope,
     private val repository: CalendarRepository,
@@ -225,10 +242,11 @@ class CalendarEditActions constructor(
     }
 
     private fun runEdit(rescheduleReminders: Boolean = false, block: suspend () -> Unit) {
+        val tracked = takeTrackedSave()
         scope.launch {
             val startedAt = nowMillis()
-            runCatching {
-                block()
+            val failure = commitLocally(tracked, block)
+            if (failure == null) {
                 // Saved on this device either way. Offline or in conflict, the change waits on its
                 // item, which shows it among the problems; a notice would only repeat that.
                 try {
@@ -236,13 +254,11 @@ class CalendarEditActions constructor(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
-                    if (!error.isConnectionFailure() && !error.isOnlySyncConflicts()) throw error
+                    if (!error.isConnectionFailure() && !error.isOnlySyncConflicts()) {
+                        message.value = "Saved on this device, but the upload failed: ${error.message}"
+                    }
                 }
-            }.onSuccess {
-                message.value = null
-                widgetRefresher.updateAll()
-            }.onFailure {
-                message.value = it.message ?: "Could not save changes."
+                runCatching { widgetRefresher.updateAll() }
             }
             if (rescheduleReminders) {
                 runCatching { reminderRescheduler.reschedule() }
@@ -251,11 +267,45 @@ class CalendarEditActions constructor(
     }
 
     private fun runTaskStatusMutation(mutation: suspend () -> Unit) {
-        scope.launch {
-            runCatching { mutation() }
-                .onSuccess { message.value = null }
-                .onFailure { message.value = it.message ?: "Could not save changes." }
+        val tracked = takeTrackedSave()
+        scope.launch { commitLocally(tracked, mutation) }
+    }
+
+    /** Runs the local part of an edit and settles its tracked save. Returns the failure, if any. */
+    private suspend fun commitLocally(tracked: EditorSaveOutcome?, commit: suspend () -> Unit): Throwable? {
+        val failure = try {
+            commit()
+            null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            error
         }
+        message.value = failure?.let { it.message ?: "Could not save changes." }
+        if (tracked != null) editorSave.value = if (failure == null) EditorSaveState.Saved(tracked) else EditorSaveState.Failed
+        return failure
+    }
+
+    /**
+     * The editor's save in progress. The sheet closes, and its draft goes, only on [EditorSaveState.Saved].
+     * This lives here because a save must outlive the composition: rotating while saving still ends it.
+     */
+    val editorSave = MutableStateFlow<EditorSaveState>(EditorSaveState.Idle)
+    private var saveToTrack: EditorSaveOutcome? = null
+
+    /** Runs [save], one edit of this class, for the editor. Ignored while an earlier save is running. */
+    fun trackEditorSave(outcome: EditorSaveOutcome, save: () -> Unit) {
+        if (editorSave.value is EditorSaveState.Saving) return
+        editorSave.value = EditorSaveState.Saving
+        saveToTrack = outcome
+        save()
+        saveToTrack = null
+    }
+
+    private fun takeTrackedSave(): EditorSaveOutcome? = saveToTrack.also { saveToTrack = null }
+
+    fun editorSaveHandled() {
+        editorSave.value = EditorSaveState.Idle
     }
 
     private fun effectiveTaskStatus(resourceHref: String, payload: TaskEditPayload): String {

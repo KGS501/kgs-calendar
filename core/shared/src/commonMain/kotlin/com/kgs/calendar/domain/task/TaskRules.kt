@@ -13,6 +13,9 @@ val TaskEntity.taskStatus: TaskStatus?
     get() = TaskStatus.from(status)
 
 /** Recurs through an RRULE, explicit RDATEs or both. */
+/** Recurring by RRULE or by RDATE alone. */
+fun TaskEntity.hasRecurrence(): Boolean = !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()
+
 val TaskEntity.isRecurring: Boolean
     get() = !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()
 

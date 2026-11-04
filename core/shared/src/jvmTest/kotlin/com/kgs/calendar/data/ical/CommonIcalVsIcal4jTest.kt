@@ -39,7 +39,7 @@ class CommonIcalVsIcal4jTest {
             val seedMillis = seed.toInstant(zone).toEpochMilliseconds()
             val start = seedMillis - 5L * 86_400_000
             val end = seedMillis + 400L * 86_400_000
-            val expected = IcalPlatform.recurrenceStarts(rule, allDay, seedMillis, zone, start, end) ?: continue
+            val expected = IcalPlatform.ical4jRecurrenceStarts(rule, allDay, seedMillis, zone, start, end) ?: continue
             val actual = CommonIcal.recurrenceStarts(rule, allDay, seedMillis, zone, start, end)
             compared++
             // ical4j shifts some occurrences by the DST hour when DTSTART lies in a transition hour;

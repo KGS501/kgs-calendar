@@ -5,8 +5,11 @@ import kotlinx.datetime.*
 import com.kgs.calendar.data.normalizeServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.kgs.calendar.platform.HttpRequest
 import com.kgs.calendar.platform.HttpRequestBuilder
+import com.kgs.calendar.platform.HttpResponse
 import com.kgs.calendar.platform.HttpTransport
+import com.kgs.calendar.platform.IOException
 import com.kgs.calendar.platform.XmlElement
 import com.kgs.calendar.platform.item
 import com.kgs.calendar.platform.length
@@ -20,6 +23,7 @@ import com.kgs.calendar.platform.toMediaType
 import com.kgs.calendar.platform.toRequestBody
 import com.kgs.calendar.platform.use
 import kotlinx.coroutines.IO
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Small CalDAV transport focused on interoperable RFC 4791/5397/6578 behavior.
@@ -35,6 +39,7 @@ class CalDavHttpClient(
         serverUrl: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): CalDavAccountDiscovery = withContext(Dispatchers.IO) {
         val normalized = normalizeServer(serverUrl)
         val origin = originOf(normalized)
@@ -46,7 +51,9 @@ class CalDavHttpClient(
         var lastError: Throwable? = null
         candidates.forEach { candidate ->
             try {
-                discoverFromEndpoint(candidate, username, appPassword)?.let { return@withContext it }
+                discoverFromEndpoint(candidate, normalized, username, appPassword, origins)?.let { return@withContext it }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 lastError = error
             }
@@ -54,14 +61,15 @@ class CalDavHttpClient(
 
         // Compatibility fallback for older Nextcloud installations which don't expose
         // complete principal discovery at the URL entered by the user.
-        val userId = resolveNextcloudUserId(normalized, username, appPassword)
+        val userId = resolveNextcloudUserId(normalized, username, appPassword, origins)
         val nextcloudBase = normalized.trimEnd('/')
         val home = "$nextcloudBase/remote.php/dav/calendars/${userId.urlPathSegment()}/"
         runCatching {
-            propfind(home, username, appPassword, "0", HOME_PROPERTIES)
+            propfind(home, username, appPassword, "0", HOME_PROPERTIES, normalized, origins)
         }.getOrElse { throw lastError ?: it }
         CalDavAccountDiscovery(
             serviceUrl = normalized,
+            enteredServerUrl = normalized,
             principalUrl = "$nextcloudBase/remote.php/dav/principals/users/${userId.urlPathSegment()}/",
             calendarHomeUrl = home,
         )
@@ -71,13 +79,18 @@ class CalDavHttpClient(
         discovery: CalDavAccountDiscovery,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): List<RemoteCollection> = withContext(Dispatchers.IO) {
+        val serverUrl = discovery.enteredServerUrl ?: discovery.serviceUrl
+        val homeOrigins = origins.withDavOriginOf(discovery.calendarHomeUrl, serverUrl)
         val responses = propfind(
             discovery.calendarHomeUrl,
             username,
             appPassword,
             depth = "1",
             body = COLLECTION_PROPERTIES,
+            serverUrl = serverUrl,
+            origins = homeOrigins,
         )
         responses
             .filterNot { it.href.isSameDavHref(discovery.calendarHomeUrl) }
@@ -101,7 +114,7 @@ class CalDavHttpClient(
                     maxAttendeesPerInstance = response.maxAttendeesPerInstance,
                 )
                 RemoteCollection(
-                    href = stableHref(discovery.calendarHomeUrl, response.href),
+                    href = stableHref(discovery.calendarHomeUrl, response.href, serverUrl, homeOrigins),
                     displayName = response.displayName ?: response.href.trim('/').substringAfterLast('/'),
                     color = response.color,
                     supportsEvents = "VEVENT" in components,
@@ -126,7 +139,7 @@ class CalDavHttpClient(
      */
     suspend fun resolveUserId(serverUrl: String, username: String, appPassword: String): String =
         withContext(Dispatchers.IO) {
-            resolveNextcloudUserId(normalizeServer(serverUrl), username, appPassword)
+            resolveNextcloudUserId(normalizeServer(serverUrl), username, appPassword, DavOrigins.None)
         }
 
     suspend fun discoverCollections(
@@ -152,13 +165,17 @@ class CalDavHttpClient(
         serverUrl: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): List<RemoteResource> = withContext(Dispatchers.IO) {
+        val collectionUrl = absoluteUrl(serverUrl, collectionHref, origins)
         propfind(
-            absoluteUrl(serverUrl, collectionHref),
+            collectionUrl,
             username,
             appPassword,
             depth = "1",
             body = ETAG_PROPERTIES,
+            serverUrl = serverUrl,
+            origins = origins,
         )
             .filterNot { it.href.isSameDavHref(collectionHref) }
             .filterNot { it.href.endsWith("/") }
@@ -169,7 +186,7 @@ class CalDavHttpClient(
                 }
             }
             .filterNot { it.responseStatus == 404 }
-            .map { RemoteResource(stableHref(absoluteUrl(serverUrl, collectionHref), it.href), it.etag) }
+            .map { RemoteResource(stableHref(collectionUrl, it.href, serverUrl, origins), it.etag) }
     }
 
     /**
@@ -183,7 +200,9 @@ class CalDavHttpClient(
         previousSyncToken: String?,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): SyncCollectionResult? = withContext(Dispatchers.IO) {
+        val collectionUrl = absoluteUrl(serverUrl, collectionHref, origins)
         val body = buildString {
             appendLine("""<?xml version="1.0" encoding="utf-8" ?>""")
             appendLine("""<d:sync-collection xmlns:d="DAV:">""")
@@ -192,66 +211,81 @@ class CalDavHttpClient(
             appendLine("""  <d:prop><d:getetag /></d:prop>""")
             appendLine("""</d:sync-collection>""")
         }
-        val request = authenticatedRequest(
-            absoluteUrl(serverUrl, collectionHref),
-            username,
-            appPassword,
-        )
+        val request = authenticatedRequest(collectionUrl, username, appPassword)
             .method("REPORT", body.toRequestBody(XML_MEDIA_TYPE))
             .header("Depth", "1")
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (response.code in setOf(400, 403, 405, 409, 501)) return@withContext null
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, "REPORT sync-collection $collectionHref failed: HTTP ${response.code}")
             }
             val xml = response.bodyText()
             val token = parseDocumentFirstText(xml, "sync-token") ?: return@withContext null
-            val davResponses = parseDavResponses(xml)
+            val allResponses = parseDavResponses(xml)
+            // RFC 6578 3.6: a 507 for the collection itself marks a truncated page, whose token
+            // continues where it ended. A 507 on a member remains a failure like any other.
+            val (selfResponses, davResponses) = allResponses.partition { it.href.isSameDavHref(collectionHref) }
+            val truncated = selfResponses.any { it.responseStatus == 507 }
+            // The server would hand out the same page forever; a full listing gets past it.
+            if (truncated && token == previousSyncToken) return@withContext null
             davResponses.firstOrNull { it.responseStatus != null && it.responseStatus !in 200..299 && it.responseStatus != 404 }
                 ?.let { throw HttpStatusException(it.responseStatus!!, "Incomplete sync response for ${it.href}") }
             val deleted = davResponses
                 .filter { it.responseStatus == 404 }
-                .map { stableHref(absoluteUrl(serverUrl, collectionHref), it.href) }
+                .map { stableHref(collectionUrl, it.href, serverUrl, origins) }
                 .toSet()
             val changed = davResponses
-                .filterNot { stableHref(absoluteUrl(serverUrl, collectionHref), it.href) in deleted }
-                .filterNot { it.href.isSameDavHref(collectionHref) }
+                .filterNot { stableHref(collectionUrl, it.href, serverUrl, origins) in deleted }
                 .filterNot { it.href.endsWith("/") }
-                .map {
-                    RemoteResource(
-                        stableHref(absoluteUrl(serverUrl, collectionHref), it.href),
-                        it.etag,
-                    )
-                }
-            SyncCollectionResult(changed, deleted, token)
+                .map { RemoteResource(stableHref(collectionUrl, it.href, serverUrl, origins), it.etag) }
+            SyncCollectionResult(changed, deleted, token, truncated)
         }
     }
 
-    suspend fun getResource(serverUrl: String, href: String, username: String, appPassword: String): String =
-        getResourceWithEtag(serverUrl, href, username, appPassword).calendarData
+    suspend fun getResource(
+        serverUrl: String,
+        href: String,
+        username: String,
+        appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
+    ): String = getResourceWithEtag(serverUrl, href, username, appPassword, origins).calendarData
 
     /** GETs [href]; the ETag comes from the same response, so it always belongs to the returned body. */
-    suspend fun getResourceWithEtag(serverUrl: String, href: String, username: String, appPassword: String): RemoteResourceData =
+    suspend fun getResourceWithEtag(
+        serverUrl: String,
+        href: String,
+        username: String,
+        appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
+    ): RemoteResourceData =
         withContext(Dispatchers.IO) {
-            val request = authenticatedRequest(absoluteUrl(serverUrl, href), username, appPassword)
+            val request = authenticatedRequest(absoluteUrl(serverUrl, href, origins), username, appPassword)
                 .header("Accept", "text/calendar")
                 .build()
-            transport.execute(request).use { response ->
+            send(request, serverUrl, origins).use { response ->
                 if (!response.isSuccessful) throw HttpStatusException(response.code, "GET $href failed: HTTP ${response.code}")
                 RemoteResourceData(href, response.header("ETag"), response.bodyText())
             }
         }
 
-    suspend fun getResourceEtag(serverUrl: String, href: String, username: String, appPassword: String): String? =
+    suspend fun getResourceEtag(
+        serverUrl: String,
+        href: String,
+        username: String,
+        appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
+    ): String? =
         withContext(Dispatchers.IO) {
             propfind(
-                absoluteUrl(serverUrl, href),
+                absoluteUrl(serverUrl, href, origins),
                 username,
                 appPassword,
                 depth = "0",
                 body = ETAG_PROPERTIES,
+                serverUrl = serverUrl,
+                origins = origins,
             ).firstOrNull { it.successfulPropertyStatus }?.etag
         }
 
@@ -261,8 +295,10 @@ class CalDavHttpClient(
         hrefs: List<String>,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): List<RemoteResourceData> = withContext(Dispatchers.IO) {
         if (hrefs.isEmpty()) return@withContext emptyList()
+        val collectionUrl = absoluteUrl(serverUrl, collectionHref, origins)
         val body = buildString {
             appendLine("""<?xml version="1.0" encoding="utf-8" ?>""")
             appendLine("""<cal:calendar-multiget xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">""")
@@ -270,21 +306,17 @@ class CalDavHttpClient(
             hrefs.forEach { appendLine("""  <d:href>${it.xmlEscaped()}</d:href>""") }
             appendLine("""</cal:calendar-multiget>""")
         }
-        val request = authenticatedRequest(
-            absoluteUrl(serverUrl, collectionHref),
-            username,
-            appPassword,
-        )
+        val request = authenticatedRequest(collectionUrl, username, appPassword)
             .method("REPORT", body.toRequestBody(XML_MEDIA_TYPE))
             .header("Depth", "0")
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-multiget $collectionHref failed: HTTP ${response.code}")
             parseDavResponses(response.bodyText()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
-                    stableHref(absoluteUrl(serverUrl, collectionHref), dav.href),
+                    stableHref(collectionUrl, dav.href, serverUrl, origins),
                     dav.etag,
                     data,
                 )
@@ -298,7 +330,9 @@ class CalDavHttpClient(
         componentName: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ): List<RemoteResourceData> = withContext(Dispatchers.IO) {
+        val collectionUrl = absoluteUrl(serverUrl, collectionHref, origins)
         val component = componentName.trim().uppercase()
         require(component in setOf("VEVENT", "VTODO")) { "Unsupported CalDAV component query: $componentName" }
         val body = buildString {
@@ -312,21 +346,17 @@ class CalDavHttpClient(
             appendLine("""  </cal:filter>""")
             appendLine("""</cal:calendar-query>""")
         }
-        val request = authenticatedRequest(
-            absoluteUrl(serverUrl, collectionHref),
-            username,
-            appPassword,
-        )
+        val request = authenticatedRequest(collectionUrl, username, appPassword)
             .method("REPORT", body.toRequestBody(XML_MEDIA_TYPE))
             .header("Depth", "1")
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "REPORT calendar-query $collectionHref failed: HTTP ${response.code}")
             parseDavResponses(response.bodyText()).mapNotNull { dav ->
                 val data = dav.calendarData ?: return@mapNotNull null
                 RemoteResourceData(
-                    stableHref(absoluteUrl(serverUrl, collectionHref), dav.href),
+                    stableHref(collectionUrl, dav.href, serverUrl, origins),
                     dav.etag,
                     data,
                 )
@@ -341,16 +371,18 @@ class CalDavHttpClient(
         appPassword: String,
         rawIcs: String,
         baseEtag: String?,
+        origins: DavOrigins = DavOrigins.None,
     ): PutResult = withContext(Dispatchers.IO) {
-        val request = authenticatedRequest(absoluteUrl(serverUrl, href), username, appPassword)
+        val request = authenticatedRequest(absoluteUrl(serverUrl, href, origins), username, appPassword)
             .put(rawIcs.toRequestBody(CALENDAR_MEDIA_TYPE))
             .header("Content-Type", CALENDAR_MEDIA_TYPE.toString())
             .apply {
                 if (baseEtag != null) header("If-Match", baseEtag) else header("If-None-Match", "*")
             }
             .build()
-        transport.execute(request).use { response ->
-            if (response.code == 412) throw CalDavConflictException("PUT", href)
+        send(request, serverUrl, origins).use { response ->
+            // Some servers answer a precondition on a target that no longer exists with 404.
+            if (response.code == 412 || (response.code == 404 && baseEtag != null)) throw CalDavConflictException("PUT", href)
             if (!response.isSuccessful) throw HttpStatusException(response.code, "PUT $href failed: HTTP ${response.code}")
             PutResult(href, response.header("ETag"))
         }
@@ -362,12 +394,13 @@ class CalDavHttpClient(
         username: String,
         appPassword: String,
         baseEtag: String?,
+        origins: DavOrigins = DavOrigins.None,
     ) = withContext(Dispatchers.IO) {
-        val request = authenticatedRequest(absoluteUrl(serverUrl, href), username, appPassword)
+        val request = authenticatedRequest(absoluteUrl(serverUrl, href, origins), username, appPassword)
             .delete()
             .apply { baseEtag?.let { header("If-Match", it) } }
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (response.code == 404) return@use
             if (response.code == 412) throw CalDavConflictException("DELETE", href)
             if (!response.isSuccessful) throw HttpStatusException(response.code, "DELETE $href failed: HTTP ${response.code}")
@@ -382,7 +415,9 @@ class CalDavHttpClient(
         color: Int?,
         supportsEvents: Boolean,
         supportsTasks: Boolean,
+        origins: DavOrigins = DavOrigins.None,
     ): String = withContext(Dispatchers.IO) {
+        val serverUrl = discovery.enteredServerUrl ?: discovery.serviceUrl
         val slug = displayName.lowercase()
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
@@ -407,7 +442,7 @@ class CalDavHttpClient(
                 .method("MKCALENDAR", body.toRequestBody(XML_MEDIA_TYPE))
                 .header("Content-Type", XML_MEDIA_TYPE.toString())
                 .build()
-            transport.execute(request).use { response ->
+            send(request, serverUrl, origins).use { response ->
                 if (response.isSuccessful) return@withContext href
                 if (response.code == 405) {
                     error("The server does not allow creating a calendar at $href (HTTP 405).")
@@ -429,6 +464,7 @@ class CalDavHttpClient(
         appPassword: String,
         displayName: String,
         color: Int?,
+        origins: DavOrigins = DavOrigins.None,
     ) = withContext(Dispatchers.IO) {
         val body = buildString {
             appendLine("""<?xml version="1.0" encoding="utf-8" ?>""")
@@ -439,15 +475,11 @@ class CalDavHttpClient(
             appendLine("""  </d:prop></d:set>""")
             appendLine("""</d:propertyupdate>""")
         }
-        val request = authenticatedRequest(
-            absoluteUrl(serverUrl, collectionHref),
-            username,
-            appPassword,
-        )
+        val request = authenticatedRequest(absoluteUrl(serverUrl, collectionHref, origins), username, appPassword)
             .method("PROPPATCH", body.toRequestBody(XML_MEDIA_TYPE))
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "PROPPATCH $collectionHref failed: HTTP ${response.code}")
         }
     }
@@ -457,7 +489,8 @@ class CalDavHttpClient(
         collectionHref: String,
         username: String,
         appPassword: String,
-    ) = deleteResource(serverUrl, collectionHref, username, appPassword, null)
+        origins: DavOrigins = DavOrigins.None,
+    ) = deleteResource(serverUrl, collectionHref, username, appPassword, null, origins)
 
     /**
      * Looks for Nextcloud's CalDAV trash bin (Nextcloud 22+) at `{calendar home}/trashbin/`. Returns
@@ -469,10 +502,12 @@ class CalDavHttpClient(
         calendarHomeUrl: String,
         username: String,
         appPassword: String,
+        serverUrl: String = calendarHomeUrl,
+        origins: DavOrigins = DavOrigins.None,
     ): RemoteTrashBin? = withContext(Dispatchers.IO) {
         val url = ensureTrailingSlash(calendarHomeUrl) + TRASH_BIN_NAME + "/"
         val responses = try {
-            propfind(url, username, appPassword, "0", TRASH_BIN_PROPERTIES)
+            propfind(url, username, appPassword, "0", TRASH_BIN_PROPERTIES, serverUrl, origins)
         } catch (error: HttpStatusException) {
             if (error.statusCode in TRASH_BIN_ABSENT_STATUSES) return@withContext null
             throw error
@@ -496,13 +531,15 @@ class CalDavHttpClient(
         trashBin: RemoteTrashBin,
         username: String,
         appPassword: String,
+        serverUrl: String = trashBin.url,
+        origins: DavOrigins = DavOrigins.None,
     ): List<RemoteTrashedObject> = withContext(Dispatchers.IO) {
         val request = authenticatedRequest(trashBin.objectsUrl, username, appPassword)
             .method("REPORT", TRASH_BIN_OBJECTS_QUERY.toRequestBody(XML_MEDIA_TYPE))
             .header("Depth", "1")
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) {
                 throw HttpStatusException(response.code, "REPORT calendar-query ${trashBin.objectsUrl} failed: HTTP ${response.code}")
             }
@@ -511,7 +548,7 @@ class CalDavHttpClient(
                 .filterNot { it.href.endsWith("/") }
                 .map { dav ->
                     RemoteTrashedObject(
-                        href = stableHref(trashBin.objectsUrl, dav.href),
+                        href = stableHref(trashBin.objectsUrl, dav.href, serverUrl, origins),
                         etag = dav.etag,
                         calendarData = dav.calendarData,
                         deletedAtMillis = dav.deletedAt?.let(::parseDavTimestampMillis),
@@ -531,13 +568,14 @@ class CalDavHttpClient(
         objectHref: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins = DavOrigins.None,
     ) = withContext(Dispatchers.IO) {
-        val objectUrl = absoluteUrl(serverUrl, objectHref)
+        val objectUrl = absoluteUrl(serverUrl, objectHref, origins)
         val request = authenticatedRequest(objectUrl, username, appPassword)
             .method("MOVE", null)
             .header("Destination", trashBinRestoreUrl(objectUrl))
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "MOVE $objectHref failed: HTTP ${response.code}")
         }
     }
@@ -548,7 +586,8 @@ class CalDavHttpClient(
         objectHref: String,
         username: String,
         appPassword: String,
-    ) = deleteResource(serverUrl, objectHref, username, appPassword, null)
+        origins: DavOrigins = DavOrigins.None,
+    ) = deleteResource(serverUrl, objectHref, username, appPassword, null, origins)
 
     /**
      * The user's Nextcloud avatar from `{server}/index.php/avatar/{user id}/{size}`. Null when the
@@ -560,9 +599,10 @@ class CalDavHttpClient(
         username: String,
         appPassword: String,
         sizePx: Int = 256,
+        origins: DavOrigins = DavOrigins.None,
     ): NextcloudAvatar? = withContext(Dispatchers.IO) {
         val normalized = normalizeServer(serverUrl)
-        val userId = resolveNextcloudUserId(normalized, username, appPassword)
+        val userId = resolveNextcloudUserId(normalized, username, appPassword, origins)
         val request = authenticatedRequest(
             "${normalized.trimEnd('/')}/index.php/avatar/${userId.urlPathSegment()}/$sizePx",
             username,
@@ -571,7 +611,7 @@ class CalDavHttpClient(
             .header("Accept", "image/*")
             .header("OCS-APIRequest", "true")
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             val contentType = response.header("Content-Type").orEmpty()
             if (!response.isSuccessful || !contentType.startsWith("image/", ignoreCase = true)) return@withContext null
             val bytes = response.body?.takeIf { it.isNotEmpty() && it.size <= MAX_AVATAR_BYTES } ?: return@withContext null
@@ -581,17 +621,19 @@ class CalDavHttpClient(
 
     private suspend fun discoverFromEndpoint(
         endpoint: String,
+        serverUrl: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins,
     ): CalDavAccountDiscovery? {
-        val endpointResponses = propfind(endpoint, username, appPassword, "0", DISCOVERY_PROPERTIES)
+        val endpointResponses = propfind(endpoint, username, appPassword, "0", DISCOVERY_PROPERTIES, serverUrl, origins)
         val endpointResponse = endpointResponses.firstOrNull() ?: return null
         val effectiveUrl = endpointResponse.requestUrl
         val principalUrl = endpointResponse.currentUserPrincipal?.let { resolveUrl(effectiveUrl, it) }
         val directHome = endpointResponse.calendarHomeSet?.let { resolveUrl(effectiveUrl, it) }
 
         val principalResponse = principalUrl?.let { principal ->
-            propfind(principal, username, appPassword, "0", PRINCIPAL_PROPERTIES).firstOrNull()
+            propfind(principal, username, appPassword, "0", PRINCIPAL_PROPERTIES, serverUrl, origins).firstOrNull()
         }
         val home = principalResponse?.calendarHomeSet?.let {
             resolveUrl(principalUrl ?: effectiveUrl, it)
@@ -601,9 +643,12 @@ class CalDavHttpClient(
             null
         } ?: return null
 
-        val options = options(effectiveUrl, username, appPassword)
+        // Fails here, with the origin to review, rather than on the first request of every sync.
+        requireApprovedDavOrigin(home, serverUrl, origins)
+        val options = options(effectiveUrl, username, appPassword, serverUrl, origins)
         return CalDavAccountDiscovery(
             serviceUrl = effectiveUrl,
+            enteredServerUrl = serverUrl,
             principalUrl = principalUrl,
             calendarHomeUrl = ensureTrailingSlash(home),
             calendarUserAddresses = principalResponse?.calendarUserAddresses
@@ -621,12 +666,12 @@ class CalDavHttpClient(
         )
     }
 
-    private suspend fun options(url: String, username: String, appPassword: String): Set<String> {
+    private suspend fun options(url: String, username: String, appPassword: String, serverUrl: String, origins: DavOrigins): Set<String> {
         val request = authenticatedRequest(url, username, appPassword)
             .method("OPTIONS", null)
             .build()
         return runCatching {
-            transport.execute(request).use { response ->
+            send(request, serverUrl, origins).use { response ->
                 if (!response.isSuccessful) emptySet()
                 else response.headers("DAV")
                     .flatMap { it.split(',') }
@@ -641,6 +686,7 @@ class CalDavHttpClient(
         normalizedServer: String,
         username: String,
         appPassword: String,
+        origins: DavOrigins,
     ): String {
         val url = "${normalizedServer.trimEnd('/')}/ocs/v1.php/cloud/user"
         val request = authenticatedRequest(url, username, appPassword)
@@ -648,7 +694,7 @@ class CalDavHttpClient(
             .header("Accept", "application/xml")
             .build()
         return runCatching {
-            transport.execute(request).use { response ->
+            send(request, normalizedServer, origins).use { response ->
                 if (!response.isSuccessful) return@use username
                 val document = parseXml(response.bodyText())
                 document.getElementsByTagName("id").firstOrNull()?.textContent?.ifBlank { username } ?: username
@@ -662,13 +708,15 @@ class CalDavHttpClient(
         appPassword: String,
         depth: String,
         body: String,
+        serverUrl: String,
+        origins: DavOrigins,
     ): List<DavResponse> {
         val request = authenticatedRequest(url, username, appPassword)
             .method("PROPFIND", body.toRequestBody(XML_MEDIA_TYPE))
             .header("Depth", depth)
             .header("Content-Type", XML_MEDIA_TYPE.toString())
             .build()
-        transport.execute(request).use { response ->
+        send(request, serverUrl, origins).use { response ->
             if (!response.isSuccessful) throw HttpStatusException(response.code, "PROPFIND $url failed: HTTP ${response.code}")
             val effectiveUrl = response.url
             return parseDavResponses(response.bodyText())
@@ -679,7 +727,43 @@ class CalDavHttpClient(
     private fun authenticatedRequest(url: String, username: String, appPassword: String): HttpRequestBuilder =
         HttpRequestBuilder()
             .url(url)
+            .followRedirects(false)
             .header("Authorization", basicAuthorization(username, appPassword))
+
+    /**
+     * Performs an authenticated request and follows its redirects here, because each hop gets the
+     * credentials and the body back: every target has to pass the account's origin check first.
+     * Reads keep their method; a write only follows the 307/308 that promise it, and any other
+     * redirect comes back as the failed response it is.
+     */
+    private suspend fun send(request: HttpRequest, serverUrl: String, origins: DavOrigins): HttpResponse {
+        var current = request
+        repeat(MAX_REDIRECTS + 1) {
+            requireApprovedDavOrigin(current.url, serverUrl, origins)
+            val response = transport.execute(current)
+            val location = response.header("Location")?.takeIf { it.isNotBlank() }
+            if (response.code !in REDIRECT_STATUSES || location == null) return response
+            val keepsMethod = current.method in REDIRECTABLE_READS || response.code == 307 || response.code == 308
+            if (!keepsMethod) return response
+            current = HttpRequest(
+                method = current.method,
+                url = resolveUrl(response.url, location),
+                headers = current.headers,
+                body = current.body,
+                contentType = current.contentType,
+                maxResponseBytes = current.maxResponseBytes,
+                followRedirects = false,
+                totalTimeoutMillis = current.totalTimeoutMillis,
+            )
+        }
+        throw IOException("Too many redirects from ${request.url}")
+    }
+
+    /** [DavOrigins.davOrigin] for an account whose calendar home is [homeUrl], before that is stored. */
+    private fun DavOrigins.withDavOriginOf(homeUrl: String, serverUrl: String): DavOrigins {
+        val home = canonicalOrigin(homeUrl)
+        return if (home == null || home == canonicalOrigin(serverUrl)) this else copy(davOrigin = home)
+    }
 
     private fun parseDavResponses(xml: String): List<DavResponse> {
         require(xml.isNotBlank()) { "Empty DAV response; refusing to treat it as an empty calendar." }
@@ -817,23 +901,26 @@ class CalDavHttpClient(
     private fun parseColor(value: String): Int? =
         runCatching { parseAndroidColor(value.trim().substringBefore(';')) }.getOrNull()
 
-    private fun absoluteUrl(serverUrl: String, href: String): String =
+    private fun absoluteUrl(serverUrl: String, href: String, origins: DavOrigins): String =
         if (href.startsWith("http://", true) || href.startsWith("https://", true)) {
             href
         } else {
-            resolveUrl(normalizeServer(serverUrl), href)
+            resolveUrl(origins.davOrigin ?: normalizeServer(serverUrl), href)
         }
 
-    private fun stableHref(baseUrl: String, href: String): String =
-        if (
-            href.startsWith("http://", true) ||
-            href.startsWith("https://", true) ||
-            href.startsWith("/")
-        ) {
-            href
-        } else {
-            resolveUrl(ensureTrailingSlash(baseUrl), href)
-        }
+    /**
+     * The form an href is kept in. One on the account's DAV origin stays as the server wrote it, so
+     * stored keys don't change; one elsewhere keeps its origin, or [absoluteUrl] would later send it
+     * to the wrong host. It still has to pass the origin check before anything is sent there.
+     */
+    private fun stableHref(baseUrl: String, href: String, serverUrl: String, origins: DavOrigins): String {
+        val isRooted = href.startsWith("/") && !href.startsWith("//")
+        val isAbsolute = href.startsWith("http://", true) || href.startsWith("https://", true)
+        if (!isRooted && !isAbsolute) return resolveUrl(ensureTrailingSlash(baseUrl), href)
+        val resolved = resolveUrl(ensureTrailingSlash(baseUrl), href)
+        val rootOrigin = canonicalOrigin(origins.davOrigin ?: normalizeServer(serverUrl))
+        return if (canonicalOrigin(resolved) == rootOrigin) href else resolved
+    }
 
     private fun resolveUrl(baseUrl: String, href: String): String =
         resolveUri(baseUrl, href)
@@ -938,6 +1025,9 @@ class CalDavHttpClient(
         private const val TRASH_BIN_NAME = "trashbin"
         private const val DELETED_CALENDAR_TYPE = "deleted-calendar"
         private const val MAX_AVATAR_BYTES = 2 * 1024 * 1024
+        private const val MAX_REDIRECTS = 10
+        private val REDIRECT_STATUSES = setOf(300, 301, 302, 303, 307, 308)
+        private val REDIRECTABLE_READS = setOf("GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT")
 
         /** Answers of servers without a trash bin at the probed URL. */
         private val TRASH_BIN_ABSENT_STATUSES = setOf(400, 403, 404, 405, 409, 501)

@@ -7,6 +7,8 @@ data class CalDavAccountDiscovery(
     val serviceUrl: String,
     val principalUrl: String?,
     val calendarHomeUrl: String,
+    /** The URL the user entered, which decides what [DavOrigins] requires; null means [serviceUrl]. */
+    val enteredServerUrl: String? = null,
     val calendarUserAddresses: Set<String> = emptySet(),
     val scheduleInboxUrl: String? = null,
     val scheduleOutboxUrl: String? = null,
@@ -151,6 +153,8 @@ data class SyncCollectionResult(
     val changedResources: List<RemoteResource>,
     val deletedHrefs: Set<String>,
     val syncToken: String,
+    /** RFC 6578 3.6: more changes follow; ask again with [syncToken]. */
+    val truncated: Boolean = false,
 )
 
 /** A Nextcloud user's avatar image; [isCustom] is false for Nextcloud's generated letter avatar. */

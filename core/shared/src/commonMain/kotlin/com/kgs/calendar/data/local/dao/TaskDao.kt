@@ -67,7 +67,11 @@ interface TaskDao {
             (recurrenceRule IS NOT NULL AND recurrenceRule != '')
             OR (rDatesCsv IS NOT NULL AND rDatesCsv != '')
           )
-          AND COALESCE(startAtMillis, dueAtMillis, 0) < :rangeEndMillis
+          AND (
+            COALESCE(startAtMillis, dueAtMillis, 0) < :rangeEndMillis
+            OR (rDatesCsv IS NOT NULL AND rDatesCsv != '')
+            OR (recurrenceOverridesJson IS NOT NULL AND recurrenceOverridesJson != '')
+          )
         ORDER BY COALESCE(startAtMillis, dueAtMillis) ASC
         """,
     )
@@ -82,7 +86,11 @@ interface TaskDao {
             (recurrenceRule IS NOT NULL AND recurrenceRule != '')
             OR (rDatesCsv IS NOT NULL AND rDatesCsv != '')
           )
-          AND COALESCE(startAtMillis, dueAtMillis, 0) < :rangeEndMillis
+          AND (
+            COALESCE(startAtMillis, dueAtMillis, 0) < :rangeEndMillis
+            OR (rDatesCsv IS NOT NULL AND rDatesCsv != '')
+            OR (recurrenceOverridesJson IS NOT NULL AND recurrenceOverridesJson != '')
+          )
         ORDER BY COALESCE(startAtMillis, dueAtMillis) ASC
         """,
     )
@@ -189,10 +197,15 @@ interface TaskDao {
         SELECT tasks.* FROM tasks
         INNER JOIN collections ON collections.href = tasks.collectionHref
         WHERE collections.isEnabled = 1
-          AND tasks.isCompleted = 0
-          AND UPPER(COALESCE(tasks.status, '')) != 'CANCELLED'
-          AND tasks.remindersCsv IS NOT NULL
-          AND tasks.remindersCsv != ''
+          AND (
+            (
+              tasks.isCompleted = 0
+              AND UPPER(COALESCE(tasks.status, '')) != 'CANCELLED'
+              AND tasks.remindersCsv IS NOT NULL
+              AND tasks.remindersCsv != ''
+            )
+            OR (tasks.recurrenceOverridesJson IS NOT NULL AND tasks.recurrenceOverridesJson != '')
+          )
         """,
     )
     suspend fun withReminders(): List<TaskEntity>

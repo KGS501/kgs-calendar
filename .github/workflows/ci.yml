@@ -34,6 +34,10 @@ jobs:
       - name: Test CI selection and verification commands
         run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
 
+      # Fast and offline, so it runs on every change instead of being a build to select.
+      - name: Test Play publishing tools
+        run: python3 -m unittest discover -s tools -p 'test_play_publisher.py' -v
+
       - name: Select affected builds
         id: select
         env:
@@ -87,6 +91,90 @@ jobs:
             core/shared/build/test-results/
             shared/ui/build/reports/tests/
             shared/ui/build/test-results/
+          if-no-files-found: ignore
+
+  release:
+    name: Android release build and lint
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Unsigned: this checks R8, resource shrinking and lint, and needs no release credentials.
+      - name: Build minified release and run lint
+        run: bash tools/verify-port.sh --release-only --console=plain
+
+      - name: Upload lint and shrinker diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.txt
+            app/build/outputs/mapping/release/
+          if-no-files-found: ignore
+
+  integration:
+    name: Android integration suite
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Bounded to what JVM tests can't show: real SQLite upgrades, and the Android parts of
+      # incoming intents, reminder launches and editor recreation. The UI-heavy suites stay local.
+      - name: Run migration and smoke tests on an emulator
+        timeout-minutes: 40
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            ./gradlew --no-daemon --max-workers=2 --console=plain :core:data:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kgs.calendar.data.local.KgsDatabaseMigrationTest
+            ./gradlew --no-daemon --max-workers=2 --console=plain :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kgs.calendar.MainActivityIntentFilterInstrumentedTest,com.kgs.calendar.reminder.ReminderLaunchInstrumentedTest,com.kgs.calendar.ui.EditorRecreationInstrumentedTest
+
+      - name: Upload integration test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            core/data/build/reports/androidTests/
+            core/data/build/outputs/androidTest-results/
           if-no-files-found: ignore
 
   build-ios:
@@ -166,7 +254,7 @@ jobs:
   ci:
     name: CI result
     if: always()
-    needs: [changes, build, build-ios]
+    needs: [changes, build, release, integration, build-ios]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -177,6 +265,9 @@ jobs:
           LINUX_REQUIRED: ${{ needs.changes.outputs.android == 'true' || needs.changes.outputs.shared == 'true' }}
           IOS_REQUIRED: ${{ needs.changes.outputs.ios }}
           LINUX_RESULT: ${{ needs.build.result }}
+          RELEASE_REQUIRED: ${{ needs.changes.outputs.android }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
           IOS_RESULT: ${{ needs.build-ios.result }}
         run: |
           [[ "$SELECTION_RESULT" == success ]] || exit 1
@@ -184,4 +275,7 @@ jobs:
           expected_ios=skipped
           if [[ "$LINUX_REQUIRED" == true ]]; then expected_linux=success; fi
           if [[ "$IOS_REQUIRED" == true ]]; then expected_ios=success; fi
+          expected_release=skipped
+          if [[ "$RELEASE_REQUIRED" == true ]]; then expected_release=success; fi
           [[ "$LINUX_RESULT" == "$expected_linux" && "$IOS_RESULT" == "$expected_ios" ]]
+          [[ "$RELEASE_RESULT" == "$expected_release" && "$INTEGRATION_RESULT" == "$expected_linux" ]]

@@ -85,4 +85,54 @@ class WidgetSerialUpdateQueueTest {
 
         assertEquals(listOf(1), processed)
     }
+
+    @Test
+    fun aFailingUpdateRunsThePendingOneAndStaysContained() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val processed = mutableListOf<Int>()
+        val failures = mutableListOf<Throwable>()
+        val queue = LatestPendingSerialQueue<String, Int>(
+            scope = this,
+            onFailure = failures::add,
+        ) { value ->
+            processed += value
+            if (value == 1) {
+                release.await()
+                error("Month preparation failed")
+            }
+        }
+
+        queue.submit("month:42", 1)
+        runCurrent()
+        queue.submit("month:42", 2)
+        release.complete(Unit)
+        advanceUntilIdle()
+        queue.submit("month:42", 3)
+        advanceUntilIdle()
+
+        assertEquals(listOf(1, 2, 3), processed)
+        assertEquals(1, failures.size)
+    }
+
+    @Test
+    fun cancellingARunningUpdateSettlesItsPendingOne() = runTest {
+        val superseded = mutableListOf<Int>()
+        val started = CompletableDeferred<Unit>()
+        val queue = LatestPendingSerialQueue<String, Int>(
+            scope = this,
+            onSuperseded = superseded::add,
+        ) {
+            started.complete(Unit)
+            CompletableDeferred<Unit>().await()
+        }
+
+        queue.submit("month:42", 1)
+        runCurrent()
+        started.await()
+        queue.submit("month:42", 2)
+        queue.cancel("month:42")
+        advanceUntilIdle()
+
+        assertEquals(listOf(2), superseded)
+    }
 }

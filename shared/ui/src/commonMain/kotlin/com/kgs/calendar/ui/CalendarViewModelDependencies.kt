@@ -1,5 +1,6 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.data.export.CalendarExportResult
 import com.kgs.calendar.ui.platform.PlatformUri
 import com.kgs.calendar.ui.res.StringResource
 import com.kgs.calendar.widget.KgsWidgetKind
@@ -27,7 +28,7 @@ interface AppLifecycleSignals {
 
 /** Writes calendars as an iCalendar file to a document the user picked; returns the items written. */
 fun interface CalendarFileExporter {
-    suspend fun export(collectionHrefs: List<String>, target: PlatformUri): Int
+    suspend fun export(collectionHrefs: List<String>, target: PlatformUri): CalendarExportResult
 }
 
 /** Reads a document the user picked (e.g. a photo for a group), or null when it can't be read. */

@@ -13,11 +13,13 @@ import android.os.Build
 import android.text.Html
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.remindsUser
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
+import com.kgs.calendar.domain.task.isOpen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -82,13 +84,16 @@ object ReminderScheduler {
         val plans = mutableListOf<ReminderAlarmPlan>()
 
         events.forEach { master ->
-            val offsets = master.remindersCsv.minutes()
-            if (offsets.isEmpty()) return@forEach
+            // Any single occurrence can have reminders of its own, or none.
+            val allOffsets = master.remindersCsv.minutes() +
+                RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson).flatMap { it.remindersCsv.minutes() }
+            if (allOffsets.isEmpty()) return@forEach
             val addresses = ownAddresses[master.collectionHref].orEmpty()
-            repository.expandEventReminderOccurrences(master, planFrom, windowEnd + offsets.leadMillis()).forEach { occurrence ->
+            repository.expandEventReminderOccurrences(master, planFrom, windowEnd + allOffsets.leadMillis()).forEach { occurrence ->
                 val event = occurrence.item
+                val offsets = event.remindersCsv.minutes()
                 // Cancelled events and invitations the user declined stay quiet.
-                if (!event.remindsUser(addresses)) return@forEach
+                if (offsets.isEmpty() || !event.remindsUser(addresses)) return@forEach
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
                     startAtMillis = event.startsAtMillis,
@@ -105,10 +110,14 @@ object ReminderScheduler {
         }
 
         tasks.forEach { master ->
-            val offsets = master.remindersCsv.minutes()
-            if (offsets.isEmpty()) return@forEach
-            repository.expandTaskReminderOccurrences(master, planFrom, windowEnd + offsets.leadMillis()).forEach { occurrence ->
+            val allOffsets = master.remindersCsv.minutes() +
+                RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson).flatMap { it.remindersCsv.minutes() }
+            if (allOffsets.isEmpty()) return@forEach
+            repository.expandTaskReminderOccurrences(master, planFrom, windowEnd + allOffsets.leadMillis()).forEach { occurrence ->
                 val task = occurrence.item
+                val offsets = task.remindersCsv.minutes()
+                // The list keeps finished occurrences for the calendar; they don't remind anyone.
+                if (offsets.isEmpty() || !task.isOpen()) return@forEach
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
                     startAtMillis = task.startAtMillis,
@@ -147,8 +156,14 @@ object ReminderScheduler {
             scheduleExactCompat(alarmManager, now, ReminderIntents.alarmPendingIntent(context, plan))
         }
         // Snoozed reminders are set again, e.g. after a restart cleared their alarms.
+        val visibility = graph.settingsStore.collectionVisibility.first()
         registry.pendingSnoozed(now).forEach { record ->
-            scheduleExactCompat(alarmManager, maxOf(record.triggerAtMillis, now), ReminderIntents.snoozedAlarmPendingIntent(context, record))
+            val occurrence = record.occurrenceId()
+            if (occurrence != null && !repository.isReminderDeliverable(occurrence, visibility)) {
+                registry.cancelSnoozed(record.alarmRequestCode)
+            } else {
+                scheduleExactCompat(alarmManager, maxOf(record.triggerAtMillis, now), ReminderIntents.snoozedAlarmPendingIntent(context, record))
+            }
         }
     }
 
@@ -158,13 +173,13 @@ object ReminderScheduler {
     }
 
     /**
-     * Last check before a due alarm posts its notification: false when the item's calendar was
-     * hidden or deactivated after the alarm had been planned. Unresolvable items still notify.
+     * Last check before a due alarm posts its notification: false when the item is gone, finished
+     * or cancelled, or its calendar was hidden or deactivated, since the alarm was planned.
      */
     suspend fun isStillVisible(context: Context, occurrenceId: CalendarOccurrenceId): Boolean {
         val graph = KgsCalendarApplication.graph(context)
         val visibility = graph.settingsStore.collectionVisibility.first()
-        return graph.repository.isReminderStillVisible(occurrenceId, visibility) ?: true
+        return graph.repository.isReminderDeliverable(occurrenceId, visibility)
     }
 
     /**

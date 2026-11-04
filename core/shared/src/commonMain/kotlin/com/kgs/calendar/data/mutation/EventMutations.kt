@@ -10,6 +10,7 @@ import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.IcalCodec
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.KgsDatabase
+import com.kgs.calendar.data.local.entity.CalendarResourceEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.newResourceHref
@@ -20,8 +21,10 @@ import com.kgs.calendar.data.toMinutesList
 import com.kgs.calendar.data.trash.TrashSnapshots
 import com.kgs.calendar.data.withRecurrenceUntilBefore
 import com.kgs.calendar.domain.event.endDateInclusive
+import com.kgs.calendar.domain.event.hasRecurrence
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.EventEditPayload
+import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.ParticipantJson
 import com.kgs.calendar.domain.model.normalizedReminderOffsets
 import com.kgs.calendar.domain.source.isAndroidProviderCollection
@@ -168,35 +171,53 @@ class EventMutations internal constructor(
             localWrites.writeTransaction {
                 localWrites.upsertLocalResource(androidEvent.collectionHref, androidEvent.resourceHref, null, ComponentType.Event, androidEvent.uid, "android-provider:$eventId")
                 database.eventDao().upsert(androidEvent)
-                if (!existing.collectionHref.isLocalCollectionHref()) {
-                    localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
-                }
-                database.eventDao().deleteByResource(existing.resourceHref)
-                database.resourceDao().delete(existing.resourceHref)
+                removeMoveSource(existing, resource)
             }
             androidWriteShield.markLocalWrite(androidEvent.resourceHref)
             return
         }
-        if (existingIsAndroid && !targetIsAndroid) {
-            val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
-                ?: error("Android event id is missing.")
-            androidCalendarProviderClient.deleteEvent(eventId)
-        }
-        val raw = icalCodec.serializeEvent(updated, originalRawIcs = resource?.rawIcs.takeUnless { moved })
+        // The stored resource goes along, so a move keeps what the app doesn't show.
+        val raw = icalCodec.serializeEvent(updated, originalRawIcs = resource?.rawIcs?.takeIf { it.contains("BEGIN:VCALENDAR", ignoreCase = true) })
         localWrites.writeTransaction {
             if (moved) {
+                // The source goes only after the server has acknowledged the destination.
                 database.eventDao().deleteByResource(existing.resourceHref)
-                database.resourceDao().delete(existing.resourceHref)
-                localWrites.enqueueDelete(existing.collectionHref, existing.resourceHref, ComponentType.Event, resource?.etag)
+                val putId = localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, null)
                 localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, null, ComponentType.Event, updated.uid, raw)
-                localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, null)
+                if (existingIsAndroid) {
+                    // The provider can't take part in the queue. The snapshot keeps the event
+                    // recoverable when the server later refuses its new copy.
+                    trashSnapshots.recordEvent(existing, existingCollection, rawIcs = null)
+                } else {
+                    removeMoveSource(existing, resource, dependsOnMutationId = putId)
+                }
             } else {
                 localWrites.upsertLocalResource(updated.collectionHref, updated.resourceHref, resource?.etag, ComponentType.Event, updated.uid, raw)
                 localWrites.enqueuePut(updated.collectionHref, updated.resourceHref, ComponentType.Event, raw, resource?.etag)
             }
             database.eventDao().upsert(updated)
         }
-        if (existingIsAndroid) androidWriteShield.markLocalDelete(existing.resourceHref)
+        if (existingIsAndroid) {
+            // After the commit: a failure here leaves both copies instead of none.
+            val eventId = androidCalendarProviderClient.eventIdFromHref(existing.resourceHref)
+                ?: error("Android event id is missing.")
+            androidCalendarProviderClient.deleteEvent(eventId)
+            localWrites.writeTransaction { database.resourceDao().delete(existing.resourceHref) }
+            androidWriteShield.markLocalDelete(existing.resourceHref)
+        }
+    }
+
+    /**
+     * Takes the moved [event]'s old copy out of the local rows. On a remote calendar its resource
+     * stays until the queued DELETE is through: that is what the DELETE's precondition and a
+     * cancelled move need. Everywhere else nothing is queued, and it goes right away.
+     */
+    private suspend fun removeMoveSource(event: EventEntity, resource: CalendarResourceEntity?, dependsOnMutationId: Long? = null) {
+        database.eventDao().deleteByResource(event.resourceHref)
+        localWrites.enqueueDelete(event.collectionHref, event.resourceHref, ComponentType.Event, resource?.etag, dependsOnMutationId)
+        if (database.pendingMutationDao().forResource(event.resourceHref).none { it.action == MutationAction.Delete }) {
+            database.resourceDao().delete(event.resourceHref)
+        }
     }
 
     suspend fun updateEventOccurrence(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
@@ -210,7 +231,7 @@ class EventMutations internal constructor(
 
     private suspend fun updateEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long, payload: EventEditPayload) {
         val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             updateEvent(uid, payload)
             return
         }
@@ -273,7 +294,7 @@ class EventMutations internal constructor(
             writableEventCollectionOrNull(payload.collectionHref)?.href,
         ) {
             val existing = database.eventDao().get(uid) ?: return@localWriteUnit
-            if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
+            if (!existing.hasRecurrence() || occurrenceStartMillis <= existing.startsAtMillis) {
                 updateEvent(uid, payload)
                 return@localWriteUnit
             }
@@ -310,7 +331,7 @@ class EventMutations internal constructor(
             organizerJson = existing.organizerJson,
             attendeesJson = existing.attendeesJson,
         )
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             updateEvent(uid, payload)
         } else {
             updateEventOccurrence(uid, occurrenceStartMillis, payload)
@@ -343,7 +364,7 @@ class EventMutations internal constructor(
             organizerJson = existing.organizerJson,
             attendeesJson = existing.attendeesJson,
         )
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             updateEvent(uid, payload)
         } else {
             updateEventOccurrence(uid, occurrenceStartMillis, payload)
@@ -446,7 +467,7 @@ class EventMutations internal constructor(
 
     private suspend fun deleteEventOccurrenceUnit(uid: String, occurrenceStartMillis: Long) {
         val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank()) {
+        if (!existing.hasRecurrence()) {
             deleteEvent(uid)
             return
         }
@@ -484,13 +505,13 @@ class EventMutations internal constructor(
 
     private suspend fun deleteEventFollowingUnit(uid: String, occurrenceStartMillis: Long) {
         val existing = database.eventDao().get(uid) ?: return
-        if (existing.recurrenceRule.isNullOrBlank() || occurrenceStartMillis <= existing.startsAtMillis) {
+        if (!existing.hasRecurrence() || occurrenceStartMillis <= existing.startsAtMillis) {
             deleteEvent(uid)
             return
         }
         if (localWrites.isReadOnlyCollectionHref(existing.collectionHref)) error("Read-only calendars cannot be edited.")
         val resource = database.resourceDao().get(existing.resourceHref)
-        val newRule = existing.recurrenceRule.withRecurrenceUntilBefore(occurrenceStartMillis, existing.allDay, zoneId)
+        val newRule = existing.recurrenceRule?.withRecurrenceUntilBefore(occurrenceStartMillis, existing.allDay, zoneId)
         val keptEx = existing.exDatesCsv
             ?.split(',')
             ?.mapNotNull { it.trim().toLongOrNull() }
@@ -545,7 +566,7 @@ class EventMutations internal constructor(
     }
 
     /**
-     * Start and end of the edited event. An end that is missing or not after the start becomes one
+     * Start and end of the edited event. An end that is missing or before the start becomes one
      * day for all-day events and one hour for timed ones.
      */
     private fun EventEditPayload.timeSpanMillis(): Pair<Long, Long> {
@@ -564,6 +585,8 @@ class EventMutations internal constructor(
         val validEnd = when {
             end > start -> end
             allDay -> date.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            // An item that takes up no time stays that way; one hour is only for a missing end.
+            end == start && this.endTime != null -> end
             else -> start + HOUR_MILLIS
         }
         return start to validEnd

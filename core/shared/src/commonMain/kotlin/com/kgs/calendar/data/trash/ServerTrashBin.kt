@@ -9,6 +9,7 @@ import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.local.entity.CollectionEntity
 import com.kgs.calendar.data.local.entity.TrashedItemEntity
+import com.kgs.calendar.data.normalizedIcsText
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.CalDavTrashBinSupport
 import com.kgs.calendar.data.remote.HttpStatusException
@@ -34,8 +35,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * object in its trash bin. A local snapshot of the same account is dropped when the listing holds an
  * object with the same UID, component type and calendar and the snapshot's DELETE is no longer
  * queued (also when the object was trashed elsewhere first and our DELETE found it gone); the server
- * item takes over its original href and its colour. Snapshots whose DELETE is still queued, and
- * snapshots of accounts whose server keeps no trash (none, or a retention of 0), stay local.
+ * item takes over its original href and its colour. Snapshots whose DELETE is still queued,
+ * snapshots of accounts whose server keeps no trash (none, or a retention of 0), and snapshots whose
+ * content differs from the server's copy stay local: an edit that was still unsent when the item was
+ * deleted exists nowhere else.
  */
 internal class ServerTrashBin(
     private val database: KgsDatabase,
@@ -57,7 +60,7 @@ internal class ServerTrashBin(
             database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
             return true
         }
-        val credentials = credentialsStore.get(accountId) ?: return false
+        val credentials = runCatching { credentialsStore.get(accountId) }.getOrNull() ?: return false
         return try {
             val support = trashBinSupport(account, credentials) ?: return false
             val trashBin = support.trashBin
@@ -65,7 +68,7 @@ internal class ServerTrashBin(
                 database.trashDao().deleteForAccount(accountId, TrashOrigin.ServerTrashBin)
                 return true
             }
-            val objects = calDavClient.listTrashBinObjects(trashBin, credentials.username, credentials.appPassword)
+            val objects = calDavClient.listTrashBinObjects(trashBin, credentials.username, credentials.appPassword, credentials.serverUrl, credentials.origins)
             val withData = objects.map { it.withCalendarData(credentials) }
             storeListing(account, withData, trashBin.retentionSeconds)
             true
@@ -85,7 +88,7 @@ internal class ServerTrashBin(
             return TrashRestoreResult.NotFound
         }
         try {
-            calDavClient.restoreTrashBinObject(credentials.serverUrl, serverHref, credentials.username, credentials.appPassword)
+            calDavClient.restoreTrashBinObject(credentials.serverUrl, serverHref, credentials.username, credentials.appPassword, credentials.origins)
         } catch (error: HttpStatusException) {
             val result = when (error.statusCode) {
                 404, 410 -> {
@@ -123,7 +126,7 @@ internal class ServerTrashBin(
         val serverHref = item.serverHref
         val credentials = credentialsStore.get(item.accountId)
         if (serverHref != null && credentials != null) {
-            calDavClient.deleteTrashBinObject(credentials.serverUrl, serverHref, credentials.username, credentials.appPassword)
+            calDavClient.deleteTrashBinObject(credentials.serverUrl, serverHref, credentials.username, credentials.appPassword, credentials.origins)
         }
         database.trashDao().delete(item.id)
     }
@@ -138,7 +141,7 @@ internal class ServerTrashBin(
         val cached = CalDavTrashBinSupport.readFrom(account.capabilitiesJson)?.takeIf { it.calendarHomeUrl == home }
         if (cached != null && !cached.supported && cached.isCurrentFor(home, now)) return cached
         val found = try {
-            calDavClient.findTrashBin(home, credentials.username, credentials.appPassword)
+            calDavClient.findTrashBin(home, credentials.username, credentials.appPassword, credentials.serverUrl, credentials.origins)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -154,7 +157,7 @@ internal class ServerTrashBin(
     private suspend fun RemoteTrashedObject.withCalendarData(credentials: StoredCredentials): RemoteTrashedObject {
         if (calendarData != null) return this
         val fetched = try {
-            calDavClient.getResource(credentials.serverUrl, href, credentials.username, credentials.appPassword)
+            calDavClient.getResource(credentials.serverUrl, href, credentials.username, credentials.appPassword, credentials.origins)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
@@ -195,6 +198,7 @@ internal class ServerTrashBin(
         uid == serverItem.uid &&
             componentType == serverItem.componentType &&
             collectionHref.hrefKey() == serverItem.collectionHref.hrefKey() &&
+            rawIcs.normalizedIcsText() == serverItem.rawIcs.normalizedIcsText() &&
             database.pendingMutationDao().forResource(resourceHref).none { it.action == MutationAction.Delete }
 
     private fun RemoteTrashedObject.toTrashedItem(

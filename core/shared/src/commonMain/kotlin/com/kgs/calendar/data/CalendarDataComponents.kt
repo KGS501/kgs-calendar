@@ -22,6 +22,7 @@ import com.kgs.calendar.data.sync.AndroidProviderSyncEngine
 import com.kgs.calendar.data.sync.CalDavSyncEngine
 import com.kgs.calendar.data.sync.PendingMutationUploader
 import com.kgs.calendar.data.sync.ReadOnlyUrlSyncEngine
+import com.kgs.calendar.data.sync.RemoteReconciliationGuard
 import com.kgs.calendar.data.sync.RemoteSyncLock
 import com.kgs.calendar.data.sync.SyncConflictResolver
 import com.kgs.calendar.data.sync.SyncOrchestrator
@@ -65,7 +66,10 @@ class CalendarDataComponents(
 
     val repairs = SyncRepairs(database, localWrites, icalCodec)
     val uploader = PendingMutationUploader(database, credentialsStore, calDavClient, localWrites)
-    val calDavSyncEngine = CalDavSyncEngine(database, credentialsStore, calDavClient, icalCodec, localWrites, uploader, zoneId, sourceImages)
+    val calDavSyncEngine = CalDavSyncEngine(
+        database, credentialsStore, calDavClient, icalCodec, localWrites, uploader, zoneId, sourceImages,
+        RemoteReconciliationGuard(database, trashSnapshots),
+    )
     val readOnlyUrlSyncEngine = ReadOnlyUrlSyncEngine(database, localWrites, icalCodec, readOnlyHttpClient, sourceImages)
     val androidProviderSyncEngine = AndroidProviderSyncEngine(database, localWrites, androidCalendarProviderClient, androidWriteShield)
 

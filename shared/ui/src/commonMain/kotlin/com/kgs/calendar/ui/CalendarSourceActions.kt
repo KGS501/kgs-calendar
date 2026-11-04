@@ -3,6 +3,9 @@ package com.kgs.calendar.ui
 import com.kgs.calendar.ui.platform.PlatformUri
 import com.kgs.calendar.ui.res.formatAndroidString
 import com.kgs.calendar.ui.res.Res
+import com.kgs.calendar.data.export.CalendarExportConflictException
+import com.kgs.calendar.data.findCause
+import com.kgs.calendar.data.remote.CalDavOriginApprovalRequired
 import com.kgs.calendar.data.CalendarRepository
 import com.kgs.calendar.data.account.SourceImageKeys
 import com.kgs.calendar.data.settings.SettingsStore
@@ -17,6 +20,7 @@ import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.sync.StructuralMutationResult
 import com.kgs.calendar.ui.sources.DefaultLocalSourceName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -72,6 +76,7 @@ class CalendarSourceActions constructor(
         username: String,
         appPassword: String,
         onResult: ((Boolean, String?) -> Unit)? = null,
+        approvedOrigins: Set<String> = emptySet(),
     ) {
         scope.launch {
             busy.value = true
@@ -84,9 +89,15 @@ class CalendarSourceActions constructor(
                         busy.value = false
                         onResult?.invoke(true, acceptedMessage)
                     },
-                ) { repository.saveManualAccount(serverUrl, username, appPassword) }
+                ) { repository.saveManualAccount(serverUrl, username, appPassword, approvedOrigins) }
             }
             saved.onFailure {
+                it.findCause<CalDavOriginApprovalRequired>()?.let { request ->
+                    originApproval.value = request
+                    busy.value = false
+                    onResult?.invoke(false, null)
+                    return@launch
+                }
                 val errorMessage = it.message ?: "Could not verify this CalDAV login."
                 message.value = errorMessage
                 busy.value = false
@@ -106,8 +117,38 @@ class CalendarSourceActions constructor(
         runStructuralMutation(CalendarStructuralMutation.AddSource) {
             val login = repository.startLoginFlow(serverUrl)
             transient.externalLoginUrl.value = login.loginUrl
-            repository.completeLoginFlow(login.pollEndpoint, login.token)
+            try {
+                repository.completeLoginFlow(login.pollEndpoint, login.token)
+            } catch (request: CalDavOriginApprovalRequired) {
+                originApproval.value = request
+                throw request
+            }
         }
+    }
+
+    /** Set while adding an account waits for the user to review the origin its server named. */
+    val originApproval = MutableStateFlow<CalDavOriginApprovalRequired?>(null)
+
+    fun approveOrigin(request: CalDavOriginApprovalRequired) {
+        originApproval.value = null
+        manualLogin(request.serverUrl, request.username, request.appPassword, approvedOrigins = request.approved + request.origin)
+    }
+
+    fun declineOrigin() {
+        originApproval.value = null
+    }
+
+    fun approveAccountOrigin(accountId: String, origin: String) {
+        runBusy {
+            repository.approveAccountOrigin(accountId, origin)
+            repository.syncNow()
+        }
+    }
+
+    fun credentialsReadable(): Boolean = repository.credentialsReadable()
+
+    fun resetCredentials() {
+        runBusy { repository.resetUnreadableCredentials() }
     }
 
     fun addReadOnlyCalendar(url: String) {
@@ -292,10 +333,10 @@ class CalendarSourceActions constructor(
         }
     }
 
-    fun deleteAccount(accountId: String) {
+    fun deleteAccount(accountId: String, purgeRecentlyDeleted: Boolean = false) {
         runStructuralMutation(CalendarStructuralMutation.RemoveSource) {
             val accounts = repository.observeAccounts().first()
-            repository.deleteAccount(accountId)
+            repository.deleteAccount(accountId, purgeRecentlyDeleted)
             // The source's own group goes with it, unless other feeds of the same website remain.
             settingsStore.setAvatarColor(SourceImageKeys.account(accountId), null)
             val removed = accounts.firstOrNull { it.id == accountId } ?: return@runStructuralMutation
@@ -308,23 +349,47 @@ class CalendarSourceActions constructor(
         }
     }
 
-    /** Saves the account's calendars to [target] as an iCalendar file and reports how many items it holds. */
+    /** Saves the account's calendars to [target] as one iCalendar file and reports how many items it holds. */
     fun exportAccount(accountId: String, target: PlatformUri) {
+        exportCalendars(target) {
+            repository.observeCollections().first().filter { it.accountId == accountId }.map { it.href }
+        }
+    }
+
+    /** Saves one calendar to [target]; this also gets past what can't share a file with other calendars. */
+    fun exportCollection(href: String, target: PlatformUri) {
+        exportCalendars(target) { listOf(href) }
+    }
+
+    private fun exportCalendars(target: PlatformUri, collectionHrefs: suspend () -> List<String>) {
         scope.launch {
             busy.value = true
+            var calendars = 0
             runCatching {
-                val hrefs = repository.observeCollections().first().filter { it.accountId == accountId }.map { it.href }
+                val hrefs = collectionHrefs()
+                calendars = hrefs.size
                 calendarFileExporter.export(hrefs, target)
-            }.onSuccess { items ->
-                message.value = formatAndroidString(strings.get(Res.string.export_done), arrayOf(items))
-            }.onFailure {
-                message.value = strings.get(Res.string.export_failed)
+            }.onSuccess { result ->
+                val done = formatAndroidString(strings.get(Res.string.export_done), arrayOf(result.items))
+                val merged = formatAndroidString(strings.get(Res.string.export_merged_copies), arrayOf(result.mergedCopies))
+                message.value = if (result.mergedCopies > 0) "$done $merged" else done
+            }.onFailure { error ->
+                val conflict = error.findCause<CalendarExportConflictException>()
+                message.value = if (conflict != null) exportConflictMessage(conflict, calendars) else strings.get(Res.string.export_failed)
             }
             busy.value = false
         }
     }
 
-    /** Deletes the local calendar with all its events and tasks; it is not created again on start. */
+    private fun exportConflictMessage(conflict: CalendarExportConflictException, calendars: Int): String {
+        val reason = when (conflict.kind) {
+            CalendarExportConflictException.Kind.SharedUid -> strings.get(Res.string.export_conflict_shared_id)
+            CalendarExportConflictException.Kind.TimeZone ->
+                formatAndroidString(strings.get(Res.string.export_conflict_time_zone), arrayOf(conflict.name))
+        }
+        return if (calendars > 1) "$reason ${strings.get(Res.string.export_conflict_one_by_one)}" else reason
+    }
+
     fun deleteLocalCalendar() {
         runStructuralMutation(CalendarStructuralMutation.RemoveSource) {
             settingsStore.setLocalCalendarRemoved(true)

@@ -9,7 +9,9 @@ shared_tasks=(
 )
 android_tasks=(:app:assembleDebug :core:data:testDebugUnitTest :app:testDebugUnitTest)
 # No selector keeps the original full local verification command.
+# --release-only runs what only a shipped build goes through: R8, resource shrinking and lint.
 case "${1:-}" in
+  --release-only) tasks=(:app:assembleRelease :app:lintRelease); shift ;;
   --android-only) tasks=("${android_tasks[@]}"); shift ;;
   --shared-only) tasks=("${shared_tasks[@]}"); shift ;;
   *) tasks=("${shared_tasks[@]}" "${android_tasks[@]}") ;;

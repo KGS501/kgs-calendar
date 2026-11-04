@@ -9,7 +9,10 @@ import kotlin.io.encoding.Base64
  * when a redirect leaves the host.
  */
 interface HttpTransport {
-    /** Performs [request]. Throws [IOException] when no response arrives. */
+    /**
+     * Performs [request]. Throws [IOException] when no response arrives or its
+     * [HttpRequest.totalTimeoutMillis] runs out. Cancelling the caller aborts the exchange.
+     */
     suspend fun execute(request: HttpRequest): HttpResponse
 }
 
@@ -24,11 +27,16 @@ class HttpRequest(
     val contentType: String? = null,
     /** A larger body fails with [ResponseTooLargeException] before it is read completely. */
     val maxResponseBytes: Long = DEFAULT_MAX_RESPONSE_BYTES,
+    /** False hands every 3xx back to the caller, which then decides where the request may go next. */
+    val followRedirects: Boolean = true,
+    /** Budget for the whole exchange including redirects and the body; per-read timeouts don't bound a slow drip. */
+    val totalTimeoutMillis: Long = DEFAULT_TOTAL_TIMEOUT_MILLIS,
 ) {
     fun header(name: String): String? = headers.lastOrNull { it.first.equals(name, ignoreCase = true) }?.second
 
     companion object {
         const val DEFAULT_MAX_RESPONSE_BYTES = 64L * 1024 * 1024
+        const val DEFAULT_TOTAL_TIMEOUT_MILLIS = 180_000L
     }
 }
 
@@ -103,6 +111,8 @@ class HttpRequestBuilder {
     private var body: RequestBody? = null
     private val headers = mutableListOf<Pair<String, String>>()
     private var maxResponseBytes: Long = HttpRequest.DEFAULT_MAX_RESPONSE_BYTES
+    private var followRedirects: Boolean = true
+    private var totalTimeoutMillis: Long = HttpRequest.DEFAULT_TOTAL_TIMEOUT_MILLIS
 
     fun url(url: String) = apply { this.url = url }
     fun header(name: String, value: String) = apply {
@@ -121,6 +131,8 @@ class HttpRequestBuilder {
     fun post(body: RequestBody) = method("POST", body)
     fun delete(body: RequestBody? = null) = method("DELETE", body)
     fun maxResponseBytes(limit: Long) = apply { maxResponseBytes = limit }
+    fun followRedirects(follow: Boolean) = apply { followRedirects = follow }
+    fun totalTimeoutMillis(limit: Long) = apply { totalTimeoutMillis = limit }
 
     fun build(): HttpRequest = HttpRequest(
         method = method,
@@ -129,6 +141,8 @@ class HttpRequestBuilder {
         body = body?.bytes ?: if (method == "PUT" || method == "POST" || method == "PROPPATCH" || method == "REPORT") ByteArray(0) else null,
         contentType = body?.contentType?.toString(),
         maxResponseBytes = maxResponseBytes,
+        followRedirects = followRedirects,
+        totalTimeoutMillis = totalTimeoutMillis,
     )
 }
 

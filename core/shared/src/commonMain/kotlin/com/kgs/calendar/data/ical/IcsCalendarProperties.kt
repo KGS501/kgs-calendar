@@ -12,6 +12,9 @@ data class IcsCalendarProperties(
     val imageBytes: ByteArray?,
 ) {
     companion object {
+        /** The same limit a downloaded feed image has. */
+        private const val MAX_INLINE_IMAGE_BYTES = 2L * 1024 * 1024
+
         fun parse(rawIcs: String): IcsCalendarProperties {
             var name: String? = null
             var fallbackName: String? = null
@@ -36,7 +39,10 @@ data class IcsCalendarProperties(
                             "X-WR-CALNAME" -> fallbackName = fallbackName ?: value.unescapedText()
                             "IMAGE" -> if (imageUrl == null && imageBytes == null) {
                                 if (params["ENCODING"].equals("BASE64", ignoreCase = true) || params["VALUE"].equals("BINARY", ignoreCase = true)) {
-                                    imageBytes = runCatching { Base64.Mime.decode(value) }.getOrNull()
+                                    // Sized before decoding: four Base64 characters hold three bytes.
+                                    if (value.length / 4L * 3L <= MAX_INLINE_IMAGE_BYTES) {
+                                        imageBytes = runCatching { Base64.Mime.decode(value) }.getOrNull()
+                                    }
                                 } else {
                                     imageUrl = value.takeIf { it.startsWith("https://", true) || it.startsWith("http://", true) }
                                 }

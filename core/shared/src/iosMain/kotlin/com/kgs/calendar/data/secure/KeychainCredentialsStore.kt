@@ -1,5 +1,6 @@
 package com.kgs.calendar.data.secure
 
+import com.kgs.calendar.data.remote.DavOrigins
 import com.kgs.calendar.json.JSONObject
 import com.kgs.calendar.platform.toByteArray
 import com.kgs.calendar.platform.toNSData
@@ -50,6 +51,8 @@ class KeychainCredentialsStore(
             .put("server", credentials.serverUrl)
             .put("username", credentials.username)
             .put("appPassword", credentials.appPassword)
+            .put("approvedOrigins", credentials.origins.approved.joinToString(" "))
+            .put("davOrigin", credentials.origins.davOrigin.orEmpty())
             .toString()
         write(accountId, json.encodeToByteArray())
         val accounts = knownAccounts() + accountId
@@ -60,7 +63,15 @@ class KeychainCredentialsStore(
         val json = read(accountId)?.decodeToString() ?: return null
         return runCatching {
             val o = JSONObject(json)
-            StoredCredentials(o.getString("server"), o.getString("username"), o.getString("appPassword"))
+            StoredCredentials(
+                o.getString("server"),
+                o.getString("username"),
+                o.getString("appPassword"),
+                DavOrigins(
+                    approved = o.optString("approvedOrigins").split(' ').filter { it.isNotBlank() }.toSet(),
+                    davOrigin = o.optString("davOrigin").takeIf { it.isNotBlank() },
+                ),
+            )
         }.getOrNull()
     }
 

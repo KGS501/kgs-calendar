@@ -6,6 +6,7 @@ import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import com.kgs.calendar.MainActivity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
@@ -57,13 +58,16 @@ object ReminderIntents {
         )
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ReminderReceiver.ACTION_MARK_TASK_DONE
+            // Extras don't tell PendingIntents apart: without this, every notification's button
+            // would share one intent, holding the task of the latest notification.
+            data = actionIdentity("mark-done", occurrenceId.stableKey)
             putExtra(CalendarLaunchTarget.EXTRA_TARGET, target.encode())
             putExtra(ReminderReceiver.EXTRA_NOTIFICATION_TAG, notificationKey.tag)
             putExtra(ReminderReceiver.EXTRA_NOTIFICATION_ID, notificationKey.id)
         }
         return PendingIntent.getBroadcast(
             context,
-            notificationKey.id xor occurrenceId.stableKey.hashCode(),
+            occurrenceId.stableKey.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -79,6 +83,7 @@ object ReminderIntents {
     ): PendingIntent {
         val intent = reminderIntent(context, title, body, notificationKey, target.encode()).apply {
             action = ReminderReceiver.ACTION_SNOOZE
+            data = actionIdentity("snooze", notificationKey.tag)
         }
         return PendingIntent.getBroadcast(
             context,
@@ -87,6 +92,9 @@ object ReminderIntents {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
+
+    private fun actionIdentity(action: String, key: String): Uri =
+        Uri.Builder().scheme("kgs-reminder").authority(action).appendPath(key).build()
 
     fun snoozedRequestCode(notificationKey: ReminderNotificationKey): Int = "snoozed:${notificationKey.tag}".hashCode()
 

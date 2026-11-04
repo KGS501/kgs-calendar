@@ -7,14 +7,7 @@ data class IcsEvent(val event: EventEntity, val rawIcs: String)
 /** Splits a calendar by UID, keeping each series with its exceptions and time zones. */
 class IcsEventReader(private val codec: IcalCodec) {
     fun read(rawIcs: String, collectionHref: String = "", color: Int = 0): List<IcsEvent> {
-        val lines = mutableListOf<String>()
-        rawIcs.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n').lines().forEach { line ->
-            if ((line.startsWith(' ') || line.startsWith('\t')) && lines.isNotEmpty()) {
-                lines[lines.lastIndex] += line.drop(1)
-            } else if (line.isNotBlank()) {
-                lines += line
-            }
-        }
+        val lines = unfoldedLines(rawIcs.removePrefix("\uFEFF"))
         require(lines.firstOrNull().equals("BEGIN:VCALENDAR", true) && lines.lastOrNull().equals("END:VCALENDAR", true))
         val stack = mutableListOf("VCALENDAR")
         val properties = mutableListOf<String>()
@@ -72,7 +65,8 @@ class IcsEventReader(private val codec: IcalCodec) {
             // Validate every occurrence, rather than allowing the codec to skip a malformed exception.
             blocks.forEach { eventBlock ->
                 val parsed = codec.parse((listOf("BEGIN:VCALENDAR") + properties + timezones.flatten() + eventBlock + "END:VCALENDAR").joinToString("\r\n"), collectionHref, uid, color)?.event
-                require(parsed != null && parsed.endsAtMillis > parsed.startsAtMillis)
+                // Equal is fine: a timed event without DTEND or DURATION takes up no time.
+                require(parsed != null && parsed.endsAtMillis >= parsed.startsAtMillis)
                 eventBlock.mapNotNull(::tzidParameter).forEach { tzid ->
                     require(zones.resolve(tzid) != null) { "Unsupported time zone" }
                 }
@@ -115,5 +109,22 @@ class IcsEventReader(private val codec: IcalCodec) {
 
     companion object {
         const val MAX_EVENTS = 500
+
+        /** Non-blank logical lines; one builder per line keeps heavily folded input linear. */
+        internal fun unfoldedLines(rawIcs: String): List<String> {
+            val lines = mutableListOf<String>()
+            val current = StringBuilder()
+            rawIcs.replace("\r\n", "\n").replace('\r', '\n').lineSequence().forEach { line ->
+                if ((line.startsWith(' ') || line.startsWith('\t')) && current.isNotEmpty()) {
+                    current.append(line, 1, line.length)
+                } else if (line.isNotBlank()) {
+                    if (current.isNotEmpty()) lines += current.toString()
+                    current.setLength(0)
+                    current.append(line)
+                }
+            }
+            if (current.isNotEmpty()) lines += current.toString()
+            return lines
+        }
     }
 }

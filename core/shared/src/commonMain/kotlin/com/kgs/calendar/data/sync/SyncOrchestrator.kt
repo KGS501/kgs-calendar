@@ -7,6 +7,9 @@ import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
 import com.kgs.calendar.data.describeSyncError
 import com.kgs.calendar.data.local.KgsDatabase
 import com.kgs.calendar.data.trash.TrashBin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
 import com.kgs.calendar.domain.model.SourceType
 import com.kgs.calendar.domain.model.SyncState
@@ -27,6 +30,7 @@ class SyncOrchestrator(
      * the window would otherwise read and store everything; empty runs them where they are called.
      */
     private val syncContext: CoroutineContext = EmptyCoroutineContext,
+    private val accountBudgetMillis: Long = DEFAULT_ACCOUNT_BUDGET_MILLIS,
 ) {
     suspend fun syncNow(
         includeDisabledProviderCalendars: Boolean = false,
@@ -47,10 +51,21 @@ class SyncOrchestrator(
             try {
                 if (account.id == LOCAL_ACCOUNT_ID) return@forEach
                 val engine = engines.firstOrNull { it.handles(account) } ?: return@forEach
-                if (engine.sync(account, options)) {
-                    // The server trash bin is extra: failing to read it does not fail the sync.
-                    if (account.sourceType == SourceType.CalDav) trash?.refreshAccountLocked(account.id)
+                // Cancellation reaches the HTTP calls, so a slow server gives way to the next account.
+                // The budget is for real I/O, so it runs on a dispatcher that keeps real time.
+                withContext(Dispatchers.Default) {
+                    withTimeout(accountBudgetMillis) {
+                        if (engine.sync(account, options)) {
+                            // The server trash bin is extra: failing to read it does not fail the sync.
+                            if (account.sourceType == SourceType.CalDav) trash?.refreshAccountLocked(account.id)
+                        }
+                    }
                 }
+            } catch (timeout: TimeoutCancellationException) {
+                val syncError = "Sync took too long and was stopped. It continues with the next sync."
+                database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
+                val failure = IllegalStateException(syncError, timeout)
+                if (firstError == null) firstError = failure else firstError!!.addSuppressed(failure)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -84,7 +99,10 @@ class SyncOrchestrator(
     private suspend fun <T> onSyncContext(block: suspend () -> T): T =
         if (syncContext == EmptyCoroutineContext) block() else withContext(syncContext) { block() }
 
-    private companion object {
-        const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L
+    companion object {
+        private const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L
+
+        /** Each account's share of a sync. It holds the lock that uploads and other accounts wait for. */
+        const val DEFAULT_ACCOUNT_BUDGET_MILLIS = 10L * 60L * 1000L
     }
 }

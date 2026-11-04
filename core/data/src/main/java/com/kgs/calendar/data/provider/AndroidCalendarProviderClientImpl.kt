@@ -5,6 +5,7 @@ import kotlinx.datetime.*
 import com.kgs.calendar.domain.time.orDeviceZone
 import android.Manifest
 import android.content.ContentResolver
+import android.content.ContentProviderOperation
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
@@ -200,13 +201,27 @@ class AndroidCalendarProviderClientImpl(
         }
     }
 
+    /**
+     * The event and its reminders go in as one batch, so a refused reminder can't leave half an
+     * event behind that a retry would then duplicate.
+     */
     override suspend fun insertEvent(calendarId: Long, event: EventEntity): Long = withContext(Dispatchers.IO) {
         requirePermissions()
-        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, event.toContentValues(calendarId, previous = null))
+        val operations = arrayListOf(
+            ContentProviderOperation.newInsert(CalendarContract.Events.CONTENT_URI)
+                .withValues(event.toContentValues(calendarId, previous = null))
+                .build(),
+        )
+        event.remindersCsv.toMinutes().distinct().sorted().forEach { minute ->
+            operations += ContentProviderOperation.newInsert(CalendarContract.Reminders.CONTENT_URI)
+                .withValueBackReference(CalendarContract.Reminders.EVENT_ID, 0)
+                .withValue(CalendarContract.Reminders.MINUTES, minute)
+                .withValue(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT)
+                .build()
+        }
+        val eventUri = resolver.applyBatch(CalendarContract.AUTHORITY, operations).first().uri
             ?: error("Android calendar provider did not return an event URI.")
-        val eventId = ContentUris.parseId(uri)
-        replaceReminders(eventId, event.remindersCsv.toMinutes())
-        eventId
+        ContentUris.parseId(eventUri)
     }
 
     /**
@@ -217,9 +232,16 @@ class AndroidCalendarProviderClientImpl(
     override suspend fun updateEvent(eventId: Long, calendarId: Long, event: EventEntity, previous: EventEntity?): Unit = withContext(Dispatchers.IO) {
         requirePermissions()
         val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
-        val updated = resolver.update(uri, event.toContentValues(calendarId, previous), null, null)
-        if (updated <= 0) error("Android event $eventId could not be updated.")
-        replaceReminders(eventId, event.remindersCsv.toMinutes())
+        // In one batch: a failure leaves both the old details and the old reminders in place.
+        val operations = arrayListOf(
+            ContentProviderOperation.newUpdate(uri)
+                .withValues(event.toContentValues(calendarId, previous))
+                .withExpectedCount(1)
+                .build(),
+        )
+        operations += reminderChanges(eventId, event.remindersCsv.toMinutes())
+        resolver.applyBatch(CalendarContract.AUTHORITY, operations)
+        Unit
     }
 
     override suspend fun deleteEvent(eventId: Long): Unit = withContext(Dispatchers.IO) {
@@ -334,7 +356,8 @@ class AndroidCalendarProviderClientImpl(
      * Makes the event's reminders match [minutes]. Rows that stay are left as they are, which keeps
      * their method (e-mail, alarm, ...), and rows with the provider's default offset are kept.
      */
-    private fun replaceReminders(eventId: Long, minutes: List<Int>) {
+    /** The operations that turn the event's reminders into [minutes]; rows it doesn't own stay. */
+    private fun reminderChanges(eventId: Long, minutes: List<Int>): List<ContentProviderOperation> {
         val wanted = minutes.distinct().sorted()
         val existing = mutableListOf<Pair<Long, Int>>()
         resolver.query(
@@ -347,20 +370,18 @@ class AndroidCalendarProviderClientImpl(
             while (cursor.moveToNext()) existing += cursor.getLong(0) to cursor.getInt(1)
         }
         val kept = mutableSetOf<Int>()
-        existing.forEach { (id, minute) ->
-            if (minute < 0) return@forEach
-            if (minute in wanted && kept.add(minute)) return@forEach
-            resolver.delete(ContentUris.withAppendedId(CalendarContract.Reminders.CONTENT_URI, id), null, null)
+        val removals = existing.mapNotNull { (id, minute) ->
+            if (minute < 0 || (minute in wanted && kept.add(minute))) return@mapNotNull null
+            ContentProviderOperation.newDelete(ContentUris.withAppendedId(CalendarContract.Reminders.CONTENT_URI, id)).build()
         }
-        wanted.filterNot { it in kept }.forEach { minute ->
-            val values = ContentValues().apply {
-                put(CalendarContract.Reminders.EVENT_ID, eventId)
-                put(CalendarContract.Reminders.MINUTES, minute)
-                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT)
-            }
-            resolver.insert(CalendarContract.Reminders.CONTENT_URI, values)
-                ?: error("Android calendar provider did not accept the reminder.")
+        val additions = wanted.filterNot { it in kept }.map { minute ->
+            ContentProviderOperation.newInsert(CalendarContract.Reminders.CONTENT_URI)
+                .withValue(CalendarContract.Reminders.EVENT_ID, eventId)
+                .withValue(CalendarContract.Reminders.MINUTES, minute)
+                .withValue(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT)
+                .build()
         }
+        return removals + additions
     }
 
     private fun requirePermissions() {

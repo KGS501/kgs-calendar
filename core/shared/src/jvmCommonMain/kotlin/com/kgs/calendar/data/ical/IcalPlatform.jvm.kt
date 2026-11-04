@@ -41,7 +41,21 @@ internal actual object IcalPlatform {
             ?.toString()
     }.getOrNull()
 
+    /**
+     * Not ical4j's Recur.getDates: that materializes the whole set up front, and its walk from DTSTART
+     * has no limit. [CommonIcal]'s expander has one, and CommonIcalVsIcal4jTest keeps the two in step.
+     */
     actual fun recurrenceStarts(
+        rule: String,
+        allDay: Boolean,
+        seedMillis: Long,
+        zone: ZoneId,
+        searchStartMillis: Long,
+        rangeEndMillis: Long,
+    ): List<Long>? = CommonIcal.recurrenceStarts(rule, allDay, seedMillis, zone, searchStartMillis, rangeEndMillis)
+
+    /** ical4j's answer for the same question; only safe with trusted rules, as in tests. */
+    internal fun ical4jRecurrenceStarts(
         rule: String,
         allDay: Boolean,
         seedMillis: Long,

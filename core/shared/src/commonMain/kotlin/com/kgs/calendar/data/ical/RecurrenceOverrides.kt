@@ -21,6 +21,8 @@ data class EventRecurrenceOverride(
     val organizerJson: String?,
     val attendeesJson: String?,
     val timezoneId: String?,
+    /** RECURRENCE-ID;RANGE=THISANDFUTURE: the change also applies to every later occurrence. */
+    val thisAndFuture: Boolean = false,
 ) {
     fun matchesOccurrence(event: EventEntity): Boolean =
         startsAtMillis == event.startsAtMillis &&
@@ -56,8 +58,9 @@ data class EventRecurrenceOverride(
     )
 
     companion object {
-        fun fromEvent(recurrenceIdMillis: Long, event: EventEntity): EventRecurrenceOverride =
+        fun fromEvent(recurrenceIdMillis: Long, event: EventEntity, thisAndFuture: Boolean = false): EventRecurrenceOverride =
             EventRecurrenceOverride(
+                thisAndFuture = thisAndFuture,
                 recurrenceIdMillis = recurrenceIdMillis,
                 startsAtMillis = event.startsAtMillis,
                 endsAtMillis = event.endsAtMillis,
@@ -95,6 +98,8 @@ data class TaskRecurrenceOverride(
     val percentComplete: Int?,
     val remindersCsv: String?,
     val timezoneId: String?,
+    /** RECURRENCE-ID;RANGE=THISANDFUTURE: the change also applies to every later occurrence. */
+    val thisAndFuture: Boolean = false,
 ) {
     fun matchesOccurrence(task: TaskEntity): Boolean =
         title == task.title &&
@@ -134,8 +139,9 @@ data class TaskRecurrenceOverride(
     )
 
     companion object {
-        fun fromTask(recurrenceIdMillis: Long, task: TaskEntity): TaskRecurrenceOverride =
+        fun fromTask(recurrenceIdMillis: Long, task: TaskEntity, thisAndFuture: Boolean = false): TaskRecurrenceOverride =
             TaskRecurrenceOverride(
+                thisAndFuture = thisAndFuture,
                 recurrenceIdMillis = recurrenceIdMillis,
                 title = task.title,
                 notes = task.notes,
@@ -186,6 +192,7 @@ object RecurrenceOverrideCodec {
                             organizerJson = obj.nullableString("organizerJson"),
                             attendeesJson = obj.nullableString("attendeesJson"),
                             timezoneId = obj.nullableString("timezoneId"),
+                            thisAndFuture = obj.optBoolean("thisAndFuture"),
                         ),
                     )
                 }
@@ -213,7 +220,8 @@ object RecurrenceOverrideCodec {
                     .putNullable("categories", override.categories)
                     .putNullable("organizerJson", override.organizerJson)
                     .putNullable("attendeesJson", override.attendeesJson)
-                    .putNullable("timezoneId", override.timezoneId),
+                    .putNullable("timezoneId", override.timezoneId)
+                    .apply { if (override.thisAndFuture) put("thisAndFuture", true) },
             )
         }
         return array.toString()
@@ -254,6 +262,7 @@ object RecurrenceOverrideCodec {
                             percentComplete = obj.nullableInt("percentComplete"),
                             remindersCsv = obj.nullableString("remindersCsv"),
                             timezoneId = obj.nullableString("timezoneId"),
+                            thisAndFuture = obj.optBoolean("thisAndFuture"),
                         ),
                     )
                 }
@@ -283,7 +292,8 @@ object RecurrenceOverrideCodec {
                     .putNullable("priority", override.priority)
                     .putNullable("percentComplete", override.percentComplete)
                     .putNullable("remindersCsv", override.remindersCsv)
-                    .putNullable("timezoneId", override.timezoneId),
+                    .putNullable("timezoneId", override.timezoneId)
+                    .apply { if (override.thisAndFuture) put("thisAndFuture", true) },
             )
         }
         return array.toString()

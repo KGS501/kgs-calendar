@@ -160,7 +160,7 @@ class AppGraph(context: Context) {
             val output = appContext.contentResolver.openOutputStream(android.net.Uri.parse(target.value), "wt") ?: error("The file can't be written.")
             output.use { it.write(result.rawIcs.toByteArray(Charsets.UTF_8)) }
         }
-        result.items
+        result
     }
 
     val pickedContentReader = PickedContentReader { uri ->
