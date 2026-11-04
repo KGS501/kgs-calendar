@@ -4,6 +4,7 @@
     <string name="sync_interval_help_ios">Your changes upload right away. iOS decides when background refresh runs, so the interval is the shortest gap between syncs. iPhone calendars sync through their own accounts.</string>
     <string name="privacy_sync_body_ios">If you add a CalDAV/Nextcloud account, an ICS URL, or iPhone calendars, the app uses the configured server, URL, or the iPhone's calendar data so syncing can work. KGS Calendar has no ads, analytics SDKs, tracking SDKs, or developer-operated backend.</string>
     <string name="privacy_storage_body_ios">KGS Calendar stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on this device. CalDAV passwords and app passwords are stored in the iOS Keychain for this device only, so they are not moved to another device by a backup.</string>
+    <string name="privacy_delete_body_ios">Removing a calendar source deletes its local credentials and cached data but leaves server calendars unchanged. The separate “Delete server calendar” action permanently deletes that calendar from its CalDAV server. Uninstalling the app deletes local app data from this device, but iOS can keep saved passwords in the Keychain. To delete a password too, remove the calendar source before you uninstall.</string>
     <string name="device_calendars_ios">iPhone calendars</string>
 
     <!-- The Windows app: tray, keyboard shortcuts, year view, Good to know. -->

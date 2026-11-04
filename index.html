@@ -15,30 +15,58 @@
 <body>
 <main>
   <h1>KGS Calendar Privacy Policy</h1>
-  <p class="updated">Last updated: July 7, 2026</p>
+  <p class="updated">Last updated: November 4, 2026</p>
 
   <h2>Overview</h2>
-  <p>KGS Calendar is a calendar and task app. It has no ads, analytics SDKs, tracking SDKs, or developer-operated backend service.</p>
+  <p>KGS Calendar is a calendar and task app for Android, iPhone, iPad, and Windows. It has no ads, analytics SDKs, tracking SDKs, or developer-operated backend service, and it does not create a KGS Calendar account. The developer does not receive your calendars, tasks, or credentials, does not sell data, and does not track you across apps or websites.</p>
 
   <h2>Data Stored On Your Device</h2>
-  <p>The app stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on your device. CalDAV passwords and app passwords are stored with Android encrypted preferences and are excluded from Android app backup.</p>
+  <p>The app stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on your device. This data stays there until you change or remove it. CalDAV passwords and app passwords are stored separately:</p>
+  <ul>
+    <li><strong>Android:</strong> in Android encrypted preferences, excluded from Android app backup.</li>
+    <li><strong>iPhone and iPad:</strong> in the iOS Keychain, for this device only.</li>
+    <li><strong>Windows:</strong> encrypted with Windows data protection for the signed-in user.</li>
+  </ul>
 
-  <h2>Android Calendar Access</h2>
-  <p>If you choose to connect Android device calendars and grant calendar permission, the app reads and writes calendar data through the Android Calendar Provider so those calendars can be shown and updated in KGS Calendar. If you do not grant calendar permission or do not add device calendars, this access is not used.</p>
+  <h2>Device Calendars</h2>
+  <p>Device calendars are optional. If you do not grant calendar permission or do not add device calendars, this access is not used.</p>
+  <p><strong>Android:</strong> If you choose to connect Android device calendars and grant calendar permission, the app reads and writes calendar data through the Android Calendar Provider so those calendars can be shown and updated in KGS Calendar.</p>
+  <p><strong>iPhone and iPad:</strong> If you add iPhone calendars and grant access, the app reads the list of calendars on your device and reads and writes the events of the calendars you keep enabled, so they can be shown and updated in KGS Calendar. iOS grants this access to all calendars at once, including those of accounts such as iCloud, Google, or Exchange. The app does not access Apple Reminders.</p>
+  <p>On both systems the app keeps a local copy of these events on your device. Changes you make to them are saved to the device's calendars, and the system then syncs them to the provider of that account.</p>
+
+  <h2>Reminders And Notifications</h2>
+  <p>Notifications are optional. Reminders are created on your device, and no push service is used. On iPhone and iPad, the app gives iOS the title and details of your upcoming reminders so it can show them at the right time, and you can snooze a reminder or mark a task as done from the notification. Reminder notifications can show event and task details on your screen, depending on your system's notification settings. On Windows, reminders appear while the app is running.</p>
 
   <h2>Sync, Accounts, And Subscriptions</h2>
-  <p>If you add a CalDAV or Nextcloud account, the app sends calendar data, task data, server URLs, usernames, and credentials only to the server you configure so syncing can work. If you add a read-only ICS or CalDAV subscription URL, the app requests data from that URL and stores a local cached copy for display. The app does not create a KGS Calendar account.</p>
+  <p>If you add a CalDAV or Nextcloud account, the app sends calendar data, task data, server URLs, usernames, and credentials only to the server you configure, or to another address of that server that you approve, so syncing can work. If you add a read-only ICS or CalDAV subscription URL, the app requests data from that URL and stores a local cached copy for display. Sync can also run in the background, as far as your device allows it. The operator of a server or URL you add handles your data under their own terms and privacy policy.</p>
+  <p>Addresses that start with http:// or webcal:// are not encrypted, so your password and calendar data can be read by others on the network. The app warns you when you enter an account server address like this. Use https:// unless the server is only reachable on a network you trust.</p>
+
+  <h2>Sharing And Importing</h2>
+  <p>If you share text or a link to KGS Calendar from another app, the app reads only the shared text and opens the event editor with it. If you open or import a calendar file, the app reads that file. Nothing is saved until you save the event or finish the import, and items you save to a server calendar are sent to that server when it syncs.</p>
 
   <h2>Location Search And Maps</h2>
-  <p>Location search is optional. When you press Search in the location picker, the search query is sent to OpenStreetMap Nominatim. If you choose nearby results, approximate device location is used to bias that search.</p>
+  <p>Location search is optional. When you press Search in the location picker, the search query and your app language and region are sent to OpenStreetMap Nominatim. If you choose nearby results and grant location permission, approximate device location is used to bias that search. The app does not save your location or use it in the background. Nearby results are not available on Windows.</p>
   <p>Map previews are loaded from OpenStreetMap after you choose to show a preview. If you enable automatic map previews, the app may load OpenStreetMap data automatically for event and task locations that look like real places.</p>
-  <p>OpenStreetMap data is &copy; OpenStreetMap contributors.</p>
+  <p>If you choose to open a location in a map, the place is passed to Apple Maps on iPhone and iPad, and to a map app or openstreetmap.org on other devices.</p>
+  <p>Like any website you connect to, these services can see your IP address when they answer a request. OpenStreetMap services are run by the OpenStreetMap Foundation, whose <a href="https://osmfoundation.org/wiki/Privacy_Policy">privacy policy</a> applies to them. OpenStreetMap data is &copy; OpenStreetMap contributors.</p>
+
+  <h2>App Stores And External Links</h2>
+  <p>Apple and Google handle app downloads under their own privacy policies. If you agreed to share diagnostics with app developers, they may give the developer crash reports and usage statistics. If you join a TestFlight beta, Apple shares your tester details and any feedback you send with the developer.</p>
+  <p>Links in the app, such as bug reports, source code, and sponsorship, open in your browser. Those websites have their own privacy policies.</p>
 
   <h2>Backups</h2>
-  <p>Android app backup may include app data according to the device and Android backup settings. The app excludes its encrypted credential preferences from Android cloud backup and device-to-device transfer backup.</p>
+  <p><strong>Android:</strong> Android app backup may include app data according to the device and Android backup settings. The app excludes its encrypted credential preferences from Android cloud backup and device-to-device transfer backup.</p>
+  <p><strong>iPhone and iPad:</strong> iCloud and computer backups may include app data according to your device settings. Passwords in the iOS Keychain are not moved to another device by a backup, so you need to enter them again there.</p>
+  <p><strong>Windows:</strong> The app makes no backups of its own. Its data folder is part of any backup you set up for your Windows user.</p>
 
   <h2>Deleting Local Data</h2>
-  <p>You can remove a calendar source in Settings to delete its local credentials and locally stored cached data for that source. Items you deleted from that source stay in Recently deleted on the device for up to 30 days unless you choose to remove them too while removing the source, or empty Recently deleted; copies in backups or exports you made earlier are not affected. Server calendars stay unchanged unless you explicitly use the separate delete-server-calendar action. Uninstalling the app deletes local app data from the device.</p>
+  <p>You can remove a calendar source in Settings to delete its local credentials and locally stored cached data for that source. Items you deleted from that source stay in Recently deleted on the device for up to 30 days unless you choose to remove them too while removing the source, or empty Recently deleted; copies in backups or exports you made earlier are not affected. Server calendars and your device's own calendars stay unchanged unless you explicitly use the separate delete-server-calendar action.</p>
+  <p><strong>Android:</strong> Uninstalling the app deletes local app data from the device.</p>
+  <p><strong>iPhone and iPad:</strong> Uninstalling the app deletes local app data from the device, but iOS can keep Keychain items after an uninstall. To delete a saved password too, remove the calendar source in Settings before you uninstall the app.</p>
+  <p><strong>Windows:</strong> Uninstalling the app does not delete your data. To delete it, remove the folder %LOCALAPPDATA%\KGS501\KGS Calendar yourself.</p>
+
+  <h2>Your Choices</h2>
+  <p>You can turn off calendar, location, and notification access at any time in your device's settings. The app keeps working without them, except for the features that need that access. Because the developer does not receive your data, there is nothing the developer can access or delete for you. To access or delete data on a server you added, contact the operator of that server.</p>
 
   <h2>Contact</h2>
   <p>kgs501@gmx.de</p>

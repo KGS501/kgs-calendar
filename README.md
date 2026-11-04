@@ -209,7 +209,7 @@ Locally, `bash tools/verify-port.sh` still runs all Linux checks; `--android-onl
 
 ## Privacy
 
-The public privacy policy is available in [index.html](index.html). It describes local device storage, Android calendar access, CalDAV/Nextcloud sync, read-only subscriptions, optional OpenStreetMap location features, encrypted credential storage, backup exclusions, deletion behavior, and contact information.
+The public privacy policy is available in [index.html](index.html). It covers the Android, iOS and Windows apps: local device storage, device calendar access, local notifications, CalDAV/Nextcloud sync, read-only subscriptions, sharing and imports, optional OpenStreetMap location features, credential storage, backups, deletion behavior, and contact information.
 
 ## License
 
