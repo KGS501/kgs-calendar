@@ -20,9 +20,10 @@
     </plurals>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
     <string name="desktop_year">Year</string>
+    <string name="location_search_privacy_notice_windows">Location search is optional. Searches are sent to OpenStreetMap Nominatim only when you press Enter.</string>
     <string name="privacy_storage_body_windows">KGS Calendar stores events, tasks, reminders, settings, source names, server URLs, usernames, and cached calendar data on this PC. CalDAV passwords and app passwords are encrypted with Windows data protection for your Windows user.</string>
     <string name="privacy_sync_body_windows">If you add a CalDAV/Nextcloud account or an ICS URL, the app uses the configured server or URL so syncing can work. KGS Calendar has no ads, analytics SDKs, tracking SDKs, or developer-operated backend.</string>
-    <string name="privacy_location_body_windows">Location search is optional. When you press Search, the query is sent to OpenStreetMap Nominatim. The Windows app doesn\'t use your location. Map previews are loaded from OpenStreetMap only after you choose to show a preview, unless automatic previews are enabled below.</string>
+    <string name="privacy_location_body_windows">Location search is optional. When you press Search, the query is sent to OpenStreetMap Nominatim. The Windows app doesn\'t use your location. Map previews are loaded from OpenStreetMap only after you choose to show a preview, unless automatic previews are turned on under General.</string>
     <string name="privacy_delete_body_windows">Removing a calendar source deletes its local credentials and cached data but leaves server calendars unchanged. The separate “Delete server calendar” action permanently deletes that calendar from its CalDAV server. Uninstalling the app does not delete your data. To delete it, remove the folder %LOCALAPPDATA%\\KGS501\\KGS Calendar yourself.</string>
     <string name="desktop_open_at_login">Open when Windows starts</string>
     <string name="desktop_open_at_login_help">KGS Calendar opens when you sign in to Windows. You can also change this in Windows Settings under Apps &gt; Startup.</string>

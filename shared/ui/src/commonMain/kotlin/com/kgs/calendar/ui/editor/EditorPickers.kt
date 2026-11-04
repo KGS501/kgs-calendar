@@ -285,7 +285,7 @@ fun LocationPickerPage(
                 )
             }
             if (!LocalProMode.current) Text(
-                stringResource(Res.string.location_search_privacy_notice),
+                stringResource(if (PlatformFeatures.isWindows) Res.string.location_search_privacy_notice_windows else Res.string.location_search_privacy_notice),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 lineHeight = 15.sp,
