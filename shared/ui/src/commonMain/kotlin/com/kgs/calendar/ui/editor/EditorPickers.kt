@@ -89,6 +89,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import com.kgs.calendar.ui.platform.LocalPlatformContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import com.kgs.calendar.ui.platform.PlatformFeatures
 import com.kgs.calendar.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -230,7 +231,7 @@ fun LocationPickerPage(
             modifier = Modifier.padding(horizontal = EditorHorizontalPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (locationAnchor == null && !context.hasLocationPermission()) {
+            if (locationAnchor == null && !context.hasLocationPermission() && !PlatformFeatures.isWindows) {
                 FilledTonalButton(
                     onClick = { locationPermissionLauncher() },
                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = editorSectionColor(), contentColor = WarmBrown),
