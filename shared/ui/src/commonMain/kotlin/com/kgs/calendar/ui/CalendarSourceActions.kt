@@ -356,6 +356,10 @@ class CalendarSourceActions constructor(
         }
     }
 
+    fun linkCopied() {
+        message.value = strings.get(Res.string.share_public_link_copied)
+    }
+
     /** Saves one calendar to [target]; this also gets past what can't share a file with other calendars. */
     fun exportCollection(href: String, target: PlatformUri) {
         exportCalendars(target) { listOf(href) }

@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import com.kgs.calendar.ui.platform.LocalPlatformContext
+import com.kgs.calendar.ui.platform.shareText
 import com.kgs.calendar.ui.res.KgsDrawables
 import com.kgs.calendar.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -313,6 +315,7 @@ fun CollectionSettingsHost(
     state: CalendarUiState,
     shell: CalendarShellUiState,
 ) {
+    val platformContext = LocalPlatformContext.current
     shell.editingCollection?.let { collection ->
         var pickingGroup by remember(collection.href) { mutableStateOf(false) }
         KgsModalBottomSheet(
@@ -358,6 +361,7 @@ fun CollectionSettingsHost(
                 groupName = state.calendarGroups.groupOf(collection)?.displayName(),
                 onChooseGroup = { pickingGroup = true },
                 onExport = { target -> viewModel.sources.exportCollection(collection.href, target) },
+                onShareLink = { url -> if (platformContext.shareText(url)) viewModel.sources.linkCopied() },
                 onClose = shell::closeCollectionEditor,
             )
         }

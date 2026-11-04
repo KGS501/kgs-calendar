@@ -112,6 +112,7 @@ class CalDavHttpClient(
                     resourceTypes = response.resourceTypes,
                     maxResourceSize = response.maxResourceSize,
                     maxAttendeesPerInstance = response.maxAttendeesPerInstance,
+                    publicUrl = response.publishUrl?.let { publicCalendarUrl(resolveUrl(discovery.calendarHomeUrl, it)) },
                 )
                 RemoteCollection(
                     href = stableHref(discovery.calendarHomeUrl, response.href, serverUrl, homeOrigins),
@@ -792,6 +793,7 @@ class CalDavHttpClient(
                 resourceTypes = response.resourceTypeNames(),
                 maxResourceSize = response.firstText("max-resource-size")?.toLongOrNull(),
                 maxAttendeesPerInstance = response.firstText("max-attendees-per-instance")?.toIntOrNull(),
+                publishUrl = response.firstHrefInside("publish-url"),
                 statusCodes = response.statusCodes(),
                 responseStatus = response.directElementChildren().firstOrNull { it.localName == "status" }
                     ?.textContent?.trim()?.split(Regex("\\s+"))?.getOrNull(1)?.toIntOrNull(),
@@ -956,6 +958,7 @@ class CalDavHttpClient(
         val resourceTypes: Set<String> = emptySet(),
         val maxResourceSize: Long? = null,
         val maxAttendeesPerInstance: Int? = null,
+        val publishUrl: String? = null,
         val statusCodes: Set<Int> = emptySet(),
         val responseStatus: Int? = null,
         val deletedAt: String? = null,
@@ -1017,6 +1020,7 @@ class CalDavHttpClient(
                 <cal:supported-calendar-component-set />
                 <cal:max-resource-size />
                 <cal:max-attendees-per-instance />
+                <cs:publish-url />
                 <a:calendar-color />
               </d:prop>
             </d:propfind>
@@ -1099,6 +1103,18 @@ internal fun parseDavTimestampMillis(value: String): Long? {
         ?: runCatching { kotlin.time.Instant.parse(text).toEpochMilli() }.getOrNull()
         ?: parseRfc1123Millis(text)
         ?: text.toLongOrNull()?.let { if (it < 100_000_000_000L) it * 1000 else it }
+}
+
+/**
+ * The link to hand out for a published calendar. Nextcloud reports its DAV address, while people get
+ * the calendar app's public page, which its own "Copy public link" builds from the same token.
+ */
+private fun publicCalendarUrl(publishUrl: String): String {
+    val marker = "/remote.php/dav/public-calendars/"
+    val cut = publishUrl.indexOf(marker)
+    if (cut < 0) return publishUrl
+    val token = publishUrl.substring(cut + marker.length).substringBefore('?').trimEnd('/')
+    return if (token.isEmpty()) publishUrl else publishUrl.substring(0, cut) + "/apps/calendar/p/" + token
 }
 
 private fun String?.isLikelyReadOnlyCalendarName(): Boolean? {

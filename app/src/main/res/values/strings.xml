@@ -813,6 +813,9 @@
     <string name="sync_attention_channel_description">Sources that stopped syncing and need you to do something.</string>
     <string name="origin_approval_notification_title">%1$s stopped syncing</string>
     <string name="origin_approval_notification_body">Its server wants to use %1$s. Open this source in Settings to review it.</string>
+    <string name="share_public_link">Share public link</string>
+    <string name="share_public_link_footer">Anyone with this link can see this calendar, without signing in.</string>
+    <string name="share_public_link_copied">Link copied.</string>
     <string name="export_done">Saved %d items to the file.</string>
     <string name="export_failed">The calendar could not be exported.</string>
     <plurals name="remove_source_unsent_changes">

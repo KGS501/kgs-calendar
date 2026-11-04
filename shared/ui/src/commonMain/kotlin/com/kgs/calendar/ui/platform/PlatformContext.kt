@@ -20,6 +20,9 @@ data class PlatformUri(val value: String)
 
 expect fun PlatformContext.openUrl(url: String)
 
+/** Hands [text] to the system's share sheet, or copies it where there is none. Returns true when it was copied. */
+expect fun PlatformContext.shareText(text: String): Boolean
+
 expect fun PlatformContext.openMapLocation(suggestion: LocationSuggestion)
 
 /** Opens the maps app on a search for [query] (already cleaned of calendar markup). */
