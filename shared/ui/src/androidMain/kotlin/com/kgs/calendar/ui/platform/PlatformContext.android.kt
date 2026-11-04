@@ -45,6 +45,12 @@ actual fun PlatformContext.openUrl(url: String) {
     startViewing(url)
 }
 
+actual fun PlatformContext.shareText(text: String): Boolean {
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    startActivity(Intent.createChooser(send, null))
+    return false
+}
+
 actual fun PlatformContext.openMapLocation(suggestion: LocationSuggestion) {
     val latLng = "${suggestion.latitude},${suggestion.longitude}"
     val encodedLabel = Uri.encode(suggestion.primaryName.ifBlank { suggestion.displayName })

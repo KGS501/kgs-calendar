@@ -38,6 +38,8 @@ data class CalDavCollectionCapabilities(
     val resourceTypes: Set<String> = emptySet(),
     val maxResourceSize: Long? = null,
     val maxAttendeesPerInstance: Int? = null,
+    /** The read-only address the server publishes this calendar at, if it is published. */
+    val publicUrl: String? = null,
 ) {
     private fun hasPrivilege(name: String): Boolean =
         privileges.any { it.equals(name, ignoreCase = true) }
@@ -91,6 +93,7 @@ data class CalDavCollectionCapabilities(
         .put("supportsCalendarMultiget", supportsCalendarMultiget)
         .put("supportsCalendarQuery", supportsCalendarQuery)
         .put("isScheduleInbox", isScheduleInbox)
+        .put("publicUrl", publicUrl)
         .toString()
 }
 

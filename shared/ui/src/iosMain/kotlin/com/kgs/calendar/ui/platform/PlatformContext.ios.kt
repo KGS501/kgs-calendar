@@ -37,7 +37,9 @@ import platform.PhotosUI.PHPickerFilter
 import platform.PhotosUI.PHPickerResult
 import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
+import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
+import platform.UIKit.popoverPresentationController
 import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
@@ -57,6 +59,15 @@ private fun open(url: String) {
 }
 
 actual fun PlatformContext.openUrl(url: String) = open(url)
+
+actual fun PlatformContext.shareText(text: String): Boolean {
+    val presenter = topViewController() ?: return false
+    val sheet = UIActivityViewController(activityItems = listOf(text), applicationActivities = null)
+    // An iPad shows this as a popover, which needs somewhere to point.
+    sheet.popoverPresentationController?.sourceView = presenter.view
+    presenter.presentViewController(sheet, animated = true, completion = null)
+    return false
+}
 
 private fun mapsUrl(vararg query: Pair<String, String>): String {
     val components = NSURLComponents(string = "https://maps.apple.com/")

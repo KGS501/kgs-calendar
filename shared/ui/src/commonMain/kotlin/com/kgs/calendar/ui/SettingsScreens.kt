@@ -64,6 +64,8 @@ import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Share
+import com.kgs.calendar.domain.source.publicCalendarUrl
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
@@ -2331,8 +2333,10 @@ fun CollectionSettingsSheet(
     groupName: String? = null,
     onChooseGroup: (() -> Unit)? = null,
     onExport: (PlatformUri) -> Unit = {},
+    onShareLink: (String) -> Unit = {},
     onClose: () -> Unit,
 ) {
+    val publicUrl = remember(collection) { collection.publicCalendarUrl() }
     val exportLauncher = rememberCreateDocumentLauncher("text/calendar") { uri -> uri?.let(onExport) }
     var name by remember(collection.href) { mutableStateOf(collection.displayName) }
     var customColor by remember(collection.href) { mutableStateOf(collection.customColor) }
@@ -2471,6 +2475,17 @@ fun CollectionSettingsSheet(
                             CalendarMetadataRow(label = row.first, value = row.second)
                         }
                     }
+                }
+            }
+            publicUrl?.let { url ->
+                SettingsGroup(horizontalPadding = 0.dp, footer = stringResource(Res.string.share_public_link_footer)) {
+                    SettingsRow(
+                        title = stringResource(Res.string.share_public_link),
+                        leading = {
+                            Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                        },
+                        onClick = { onShareLink(url) },
+                    )
                 }
             }
             SettingsGroup(horizontalPadding = 0.dp, footer = stringResource(Res.string.export_single_calendar_footer)) {

@@ -813,6 +813,9 @@
     <string name="sync_attention_channel_description">Quellen, deren Synchronisierung gestoppt wurde und bei denen du etwas tun musst.</string>
     <string name="origin_approval_notification_title">%1$s synchronisiert nicht mehr</string>
     <string name="origin_approval_notification_body">Der Server möchte %1$s verwenden. Öffne diese Quelle in den Einstellungen, um das zu prüfen.</string>
+    <string name="share_public_link">Öffentlichen Link teilen</string>
+    <string name="share_public_link_footer">Jede Person mit diesem Link kann diesen Kalender ohne Anmeldung sehen.</string>
+    <string name="share_public_link_copied">Link kopiert.</string>
     <string name="export_done">%d Einträge in die Datei gespeichert.</string>
     <string name="export_failed">Der Kalender konnte nicht exportiert werden.</string>
     <plurals name="remove_source_unsent_changes">

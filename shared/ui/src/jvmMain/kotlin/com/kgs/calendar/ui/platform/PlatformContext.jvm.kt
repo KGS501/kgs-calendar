@@ -17,6 +17,8 @@ import org.jetbrains.skia.Image
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.io.File
 import java.net.URI
 import java.net.URLEncoder
@@ -36,6 +38,11 @@ var DesktopAppVersion: String = ""
 
 /** The system language as it was at startup, before the app applied its own language setting. */
 private val startupLocale: Locale = Locale.getDefault()
+
+actual fun PlatformContext.shareText(text: String): Boolean {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+    return true
+}
 
 actual fun PlatformContext.openUrl(url: String) {
     runCatching {
