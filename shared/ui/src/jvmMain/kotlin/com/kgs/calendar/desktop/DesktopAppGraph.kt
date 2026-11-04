@@ -12,6 +12,8 @@ import com.kgs.calendar.data.provider.AndroidCalendarProviderClient
 import com.kgs.calendar.data.remote.CalDavHttpClient
 import com.kgs.calendar.data.remote.NextcloudLoginFlowClient
 import com.kgs.calendar.data.secure.WindowsCredentialsStore
+import com.kgs.calendar.data.settings.AppColorMode
+import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.desktopSettingsStore
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.navigation.CalendarLaunchResolver
@@ -34,7 +36,9 @@ import com.kgs.calendar.widget.KgsWidgetKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -145,6 +149,9 @@ class DesktopAppGraph(val dataDirectory: File) {
             result.items
         },
         editorDrafts = EditorDraftStore(EditorDraftFiles(File(dataDirectory, "editor-drafts"))),
+        // Read up front: this runs before the window appears, which then opens in the user's colours.
+        initialThemeMode = runCatching { runBlocking { settingsStore.themeMode.first() } }.getOrDefault(AppThemeMode.KgsBlue),
+        initialColorMode = runCatching { runBlocking { settingsStore.colorMode.first() } }.getOrDefault(AppColorMode.Auto),
     )
 
     private companion object {

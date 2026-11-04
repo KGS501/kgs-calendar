@@ -20,9 +20,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerButton
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -47,9 +44,14 @@ import com.kgs.calendar.ui.platform.LocalShortcutBindings
 import com.kgs.calendar.ui.platform.LocalWindowChrome
 import com.kgs.calendar.ui.theme.LocalAppFontFamily
 import com.kgs.calendar.ui.theme.LocalAppPlatformTextStyle
+import java.awt.AWTEvent
 import java.awt.Component
 import java.awt.Container
 import java.awt.Frame
+import java.awt.Toolkit
+import java.awt.event.AWTEventListener
+import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import javax.swing.RootPaneContainer
@@ -281,6 +283,10 @@ fun main(args: Array<String>) {
                     showFirstTime()
                 }
             }
+            DisposableEffect(window) {
+                val stopListening = installMouseBackButton(window)
+                onDispose { stopListening() }
+            }
             CompositionLocalProvider(
                 LocalWindowChrome provides windowChrome,
                 LocalDesktopShortcuts provides shortcuts,
@@ -304,6 +310,37 @@ fun main(args: Array<String>) {
                 }
             }
         }
+    }
+}
+
+/** AWT's number for the mouse's back button. */
+private const val MouseBackButton = 4
+
+/**
+ * Makes the mouse's back button go back like Escape, wherever in [window] it is pressed. It listens
+ * ahead of Compose: sheets and popups are layers of their own, which a modifier on the content
+ * doesn't hear. Returns how to stop listening.
+ */
+private fun installMouseBackButton(window: java.awt.Window): () -> Unit {
+    val listener = AWTEventListener { event ->
+        if (event is MouseEvent && event.id == MouseEvent.MOUSE_PRESSED && event.button == MouseBackButton &&
+            SwingUtilities.isDescendingFrom(event.component, window)
+        ) {
+            window.pressEscape()
+        }
+    }
+    Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.MOUSE_EVENT_MASK)
+    return { Toolkit.getDefaultToolkit().removeAWTEventListener(listener) }
+}
+
+/** Escape as if typed: the way into Compose's back handling, which has no public entry point. */
+private fun java.awt.Window.pressEscape() {
+    // Posted, not dispatched: only posted key events are passed on to the component that has the focus.
+    val queue = Toolkit.getDefaultToolkit().systemEventQueue
+    for (id in intArrayOf(KeyEvent.KEY_PRESSED, KeyEvent.KEY_RELEASED)) {
+        queue.postEvent(
+            KeyEvent(this, id, System.currentTimeMillis(), 0, KeyEvent.VK_ESCAPE, KeyEvent.CHAR_UNDEFINED, KeyEvent.KEY_LOCATION_STANDARD),
+        )
     }
 }
 

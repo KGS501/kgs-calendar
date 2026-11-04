@@ -1421,8 +1421,8 @@ fun buildAllDayOverlayItems(
     )
 
     // Two days of margin cover the zone differences between dates and instants.
-    val earliestMillis = (visibleStartPage - 2).toDayDate().startOfDayMillis()
-    val latestMillis = (visibleEndPage + 3).toDayDate().startOfDayMillis()
+    val earliestMillis = (layoutStartPage - 2).toDayDate().startOfDayMillis()
+    val latestMillis = (layoutEndPage + 3).toDayDate().startOfDayMillis()
     val candidates = buildList {
         events.forEach { event ->
             if (event.startsAtMillis >= latestMillis || event.endsAtMillis < earliestMillis) return@forEach
