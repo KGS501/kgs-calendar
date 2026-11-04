@@ -10,6 +10,7 @@ fun buildDesktopKgsDatabase(file: File): KgsDatabase {
     file.parentFile?.mkdirs()
     return Room.databaseBuilder<KgsDatabase>(name = file.absolutePath)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(*KgsSharedMigrations.ALL)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 }

@@ -4,7 +4,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
-/** Migrations of the schema versions iOS installs can be on; Android runs them after its older ones. */
+/** Migrations of the schema versions iOS and desktop installs can be on; Android runs them after its older ones. */
 object KgsSharedMigrations {
     val ALL: Array<Migration> get() = arrayOf(MIGRATION_22_23)
 
