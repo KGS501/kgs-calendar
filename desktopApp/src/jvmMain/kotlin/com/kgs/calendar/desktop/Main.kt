@@ -267,6 +267,8 @@ fun main(args: Array<String>) {
                 val listener = object : WindowAdapter() {
                     override fun windowActivated(e: WindowEvent?) {
                         currentLoaded?.graph?.windowActivatedAt?.tryEmit(System.currentTimeMillis())
+                        // It may have been changed in Windows' settings in the meantime.
+                        windowBehaviour.refreshOpenAtLogin()
                     }
                 }
                 window.addWindowListener(listener)

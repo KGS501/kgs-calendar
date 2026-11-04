@@ -1328,6 +1328,14 @@ fun SettingsPage(
                         onCheckedChange = onAutoLoadMapPreviewsChanged,
                     )
                     com.kgs.calendar.ui.platform.LocalDesktopWindowBehaviour.current?.let { window ->
+                        if (window.canOpenAtLogin) {
+                            SettingsSwitchRow(
+                                title = stringResource(Res.string.desktop_open_at_login),
+                                subtitle = explanation(Res.string.desktop_open_at_login_help),
+                                checked = window.openAtLogin,
+                                onCheckedChange = window::updateOpenAtLogin,
+                            )
+                        }
                         SettingsSwitchRow(
                             title = stringResource(Res.string.desktop_close_to_tray),
                             subtitle = explanation(Res.string.desktop_close_to_tray_help),

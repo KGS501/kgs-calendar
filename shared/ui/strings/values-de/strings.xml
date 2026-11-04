@@ -17,6 +17,8 @@
         <item quantity="one">%1$d Aufgabe heute fällig</item>
         <item quantity="other">%1$d Aufgaben heute fällig</item>
     </plurals>
+    <string name="desktop_open_at_login">Beim Windows-Start öffnen</string>
+    <string name="desktop_open_at_login_help">KGS Calendar öffnet sich, wenn du dich bei Windows anmeldest. Das kannst du auch in den Windows-Einstellungen unter Apps &gt; Autostart ändern.</string>
     <string name="desktop_close_to_tray">Nach dem Schließen weiterlaufen</string>
     <string name="desktop_close_to_tray_help">Beim Schließen des Fensters bleibt KGS Calendar im Infobereich, damit Erinnerungen weiter erscheinen und die App sofort wieder offen ist. Ausgeschaltet beendet das Schließen des Fensters die App.</string>
     <string name="desktop_running_in_tray">KGS Calendar läuft im Infobereich weiter, damit deine Erinnerungen weiter erscheinen. Über das Symbol dort kannst du es beenden.</string>

@@ -20,6 +20,8 @@
     </plurals>
     <string name="desktop_running_in_tray">KGS Calendar keeps running in the notification area, so your reminders still appear. Quit it from the icon there.</string>
     <string name="desktop_year">Year</string>
+    <string name="desktop_open_at_login">Open when Windows starts</string>
+    <string name="desktop_open_at_login_help">KGS Calendar opens when you sign in to Windows. You can also change this in Windows Settings under Apps &gt; Startup.</string>
     <string name="desktop_close_to_tray">Keep running when closed</string>
     <string name="desktop_close_to_tray_help">Closing the window keeps KGS Calendar in the notification area, so reminders still appear and it opens again at once. Turned off, closing the window quits the app.</string>
     <string name="desktop_year_rows_lower">Lower month rows</string>

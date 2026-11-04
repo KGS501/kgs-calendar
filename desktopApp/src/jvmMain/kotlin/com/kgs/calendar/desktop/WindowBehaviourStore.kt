@@ -10,6 +10,7 @@ class WindowBehaviourStore(private val file: File) {
         val values = Properties().apply { if (file.isFile) runCatching { file.inputStream().use(::load) } }
         return DesktopWindowBehaviour(
             closeToTray = values.getProperty("closeToTray") != "false",
+            loginStart = WindowsLoginStart.forThisApp(),
             onChanged = ::save,
         )
     }
