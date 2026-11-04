@@ -7,7 +7,6 @@ import com.kgs.calendar.domain.model.EventClassification
 import com.kgs.calendar.domain.model.EventStatus
 import com.kgs.calendar.domain.model.EventTransparency
 import com.kgs.calendar.domain.time.toDate
-import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import com.kgs.calendar.time.ZoneId
 
@@ -36,7 +35,7 @@ fun EventEntity.monthOccurrenceKey(uidFallbackForBlankHref: Boolean = false): St
 }
 
 fun EventEntity.endDateInclusive(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
-    Instant.ofEpochMilli((endsAtMillis - 1).coerceAtLeast(startsAtMillis)).atZone(zoneId).toLocalDate()
+    (endsAtMillis - 1).coerceAtLeast(startsAtMillis).toDate(zoneId)
 
 fun EventEntity.occursOn(date: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
     val start = startsAtMillis.toDate(zoneId)

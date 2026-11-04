@@ -110,8 +110,18 @@ fun TaskEntity.isFullDayTaskOn(day: LocalDate): Boolean {
 fun EventEntity.continuesAllDayTopItemAfter(date: LocalDate): Boolean =
     isAllDayTopItemOn(date.plusDays(1))
 
+/**
+ * A timed event this short has no full middle day, even over a daylight saving change. Most events
+ * are, and this is asked for every event on every layout, so they skip the date conversions.
+ */
+private fun EventEntity.isTooShortForAllDayTop(): Boolean = !allDay && endsAtMillis - startsAtMillis < MIN_ALL_DAY_TOP_MILLIS
+
+private const val MIN_ALL_DAY_TOP_MILLIS = 22L * 60L * 60L * 1000L
+
 fun EventEntity.allDayTopStartDate(): LocalDate? =
-    if (allDay) {
+    if (isTooShortForAllDayTop()) {
+        null
+    } else if (allDay) {
         startsAtMillis.toDate()
     } else if (isTimedMultiDay()) {
         startsAtMillis.toDate().plusDays(1).takeIf { !it.isAfter(endDateInclusive().minusDays(1)) }
@@ -120,7 +130,9 @@ fun EventEntity.allDayTopStartDate(): LocalDate? =
     }
 
 fun EventEntity.allDayTopEndDate(): LocalDate? =
-    if (allDay) {
+    if (isTooShortForAllDayTop()) {
+        null
+    } else if (allDay) {
         endDateInclusive()
     } else if (isTimedMultiDay()) {
         endDateInclusive().minusDays(1).takeIf { !it.isBefore(startsAtMillis.toDate().plusDays(1)) }

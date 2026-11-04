@@ -8,7 +8,7 @@ import com.kgs.calendar.time.ZoneId
 import com.kgs.calendar.time.DateTimeFormatter
 
 fun Long.toDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate =
-    Instant.ofEpochMilli(this).atZone(zoneId).toLocalDate()
+    Instant.fromEpochMilliseconds(this).toLocalDateTime(zoneId).date
 
 fun Long.toTimeText(zoneId: ZoneId = ZoneId.systemDefault()): String =
     Instant.ofEpochMilli(this).atZone(zoneId).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))

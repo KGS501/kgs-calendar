@@ -1,5 +1,7 @@
 package com.kgs.calendar.time
 
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -11,6 +13,12 @@ import kotlin.time.Instant
 
 /** The shim must give the same answers as java.time, which the Android code used before. */
 class JavaTimeCompatTest {
+    @Test
+    fun zonesById_areRememberedAndUnknownIdsStillFail() {
+        assertSame(zoneOf("Europe/Berlin"), zoneOf("Europe/Berlin"))
+        assertFailsWith<Exception> { zoneOf("Not/AZone") }
+    }
+
     private val berlin = TimeZone.of("Europe/Berlin")
     private val javaBerlin = java.time.ZoneId.of("Europe/Berlin")
     private val saoPaulo = TimeZone.of("America/Sao_Paulo") // midnight DST gap in 2018

@@ -39,7 +39,16 @@ import kotlin.time.Instant
 /** java.time's ZoneId: a kotlinx [TimeZone]. */
 typealias ZoneId = TimeZone
 
-fun TimeZone.Companion.systemDefault(): TimeZone = TimeZone.currentSystemDefault()
+/** The device's zone. It is read for every date shown, so it must be cheap: see [platformSystemZone]. */
+fun TimeZone.Companion.systemDefault(): TimeZone = platformSystemZone()
+
+/** The device's zone; on iOS kotlinx-datetime reads the zone's rules from a file on every call. */
+internal expect fun platformSystemZone(): TimeZone
+
+private val zonesById = com.kgs.calendar.platform.LockedMap<String, TimeZone>()
+
+/** [TimeZone.of], which also reads a file on iOS, remembered per id. Unknown ids throw as it does. */
+fun zoneOf(id: String): TimeZone = zonesById[id] ?: TimeZone.of(id).also { zonesById[id] = it }
 
 /** The zone's id, as java.time's `ZoneId.getId()`. */
 val TimeZone.zoneId: String get() = id
@@ -70,7 +79,7 @@ fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 fun LocalDate.Companion.of(year: Int, month: Int, dayOfMonth: Int): LocalDate = LocalDate(year, month, dayOfMonth)
 fun LocalDate.Companion.of(year: Int, month: Month, dayOfMonth: Int): LocalDate = LocalDate(year, month, dayOfMonth)
 fun LocalDate.Companion.ofEpochDay(epochDay: Long): LocalDate = fromEpochDays(epochDay)
-fun LocalDate.Companion.now(zone: TimeZone = TimeZone.currentSystemDefault()): LocalDate =
+fun LocalDate.Companion.now(zone: TimeZone = TimeZone.systemDefault()): LocalDate =
     Clock.System.now().toLocalDateTime(zone).date
 fun LocalDate.Companion.ofInstant(instant: Instant, zone: TimeZone): LocalDate = instant.toLocalDateTime(zone).date
 
@@ -123,7 +132,7 @@ private fun isLeapYear(year: Int): Boolean = (year % 4 == 0 && year % 100 != 0) 
 fun YearMonth.Companion.of(year: Int, month: Int): YearMonth = YearMonth(year, month)
 fun YearMonth.Companion.of(year: Int, month: Month): YearMonth = YearMonth(year, month)
 fun YearMonth.Companion.from(date: LocalDate): YearMonth = date.yearMonth
-fun YearMonth.Companion.now(zone: TimeZone = TimeZone.currentSystemDefault()): YearMonth = LocalDate.now(zone).yearMonth
+fun YearMonth.Companion.now(zone: TimeZone = TimeZone.systemDefault()): YearMonth = LocalDate.now(zone).yearMonth
 fun YearMonth.atDay(dayOfMonth: Int): LocalDate = onDay(dayOfMonth)
 fun YearMonth.atEndOfMonth(): LocalDate = lastDay
 fun YearMonth.lengthOfMonth(): Int = numberOfDays
@@ -146,7 +155,7 @@ fun LocalTime.Companion.ofSecondOfDay(secondOfDay: Long): LocalTime = fromSecond
 val LocalTime.Companion.MIDNIGHT: LocalTime get() = LocalTime(0, 0)
 val LocalTime.Companion.NOON: LocalTime get() = LocalTime(12, 0)
 val LocalTime.Companion.MAX_TIME: LocalTime get() = LocalTime(23, 59, 59, 999_999_999)
-fun LocalTime.Companion.now(zone: TimeZone = TimeZone.currentSystemDefault()): LocalTime =
+fun LocalTime.Companion.now(zone: TimeZone = TimeZone.systemDefault()): LocalTime =
     Clock.System.now().toLocalDateTime(zone).time
 fun LocalTime.plusMinutes(minutes: Long): LocalTime = plusSecondsWrapping(minutes * 60)
 fun LocalTime.plusMinutes(minutes: Int): LocalTime = plusSecondsWrapping(minutes.toLong() * 60)
@@ -177,7 +186,7 @@ fun LocalDateTime.Companion.of(date: LocalDate, time: LocalTime): LocalDateTime 
 fun LocalDateTime.Companion.of(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int = 0): LocalDateTime =
     LocalDateTime(year, month, day, hour, minute, second)
 fun LocalDateTime.Companion.ofInstant(instant: Instant, zone: TimeZone): LocalDateTime = instant.toLocalDateTime(zone)
-fun LocalDateTime.Companion.now(zone: TimeZone = TimeZone.currentSystemDefault()): LocalDateTime =
+fun LocalDateTime.Companion.now(zone: TimeZone = TimeZone.systemDefault()): LocalDateTime =
     Clock.System.now().toLocalDateTime(zone)
 fun LocalDateTime.toLocalDate(): LocalDate = date
 fun LocalDateTime.toLocalTime(): LocalTime = time
@@ -377,7 +386,7 @@ class ZonedDateTime private constructor(
         fun of(date: LocalDate, time: LocalTime, zone: TimeZone): ZonedDateTime = of(LocalDateTime(date, time), zone)
         fun of(year: Int, month: Int, dayOfMonth: Int, hour: Int, minute: Int, second: Int, nanoOfSecond: Int, zone: TimeZone): ZonedDateTime =
             of(LocalDateTime(year, month, dayOfMonth, hour, minute, second, nanoOfSecond), zone)
-        fun now(zone: TimeZone = TimeZone.currentSystemDefault()): ZonedDateTime = ofInstant(Clock.System.now(), zone)
+        fun now(zone: TimeZone = TimeZone.systemDefault()): ZonedDateTime = ofInstant(Clock.System.now(), zone)
     }
 }
 

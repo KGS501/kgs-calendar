@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ExperimentalComposeApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import com.kgs.calendar.ios.IosAppGraph
 import com.kgs.calendar.ios.IosReminderScheduler
 import com.kgs.calendar.ios.IosSync
 import com.kgs.calendar.time.IosAppLanguage
+import com.kgs.calendar.time.refreshSystemZone
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import com.kgs.calendar.navigation.CalendarLaunchTarget
@@ -206,6 +208,7 @@ fun onAppLaunch() {
     }
 }
 
+@OptIn(ExperimentalComposeApi::class)
 fun MainViewController(): UIViewController {
     val graph = IosAppGraph.shared
     graph.reminders.requestPermission()
@@ -213,6 +216,7 @@ fun MainViewController(): UIViewController {
     // The app may already be active when the screen is built, so the first activation can come too early to observe.
     graph.sync.onForeground()
     NSNotificationCenter.defaultCenter.addObserverForName(UIApplicationDidBecomeActiveNotification, `object` = null, queue = NSOperationQueue.mainQueue) { _ ->
+        refreshSystemZone()
         graph.onForegrounded(nowMillis())
         graph.sync.onForeground()
         graph.scope.launch { runCatching { graph.reminders.reschedule() } }
@@ -220,5 +224,6 @@ fun MainViewController(): UIViewController {
     NSNotificationCenter.defaultCenter.addObserverForName(UIApplicationDidEnterBackgroundNotification, `object` = null, queue = NSOperationQueue.mainQueue) { _ ->
         graph.sync.onBackground()
     }
-    return ComposeUIViewController { CalendarRootContent(graph) }
+    // Drawing is encoded off the main thread, which also keeps gestures smooth on big iPad screens.
+    return ComposeUIViewController(configure = { parallelRendering = true }) { CalendarRootContent(graph) }
 }

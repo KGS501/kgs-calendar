@@ -52,6 +52,8 @@ fun StringResource.localized(locale: AppLocale, vararg args: Any?): String = for
 fun PluralsResource.localized(locale: AppLocale, count: Int, vararg args: Any?): String =
     formatAndroidString(text(locale, count), args)
 
+private val FormatPlaceholder = Regex("""(\d+\$)?([sdf])|(\d+\$)?\.(\d+)f""")
+
 /** Android's `%s`, `%d`, `%1$s`, `%2$d` and `%%`, which are all the app's strings use. */
 fun formatAndroidString(template: String, args: Array<out Any?>): String {
     if ('%' !in template) return template
@@ -70,7 +72,7 @@ fun formatAndroidString(template: String, args: Array<out Any?>): String {
             i += 2
             continue
         }
-        val match = Regex("""(\d+\$)?([sdf])|(\d+\$)?\.(\d+)f""").matchAt(template, i + 1)
+        val match = FormatPlaceholder.matchAt(template, i + 1)
         if (match == null) {
             out.append(c)
             i++
