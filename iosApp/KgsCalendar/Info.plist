@@ -30,6 +30,8 @@
     <key>NSCalendarsFullAccessUsageDescription</key><string>Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.</string>
     <key>NSCalendarsUsageDescription</key><string>Shows and edits the calendars of your iPhone's accounts (iCloud, Google, Exchange) next to your other calendars.</string>
     <key>NSLocationWhenInUseUsageDescription</key><string>Suggests places near you when you enter an event's location.</string>
+    <!-- Nearby search only needs the area, as on Android; the privacy policy promises approximate location. -->
+    <key>NSLocationDefaultAccuracyReduced</key><true/>
     <key>NSAppTransportSecurity</key><dict>
         <!-- As on Android: plain HTTP stays possible for webcal:// feeds and servers on a trusted network. -->
         <key>NSAllowsArbitraryLoads</key><true/>
