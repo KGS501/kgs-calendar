@@ -43,11 +43,13 @@ parts:
 - Passwords are encrypted with Windows' data protection (DPAPI) for the signed-in user.
 - Reminders appear while the app runs. Closing the window keeps it in the notification area
   (Settings → General can turn that off); quit it from the tray icon's menu.
+- Settings → General can open the app when Windows starts. That is Windows' own startup entry for
+  the user, so it also appears in Windows' Settings → Apps → Startup and follows changes made there.
 - The data lives in `%LOCALAPPDATA%\KGS501\KGS Calendar`, apart from the program folder, so
   installing an update keeps it. Previews before V.2.0.0 kept it in the program folder.
 - Running the installer while the app is open closes it and starts the new version afterwards.
   Windows only installs over a lower version, so every build handed out needs a higher
-  `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0-1 becomes installer version 2.0.1).
+  `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0-2 becomes installer version 2.0.2).
 
 Windows at least 760 dp wide get the desktop layout (`ui/desktop`): a sidebar with the month and
 the calendars, a toolbar with back/today/forward, search, views, create and tasks, a task pane

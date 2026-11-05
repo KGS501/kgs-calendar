@@ -1328,6 +1328,14 @@ fun SettingsPage(
                         onCheckedChange = onAutoLoadMapPreviewsChanged,
                     )
                     com.kgs.calendar.ui.platform.LocalDesktopWindowBehaviour.current?.let { window ->
+                        if (window.canOpenAtLogin) {
+                            SettingsSwitchRow(
+                                title = stringResource(Res.string.desktop_open_at_login),
+                                subtitle = explanation(Res.string.desktop_open_at_login_help),
+                                checked = window.openAtLogin,
+                                onCheckedChange = window::updateOpenAtLogin,
+                            )
+                        }
                         SettingsSwitchRow(
                             title = stringResource(Res.string.desktop_close_to_tray),
                             subtitle = explanation(Res.string.desktop_close_to_tray_help),
@@ -2111,19 +2119,37 @@ private fun PrivacyPolicyPage() {
     SettingsGroup {
         PrivacyTextRow(
             title = stringResource(Res.string.privacy_storage_title),
-            body = stringResource(if (PlatformFeatures.isIos) Res.string.privacy_storage_body_ios else Res.string.privacy_storage_body),
+            body = stringResource(
+                when {
+                    PlatformFeatures.isIos -> Res.string.privacy_storage_body_ios
+                    PlatformFeatures.isWindows -> Res.string.privacy_storage_body_windows
+                    else -> Res.string.privacy_storage_body
+                },
+            ),
         )
         PrivacyTextRow(
             title = stringResource(Res.string.privacy_sync_title),
-            body = stringResource(if (PlatformFeatures.isIos) Res.string.privacy_sync_body_ios else Res.string.privacy_sync_body),
+            body = stringResource(
+                when {
+                    PlatformFeatures.isIos -> Res.string.privacy_sync_body_ios
+                    PlatformFeatures.isWindows -> Res.string.privacy_sync_body_windows
+                    else -> Res.string.privacy_sync_body
+                },
+            ),
         )
         PrivacyTextRow(
             title = stringResource(Res.string.privacy_location_title),
-            body = stringResource(Res.string.privacy_location_body),
+            body = stringResource(if (PlatformFeatures.isWindows) Res.string.privacy_location_body_windows else Res.string.privacy_location_body),
         )
         PrivacyTextRow(
             title = stringResource(Res.string.privacy_delete_title),
-            body = stringResource(if (PlatformFeatures.isIos) Res.string.privacy_delete_body_ios else Res.string.privacy_delete_body),
+            body = stringResource(
+                when {
+                    PlatformFeatures.isIos -> Res.string.privacy_delete_body_ios
+                    PlatformFeatures.isWindows -> Res.string.privacy_delete_body_windows
+                    else -> Res.string.privacy_delete_body
+                },
+            ),
         )
     }
 }

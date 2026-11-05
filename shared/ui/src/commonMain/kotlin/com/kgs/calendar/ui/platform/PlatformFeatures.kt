@@ -8,6 +8,9 @@ expect object PlatformFeatures {
     /** The iOS app; texts that name the platform (Android, iPhone) follow it. */
     val isIos: Boolean
 
+    /** The Windows app; its texts follow it the same way, and it doesn't use the device's location. */
+    val isWindows: Boolean
+
     /** Calendars of other apps on the device (Android's Calendar Provider, iOS's EventKit). */
     val deviceCalendars: Boolean
 
