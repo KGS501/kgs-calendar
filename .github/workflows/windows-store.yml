@@ -38,7 +38,7 @@ jobs:
         run: >
           ./gradlew.bat --no-daemon --console=plain
           "-Dorg.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
-          -Pkotlin.compiler.execution.strategy=in-process
+          "-Pkotlin.compiler.execution.strategy=in-process"
           -PmsixTest :desktopApp:packageMsix
 
       - name: Sign the test package with a test certificate
@@ -98,7 +98,7 @@ jobs:
         run: >
           ./gradlew.bat --no-daemon --console=plain
           "-Dorg.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
-          -Pkotlin.compiler.execution.strategy=in-process
+          "-Pkotlin.compiler.execution.strategy=in-process"
           :desktopApp:packageMsix
 
       - name: Upload the Store package
