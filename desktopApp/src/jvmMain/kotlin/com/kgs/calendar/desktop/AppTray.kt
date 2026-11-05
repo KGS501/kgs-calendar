@@ -10,6 +10,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.image.BaseMultiResolutionImage
 import java.awt.image.BufferedImage
+import java.io.File
 import javax.imageio.ImageIO
 
 /**
@@ -23,9 +24,12 @@ import javax.imageio.ImageIO
  */
 class AppTray(
     tooltip: String,
+    notificationIcon: File,
     private val onOpen: () -> Unit,
     private val onMenu: (Point) -> Unit,
 ) {
+    private val notifications = runCatching { WindowsNotifications.forThisApp(notificationImage(), notificationIcon) }.getOrNull()
+
     private val icon: TrayIcon? = runCatching {
         if (!SystemTray.isSupported()) return@runCatching null
         TrayIcon(trayImage(), tooltip).apply {
@@ -47,8 +51,13 @@ class AppTray(
         }
     }.getOrNull()
 
-    /** Shows a notification (a reminder, a hint) from the app's icon. */
+    /** Shows a notification (a reminder, a hint), from the app's icon where Windows' own don't work. */
     fun notify(title: String, body: String) {
+        val notifications = notifications
+        if (notifications != null) notifications.show(title, body) { showBalloon(title, body) } else showBalloon(title, body)
+    }
+
+    private fun showBalloon(title: String, body: String) {
         icon?.displayMessage(title, body, TrayIcon.MessageType.NONE)
     }
 
@@ -58,10 +67,14 @@ class AppTray(
 
     private companion object {
         val Sizes = listOf(16, 20, 24, 28, 32, 40, 48, 64)
+        const val NotificationIconSize = 128
+
+        fun logo(): BufferedImage = cropToSquare(AppTray::class.java.getResourceAsStream("/kgs_logo.png")!!.use(ImageIO::read))
+
+        fun notificationImage(): BufferedImage = scaled(logo(), NotificationIconSize)
 
         fun trayImage(): Image {
-            val source = AppTray::class.java.getResourceAsStream("/kgs_logo.png")!!.use(ImageIO::read)
-            val square = cropToSquare(source)
+            val square = logo()
             return BaseMultiResolutionImage(*Sizes.map { size -> scaled(square, size) }.toTypedArray())
         }
 
