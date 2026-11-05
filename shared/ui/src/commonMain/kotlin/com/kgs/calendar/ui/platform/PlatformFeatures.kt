@@ -25,6 +25,9 @@ expect object PlatformFeatures {
 
     /** Vibration on touch (not on the desktop). */
     val haptics: Boolean
+
+    /** What removing a source and uninstalling the app delete here. */
+    val privacyDeleteBody: StringResource
 }
 
 /** The device's own calendars by the platform's name: "Android device calendars", "iPhone calendars". */

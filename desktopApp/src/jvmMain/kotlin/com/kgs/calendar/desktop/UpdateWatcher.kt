@@ -1,5 +1,6 @@
 package com.kgs.calendar.desktop
 
+import com.kgs.calendar.ui.platform.WindowsPackage
 import com.sun.jna.Library
 import com.sun.jna.Memory
 import com.sun.jna.Native
@@ -27,7 +28,8 @@ object UpdateWatcher {
     @Volatile private var started = false
 
     fun start(onUpdate: () -> Unit) {
-        if (started || !System.getProperty("os.name").orEmpty().startsWith("Windows")) return
+        // The Store updates its package itself, and the app's files aren't in the way there.
+        if (started || !System.getProperty("os.name").orEmpty().startsWith("Windows") || WindowsPackage.isStoreApp) return
         started = true
         thread(name = "kgs-update-watch", isDaemon = true) {
             while (true) {

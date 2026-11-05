@@ -47,6 +47,10 @@ parts:
   the user, so it also appears in Windows' Settings → Apps → Startup and follows changes made there.
 - The data lives in `%LOCALAPPDATA%\KGS501\KGS Calendar`, apart from the program folder, so
   installing an update keeps it. Previews before V.2.0.0 kept it in the program folder.
+- The official way to get it is the Microsoft Store, built with `packageMsix`; see
+  [docs/microsoft-store/README.md](docs/microsoft-store/README.md). The `.msi` stays available on
+  GitHub. A Store app can't write to the registry's startup list or its own folder, so it uses a
+  startup task, keeps its data in its package, and doesn't build a class archive.
 - Running the installer while the app is open closes it and starts the new version afterwards.
   Windows only installs over a lower version, so every build handed out needs a higher
   `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0 is installer version 2.0.0, V.2.0.0-1 is 2.0.1, V.2.0.1 is 2.0.100).

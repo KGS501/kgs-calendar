@@ -12,4 +12,8 @@ actual object PlatformFeatures {
     actual val systemColors: Boolean = true
     actual val systemColorsLabel: StringResource = Res.string.windows_colors
     actual val haptics: Boolean = false
+
+    /** Uninstalling a Store app takes its data along; the installer leaves it. */
+    actual val privacyDeleteBody: StringResource
+        get() = if (WindowsPackage.isStoreApp) Res.string.privacy_delete_body_windows_store else Res.string.privacy_delete_body_windows
 }

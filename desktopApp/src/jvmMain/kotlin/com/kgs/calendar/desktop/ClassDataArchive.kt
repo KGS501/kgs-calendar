@@ -1,5 +1,6 @@
 package com.kgs.calendar.desktop
 
+import com.kgs.calendar.ui.platform.WindowsPackage
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinNT
@@ -39,7 +40,8 @@ internal object ClassDataArchive {
      * (the app quits) stops the build, which then starts over on a later run.
      */
     suspend fun build() {
-        if (started) return
+        // A Store app's folder is read-only, and the archive only fits the folder it was made in.
+        if (started || WindowsPackage.isStoreApp) return
         started = true
         runCatching { buildArchive() }.onFailure { println("KGS class archive not built: $it") }
     }
