@@ -3,6 +3,7 @@ package com.kgs.calendar.desktop
 import com.sun.jna.Library
 import com.sun.jna.Memory
 import com.sun.jna.Native
+import com.sun.jna.Pointer
 import com.sun.jna.WString
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinNT
@@ -18,6 +19,9 @@ import kotlin.concurrent.thread
  * window to ask). So the app watches for Windows Installer working on KGS Calendar itself, a package
  * of it or (as Settings > Apps does) its installed product: then it quits ([onUpdate]) and starts again
  * once the installer is done (or was cancelled), in its new version; not after uninstalling.
+ *
+ * A package is told by the upgrade code inside it, not by its name: a download can be called anything
+ * (GitHub turns the spaces into dots), and if the app stays open the update fails on its locked files.
  */
 object UpdateWatcher {
     @Volatile private var started = false
@@ -44,8 +48,32 @@ object UpdateWatcher {
         if (installers.isEmpty()) return null
         val products = installedProducts()
         return installers.firstOrNull { process ->
-            val commandLine = commandLine(process.pid())?.lowercase() ?: return@firstOrNull false
-            ("kgs calendar" in commandLine && ".msi" in commandLine) || products.any { it in commandLine }
+            val commandLine = commandLine(process.pid()) ?: return@firstOrNull false
+            products.any { commandLine.contains(it, ignoreCase = true) } ||
+                PackagePath.findAll(commandLine).any { isOurPackage(it.groupValues[1] + it.groupValues[2]) }
+        }
+    }
+
+    /** Going by the name only where the package can't be read, such as a path relative to the installer. */
+    private fun isOurPackage(path: String): Boolean =
+        runCatching { upgradeCodeOf(path) }.getOrNull()?.equals(UPGRADE_CODE, ignoreCase = true)
+            ?: path.contains("kgs calendar", ignoreCase = true)
+
+    /** The upgrade code in the package at [path], or null if it can't be read. */
+    private fun upgradeCodeOf(path: String): String? {
+        val database = IntByReference()
+        if (Msi.INSTANCE.MsiOpenDatabaseW(WString(path), null, database) != 0) return null
+        val view = IntByReference()
+        val record = IntByReference()
+        try {
+            if (Msi.INSTANCE.MsiDatabaseOpenViewW(database.value, WString(UPGRADE_CODE_QUERY), view) != 0) return null
+            if (Msi.INSTANCE.MsiViewExecute(view.value, 0) != 0 || Msi.INSTANCE.MsiViewFetch(view.value, record) != 0) return null
+            val value = CharArray(GUID_LENGTH + 1)
+            val length = IntByReference(value.size)
+            if (Msi.INSTANCE.MsiRecordGetStringW(record.value, 1, value, length) != 0) return null
+            return String(value, 0, length.value)
+        } finally {
+            listOf(record.value, view.value, database.value).filter { it != 0 }.forEach(Msi.INSTANCE::MsiCloseHandle)
         }
     }
 
@@ -103,6 +131,18 @@ object UpdateWatcher {
     private interface Msi : Library {
         fun MsiEnumRelatedProductsW(upgradeCode: WString, reserved: Int, index: Int, productCode: CharArray): Int
 
+        fun MsiOpenDatabaseW(path: WString, persist: Pointer?, database: IntByReference): Int
+
+        fun MsiDatabaseOpenViewW(database: Int, query: WString, view: IntByReference): Int
+
+        fun MsiViewExecute(view: Int, record: Int): Int
+
+        fun MsiViewFetch(view: Int, record: IntByReference): Int
+
+        fun MsiRecordGetStringW(record: Int, field: Int, value: CharArray, length: IntByReference): Int
+
+        fun MsiCloseHandle(handle: Int): Int
+
         companion object {
             val INSTANCE: Msi = Native.load("msi", Msi::class.java)
         }
@@ -119,6 +159,12 @@ object UpdateWatcher {
 
     /** The installer's upgrade code (desktopApp/build.gradle.kts), the same for every version. */
     private const val UPGRADE_CODE = "{E37AE039-A4F6-46A7-A7FD-14F524E68795}"
+    private const val UPGRADE_CODE_QUERY = "SELECT Value FROM Property WHERE Property='UpgradeCode'"
+    private const val GUID_LENGTH = 38
+
+    /** A package in msiexec's command line, quoted or without spaces. */
+    private val PackagePath = Regex("""\"([^"]+\.msi)\"|(?<![^\s])([^\s"]+\.msi)""", RegexOption.IGNORE_CASE)
+
     private const val POLL_MS = 2_500L
     private const val HELPER_TIMEOUT_SECONDS = 15L
     private const val BUFFER_SIZE = 8192
