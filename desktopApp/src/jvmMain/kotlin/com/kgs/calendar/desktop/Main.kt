@@ -122,6 +122,7 @@ fun main(args: Array<String>) {
         val tray = remember {
             AppTray(
                 tooltip = TrayTooltip,
+                notificationIcon = File(dataDirectory, "notification-icon.png"),
                 onOpen = { trayActions.open() },
                 onMenu = { point ->
                     menuPrepared = true

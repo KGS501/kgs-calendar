@@ -49,7 +49,7 @@ parts:
   installing an update keeps it. Previews before V.2.0.0 kept it in the program folder.
 - Running the installer while the app is open closes it and starts the new version afterwards.
   Windows only installs over a lower version, so every build handed out needs a higher
-  `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0-2 becomes installer version 2.0.2).
+  `appVersionName` in `desktopApp/build.gradle.kts` (V.2.0.0 is installer version 2.0.0, V.2.0.0-1 is 2.0.1, V.2.0.1 is 2.0.100).
 
 Windows at least 760 dp wide get the desktop layout (`ui/desktop`): a sidebar with the month and
 the calendars, a toolbar with back/today/forward, search, views, create and tasks, a task pane
