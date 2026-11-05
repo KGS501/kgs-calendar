@@ -1,6 +1,7 @@
 package com.kgs.calendar.desktop
 
 import com.kgs.calendar.ui.platform.DesktopWindowBehaviour
+import com.kgs.calendar.ui.platform.WindowsPackage
 import java.io.File
 import java.util.Properties
 
@@ -10,7 +11,7 @@ class WindowBehaviourStore(private val file: File) {
         val values = Properties().apply { if (file.isFile) runCatching { file.inputStream().use(::load) } }
         return DesktopWindowBehaviour(
             closeToTray = values.getProperty("closeToTray") != "false",
-            loginStart = WindowsLoginStart.forThisApp(),
+            loginStart = if (WindowsPackage.isStoreApp) WindowsStoreLoginStart() else WindowsLoginStart.forThisApp(),
             onChanged = ::save,
         )
     }

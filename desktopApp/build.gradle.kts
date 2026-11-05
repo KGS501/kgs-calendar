@@ -1,3 +1,7 @@
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.util.Properties
+import javax.imageio.ImageIO
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -101,6 +105,147 @@ tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
             java.delete()
         }
     }
+}
+
+// The Microsoft Store package: the same app as the installer's, in the Store's format. `packageMsix` needs
+// makeappx and makepri from the Windows SDK: the folder WINDOWS_SDK_BIN names, or an installed SDK.
+// `-PmsixTest` makes a package with a test identity, for signing with a test certificate and trying it
+// out (see docs/microsoft-store.md). The Store signs the real one itself and only takes one without it.
+abstract class PackageMsixTask : DefaultTask() {
+    @get:InputDirectory abstract val app: DirectoryProperty
+    @get:InputDirectory abstract val template: DirectoryProperty
+    @get:InputFile abstract val logo: RegularFileProperty
+    @get:Input abstract val version: Property<String>
+    @get:Input abstract val testPackage: Property<Boolean>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    /** Logo sizes in the names Windows looks for; each is the logo, centred, in that size. */
+    private val logos = buildMap<String, Pair<Pair<Int, Int>, Double>> {
+        for ((scale, percent) in listOf(100 to 1.0, 125 to 1.25, 150 to 1.5, 200 to 2.0, 400 to 4.0)) {
+            fun add(name: String, width: Int, height: Int, fill: Double) {
+                put("$name.scale-$scale.png", ((width * percent).toInt() to (height * percent).toInt()) to fill)
+            }
+            add("Square44x44Logo", 44, 44, 0.84)
+            add("Square71x71Logo", 71, 71, 0.6)
+            add("Square150x150Logo", 150, 150, 0.6)
+            add("Square310x310Logo", 310, 310, 0.6)
+            add("Wide310x150Logo", 310, 150, 0.6)
+            add("StoreLogo", 50, 50, 0.84)
+        }
+        for (size in listOf(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)) {
+            val single = (size to size) to 0.92
+            put("Square44x44Logo.targetsize-$size.png", single)
+            put("Square44x44Logo.targetsize-${size}_altform-unplated.png", single)
+            put("Square44x44Logo.targetsize-${size}_altform-lightunplated.png", single)
+        }
+    }
+
+    @TaskAction
+    fun pack() {
+        val output = outputDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val stage = File(output, "stage")
+        app.get().asFile.copyRecursively(stage)
+        // The folder is read-only, so the class list (see above) has nowhere to go, and there is no archive.
+        File(stage, "app/KGS Calendar.cfg").let { cfg ->
+            cfg.writeText(cfg.readLines().filterNot { "DumpLoadedClassList" in it || "VMOptionsFile" in it }.joinToString("\n", postfix = "\n"))
+        }
+        writeLogos(File(stage, "Assets"))
+
+        val identity = Properties().apply { File(template.get().asFile, "store-identity.properties").inputStream().use(::load) }
+        val test = testPackage.get()
+        val identityName = identity.getProperty("identityName") + if (test) ".Test" else ""
+        val publisher = if (test) "CN=KGS501 Test" else identity.getProperty("publisher")
+        File(stage, "AppxManifest.xml").writeText(
+            File(template.get().asFile, "AppxManifest.xml").readText()
+                .replace("@IDENTITY_NAME@", identityName)
+                .replace("@PUBLISHER@", publisher)
+                .replace("@PUBLISHER_DISPLAY_NAME@", identity.getProperty("publisherDisplayName"))
+                .replace("@DISPLAY_NAME@", "KGS Calendar")
+                .replace("@VERSION@", version.get() + ".0"),
+        )
+
+        val tools = sdkTools()
+        val config = File(output, "priconfig.xml")
+        run(File(tools, "makepri.exe"), "createconfig", "/cf", config.path, "/dq", "en-US_de-DE", "/pv", "10.0.0", "/o")
+        run(File(tools, "makepri.exe"), "new", "/pr", stage.path, "/cf", config.path, "/of", File(stage, "resources.pri").path, "/mn", File(stage, "AppxManifest.xml").path, "/o")
+        val name = "KGS-Calendar-${version.get()}.0-x64" + if (test) "-test" else ""
+        run(File(tools, "makeappx.exe"), "pack", "/d", stage.path, "/p", File(output, "$name.msix").path, "/o")
+        logger.lifecycle("Store package: ${File(output, "$name.msix")}")
+    }
+
+    private fun sdkTools(): File {
+        val fromEnvironment = System.getenv("WINDOWS_SDK_BIN")?.let(::File)
+        val installed = File("C:/Program Files (x86)/Windows Kits/10/bin").listFiles().orEmpty()
+            .filter { File(it, "x64/makeappx.exe").isFile }.maxByOrNull { it.name }?.let { File(it, "x64") }
+        return listOfNotNull(fromEnvironment, installed).firstOrNull { File(it, "makeappx.exe").isFile }
+            ?: error("makeappx.exe not found: install the Windows SDK or set WINDOWS_SDK_BIN to its folder")
+    }
+
+    private fun run(tool: File, vararg arguments: String) {
+        val process = ProcessBuilder(tool.path, *arguments).redirectErrorStream(true).start()
+        val log = process.inputStream.bufferedReader().readText()
+        check(process.waitFor() == 0) { "${tool.name} failed:\n$log" }
+    }
+
+    private fun writeLogos(assets: File) {
+        assets.mkdirs()
+        val source = croppedToLogo(ImageIO.read(logo.get().asFile))
+        for ((name, spec) in logos) {
+            val (size, fill) = spec
+            val (width, height) = size
+            val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+            val side = (minOf(width, height) * fill).toInt().coerceAtLeast(1)
+            image.createGraphics().apply {
+                setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+                setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+                drawImage(scaledDown(source, side), (width - side) / 2, (height - side) / 2, null)
+                dispose()
+            }
+            ImageIO.write(image, "png", File(assets, name))
+        }
+    }
+
+    /** The drawn part of [image], centred in a square, so the logo fills the sizes above as they say. */
+    private fun croppedToLogo(image: BufferedImage): BufferedImage {
+        val drawn = (0 until image.height).flatMap { y -> (0 until image.width).filter { x -> (image.getRGB(x, y) ushr 24) > 20 }.map { x -> x to y } }
+        val left = drawn.minOf { it.first }
+        val top = drawn.minOf { it.second }
+        val width = drawn.maxOf { it.first } - left + 1
+        val height = drawn.maxOf { it.second } - top + 1
+        val side = maxOf(width, height)
+        return BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB).also { square ->
+            square.createGraphics().apply {
+                drawImage(image, (side - width) / 2 - left, (side - height) / 2 - top, null)
+                dispose()
+            }
+        }
+    }
+
+    /** Halves the logo step by step, which stays smooth where one big step wouldn't. */
+    private fun scaledDown(image: BufferedImage, size: Int): BufferedImage {
+        fun resized(from: BufferedImage, side: Int) = BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB).also { to ->
+            to.createGraphics().apply {
+                setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+                drawImage(from, 0, 0, side, side, null)
+                dispose()
+            }
+        }
+        var current = image
+        while (current.width / 2 >= size * 2) current = resized(current, current.width / 2)
+        return resized(current, size)
+    }
+}
+
+tasks.register<PackageMsixTask>("packageMsix") {
+    group = "compose desktop"
+    description = "Builds the Microsoft Store package (.msix)."
+    app.set(layout.buildDirectory.dir("compose/binaries/main/app/KGS Calendar"))
+    template.set(layout.projectDirectory.dir("msix"))
+    logo.set(layout.projectDirectory.file("src/jvmMain/resources/kgs_logo.png"))
+    version.set(installerVersion)
+    testPackage.set(providers.gradleProperty("msixTest").isPresent)
+    outputDir.set(layout.buildDirectory.dir("msix"))
+    dependsOn("createDistributable")
 }
 
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {

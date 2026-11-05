@@ -12,4 +12,5 @@ actual object PlatformFeatures {
     actual val systemColors: Boolean = false
     actual val systemColorsLabel: StringResource = Res.string.android_colors
     actual val haptics: Boolean = true
+    actual val privacyDeleteBody: StringResource = Res.string.privacy_delete_body_ios
 }

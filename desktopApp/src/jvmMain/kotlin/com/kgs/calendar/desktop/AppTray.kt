@@ -28,7 +28,7 @@ class AppTray(
     private val onOpen: () -> Unit,
     private val onMenu: (Point) -> Unit,
 ) {
-    private val notifications = runCatching { WindowsNotifications.forThisApp(notificationImage(), notificationIcon) }.getOrNull()
+    private val notifications = runCatching { WindowsNotifications.forThisApp(::notificationImage, notificationIcon) }.getOrNull()
 
     private val icon: TrayIcon? = runCatching {
         if (!SystemTray.isSupported()) return@runCatching null

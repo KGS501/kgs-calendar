@@ -2143,13 +2143,7 @@ private fun PrivacyPolicyPage() {
         )
         PrivacyTextRow(
             title = stringResource(Res.string.privacy_delete_title),
-            body = stringResource(
-                when {
-                    PlatformFeatures.isIos -> Res.string.privacy_delete_body_ios
-                    PlatformFeatures.isWindows -> Res.string.privacy_delete_body_windows
-                    else -> Res.string.privacy_delete_body
-                },
-            ),
+            body = stringResource(PlatformFeatures.privacyDeleteBody),
         )
     }
 }
