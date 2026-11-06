@@ -1,0 +1,16 @@
+{
+  "name": "KGS Calendar",
+  "subtitle": "Events and tasks, together",
+  "promotionalText": "Your events and tasks in one calendar. Works on its own or syncs with Nextcloud and any CalDAV server. No account, no ads, no tracking.",
+  "keywords": "caldav,nextcloud,tasks,todo,agenda,planner,schedule,reminders,ics,sync,subscription,events",
+  "description": "KGS Calendar keeps your events and tasks in one place, on your own terms. Use it on its own, with the calendars already on your iPhone or iPad, or with your own server. There is no KGS account, and no ads or tracking.\n\nEVENTS AND TASKS TOGETHER\nTasks sit right next to your events instead of in a separate app. Plan your day, then tick things off in the same calendar. Tasks can have due dates, priorities, reminders and subtasks.\n\nNEXTCLOUD AND CALDAV, BUILT IN\nConnect Nextcloud or any other CalDAV server and sync calendars and task lists in both directions. Changes you make offline are sent when you are back online. Your data only goes to the server you choose.\n\nALL YOUR CALENDARS\n- Show and edit the calendars on your device, including iCloud, Google and Exchange accounts\n- Subscribe to read-only ICS and CalDAV calendars\n- Keep local calendars that stay on your device\n- Choose names, colors and order, and show or hide any calendar\n\nVIEWS THAT FIT YOUR DAY\nSwitch between month, several days, a single day, agenda and tasks. On iPad, the extra space shows more of your schedule.\n\nREMINDERS THAT WORK\nGet notified about events and tasks. Snooze a reminder or mark a task as done right from the notification.\n\nAND MORE\n- Repeating events and tasks\n- Search across events and tasks\n- Import .ics files from mail or the Files app\n- Share text from another app to start a new event\n- Optional location search and map previews with OpenStreetMap\n- Light and dark themes\n- English and German\n\nPRIVATE BY DESIGN\nThe developer does not receive your calendars, tasks or passwords. Passwords are stored in the iOS Keychain. Location, calendar and notification access are optional.",
+  "whatsNew": "",
+  "supportUrl": "https://github.com/KGS501/kgs-calendar/issues",
+  "marketingUrl": "",
+  "privacyPolicyUrl": "https://kgs501.github.io/kgs-calendar/",
+  "copyright": "2026 KGS501",
+  "primaryCategory": "PRODUCTIVITY",
+  "secondaryCategory": "UTILITIES",
+  "contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT",
+  "reviewNotes": "No login is needed. The app works fully offline with its local calendar: on first start, create an event or a task with the + button.\n\nConnecting a server is optional. CalDAV and Nextcloud accounts belong to the user; the app has no account or backend of its own.\n\nAll permissions are optional and the app works without them. Notifications are requested at first start, for reminders. Calendar access is requested when adding iPhone calendars, and approximate location only for nearby results in location search.\n\nShare extension: share text from another app to KGS Calendar. The extension passes the text to the app through its own kgscalendar:// URL, which opens the new event editor."
+}
