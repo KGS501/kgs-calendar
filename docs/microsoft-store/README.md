@@ -6,14 +6,19 @@ certificate is needed and Windows doesn't warn about it.
 
 ## First submission
 
-### 1. Create the account and reserve the name
+### 1. The account and the name
 
-1. Register at [Partner Center](https://partner.microsoft.com/dashboard) as an individual developer.
-   It's free.
-2. Under **Apps and games**, choose **New product > MSIX or PWA app** and reserve the name
-   **KGS Calendar**.
-3. Open **Product identity** and copy the three values into
-   [`desktopApp/msix/store-identity.properties`](../../desktopApp/msix/store-identity.properties):
+This is done for KGS Calendar, and the identity is in
+[`desktopApp/msix/store-identity.properties`](../../desktopApp/msix/store-identity.properties). For
+reference, or to set it up again:
+
+1. Sign up at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/) as an individual
+   developer, with a personal Microsoft account. It's free, and you can't change the account type
+   later. Going through Partner Center directly can land you in the older sign-up, which may charge a
+   fee.
+2. In [Partner Center](https://partner.microsoft.com/dashboard), under **Apps and games**, choose
+   **New product > MSIX or PWA app** and reserve the name **KGS Calendar**.
+3. Open **Product identity** and copy the three values into the identity file:
 
    | Partner Center | In the file |
    | --- | --- |
@@ -21,8 +26,7 @@ certificate is needed and Windows doesn't warn about it.
    | Package/Identity/Publisher | `publisher` |
    | Package/Properties/PublisherDisplayName | `publisherDisplayName` |
 
-   Commit that. The Store rejects a package whose identity doesn't match, and the placeholder in the
-   file can't pass.
+   The Store rejects a package whose identity doesn't match.
 
 ### 2. Build the package
 
