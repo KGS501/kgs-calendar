@@ -31,13 +31,13 @@ KGS Calendar has no ads, no analytics and no tracking. There is no KGS Calendar 
 - Light and dark themes, and Windows' accent colour
 - English and German
 
-**Search terms**
+**Keywords** (Microsoft allows 7)
 
-calendar, tasks, Nextcloud, CalDAV, reminders, ICS, agenda, planner
+calendar, tasks, Nextcloud, CalDAV, reminders, ICS, agenda
 
 **What's new in this version**
 
-The first version in the Microsoft Store.
+Leave this blank for the first submission.
 
 **Copyright and trademark**
 
@@ -51,10 +51,21 @@ https://github.com/KGS501/kgs-calendar/blob/main/LICENSE.md
 
 https://github.com/KGS501/kgs-calendar
 
-**Screenshots, in this order**
+**Images**
 
-1. `screenshots/en-1-week.png`: All your events and tasks at a glance
-2. `screenshots/en-3-month.png`: The month in one view
-3. `screenshots/en-4-year.png`: Plan the whole year
-4. `screenshots/en-2-event.png`: Everything about an event
-5. `screenshots/en-5-agenda.png`: What's coming up
+Screenshots, in this order:
+
+1. `screenshots/1-overview.png`: Your events and tasks, side by side
+2. `screenshots/2-month.png`: See the big picture and plan your month
+3. `screenshots/3-tasks.png`: Full task support with CalDAV sync
+4. `screenshots/4-views.png`: View events and tasks the way you want
+5. `screenshots/5-light-dark.png`: Light mode and dark mode
+6. `screenshots/6-desktop.png`: Made for your desktop
+7. `screenshots/7-your-servers.png`: Your calendars on your own servers
+
+Logos and art:
+
+- 9:16 poster art: `art/poster-1440x2160.png`
+- 1:1 box art: `logo/store-logo-1080.png`
+- 1:1 app tile icon: `logo/store-logo-300.png`
+- 16:9 super hero art: `art/hero-3840x2160.png`
