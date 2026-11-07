@@ -51,7 +51,7 @@ The package ends up in `desktopApp/build/msix`.
 | Properties | Category **Productivity**; privacy policy `https://kgs501.github.io/kgs-calendar/`; support `https://github.com/KGS501/kgs-calendar/issues` |
 | Age ratings | Answer the questionnaire; see below |
 | Packages | Upload the `.msix` |
-| Store listings | [`listing.en.md`](listing.en.md) and [`listing.de.md`](listing.de.md), with the images in [`screenshots`](screenshots) and [`logo`](logo) |
+| Store listings | [`listing.en.md`](listing.en.md), with the images in [`screenshots`](screenshots), [`art`](art) and [`logo`](logo). The package also offers German: remove that language here, so the English listing shows everywhere |
 | Submission options | The `runFullTrust` note below |
 
 **Age ratings.** The app has no violence, sex, gambling or similar content, no purchases, and no ads.
@@ -70,6 +70,21 @@ internet, to the calendar servers the user adds. Say so if asked.
 Certification usually takes up to a few days. Once it's live, install the app from the Store on a
 machine and check it opens. People moving from the `.msi` can install it next to that and then
 uninstall the `.msi`: the Store app finds their data by itself.
+
+## Store images
+
+[`tools/generate_microsoft_store_images.py`](../../tools/generate_microsoft_store_images.py) draws the
+screenshots and art from the app captures in [`app-captures`](app-captures), in the style of the Google Play
+images, and needs Chrome or Edge. After a change to the app's look, retake the captures from a demo
+profile and run it again:
+
+```powershell
+$env:JAVA_TOOL_OPTIONS = '-Dsun.java2d.uiScale=1.25 -Duser.language=en -Duser.country=GB'
+& 'KGS Calendar.exe' --data-dir <empty folder> --demo
+```
+
+The captures use a 1500 by 830 window in light mode, with tasks coloured by priority and the tasks
+panel pinned. The dark pair uses dark mode.
 
 ## Later updates
 
