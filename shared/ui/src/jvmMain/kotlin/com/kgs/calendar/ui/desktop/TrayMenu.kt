@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberDialogState
@@ -107,6 +108,8 @@ fun KgsTrayMenu(
     onOpen: () -> Unit,
     onAction: (ShortcutAction) -> Unit,
     onQuit: () -> Unit,
+    /** The app's logo. The menu is a window of its own, which Windows shows by name and icon, e.g. while shutting down. */
+    icon: Painter? = null,
 ) {
     val open = anchor != null
     val zone = remember { ZoneId.systemDefault() }
@@ -155,6 +158,7 @@ fun KgsTrayMenu(
         visible = open,
         state = dialogState,
         title = "KGS Calendar",
+        icon = icon,
         undecorated = true,
         resizable = false,
         onKeyEvent = { event ->

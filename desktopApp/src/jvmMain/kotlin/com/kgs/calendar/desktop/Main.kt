@@ -191,7 +191,7 @@ fun main(args: Array<String>) {
         LaunchedEffect(Unit) {
             instance.listen { SwingUtilities.invokeLater(::showWindow) }
             // Signing out, or an installer updating the app, closes it properly.
-            SessionEnd.install { SwingUtilities.invokeLater(::quit) }
+            SessionEnd.install { placementStore.save(windowState) }
             UpdateWatcher.start { SwingUtilities.invokeLater(::quit) }
         }
         trayActions.open = ::showWindow
@@ -214,6 +214,7 @@ fun main(args: Array<String>) {
                         shortcuts.perform(action)
                     },
                     onQuit = ::quit,
+                    icon = icon,
                 )
             }
         }

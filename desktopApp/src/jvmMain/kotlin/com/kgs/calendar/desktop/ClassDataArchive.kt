@@ -35,6 +35,14 @@ internal object ClassDataArchive {
 
     @Volatile private var started = false
 
+    /** The archive being built in its own process, if any. */
+    @Volatile private var building: Process? = null
+
+    /** Ends a build still running, when the app has to stop at once. */
+    fun stopBuilding() {
+        building?.destroyForcibly()
+    }
+
     /**
      * Builds the archive if there is none yet; blocks the calling thread while it runs. Cancelling it
      * (the app quits) stops the build, which then starts over on a later run.
@@ -99,6 +107,7 @@ internal object ClassDataArchive {
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .start()
             running.set(process)
+            building = process
             lowerPriority(process)
             val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(10)
             while (!process.waitFor(250, TimeUnit.MILLISECONDS)) {
@@ -113,6 +122,7 @@ internal object ClassDataArchive {
                 return
             }
         } finally {
+            building = null
             runCatching { Runtime.getRuntime().removeShutdownHook(stopOnExit) }
             listCopy.delete()
             argFile.delete()

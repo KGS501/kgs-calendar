@@ -14,17 +14,23 @@ plugins {
 val appVersionName = "V.2.0.0"
 
 /**
+ * Raised when Windows gets a fixed build under the same version name, as Android's version code is;
+ * back to 0 with the next version name. The app keeps showing [appVersionName].
+ */
+val windowsRebuild = 1
+
+/**
  * The installer's version. Windows only installs a package over the one before it (keeping its data)
  * when this version is higher, and it compares just three numbers, so every build handed out needs
- * a higher one: V.2.0.0 → 2.0.0, V.2.0.0-3 → 2.0.3, V.2.0.1 → 2.0.100.
+ * a higher one: V.2.0.0 → 2.0.0, V.2.0.0-3 → 2.0.3, V.2.0.1 → 2.0.100, plus [windowsRebuild].
  */
 val installerVersion: String = run {
     val match = Regex("""V\.(\d+)\.(\d+)\.(\d+)(?:-(\d+))?""").matchEntire(appVersionName)
         ?: error("Unexpected version name $appVersionName")
     val (major, minor, patch, build) = match.destructured
-    val buildNumber = patch.toInt() * 100 + (build.toIntOrNull() ?: 0)
-    check(build.isEmpty() || build.toInt() < 100) { "A rebuild number must stay below 100" }
-    "$major.$minor.$buildNumber"
+    val rebuild = (build.toIntOrNull() ?: 0) + windowsRebuild
+    check(rebuild < 100) { "A rebuild number must stay below 100" }
+    "$major.$minor.${patch.toInt() * 100 + rebuild}"
 }
 
 kotlin {

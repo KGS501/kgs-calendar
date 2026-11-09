@@ -56,7 +56,11 @@ fun CalendarAppContent(
 ) {
     // Cards anywhere below open their right-click menu here (see itemContextMenu).
     val itemMenu = remember { ItemContextMenuState() }
-    CompositionLocalProvider(LocalItemContextMenu provides itemMenu) {
+    val readOnlyHrefs = remember(state.collections) { state.collections.readOnlyHrefs() }
+    CompositionLocalProvider(
+        LocalItemContextMenu provides itemMenu,
+        LocalReadOnlyCollectionHrefs provides readOnlyHrefs,
+    ) {
         CalendarAppBody(viewModel, state, today, itemMenu)
     }
 }

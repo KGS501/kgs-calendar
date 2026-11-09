@@ -88,7 +88,8 @@ panel pinned. The dark pair uses dark mode.
 
 ## Later updates
 
-1. Raise `appVersionName` in `desktopApp/build.gradle.kts`. The Store only takes a higher version.
+1. Raise `appVersionName` in `desktopApp/build.gradle.kts`, or `windowsRebuild` for a fixed build under
+   the same version name. The Store only takes a higher version.
    The package's version comes from it, and its last number is always 0.
 2. Run the workflow and upload the new `.msix` in a new submission.
 

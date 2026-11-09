@@ -83,6 +83,18 @@ class ReminderRegistry(
         cancelMatching { it.resourceHref == resourceHref }
     }
 
+    /**
+     * Takes down the notifications of items that ended somewhere else: a task checked off on
+     * another device or on the server, or an item deleted there. Each sync brings such changes in
+     * and then calls this, so a notification doesn't stay behind for something already done.
+     */
+    suspend fun dismissEnded(isStillDue: suspend (CalendarOccurrenceId) -> Boolean) {
+        val shown = mutex.withLock { storage.readActive() }.map { it.occurrenceId }.distinct()
+        val ended = shown.filterNot { isStillDue(it) }.toSet()
+        if (ended.isEmpty()) return
+        mutex.withLock { cancelMatching { it in ended } }
+    }
+
     private fun cancelMatching(matches: (CalendarOccurrenceId) -> Boolean) {
         val scheduled = storage.readScheduled()
         scheduled.filter { matches(it.occurrenceId) }.forEach { cancelAlarm(it.alarmRequestCode) }

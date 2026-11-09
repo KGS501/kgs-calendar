@@ -108,6 +108,7 @@ import com.kgs.calendar.ui.timeline.TimelineDragBounds
 import com.kgs.calendar.ui.timeline.TimelineDragPoint
 import com.kgs.calendar.ui.timeline.TimelineDraggedItem
 import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineDragItemKey
 import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
 import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDate
@@ -382,11 +383,13 @@ private fun TimedEventBlock(
     var cardCoordinates by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
     val haptics = LocalKgsHaptics.current
-    val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
-    DisposableEffect(event.resourceHref, event.startsAtMillis, dragReporter) {
-        onDispose {
-            if (latestRootOverlayDrag) dragReporter.cancel()
-        }
+    val dragKey = TimelineDragItemKey(TimelineDraggedItemKind.Event, event.resourceHref, event.occurrenceStartForEdit())
+    val hiddenByOverlay = LocalTimelineDraggedItem.current == dragKey
+    val movable = canMoveItemsOf(event.collectionHref)
+    val latestOverlayDragging by rememberUpdatedState(isDragging && rootOverlayDrag)
+    DisposableEffect(dragKey, dragReporter) {
+        // A card that leaves mid-drag takes its gesture with it, so its overlay goes too.
+        onDispose { if (latestOverlayDragging) dragReporter.cancel(dragKey) }
     }
     val density = LocalDensity.current
     val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
@@ -464,7 +467,7 @@ private fun TimedEventBlock(
                 if (rootOverlayDrag && coordinates != null) {
                     val pointer = coordinates.localToRoot(offset)
                     val topLeft = coordinates.positionInRoot()
-                    dragReporter.start(
+                    rootOverlayDrag = dragReporter.start(
                         TimelineTimedDragStart(
                             item = TimelineDraggedItem(
                                 kind = TimelineDraggedItemKind.Event,
@@ -502,7 +505,7 @@ private fun TimedEventBlock(
                 }
             },
             onDragCancel = {
-                if (rootOverlayDrag) dragReporter.cancel()
+                if (rootOverlayDrag) dragReporter.cancel(dragKey)
                 isDragging = false
                 rootOverlayDrag = false
                 dragX = 0f
@@ -510,8 +513,7 @@ private fun TimedEventBlock(
             },
             onDragEnd = {
                 haptics.drop()
-                val awaitingRootCommit = rootOverlayDrag
-                if (awaitingRootCommit) {
+                if (rootOverlayDrag) {
                     dragReporter.end()
                 } else {
                     val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
@@ -528,18 +530,11 @@ private fun TimedEventBlock(
                     }
                 }
                 isDragging = false
-                if (!awaitingRootCommit) rootOverlayDrag = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
         )
-    }
-    LaunchedEffect(rootOverlayDrag, isDragging) {
-        if (rootOverlayDrag && !isDragging) {
-            delay(5_000)
-            dragReporter.cancel()
-            rootOverlayDrag = false
-        }
     }
     Row(
         modifier = Modifier
@@ -568,11 +563,11 @@ private fun TimedEventBlock(
                     boundsTransform = MorphItemBoundsTransform,
                 )
                 .padding(vertical = 1.dp)
-                .alpha(if (rootOverlayDrag) 0f else pendingAlpha)
+                .alpha(if (hiddenByOverlay) 0f else pendingAlpha)
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-event-${event.resourceHref}")
-                .then(dragModifier)
+                .then(if (movable) dragModifier else Modifier)
                 .itemContextMenu(event),
         ) {
             Box(
@@ -727,11 +722,12 @@ private fun TimedTaskBlock(
     var cardCoordinates by remember(task.resourceHref, task.startAtMillis, task.dueAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
     val haptics = LocalKgsHaptics.current
-    val latestRootOverlayDrag by rememberUpdatedState(rootOverlayDrag)
-    DisposableEffect(task.resourceHref, task.startAtMillis, task.dueAtMillis, dragReporter) {
-        onDispose {
-            if (latestRootOverlayDrag) dragReporter.cancel()
-        }
+    val dragKey = TimelineDragItemKey(TimelineDraggedItemKind.Task, task.resourceHref)
+    val hiddenByOverlay = LocalTimelineDraggedItem.current == dragKey
+    val movable = canMoveItemsOf(task.collectionHref)
+    val latestOverlayDragging by rememberUpdatedState(isDragging && rootOverlayDrag)
+    DisposableEffect(dragKey, dragReporter) {
+        onDispose { if (latestOverlayDragging) dragReporter.cancel(dragKey) }
     }
     val density = LocalDensity.current
     val hourHeightPxForDrag = with(density) { hourHeightDp.dp.toPx() }
@@ -794,7 +790,7 @@ private fun TimedTaskBlock(
                 if (rootOverlayDrag && coordinates != null) {
                     val pointer = coordinates.localToRoot(offset)
                     val topLeft = coordinates.positionInRoot()
-                    dragReporter.start(
+                    rootOverlayDrag = dragReporter.start(
                         TimelineTimedDragStart(
                             item = TimelineDraggedItem(
                                 kind = TimelineDraggedItemKind.Task,
@@ -832,7 +828,7 @@ private fun TimedTaskBlock(
                 }
             },
             onDragCancel = {
-                if (rootOverlayDrag) dragReporter.cancel()
+                if (rootOverlayDrag) dragReporter.cancel(dragKey)
                 isDragging = false
                 rootOverlayDrag = false
                 dragX = 0f
@@ -840,8 +836,7 @@ private fun TimedTaskBlock(
             },
             onDragEnd = {
                 haptics.drop()
-                val awaitingRootCommit = rootOverlayDrag
-                if (awaitingRootCommit) {
+                if (rootOverlayDrag) {
                     dragReporter.end()
                 } else {
                     val dayDelta = if (dayStep > 0f) (dragX / dayStep).roundToInt() else 0
@@ -858,18 +853,11 @@ private fun TimedTaskBlock(
                     }
                 }
                 isDragging = false
-                if (!awaitingRootCommit) rootOverlayDrag = false
+                rootOverlayDrag = false
                 dragX = 0f
                 dragY = 0f
             },
         )
-    }
-    LaunchedEffect(rootOverlayDrag, isDragging) {
-        if (rootOverlayDrag && !isDragging) {
-            delay(5_000)
-            dragReporter.cancel()
-            rootOverlayDrag = false
-        }
     }
     Row(
         modifier = Modifier
@@ -900,11 +888,11 @@ private fun TimedTaskBlock(
                 )
                 .taskPriorityMotion(if (inactive) null else task.priority, background)
                 .padding(vertical = 1.dp)
-                .alpha(if (rootOverlayDrag) 0f else taskAlpha * pendingAlpha)
+                .alpha(if (hiddenByOverlay) 0f else taskAlpha * pendingAlpha)
                 .background(background, shape)
                 .onGloballyPositioned { cardCoordinates = it }
                 .testTag("timeline-timed-task-${task.resourceHref}")
-                .then(dragModifier)
+                .then(if (movable) dragModifier else Modifier)
                 .itemContextMenu(task),
         ) {
             TaskCardCompletionBurst(burstKey, color = textColor, modifier = Modifier.matchParentSize())

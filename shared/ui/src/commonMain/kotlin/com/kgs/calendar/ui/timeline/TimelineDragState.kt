@@ -64,6 +64,19 @@ data class TimelineDraggedItem(
     }
 }
 
+/**
+ * The card a drag belongs to. The overlay stands in for that card while it moves, so the card hides,
+ * and only that card may call its drag off. Tasks don't repeat here, so their href is enough.
+ */
+data class TimelineDragItemKey(
+    val kind: TimelineDraggedItemKind,
+    val resourceHref: String,
+    val occurrenceMillis: Long = 0L,
+)
+
+val TimelineDraggedItem.key: TimelineDragItemKey
+    get() = TimelineDragItemKey(kind, resourceHref, if (kind == TimelineDraggedItemKind.Event) occurrenceMillis else 0L)
+
 data class TimelineDragPoint(val x: Float, val y: Float) {
     init {
         require(x.isFinite() && y.isFinite()) { "Drag point must be finite" }
@@ -90,18 +103,22 @@ data class TimelineTimedDragStart(
 
 interface TimelineTimedDragReporter {
     val usesRootOverlay: Boolean
-    fun start(start: TimelineTimedDragStart)
+
+    /** Whether the overlay took the drag over; if not, the card moves by itself. */
+    fun start(start: TimelineTimedDragStart): Boolean
     fun update(pointerInRoot: TimelineDragPoint)
     fun end()
-    fun cancel()
+
+    /** Calls off [item]'s drag; a drag of any other card carries on. */
+    fun cancel(item: TimelineDragItemKey)
 }
 
 object NoOpTimelineTimedDragReporter : TimelineTimedDragReporter {
     override val usesRootOverlay: Boolean = false
-    override fun start(start: TimelineTimedDragStart) = Unit
+    override fun start(start: TimelineTimedDragStart) = false
     override fun update(pointerInRoot: TimelineDragPoint) = Unit
     override fun end() = Unit
-    override fun cancel() = Unit
+    override fun cancel(item: TimelineDragItemKey) = Unit
 }
 
 class TimelineDragReducer(
