@@ -39,7 +39,7 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = 36
-        versionCode = 46
+        versionCode = 47
         versionName = "V.2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

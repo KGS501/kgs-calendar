@@ -59,6 +59,31 @@ class ReminderRegistryTest {
         assertEquals(emptyList<ActiveReminderNotification>(), storage.active)
     }
 
+    @Test
+    fun notificationsOfItemsFinishedElsewhereAreTakenDown() = runTest {
+        val otherTask = CalendarOccurrenceId.Task("tasks/7.ics", 1_700_000_000_000)
+        registry.recordNotification(ActiveReminderNotification(firstId, firstKey))
+        registry.recordNotification(ActiveReminderNotification(otherTask, secondKey))
+        registry.addSnoozed(snoozed(33, firstId))
+
+        // Task 42 was checked off on another device; task 7 is still open.
+        registry.dismissEnded { it != firstId }
+
+        assertEquals(listOf(firstKey), cancelledNotifications)
+        assertEquals(listOf(otherTask), storage.active.map { it.occurrenceId })
+        assertEquals(emptyList<SnoozedReminder>(), storage.snoozed)
+    }
+
+    @Test
+    fun nothingIsTakenDownWhileEverythingIsStillDue() = runTest {
+        registry.recordNotification(ActiveReminderNotification(firstId, firstKey))
+
+        registry.dismissEnded { true }
+
+        assertEquals(emptyList<ReminderNotificationKey>(), cancelledNotifications)
+        assertEquals(listOf(firstId), storage.active.map { it.occurrenceId })
+    }
+
     private fun snoozed(alarmCode: Int, occurrence: CalendarOccurrenceId) = SnoozedReminder(
         alarmRequestCode = alarmCode,
         triggerAtMillis = 1_700_000_600_000,

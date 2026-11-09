@@ -144,6 +144,8 @@ import com.kgs.calendar.ui.timeline.TimelineDragReducer
 import com.kgs.calendar.ui.timeline.TimelineDragSession
 import com.kgs.calendar.ui.timeline.TimelineDraggedItem
 import com.kgs.calendar.ui.timeline.TimelineDraggedItemKind
+import com.kgs.calendar.ui.timeline.TimelineDragItemKey
+import com.kgs.calendar.ui.timeline.key
 import com.kgs.calendar.ui.timeline.TimelineDropTarget
 import com.kgs.calendar.ui.timeline.TimelineTimedDragReporter
 import com.kgs.calendar.ui.timeline.TimelineTimedDragStart
@@ -212,6 +214,8 @@ private data class ActiveTimelineTimedDrag(
     val session: TimelineDragSession,
     val layout: TimelineRootDragLayout,
     val awaitingCommit: Boolean = false,
+    /** The calendar's items when the card was dropped: the move has landed once they change. */
+    val itemsAtDrop: Pair<Any?, Any?>? = null,
 )
 
 private interface TimelineVerticalPinchOwner {
@@ -915,9 +919,9 @@ fun TimelineView(
             exitMarginPx = with(density) { 16.dp.toPx() },
         )
     }
-    val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Unit>(
+    val currentDragStart = rememberUpdatedState<(TimelineTimedDragStart) -> Boolean>(
         newValue = dragStart@ { start ->
-            if (morphContext != null || pagerDayWidthPx <= 0f) return@dragStart
+            if (morphContext != null || pagerDayWidthPx <= 0f) return@dragStart false
             val firstPage = pagerState.layoutInfo.visiblePagesInfo.minByOrNull { it.offset }
             val anchorPage = firstPage?.index ?: pagerState.currentPage
             val anchorOffsetPx = firstPage?.offset?.toFloat() ?: 0f
@@ -955,6 +959,7 @@ fun TimelineView(
                 ),
                 layout = layout,
             )
+            true
         },
     )
     val currentDragUpdate = rememberUpdatedState<(TimelineDragPoint) -> Unit>(
@@ -1004,7 +1009,7 @@ fun TimelineView(
     val currentDragEnd = rememberUpdatedState<() -> Unit>(
         newValue = dragEnd@ {
             val active = activeTimedDrag ?: return@dragEnd
-            activeTimedDrag = active.copy(awaitingCommit = true)
+            activeTimedDrag = active.copy(awaitingCommit = true, itemsAtDrop = state.events to state.datedTasks)
             when (val target = active.session.target) {
                 is TimelineDropTarget.AllDay -> when (active.item.kind) {
                     TimelineDraggedItemKind.Event -> onEventMovedAllDay(
@@ -1038,8 +1043,10 @@ fun TimelineView(
                     )
                 }
             }
+            // The overlay stays on the drop target until the moved item shows there (see below); if
+            // the move never lands, the card comes back where it was.
             scope.launch {
-                delay(1_200)
+                delay(2_500)
                 val current = activeTimedDrag
                 if (
                     current?.awaitingCommit == true &&
@@ -1051,16 +1058,28 @@ fun TimelineView(
             }
         },
     )
-    val currentDragCancel = rememberUpdatedState<() -> Unit>(newValue = { activeTimedDrag = null })
+    // Only the card a drag belongs to may call it off: a card that leaves the screen just after its
+    // own drop must not take the overlay away from the next card being dragged.
+    val currentDragCancel = rememberUpdatedState<(TimelineDragItemKey) -> Unit>(
+        newValue = { item -> if (activeTimedDrag?.item?.key == item) activeTimedDrag = null },
+    )
     val timedDragReporter = remember {
         object : TimelineTimedDragReporter {
             override val usesRootOverlay: Boolean = true
             override fun start(start: TimelineTimedDragStart) = currentDragStart.value(start)
             override fun update(pointerInRoot: TimelineDragPoint) = currentDragUpdate.value(pointerInRoot)
             override fun end() = currentDragEnd.value()
-            override fun cancel() = currentDragCancel.value()
+            override fun cancel(item: TimelineDragItemKey) = currentDragCancel.value(item)
         }
     }
+    // A dropped item shows at its new place as soon as the calendar's items change: the overlay
+    // gives way to it then, rather than after a fixed time.
+    LaunchedEffect(state.events, state.datedTasks) {
+        val dropped = activeTimedDrag ?: return@LaunchedEffect
+        val itemsAtDrop = dropped.itemsAtDrop ?: return@LaunchedEffect
+        if (itemsAtDrop.first !== state.events || itemsAtDrop.second !== state.datedTasks) activeTimedDrag = null
+    }
+    val draggedItemKey = activeTimedDrag?.item?.key
     // One light tick each time a dragged event or task snaps to another slot, day or all-day lane.
     activeTimedDrag?.takeUnless { it.awaitingCommit }?.let { DragSnapHaptics(slot = it.session.target) }
 
@@ -1133,6 +1152,7 @@ fun TimelineView(
             CompositionLocalProvider(
                 LocalMorphItemDay provides itemMorphDay,
                 LocalTimedDragReporter provides timedDragReporter,
+                LocalTimelineDraggedItem provides draggedItemKey,
             ) {
             val pagerFlingBehavior = if (fullWeekPagingEnabled) fullWeekFlingBehavior else fallbackPagerFlingBehavior
             HorizontalPager(
@@ -1795,6 +1815,9 @@ private fun DayHeader(
  * day renders behind the next page's background, since pager pages are drawn in
  * index order by default.
  */
+/** The card the drag overlay currently stands in for; that card hides meanwhile. */
+val LocalTimelineDraggedItem = compositionLocalOf<TimelineDragItemKey?> { null }
+
 val LocalTimedDragReporter = compositionLocalOf<TimelineTimedDragReporter> {
     NoOpTimelineTimedDragReporter
 }

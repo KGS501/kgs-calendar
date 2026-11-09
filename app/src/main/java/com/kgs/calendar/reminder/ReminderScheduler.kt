@@ -72,7 +72,10 @@ object ReminderScheduler {
         val graph = KgsCalendarApplication.graph(context)
         val repository = graph.repository
         // Hidden calendars, and hidden events or tasks of a calendar, never notify.
-        val (events, tasks) = repository.reminderCandidates(graph.settingsStore.collectionVisibility.first())
+        val visibility = graph.settingsStore.collectionVisibility.first()
+        val (events, tasks) = repository.reminderCandidates(visibility)
+        // What was finished or removed elsewhere since its notification came up takes it down now.
+        graph.reminderRegistry.dismissEnded { repository.isReminderDeliverable(it, visibility) }
         val now = nowMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
         // Recent occurrences are planned too, to catch up reminders whose alarm never went off.
@@ -156,7 +159,6 @@ object ReminderScheduler {
             scheduleExactCompat(alarmManager, now, ReminderIntents.alarmPendingIntent(context, plan))
         }
         // Snoozed reminders are set again, e.g. after a restart cleared their alarms.
-        val visibility = graph.settingsStore.collectionVisibility.first()
         registry.pendingSnoozed(now).forEach { record ->
             val occurrence = record.occurrenceId()
             if (occurrence != null && !repository.isReminderDeliverable(occurrence, visibility)) {

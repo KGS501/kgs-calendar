@@ -149,6 +149,7 @@ import com.kgs.calendar.ui.model.highestOverduePriority
 import com.kgs.calendar.ui.model.overdueEntryKey
 import com.kgs.calendar.ui.model.occurrenceStartForEdit
 import com.kgs.calendar.ui.timeline.AllDayReservation
+import com.kgs.calendar.ui.timeline.TimelineDragItemKey
 import com.kgs.calendar.ui.timeline.TimelineDragBounds
 import com.kgs.calendar.ui.timeline.TimelineDragPoint
 import com.kgs.calendar.ui.timeline.TimelineDraggedItem
@@ -1047,7 +1048,7 @@ private fun AllDayViewportChip(
                 leadingExtension = AllDayAbstractionContinuationExtension * if (leadingAbstractionReaches) leadingAbstractionFade else 0f,
                 trailingExtension = AllDayAbstractionContinuationExtension * if (trailingAbstractionReaches) trailingAbstractionFade else 0f,
             )
-            .then(dragModifier)
+            .then(if (canMoveItemsOf(item.event?.collectionHref ?: item.task?.collectionHref.orEmpty())) dragModifier else Modifier)
             .then(item.event?.let { Modifier.itemContextMenu(it) } ?: item.task?.let { Modifier.itemContextMenu(it) } ?: Modifier),
     ) {
         Box(
@@ -1556,12 +1557,10 @@ private fun OverdueTaskChip(
         detectDragGesturesAfterLongPress(
             onDragStart = { offset ->
                 val cardCoordinates = coordinates ?: return@detectDragGesturesAfterLongPress
-                rootOverlayDrag = dragReporter.usesRootOverlay
-                if (rootOverlayDrag) {
-                    haptics.dragStart()
+                if (dragReporter.usesRootOverlay) {
                     val pointer = cardCoordinates.localToRoot(offset)
                     val topLeft = cardCoordinates.positionInRoot()
-                    dragReporter.start(
+                    rootOverlayDrag = dragReporter.start(
                         TimelineTimedDragStart(
                             item = TimelineDraggedItem(
                                 kind = TimelineDraggedItemKind.Task,
@@ -1586,6 +1585,9 @@ private fun OverdueTaskChip(
                             ),
                         ),
                     )
+                }
+                if (rootOverlayDrag) {
+                    haptics.dragStart()
                     onDragStarted()
                 }
             },
@@ -1598,7 +1600,7 @@ private fun OverdueTaskChip(
                 }
             },
             onDragCancel = {
-                if (rootOverlayDrag) dragReporter.cancel()
+                if (rootOverlayDrag) dragReporter.cancel(TimelineDragItemKey(TimelineDraggedItemKind.Task, task.resourceHref))
                 rootOverlayDrag = false
                 onDragFinished()
             },
@@ -1620,7 +1622,7 @@ private fun OverdueTaskChip(
             .alpha((if (inactive) 0.48f else 1f) * pendingAlpha)
             .taskPriorityMotion(if (inactive) null else task.priority, color)
             .background(color, shape)
-            .then(dragModifier)
+            .then(if (canMoveItemsOf(task.collectionHref)) dragModifier else Modifier)
             .itemContextMenu(task)
             .testTag("timeline-overdue-task-${task.resourceHref}"),
     ) {

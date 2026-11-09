@@ -10,16 +10,18 @@ import com.sun.jna.platform.win32.WinUser
 import kotlin.concurrent.thread
 
 /**
- * Lets Windows close the app when it has to: an installer updating it (through the Restart Manager)
- * or the user signing out. Java's own windows don't answer that request, so a running app (even one
- * only in the notification area) would hold its files and make the update fail. A hidden window of
- * the app's own answers instead and has the app save and quit ([onEnd]); after an update Windows
+ * Lets Windows close the app when it has to: shutting down, restarting, signing out, or an installer
+ * updating it (through the Restart Manager). A hidden window of the app's own answers Windows, saves
+ * what the app keeps between runs ([saveState]) and ends the app at once; after an update Windows
  * starts it again.
+ *
+ * The app's usual way out isn't used here: it waits for the window's thread, which Java holds up
+ * while Windows ends the session, so the app hung on and Windows listed it as blocking shutdown.
  */
 object SessionEnd {
     @Volatile private var procedure: WinUser.WindowProc? = null
 
-    fun install(onEnd: () -> Unit) {
+    fun install(saveState: () -> Unit) {
         if (procedure != null || !System.getProperty("os.name").orEmpty().startsWith("Windows")) return
         runCatching { Restart.INSTANCE.RegisterApplicationRestart(WString(""), RESTART_ONLY_FOR_UPDATES) }
         thread(name = "kgs-session", isDaemon = true) {
@@ -35,7 +37,7 @@ object SessionEnd {
                             WM_ENDSESSION -> {
                                 if (wParam != null && wParam.toLong() != 0L && !ending) {
                                     ending = true
-                                    onEnd()
+                                    endNow(saveState)
                                 }
                                 WinDef.LRESULT(0)
                             }
@@ -61,6 +63,18 @@ object SessionEnd {
         }
     }
 
+    /**
+     * Windows ends the session as soon as this window has answered, cutting off whatever still
+     * runs, so the app saves first, for a moment at most, and then stops on the spot. The database
+     * and settings write each change whole, so an interrupted write loses nothing already saved.
+     */
+    private fun endNow(saveState: () -> Unit) {
+        val saving = thread(name = "kgs-session-save", isDaemon = true) { runCatching(saveState) }
+        saving.join(SAVE_TIMEOUT_MS)
+        ClassDataArchive.stopBuilding()
+        Runtime.getRuntime().halt(0)
+    }
+
     @Suppress("FunctionName")
     private interface Restart : Library {
         fun RegisterApplicationRestart(commandLine: WString, flags: Int): Int
@@ -71,6 +85,7 @@ object SessionEnd {
     }
 
     private const val CLASS_NAME = "KgsCalendarSessionWindow"
+    private const val SAVE_TIMEOUT_MS = 1_000L
     private const val WM_QUERYENDSESSION = 0x0011
     private const val WM_ENDSESSION = 0x0016
 
