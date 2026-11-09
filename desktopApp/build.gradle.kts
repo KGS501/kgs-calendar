@@ -14,8 +14,8 @@ plugins {
 val appVersionName = "V.2.0.0"
 
 /**
- * Raised when Windows gets a fixed build under the same version name, as Android's version code is;
- * back to 0 with the next version name. The app keeps showing [appVersionName].
+ * Raised when the installer (.msi) gets a fixed build under the same version name, as Android's
+ * version code is; back to 0 with the next version name. The app keeps showing [appVersionName].
  */
 val windowsRebuild = 1
 
@@ -24,13 +24,25 @@ val windowsRebuild = 1
  * when this version is higher, and it compares just three numbers, so every build handed out needs
  * a higher one: V.2.0.0 → 2.0.0, V.2.0.0-3 → 2.0.3, V.2.0.1 → 2.0.100, plus [windowsRebuild].
  */
-val installerVersion: String = run {
+val installerVersion: String = windowsVersion(windowsRebuild)
+
+/**
+ * Raised when the Store gets a fixed package under the same version name; back to 0 with the next
+ * version name. The Store only asks for a version above the last one it published, so a package
+ * swapped before its first release keeps the version of the name: V.2.0.0 is the Store's 2.0.0.0.
+ */
+val storeRebuild = 0
+
+/** The Store package's version, as [installerVersion] but with [storeRebuild]; the Store adds a fourth 0. */
+val storeVersion: String = windowsVersion(storeRebuild)
+
+fun windowsVersion(extraRebuild: Int): String {
     val match = Regex("""V\.(\d+)\.(\d+)\.(\d+)(?:-(\d+))?""").matchEntire(appVersionName)
         ?: error("Unexpected version name $appVersionName")
     val (major, minor, patch, build) = match.destructured
-    val rebuild = (build.toIntOrNull() ?: 0) + windowsRebuild
+    val rebuild = (build.toIntOrNull() ?: 0) + extraRebuild
     check(rebuild < 100) { "A rebuild number must stay below 100" }
-    "$major.$minor.${patch.toInt() * 100 + rebuild}"
+    return "$major.$minor.${patch.toInt() * 100 + rebuild}"
 }
 
 kotlin {
@@ -248,7 +260,7 @@ tasks.register<PackageMsixTask>("packageMsix") {
     app.set(layout.buildDirectory.dir("compose/binaries/main/app/KGS Calendar"))
     template.set(layout.projectDirectory.dir("msix"))
     logo.set(layout.projectDirectory.file("src/jvmMain/resources/kgs_logo.png"))
-    version.set(installerVersion)
+    version.set(storeVersion)
     testPackage.set(providers.gradleProperty("msixTest").isPresent)
     outputDir.set(layout.buildDirectory.dir("msix"))
     dependsOn("createDistributable")
