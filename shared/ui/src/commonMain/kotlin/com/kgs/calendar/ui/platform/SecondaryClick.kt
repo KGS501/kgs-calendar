@@ -20,7 +20,8 @@ fun Modifier.onSecondaryClick(enabled: Boolean = true, onClick: (Offset) -> Unit
     if (!enabled) {
         this
     } else {
-        composed {
+        // On a fresh Modifier: a bare `composed` would chain onto `this`, doubling it with `.then(this)`.
+        Modifier.composed {
             val currentOnClick by rememberUpdatedState(onClick)
             Modifier.pointerInput(Unit) {
                 awaitPointerEventScope {
