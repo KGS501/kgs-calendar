@@ -92,7 +92,10 @@ private class CoordinatesHolder {
     var coordinates: LayoutCoordinates? = null
 }
 
-private fun Modifier.itemContextMenu(item: () -> DetailSheet): Modifier = composed {
+// `Modifier.composed`, not a bare `composed`: inside this extension a bare one would already chain
+// onto `this`, and the `.then(this)` below would then add the card's modifiers a second time (two
+// drag detectors on every timeline card, fighting over each drag).
+private fun Modifier.itemContextMenu(item: () -> DetailSheet): Modifier = Modifier.composed {
     val menu = LocalItemContextMenu.current ?: return@composed Modifier
     val currentItem by rememberUpdatedState(item)
     val holder = remember { CoordinatesHolder() }
