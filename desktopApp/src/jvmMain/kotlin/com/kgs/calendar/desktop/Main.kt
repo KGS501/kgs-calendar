@@ -84,7 +84,7 @@ private class LoadedApp(val graph: DesktopAppGraph, val viewModel: CalendarViewM
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    DesktopAppVersion = System.getProperty("kgs.version") ?: "V.2.0.0"
+    DesktopAppVersion = System.getProperty("kgs.version") ?: "V.2.0.1"
     val dataDirectory = dataDirectory(args)
     // Started again while it runs (the Start menu, a shortcut): the running app shows its window instead.
     val instance = SingleInstance.claim(dataDirectory) ?: exitProcess(0)

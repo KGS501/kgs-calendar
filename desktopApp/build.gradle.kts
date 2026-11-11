@@ -11,13 +11,13 @@ plugins {
 }
 
 /** The app's version as the other platforms show it: V.MAJOR.MINOR.PATCH, or V.MAJOR.MINOR.PATCH-BUILD for a rebuild. */
-val appVersionName = "V.2.0.0"
+val appVersionName = "V.2.0.1"
 
 /**
  * Raised when Windows gets a fixed build under the same version name, as Android's version code is;
  * back to 0 with the next version name. The app keeps showing [appVersionName].
  */
-val windowsRebuild = 1
+val windowsRebuild = 0
 
 /**
  * The installer's version. Windows only installs a package over the one before it (keeping its data)
