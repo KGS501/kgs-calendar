@@ -11,7 +11,7 @@ plugins {
 }
 
 /** The app's version as the other platforms show it: V.MAJOR.MINOR.PATCH, or V.MAJOR.MINOR.PATCH-BUILD for a rebuild. */
-val appVersionName = "V.2.0.1"
+val appVersionName = "V.2.0.2-1"
 
 /**
  * Raised when Windows gets a fixed build under the same version name, as Android's version code is;
