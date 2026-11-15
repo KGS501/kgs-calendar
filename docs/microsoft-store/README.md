@@ -115,23 +115,31 @@ listed there.
 1. Raise the version as for any update (see above). **The flight's package must be higher than the
    production package**, or the testers' Store keeps production: V.2.0.2-1 is 2.0.201.0, above
    V.2.0.1's 2.0.100.0. Production isn't touched by any of this.
-2. Run the **Windows Store package** workflow on the beta's tag and take the `.msix` from
-   `store-package`.
-3. In Partner Center, open KGS Calendar > **Internal testing**. Choose **Packages**, remove the last
-   beta's package, upload the new one and save. (A flight that is in certification can't be changed:
-   cancel it there first, or wait.)
-4. Choose **Submit to the Store**. The flight goes through certification like a submission, usually
-   within a few hours and at most three business days, and is published to the group by itself.
-5. On the laptop, signed in to the Store with the group's account, open KGS Calendar in the Store and
+2. Run the **Windows Store package** workflow with **source_ref** set to the beta's tag and
+   **publish** set to `flight`:
+
+   ```sh
+   gh workflow run windows-store.yml --ref main -f source_ref=V.2.0.2-1 -f publish=flight
+   ```
+
+   It builds and certifies the package as always, then uploads it to the **Internal testing** flight
+   and submits it to certification. Nobody has to upload anything by hand.
+3. Certification takes a few hours, at most three business days; the flight is then published to
+   the group by itself. Partner Center shows the state under KGS Calendar > **Internal testing**.
+   (A flight already in certification can't take a new package: wait for it, or cancel it there.)
+4. On the laptop, signed in to the Store with the group's account, open KGS Calendar in the Store and
    check for updates: it installs the flight's version. Check **About** shows the beta's version.
 
 ### Promoting a tested beta
 
 The owner decides when a beta is ready; nobody promotes it without them.
 
-1. Open KGS Calendar > **Internal testing** and choose to make its package available to everyone
-   (Partner Center calls this creating a submission from the flight). The production submission then
-   gets the flight's package; check its other pages, such as "What's new", and submit it.
+1. Run the workflow with **publish** set to `production` and **source_ref** set to the tested tag.
+   The publish step waits in the `store-production` environment until the owner approves it on the
+   run's page in GitHub; then it uploads the package as a production update and submits it. Change
+   "What's new" in Partner Center first if it should say something new. Or, in Partner Center, open
+   **Internal testing** and make its package available to everyone (Partner Center calls this
+   creating a submission from the flight).
 2. Or ship a final build of its own in a normal update submission (see above). Mind the numbers: a
    final V.2.0.2 maps to 2.0.200, *below* its betas (V.2.0.2-1 is 2.0.201), so it can't replace a
    published beta package. Either promote the tested beta's package as in step 1, or give the final
@@ -140,6 +148,17 @@ The owner decides when a beta is ready; nobody promotes it without them.
 
 After the production update is out, the flight's package is lower than production and the testers get
 production again until the next beta.
+
+### How the workflow reaches the Store
+
+The publish job uses the Store submission API through the `msstore` CLI
+(`microsoft/microsoft-store-apppublisher`). It signs in as the Microsoft Entra app **KGS Calendar
+Store publishing** in the tenant **KGS501.onmicrosoft.com**, which is linked to the Partner Center
+account and has the Manager role there. Its values are repository secrets: `AZURE_AD_TENANT_ID`,
+`SELLER_ID`, `AZURE_AD_APPLICATION_CLIENT_ID` and `AZURE_AD_APPLICATION_SECRET`. The key comes from
+Partner Center > Account settings > User management > Microsoft Entra applications > the app > **Add
+new key**; it is shown once and expires after two years, so add a new one and update the secret before
+then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
 
 ## How the Store app differs
 
