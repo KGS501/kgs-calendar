@@ -154,11 +154,22 @@ production again until the next beta.
 The publish job uses the Store submission API through the `msstore` CLI
 (`microsoft/microsoft-store-apppublisher`). It signs in as the Microsoft Entra app **KGS Calendar
 Store publishing** in the tenant **KGS501.onmicrosoft.com**, which is linked to the Partner Center
-account and has the Manager role there. Its values are repository secrets: `AZURE_AD_TENANT_ID`,
-`SELLER_ID`, `AZURE_AD_APPLICATION_CLIENT_ID` and `AZURE_AD_APPLICATION_SECRET`. The key comes from
-Partner Center > Account settings > User management > Microsoft Entra applications > the app > **Add
-new key**; it is shown once. Keys expire (the date is on that page), so add a new one and update the
-secret before then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
+account and has the Manager role there. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
+
+Its values are **environment secrets**, not repository secrets: `AZURE_AD_TENANT_ID`, `SELLER_ID`,
+`AZURE_AD_APPLICATION_CLIENT_ID` and `AZURE_AD_APPLICATION_SECRET`, set the same on both
+environments, `store-flight` and `store-production` (Settings > Environments). Only the publish job
+runs in one of them, so no other job or workflow can read the secrets. Both environments accept
+**only the branch `main`**: dispatch with `--ref main` (pick what gets built with `source_ref`); a run
+dispatched from any other branch can't reach the secrets, so a workflow changed on a branch can't
+publish. `store-production` also waits for the owner's approval. Changing the environments or their
+secrets needs admin rights on the repository.
+
+The key comes from Partner Center > Account settings > User management > Microsoft Entra applications
+> the app > **Add new key**; it is shown once. The current key expires on 2028-11-15 (the date is on
+that page). Before then, add a new key, set `AZURE_AD_APPLICATION_SECRET` on both environments
+(`gh secret set AZURE_AD_APPLICATION_SECRET --env store-flight`, then `--env store-production`), and
+remove the old key on that page.
 
 The API can't upload to a submission that was started in Partner Center, and it can't delete one
 either. **Don't start a draft in Partner Center** (an update, or a new package for the flight) when the
