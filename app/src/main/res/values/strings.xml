@@ -615,6 +615,7 @@
     <string name="sync_conflict_keep_mine">Keep mine</string>
     <string name="sync_conflict_use_server">Use the other</string>
     <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="error_saved_upload_failed">Saved on this device, but the upload failed: %1$s</string>
     <string name="error_unreachable">Couldn\'t reach the server. Check the internet connection, Private DNS or VPN, and the server address.</string>
     <string name="error_timeout">The server took too long to answer. The app tries again with the next sync.</string>
     <string name="error_credentials_missing">The login for this source is missing. Edit the source and enter the password again.</string>

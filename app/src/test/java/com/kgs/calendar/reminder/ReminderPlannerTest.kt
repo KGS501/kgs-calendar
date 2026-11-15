@@ -27,12 +27,34 @@ class ReminderPlannerTest {
     }
 
     @Test
-    fun separateOccurrencesUseSeparateNotificationKeys() {
-        val second = taskOccurrence.copy(
+    fun occurrencesOfARepeatingItemUseSeparateNotificationKeys() {
+        val first = taskOccurrence.copy(repeats = true)
+        val second = first.copy(
             occurrenceId = CalendarOccurrenceId.Task("tasks/42.ics", 1_700_086_400_000),
         )
 
-        assertNotEquals(planner.key(taskOccurrence), planner.key(second))
+        assertNotEquals(planner.key(first), planner.key(second))
+    }
+
+    @Test
+    fun aMovedSingleItemKeepsItsNotificationKey() {
+        // A single item's occurrence id carries its start, which changes when it is moved or edited.
+        val moved = taskOccurrence.copy(
+            occurrenceId = CalendarOccurrenceId.Task("tasks/42.ics", 1_700_007_200_000),
+            startAtMillis = 9_200_000L,
+            endAtMillis = 9_800_000L,
+            defaultAnchorAtMillis = 9_800_000L,
+        )
+
+        assertEquals(planner.key(taskOccurrence), planner.key(moved))
+        assertEquals(planner.plan(taskOccurrence, listOf(120)).single().notificationKey, planner.plan(moved, listOf(REMINDER_AT_START)).single().notificationKey)
+    }
+
+    @Test
+    fun anEventAndATaskAtTheSameAddressKeepSeparateKeys() {
+        val event = taskOccurrence.copy(occurrenceId = CalendarOccurrenceId.Event("tasks/42.ics", 1_700_000_000_000))
+
+        assertNotEquals(planner.key(taskOccurrence), planner.key(event))
     }
 
     @Test

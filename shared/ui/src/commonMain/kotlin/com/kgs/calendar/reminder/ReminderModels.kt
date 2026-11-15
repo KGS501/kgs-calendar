@@ -11,6 +11,8 @@ data class ReminderOccurrence(
     val body: String?,
     /** A reminder missed while the device was off is still shown until then; null for always. */
     val notifyUntilMillis: Long? = null,
+    /** Whether the item repeats: then each occurrence has notifications of its own (see ReminderPlanner.key). */
+    val repeats: Boolean = false,
 )
 
 data class ReminderNotificationKey(

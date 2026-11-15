@@ -59,6 +59,7 @@ suspend fun planReminders(
                 title = event.title,
                 body = null,
                 notifyUntilMillis = event.endsAtMillis,
+                repeats = master.repeats(),
             )
             plans += planner.plan(reminderOccurrence, offsets).map { it.copy(body = bodies.event(event, it.triggerAtMillis)) }
         }
@@ -75,6 +76,7 @@ suspend fun planReminders(
                 defaultAnchorAtMillis = task.dueAtMillis ?: task.startAtMillis,
                 title = task.title.takeIf { it.isNotBlank() } ?: untitledTask,
                 body = null,
+                repeats = master.repeats(),
             )
             plans += planner.plan(reminderOccurrence, offsets).map { it.copy(body = bodies.task(task, it.triggerAtMillis)) }
         }
@@ -83,6 +85,12 @@ suspend fun planReminders(
 }
 
 const val REMINDER_WINDOW_DAYS = 21L
+
+/** Whether reminders of this event come per occurrence (see ReminderPlanner.key). */
+fun EventEntity.repeats(): Boolean = isRecurring || !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()
+
+/** Whether reminders of this task come per occurrence (see ReminderPlanner.key). */
+fun TaskEntity.repeats(): Boolean = !recurrenceRule.isNullOrBlank() || !rDatesCsv.isNullOrBlank()
 
 private fun String?.reminderMinutes(): List<Int> =
     this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.filter { it.isSupportedReminderOffset() }.orEmpty()

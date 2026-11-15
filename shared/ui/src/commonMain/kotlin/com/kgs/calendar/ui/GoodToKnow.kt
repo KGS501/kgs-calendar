@@ -54,7 +54,7 @@ internal fun GoodToKnowSettings() {
     Tip(Res.string.tip_move_title, Res.string.tip_move_body) { MoveIllustration() }
     Tip(Res.string.tip_status_title, Res.string.tip_status_body) { StatusIllustration() }
     Tip(Res.string.tip_day_title, Res.string.tip_day_body) { DayToggleIllustration() }
-    if (desktop || largeScreen) Tip(Res.string.tip_sheet_title, Res.string.tip_sheet_body) { SheetIllustration() }
+    if (desktop) Tip(Res.string.tip_sheet_title, Res.string.tip_sheet_body) { SheetIllustration() }
     if (desktop) Tip(Res.string.tip_seam_title, Res.string.tip_seam_body) { SeamIllustration() }
     if (desktop) Tip(Res.string.tip_keys_title, Res.string.tip_keys_body) { KeysIllustration() }
 }

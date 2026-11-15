@@ -98,6 +98,7 @@ private class NotificationDelegate : NSObject(), UNUserNotificationCenterDelegat
             val visible = runCatching {
                 graph.repository.isReminderStillVisible(occurrence, graph.settingsStore.collectionVisibility.first())
             }.getOrNull() ?: true
+            if (visible) graph.reminders.replaceEarlier(willPresentNotification)
             withCompletionHandler(if (visible) show else 0u)
         }
     }

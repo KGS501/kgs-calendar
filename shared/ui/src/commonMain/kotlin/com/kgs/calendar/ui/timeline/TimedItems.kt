@@ -383,7 +383,10 @@ private fun TimedEventBlock(
     var cardCoordinates by remember(event.resourceHref, event.startsAtMillis) { mutableStateOf<LayoutCoordinates?>(null) }
     val dragReporter = LocalTimedDragReporter.current
     val haptics = LocalKgsHaptics.current
-    val dragKey = TimelineDragItemKey(TimelineDraggedItemKind.Event, event.resourceHref, event.occurrenceStartForEdit())
+    // occurrenceStartForEdit reads the item's overrides (JSON); every card recomposes when a drag starts or ends.
+    val dragKey = remember(event) {
+        TimelineDragItemKey(TimelineDraggedItemKind.Event, event.resourceHref, event.occurrenceStartForEdit())
+    }
     val hiddenByOverlay = LocalTimelineDraggedItem.current == dragKey
     val movable = canMoveItemsOf(event.collectionHref)
     val latestOverlayDragging by rememberUpdatedState(isDragging && rootOverlayDrag)

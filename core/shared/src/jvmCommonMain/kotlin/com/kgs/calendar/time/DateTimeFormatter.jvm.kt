@@ -19,7 +19,39 @@ actual fun rootAppLocale(): AppLocale = java.util.Locale.ROOT
 
 private fun FormatStyle.toJava(): java.time.format.FormatStyle = java.time.format.FormatStyle.valueOf(name)
 
+private data class JavaFormatterKey(
+    val pattern: String?,
+    val dateStyle: FormatStyle?,
+    val timeStyle: FormatStyle?,
+    val locale: java.util.Locale,
+    val hasTime: Boolean,
+    val hasDate: Boolean,
+    val basicIsoDate: Boolean,
+)
+
+/**
+ * Built java.time formatters. Building one parses its pattern, which costs more than the formatting
+ * itself, and a sync formats and parses thousands of dates. The key holds the default locale, so a
+ * formatter without a locale still follows a change of the app's language.
+ */
+private val javaFormatters = java.util.concurrent.ConcurrentHashMap<JavaFormatterKey, java.time.format.DateTimeFormatter>()
+
 private fun DateTimeFormatter.toJava(hasTime: Boolean, hasDate: Boolean): java.time.format.DateTimeFormatter {
+    val key = JavaFormatterKey(
+        pattern = pattern,
+        dateStyle = dateStyle,
+        timeStyle = timeStyle,
+        locale = locale ?: java.util.Locale.getDefault(java.util.Locale.Category.FORMAT),
+        hasTime = hasTime,
+        hasDate = hasDate,
+        basicIsoDate = this === DateTimeFormatter.BASIC_ISO_DATE,
+    )
+    return javaFormatters.getOrPut(key) { buildJava(hasTime, hasDate) }
+}
+
+private fun DateTimeFormatter.buildJava(hasTime: Boolean, hasDate: Boolean): java.time.format.DateTimeFormatter {
+    // java.time's own constant parses strictly: a date such as 20240230 is an error, not 29 February.
+    if (this === DateTimeFormatter.BASIC_ISO_DATE) return java.time.format.DateTimeFormatter.BASIC_ISO_DATE
     val base = when {
         pattern != null -> java.time.format.DateTimeFormatter.ofPattern(pattern)
         dateStyle != null && timeStyle != null && hasTime && hasDate ->

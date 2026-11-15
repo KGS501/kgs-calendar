@@ -54,11 +54,13 @@ fun CalendarAppContent(
     state: CalendarUiState,
     today: LocalDate,
 ) {
-    // Cards anywhere below open their right-click menu here (see itemContextMenu).
+    // Cards anywhere below open their right-click menu here (see itemContextMenu). Only the desktop has
+    // one: on a touch screen it would only add a position callback and a pointer handler to every card.
     val itemMenu = remember { ItemContextMenuState() }
+    val desktop = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
     val readOnlyHrefs = remember(state.collections) { state.collections.readOnlyHrefs() }
     CompositionLocalProvider(
-        LocalItemContextMenu provides itemMenu,
+        LocalItemContextMenu provides itemMenu.takeIf { desktop },
         LocalReadOnlyCollectionHrefs provides readOnlyHrefs,
     ) {
         CalendarAppBody(viewModel, state, today, itemMenu)

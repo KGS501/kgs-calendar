@@ -71,7 +71,10 @@ class ReminderRegistry(
     }
 
     suspend fun recordNotification(notification: ActiveReminderNotification) = mutex.withLock {
-        val remaining = storage.readActive().filterNot { it.occurrenceId == notification.occurrenceId }
+        // A notification with the same key replaced the earlier one, also when the item was moved since.
+        val remaining = storage.readActive().filterNot {
+            it.occurrenceId == notification.occurrenceId || it.notificationKey == notification.notificationKey
+        }
         storage.writeActive(remaining + notification)
     }
 

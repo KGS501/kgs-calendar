@@ -136,10 +136,20 @@ fun List<EventEntity>.layoutTimedEventsForDay(day: LocalDate, hourHeightDp: Floa
     return result
 }
 
+/**
+ * The day's timeline from [DayStartHour] to the end of [DayEndHour], in epoch millis. Runs for every item
+ * on every visible day, also on each frame of a pinch zoom, so it converts each end only once.
+ */
+private fun LocalDate.visibleTimelineMillis(): Pair<Long, Long> {
+    val zone = ZoneId.systemDefault()
+    val start = LocalDateTime(this, LocalTime(DayStartHour, 0)).toEpochMillis(zone)
+    val endLocal = if (DayEndHour == 23) LocalDateTime(plusDays(1), LocalTime(0, 0)) else LocalDateTime(this, LocalTime(DayEndHour + 1, 0))
+    return start to endLocal.toEpochMillis(zone)
+}
+
 fun EventEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlacement? {
     if (allDay || isTimedMultiDayMiddleOn(day)) return null
-    val visibleStart = day.atTime(DayStartHour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val visibleEnd = day.atTime(DayEndHour, 0).plusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val (visibleStart, visibleEnd) = day.visibleTimelineMillis()
     val overlapStart = max(startsAtMillis, visibleStart)
     val effectiveEnd = if (endsAtMillis - startsAtMillis <= NearZeroTimedEventThresholdMillis) {
         startsAtMillis + MinimumTimedEventVisualDurationMillis
@@ -180,8 +190,7 @@ fun TaskEntity.timedPlacementOn(day: LocalDate, hourHeightDp: Float): TimedPlace
         startTimed != null -> startTimed + DefaultTaskDurationMillis
         else -> dueTimed!!
     }
-    val visibleStart = day.atTime(DayStartHour, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val visibleEnd = day.atTime(DayEndHour, 0).plusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val (visibleStart, visibleEnd) = day.visibleTimelineMillis()
     val overlapStart = max(start, visibleStart)
     val overlapEnd = min(max(end, start + DefaultTaskDurationMillis), visibleEnd)
     if (overlapEnd <= overlapStart) return null

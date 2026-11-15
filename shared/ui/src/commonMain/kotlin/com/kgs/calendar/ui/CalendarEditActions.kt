@@ -255,7 +255,7 @@ class CalendarEditActions constructor(
                     throw error
                 } catch (error: Throwable) {
                     if (!error.isConnectionFailure() && !error.isOnlySyncConflicts()) {
-                        message.value = "Saved on this device, but the upload failed: ${error.message}"
+                        message.value = "$SavedUploadFailedPrefix ${error.message}"
                     }
                 }
                 runCatching { widgetRefresher.updateAll() }

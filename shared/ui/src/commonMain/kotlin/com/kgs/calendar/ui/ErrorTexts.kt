@@ -15,6 +15,8 @@ fun friendlyErrorText(raw: String): String {
     val lower = text.lowercase()
     val status = HttpStatus.find(text)?.groupValues?.get(1)?.toIntOrNull()
     return when {
+        text.startsWith(SavedUploadFailedPrefix) ->
+            stringResource(Res.string.error_saved_upload_failed, friendlyErrorText(text.removePrefix(SavedUploadFailedPrefix).trim()))
         text in GenericFallbacks -> stringResource(Res.string.error_generic)
         "dns lookup" in lower || "unable to resolve host" in lower || "failed to connect" in lower ||
             "connection refused" in lower || "connection reset" in lower || "network is unreachable" in lower ->
@@ -37,6 +39,9 @@ fun friendlyErrorText(raw: String): String {
         else -> text
     }
 }
+
+/** Set by CalendarEditActions when a save stays on the device because its upload failed. */
+internal const val SavedUploadFailedPrefix = "Saved on this device, but the upload failed:"
 
 private val SourcePrefix = Regex("^Source \"[^\"]*\":\\s*")
 private val HttpStatus = Regex("HTTP (\\d{3})\\b")
