@@ -53,6 +53,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -121,6 +123,7 @@ fun MonthBlock(
     val leading = firstDay.leadingDaysFrom(firstDayOfWeek)
     val length = month.lengthOfMonth()
     val rowCount = ((leading + length + 6) / 7)
+    val monthHoverEnabled = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
     val cards = monthCardMetrics()
     val textScale = calendarTextScale()
     val rowHeight = cards.rowHeight * textScale * rowScale
@@ -166,8 +169,13 @@ fun MonthBlock(
                     }
                     // The cells show their hover tint themselves, so the pills' fades over a hovered day
                     // can fade into the same tint.
+                    // Touch screens never hover: there the row skips the seven hover watchers.
                     val hoverSources = remember { List(7) { MutableInteractionSource() } }
-                    val hoveredColumns = hoverSources.map { it.collectIsHoveredAsState() }
+                    val hoveredColumns: List<State<Boolean>> = if (monthHoverEnabled) {
+                        hoverSources.map { it.collectIsHoveredAsState() }
+                    } else {
+                        NoHoveredColumns
+                    }
                     Box(
                         modifier = Modifier.fillMaxWidth().height(rowHeight),
                     ) {
@@ -997,3 +1005,7 @@ private fun MonthPillChip(pill: MonthPill, morphEnabled: Boolean = false) {
         PendingMutationBadge(pill.event, pill.task, Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp))
     }
 }
+
+/** A week row's hover state on touch screens: nothing is ever hovered. */
+private val NoHoveredColumns: List<State<Boolean>> = List(7) { mutableStateOf(false) }
+

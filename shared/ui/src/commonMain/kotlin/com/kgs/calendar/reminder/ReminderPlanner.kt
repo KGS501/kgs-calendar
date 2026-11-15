@@ -23,11 +23,17 @@ class ReminderPlanner {
             )
         }
 
+    /**
+     * One notification per item, or per occurrence of a repeating one: a later reminder replaces the
+     * earlier one's notification instead of adding a second. A single item's occurrence id carries its
+     * start, so the key leaves it out; otherwise moving the item gave its next reminder a new key.
+     */
     fun key(occurrence: ReminderOccurrence): ReminderNotificationKey {
-        val stableKey = occurrence.occurrenceId.stableKey
+        val id = occurrence.occurrenceId
+        val itemKey = if (occurrence.repeats) id.stableKey else "${id.kind}:${id.resourceHref.length}:${id.resourceHref}"
         return ReminderNotificationKey(
-            tag = "$NOTIFICATION_TAG_PREFIX$stableKey",
-            id = stableKey.hashCode(),
+            tag = "$NOTIFICATION_TAG_PREFIX$itemKey",
+            id = itemKey.hashCode(),
         )
     }
 

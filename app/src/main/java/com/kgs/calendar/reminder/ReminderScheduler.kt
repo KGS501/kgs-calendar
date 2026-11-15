@@ -105,6 +105,7 @@ object ReminderScheduler {
                     title = event.title,
                     body = null,
                     notifyUntilMillis = event.endsAtMillis,
+                    repeats = master.repeats(),
                 )
                 plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = eventNotificationBody(event, plan.triggerAtMillis))
@@ -128,6 +129,7 @@ object ReminderScheduler {
                     defaultAnchorAtMillis = task.dueAtMillis ?: task.startAtMillis,
                     title = task.title.takeIf { it.isNotBlank() } ?: context.getString(R.string.untitled_task),
                     body = null,
+                    repeats = master.repeats(),
                 )
                 plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = taskNotificationBody(task, plan.triggerAtMillis))

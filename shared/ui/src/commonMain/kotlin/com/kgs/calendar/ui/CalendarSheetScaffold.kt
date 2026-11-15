@@ -103,8 +103,7 @@ import kotlin.math.roundToInt
 import kotlin.math.abs
 import com.kgs.calendar.ui.desktop.LocalPaneLayout
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.ui.graphics.shadow.Shadow
-import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.PointerEventType
 
 data class SheetInsetPolicy(
@@ -637,16 +636,18 @@ fun KgsModalBottomSheet(
             // Phones, rotated ones included, keep the full window width.
             val sheetMaxWidth = largeScreenMaxWidth(SheetMaxWidth)
             val separationShadowDark = MaterialTheme.colorScheme.background.isDark()
-            // On screens wider than a sheet, the sheet sits where the user last put it (dragging its
-            // handle sideways); every sheet opens there.
+            // On desktop windows wider than a sheet, the sheet sits where the user last put it (dragging
+            // its handle sideways); every sheet opens there. Tablets keep it centred and its handle's
+            // usual drag with its fling.
             val paneLayout = LocalPaneLayout.current
+            val desktopChrome = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
             val sheetWidthPx = if (sheetMaxWidth == Dp.Unspecified) {
                 constraints.maxWidth.toFloat()
             } else {
                 min(constraints.maxWidth.toFloat(), with(density) { sheetMaxWidth.toPx() })
             }
             val sheetFreeWidthPx = (constraints.maxWidth - sheetWidthPx).coerceAtLeast(0f)
-            val sheetMovable = !inPanel && sheetFreeWidthPx > 1f
+            val sheetMovable = desktopChrome && !inPanel && sheetFreeWidthPx > 1f
             val sheetXPx = if (sheetMovable) sheetFreeWidthPx * paneLayout.sheetPosition else 0f
 
             // Fold panels round only the corners next to the hinge.
@@ -708,22 +709,17 @@ fun KgsModalBottomSheet(
                     )
                     .then(
                         if (!inPanel) {
-                            // A soft, blurred shadow around the whole sheet: no edge where it ends, also
-                            // beside a sheet narrower than the screen.
-                            Modifier.dropShadow(
-                                shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius),
-                                // Strong enough to show clearly where the sheet ends, also over the dimmed calendar.
-                                shadow = Shadow(
-                                    radius = 32.dp,
-                                    spread = 4.dp,
-                                    color = Color.Black,
-                                    alpha = when {
-                                        separationShadow && separationShadowDark -> 0.62f
-                                        separationShadow -> 0.36f
-                                        separationShadowDark -> 0.55f
-                                        else -> 0.34f
-                                    },
-                                ),
+                            // A soft shadow around the whole sheet: no edge where it ends, also beside a
+                            // sheet narrower than the screen. Strong enough to show clearly where the sheet
+                            // ends, also over the dimmed calendar.
+                            Modifier.softSheetShadow(
+                                cornerRadius = cornerRadius,
+                                alpha = when {
+                                    separationShadow && separationShadowDark -> 0.62f
+                                    separationShadow -> 0.36f
+                                    separationShadowDark -> 0.55f
+                                    else -> 0.34f
+                                },
                             )
                         } else {
                             Modifier
@@ -892,6 +888,58 @@ fun KgsModalBottomSheet(
 const val KgsModalBottomSheetSurfaceTag = "kgs-modal-bottom-sheet"
 
 private val SheetHandleHeight = 18.dp
+
+/**
+ * The sheet's shadow, drawn from gradients: a band above it, one on each side, and a quarter ring
+ * around each rounded top corner, fading out over [SheetShadowExtent]. The sheet's height changes on
+ * every frame of opening, closing and dragging, and a blurred shadow (Modifier.dropShadow) blurs a
+ * bitmap of the sheet's whole size again on the main thread each time; gradients cost next to nothing.
+ */
+private fun Modifier.softSheetShadow(cornerRadius: Dp, alpha: Float): Modifier = drawBehind {
+    val extent = SheetShadowExtent.toPx()
+    val radius = cornerRadius.toPx().coerceAtMost(size.width / 2f)
+    val outer = radius + extent
+    val stops = SheetShadowFalloff.map { (at, strength) -> at to Color.Black.copy(alpha = alpha * strength) }.toTypedArray()
+    val ringStops = SheetShadowFalloff.map { (at, strength) ->
+        (radius + at * extent) / outer to Color.Black.copy(alpha = alpha * strength)
+    }.toTypedArray()
+    val sideTop = radius
+    val sideHeight = (size.height - sideTop).coerceAtLeast(0f)
+    // Above the straight part of the top edge.
+    drawRect(
+        brush = Brush.verticalGradient(*stops, startY = 0f, endY = -extent),
+        topLeft = Offset(radius, -extent),
+        size = Size((size.width - 2 * radius).coerceAtLeast(0f), extent),
+    )
+    // Beside the sheet, below the corners.
+    drawRect(
+        brush = Brush.horizontalGradient(*stops, startX = 0f, endX = -extent),
+        topLeft = Offset(-extent, sideTop),
+        size = Size(extent, sideHeight),
+    )
+    drawRect(
+        brush = Brush.horizontalGradient(*stops, startX = size.width, endX = size.width + extent),
+        topLeft = Offset(size.width, sideTop),
+        size = Size(extent, sideHeight),
+    )
+    // Around the corners; inside the ring is the sheet itself, which covers it.
+    drawRect(
+        brush = Brush.radialGradient(*ringStops, center = Offset(radius, radius), radius = outer),
+        topLeft = Offset(-extent, -extent),
+        size = Size(outer, outer),
+    )
+    drawRect(
+        brush = Brush.radialGradient(*ringStops, center = Offset(size.width - radius, radius), radius = outer),
+        topLeft = Offset(size.width - radius, -extent),
+        size = Size(outer, outer),
+    )
+}
+
+/** How far the sheet's shadow reaches beyond its edge. */
+private val SheetShadowExtent = 40.dp
+
+/** The shadow's strength from the sheet's edge (0) to the end of [SheetShadowExtent] (1), roughly a blur's falloff. */
+private val SheetShadowFalloff = listOf(0f to 0.6f, 0.15f to 0.42f, 0.35f to 0.2f, 0.6f to 0.07f, 1f to 0f)
 
 /** A mouse wheel lowering the sheet (see pullSheetByWheel); read by its event handling, so it is not state. */
 private class WheelPull {

@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -74,11 +75,21 @@ fun SharedDrawerSheet(
                     .clickable(interactionSource = quietInteraction, indication = null, onClick = onDismiss),
             )
         }
-        if (effectiveProgress > 0f) Surface(
+        // Stays composed while closed, so opening it doesn't build its whole content again (calendar
+        // pictures included) in the first frames of the slide. Closed, it isn't placed: not drawn, not
+        // focusable and not read out.
+        Surface(
             modifier = Modifier
                 .width(drawerWidth)
                 .fillMaxHeight()
-                .offset { IntOffset(((-drawerWidthPx) * (1f - effectiveProgress)).roundToInt(), 0) }
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    layout(placeable.width, placeable.height) {
+                        if (effectiveProgress > 0f) {
+                            placeable.place(((-drawerWidthPx) * (1f - effectiveProgress)).roundToInt(), 0)
+                        }
+                    }
+                }
                 .pointerInput(visible, drawerWidthPx) {
                     detectHorizontalDragGestures(
                         onDragCancel = { dragOffsetPx = 0f },

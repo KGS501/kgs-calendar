@@ -90,6 +90,7 @@ class IosReminderScheduler(private val graph: IosAppGraph) {
                 content.setUserInfo(mapOf(KEY_TARGET to target.encode(), KEY_OCCURRENCE to plan.occurrenceId.stableKey, KEY_TAG to plan.notificationKey.tag))
                 add(PLANNED_PREFIX + plan.alarmRequestCode, content, ((plan.triggerAtMillis - now) / 1000.0).coerceAtLeast(1.0))
             }
+        keepLatestDelivered()
     }
 
     /** Shows [notification] again in [SNOOZE_MINUTES]; one snooze per reminder, like on Android. */
@@ -115,6 +116,37 @@ class IosReminderScheduler(private val graph: IosAppGraph) {
     private suspend fun pendingRequests(): List<String> = suspendCancellableCoroutine { continuation ->
         center.getPendingNotificationRequestsWithCompletionHandler { requests ->
             continuation.resume(requests.orEmpty().mapNotNull { (it as? UNNotificationRequest)?.identifier })
+        }
+    }
+
+    /**
+     * A reminder replaces the shown notification of an earlier reminder of the same item (or the same
+     * occurrence of a repeating one), as on Android. Called when one comes up while the app runs; the
+     * next reschedule tidies up the ones that came up while it didn't.
+     */
+    fun replaceEarlier(notification: UNNotification) {
+        val tag = notification.request.content.userInfo[KEY_TAG] as? String ?: return
+        val identifier = notification.request.identifier
+        center.getDeliveredNotificationsWithCompletionHandler { delivered ->
+            val ids = delivered.orEmpty()
+                .mapNotNull { (it as? UNNotification)?.request }
+                .filter { it.identifier != identifier && it.content.userInfo[KEY_TAG] as? String == tag }
+                .map { it.identifier }
+            if (ids.isNotEmpty()) center.removeDeliveredNotificationsWithIdentifiers(ids)
+        }
+    }
+
+    /** Keeps only the latest shown notification per item (see [replaceEarlier]). */
+    private fun keepLatestDelivered() {
+        center.getDeliveredNotificationsWithCompletionHandler { delivered ->
+            val ids = delivered.orEmpty()
+                .mapNotNull { it as? UNNotification }
+                .filter { it.request.content.userInfo[KEY_TAG] is String }
+                .groupBy { it.request.content.userInfo[KEY_TAG] as String }
+                .values
+                .flatMap { sameItem -> sameItem.sortedBy { it.date.timeIntervalSince1970 }.dropLast(1) }
+                .map { it.request.identifier }
+            if (ids.isNotEmpty()) center.removeDeliveredNotificationsWithIdentifiers(ids)
         }
     }
 

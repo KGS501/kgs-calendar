@@ -615,6 +615,7 @@
     <string name="sync_conflict_keep_mine">Meine behalten</string>
     <string name="sync_conflict_use_server">Die andere nehmen</string>
     <string name="error_generic">Etwas ist schiefgelaufen. Bitte versuche es erneut.</string>
+    <string name="error_saved_upload_failed">Auf diesem Gerät gespeichert, aber das Hochladen ist fehlgeschlagen: %1$s</string>
     <string name="error_unreachable">Der Server war nicht erreichbar. Prüfe die Internetverbindung, privates DNS oder VPN und die Serveradresse.</string>
     <string name="error_timeout">Der Server hat zu lange nicht geantwortet. Die App versucht es bei der nächsten Synchronisierung erneut.</string>
     <string name="error_credentials_missing">Die Anmeldung für diese Quelle fehlt. Bearbeite die Quelle und gib das Passwort erneut ein.</string>
