@@ -95,6 +95,52 @@ panel pinned. The dark pair uses dark mode.
 
 Store users then get it automatically.
 
+## Testing betas through the Store
+
+Betas (versions like V.2.0.2-1) go to a **package flight** first, the Store's counterpart to Play's
+internal testing and TestFlight: only the people in its group get the flight's package, through the
+real Store install and its updates. Everyone else keeps the production package.
+
+| | Name in Partner Center |
+| --- | --- |
+| Flight group (a known user group, under Customer groups) | **KGS internal testers** |
+| Package flight (on the app's overview, under package flights) | **Internal testing** |
+
+The group holds the Microsoft account the owner's laptop uses in the Store app. To add a tester, edit
+the group under Apps and games > Customer groups; each tester must sign in to the Store with the account
+listed there.
+
+### A new beta
+
+1. Raise the version as for any update (see above). **The flight's package must be higher than the
+   production package**, or the testers' Store keeps production: V.2.0.2-1 is 2.0.201.0, above
+   V.2.0.1's 2.0.100.0. Production isn't touched by any of this.
+2. Run the **Windows Store package** workflow on the beta's tag and take the `.msix` from
+   `store-package`.
+3. In Partner Center, open KGS Calendar > **Internal testing**. Choose **Packages**, remove the last
+   beta's package, upload the new one and save. (A flight that is in certification can't be changed:
+   cancel it there first, or wait.)
+4. Choose **Submit to the Store**. The flight goes through certification like a submission, usually
+   within a few hours and at most three business days, and is published to the group by itself.
+5. On the laptop, signed in to the Store with the group's account, open KGS Calendar in the Store and
+   check for updates: it installs the flight's version. Check **About** shows the beta's version.
+
+### Promoting a tested beta
+
+The owner decides when a beta is ready; nobody promotes it without them.
+
+1. Open KGS Calendar > **Internal testing** and choose to make its package available to everyone
+   (Partner Center calls this creating a submission from the flight). The production submission then
+   gets the flight's package; check its other pages, such as "What's new", and submit it.
+2. Or ship a final build of its own in a normal update submission (see above). Mind the numbers: a
+   final V.2.0.2 maps to 2.0.200, *below* its betas (V.2.0.2-1 is 2.0.201), so it can't replace a
+   published beta package. Either promote the tested beta's package as in step 1, or give the final
+   build a `windowsRebuild` above the last beta's number (V.2.0.2 with `windowsRebuild = 2` is
+   2.0.202).
+
+After the production update is out, the flight's package is lower than production and the testers get
+production again until the next beta.
+
 ## How the Store app differs
 
 | | Store app | `.msi` |

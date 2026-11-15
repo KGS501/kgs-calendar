@@ -133,7 +133,7 @@ fun main(args: Array<String>) {
         DisposableEffect(tray) { onDispose { tray.remove() } }
         LaunchedEffect(loaded) {
             val app = loaded ?: return@LaunchedEffect
-            app.graph.reminders.notifier = { title, body -> tray.notify(title, body.orEmpty()) }
+            app.graph.reminders.notifier = { title, body, tag -> tray.notify(title, body.orEmpty(), tag) }
             // Sync and reminders work in the background, never on the window's thread.
             app.graph.start(CoroutineScope(coroutineContext + Dispatchers.Default))
             // The next start's startup screen shows in the look the app has now.

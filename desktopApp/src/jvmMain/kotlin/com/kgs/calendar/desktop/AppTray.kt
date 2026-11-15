@@ -52,9 +52,10 @@ class AppTray(
     }.getOrNull()
 
     /** Shows a notification (a reminder, a hint), from the app's icon where Windows' own don't work. */
-    fun notify(title: String, body: String) {
+    /** Shows a notification; one with the [tag] of an earlier one replaces it (the tray's balloon has no tags). */
+    fun notify(title: String, body: String, tag: String? = null) {
         val notifications = notifications
-        if (notifications != null) notifications.show(title, body) { showBalloon(title, body) } else showBalloon(title, body)
+        if (notifications != null) notifications.show(title, body, tag) { showBalloon(title, body) } else showBalloon(title, body)
     }
 
     private fun showBalloon(title: String, body: String) {

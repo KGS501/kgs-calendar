@@ -26,9 +26,13 @@ class DesktopReminders(
     private val settingsStore: SettingsStore,
     private val deliveredFile: File,
 ) {
-    /** Shows a reminder; set by the window once the tray icon exists. */
+    /**
+     * Shows a reminder; set by the window once the tray icon exists. The tag is the item's
+     * notification key (see `ReminderPlanner.key`): a newer reminder with the same tag replaces the
+     * one before it, so an item shows one notification at a time.
+     */
     @Volatile
-    var notifier: (title: String, body: String?) -> Unit = { _, _ -> }
+    var notifier: (title: String, body: String?, tag: String) -> Unit = { _, _, _ -> }
 
     @Volatile
     var scope: CoroutineScope? = null
@@ -81,7 +85,7 @@ class DesktopReminders(
             lock.withLock {
                 if (pending.firstOrNull()?.alarmRequestCode != next.alarmRequestCode) return@withLock
                 pending = pending.drop(1)
-                notifier(next.title, next.body)
+                notifier(next.title, next.body, next.notificationKey.tag)
                 writeDelivered((readDelivered().orEmpty() + next.alarmRequestCode).toSet())
             }
         }
