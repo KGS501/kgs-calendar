@@ -159,11 +159,13 @@ jobs:
       - name: Upload and submit to certification
         shell: pwsh
         run: |
-          $package = (Get-ChildItem store-package -Filter *.msix | Select-Object -First 1).FullName
-          "Publishing $(Split-Path $package -Leaf) to ${{ inputs.publish }}"
+          $package = Get-ChildItem store-package -Filter *.msix | Select-Object -First 1
+          "Publishing $($package.Name) to ${{ inputs.publish }}"
+          # The CLI takes the folder holding the package; the upload of ~130 MB gets 30 minutes.
+          $common = @('--inputDirectory', $package.DirectoryName, '--appId', $env:STORE_APP_ID, '--uploadTimeout', '1800')
           if ('${{ inputs.publish }}' -eq 'flight') {
-            msstore publish --inputFile $package --appId $env:STORE_APP_ID --flightId $env:STORE_FLIGHT_ID
+            msstore publish @common --flightId $env:STORE_FLIGHT_ID
           } else {
-            msstore publish --inputFile $package --appId $env:STORE_APP_ID
+            msstore publish @common
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
