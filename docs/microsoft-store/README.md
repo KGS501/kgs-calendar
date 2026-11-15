@@ -157,8 +157,8 @@ Store publishing** in the tenant **KGS501.onmicrosoft.com**, which is linked to 
 account and has the Manager role there. Its values are repository secrets: `AZURE_AD_TENANT_ID`,
 `SELLER_ID`, `AZURE_AD_APPLICATION_CLIENT_ID` and `AZURE_AD_APPLICATION_SECRET`. The key comes from
 Partner Center > Account settings > User management > Microsoft Entra applications > the app > **Add
-new key**; it is shown once and expires after two years, so add a new one and update the secret before
-then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
+new key**; it is shown once. Keys expire (the date is on that page), so add a new one and update the
+secret before then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
 
 ## How the Store app differs
 
