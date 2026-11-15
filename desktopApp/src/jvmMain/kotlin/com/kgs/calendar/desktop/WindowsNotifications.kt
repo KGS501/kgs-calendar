@@ -1,5 +1,7 @@
 package com.kgs.calendar.desktop
 
+import com.kgs.calendar.reminder.WindowsToastGroup
+import com.kgs.calendar.reminder.windowsToastTag
 import com.kgs.calendar.ui.platform.WindowsPackage
 import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.WinReg
@@ -17,10 +19,15 @@ import kotlin.concurrent.thread
  * user's registry, as the installer can't, so its notifications show its name and icon.
  */
 class WindowsNotifications private constructor(private val appId: String) {
-    /** Shows the notification, or calls [onFailed] if Windows wouldn't. */
-    fun show(title: String, body: String, onFailed: () -> Unit) {
+    /**
+     * Shows the notification, or calls [onFailed] if Windows wouldn't. A reminder's [tag] (its item's
+     * notification key) replaces the item's earlier notification in the notification centre.
+     */
+    fun show(title: String, body: String, tag: String? = null, onFailed: () -> Unit) {
         thread(name = "kgs-notification", isDaemon = true) {
-            runCatching { WinRt.showToast(appId, toastXml(title, body)) }.onFailure {
+            runCatching {
+                WinRt.showToast(appId, toastXml(title, body), tag?.let(::windowsToastTag), tag?.let { WindowsToastGroup })
+            }.onFailure {
                 println("KGS notification not shown: $it")
                 onFailed()
             }

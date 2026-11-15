@@ -95,6 +95,79 @@ panel pinned. The dark pair uses dark mode.
 
 Store users then get it automatically.
 
+## Testing betas through the Store
+
+Betas (versions like V.2.0.2-1) go to a **package flight** first, the Store's counterpart to Play's
+internal testing and TestFlight: only the people in its group get the flight's package, through the
+real Store install and its updates. Everyone else keeps the production package.
+
+| | Name in Partner Center |
+| --- | --- |
+| Flight group (a known user group, under Customer groups) | **KGS internal testers** |
+| Package flight (on the app's overview, under package flights) | **Internal testing** |
+
+The group holds the Microsoft account the owner's laptop uses in the Store app. To add a tester, edit
+the group under Apps and games > Customer groups; each tester must sign in to the Store with the account
+listed there.
+
+### A new beta
+
+1. Raise the version as for any update (see above). **The flight's package must be higher than the
+   production package**, or the testers' Store keeps production: V.2.0.2-1 is 2.0.201.0, above
+   V.2.0.1's 2.0.100.0. Production isn't touched by any of this.
+2. Run the **Windows Store package** workflow with **source_ref** set to the beta's tag and
+   **publish** set to `flight`:
+
+   ```sh
+   gh workflow run windows-store.yml --ref main -f source_ref=V.2.0.2-1 -f publish=flight
+   ```
+
+   It builds and certifies the package as always, then uploads it to the **Internal testing** flight
+   and submits it to certification. Nobody has to upload anything by hand.
+3. Certification takes a few hours, at most three business days; the flight is then published to
+   the group by itself. Partner Center shows the state under KGS Calendar > **Internal testing**.
+   (A flight already in certification can't take a new package: wait for it, or cancel it there.)
+4. On the laptop, signed in to the Store with the group's account, open KGS Calendar in the Store and
+   check for updates: it installs the flight's version. Check **About** shows the beta's version.
+
+### Promoting a tested beta
+
+The owner decides when a beta is ready; nobody promotes it without them.
+
+1. Run the workflow with **publish** set to `production` and **source_ref** set to the tested tag.
+   The publish step waits in the `store-production` environment until the owner approves it on the
+   run's page in GitHub; then it uploads the package as a production update and submits it. Change
+   "What's new" in Partner Center first if it should say something new. Or, in Partner Center, open
+   **Internal testing** and make its package available to everyone (Partner Center calls this
+   creating a submission from the flight).
+2. Or ship a final build of its own in a normal update submission (see above). Mind the numbers: a
+   final V.2.0.2 maps to 2.0.200, *below* its betas (V.2.0.2-1 is 2.0.201), so it can't replace a
+   published beta package. Either promote the tested beta's package as in step 1, or give the final
+   build a `windowsRebuild` above the last beta's number (V.2.0.2 with `windowsRebuild = 2` is
+   2.0.202).
+
+After the production update is out, the flight's package is lower than production and the testers get
+production again until the next beta.
+
+### How the workflow reaches the Store
+
+The publish job uses the Store submission API through the `msstore` CLI
+(`microsoft/microsoft-store-apppublisher`). It signs in as the Microsoft Entra app **KGS Calendar
+Store publishing** in the tenant **KGS501.onmicrosoft.com**, which is linked to the Partner Center
+account and has the Manager role there. Its values are repository secrets: `AZURE_AD_TENANT_ID`,
+`SELLER_ID`, `AZURE_AD_APPLICATION_CLIENT_ID` and `AZURE_AD_APPLICATION_SECRET`. The key comes from
+Partner Center > Account settings > User management > Microsoft Entra applications > the app > **Add
+new key**; it is shown once. Keys expire (the date is on that page), so add a new one and update the
+secret before then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
+
+The API can't upload to a submission that was started in Partner Center, and it can't delete one
+either. **Don't start a draft in Partner Center** (an update, or a new package for the flight) when the
+workflow should publish; if one is there, the run stops with "Retrieved a submission that was created in
+Partner Center". Delete that draft in Partner Center, then run again. Deleting the only submission of a
+flight that was never published deletes the flight too: create it again with the API (POST
+`applications/9P0NZM3HSQ92/flights` with the name and the group's id) and put its new id in the
+workflow. The flight in the workflow was created that way.
+
 ## How the Store app differs
 
 | | Store app | `.msi` |

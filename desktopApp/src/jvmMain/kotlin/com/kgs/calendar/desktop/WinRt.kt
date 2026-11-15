@@ -30,7 +30,11 @@ internal object WinRt {
     private fun <T> onWinRtThread(work: () -> T): T = thread.submit(Callable(work)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
 
     /** Shows the notification [toastXml] as the app [appId]. */
-    fun showToast(appId: String, toastXml: String) = onWinRtThread {
+    /**
+     * Shows a notification. With a [tag] and [group], it replaces the app's notification with the same
+     * pair still in the notification centre (Windows takes at most 64 characters for each).
+     */
+    fun showToast(appId: String, toastXml: String, tag: String? = null, group: String? = null) = onWinRtThread {
         val document = hString("Windows.Data.Xml.Dom.XmlDocument") { name ->
             val instance = PointerByReference()
             check(Combase.INSTANCE.RoActivateInstance(name, instance))
@@ -42,6 +46,13 @@ internal object WinRt {
                 document.query(IXmlDocument).use { xml -> factory.callForObject(FIRST_METHOD, xml.pointer) }
             }
             toast.use {
+                if (tag != null) {
+                    toast.query(IToastNotification2).use { tagged ->
+                        hString(tag) { value -> tagged.call(FIRST_METHOD, value) }
+                        // After the Tag's setter and getter.
+                        group?.let { hString(it) { value -> tagged.call(FIRST_METHOD + 2, value) } }
+                    }
+                }
                 factory("Windows.UI.Notifications.ToastNotificationManager", IToastNotificationManagerStatics).use { manager ->
                     // After CreateToastNotifier without an id.
                     val notifier = hString(appId) { id -> manager.callForObject(FIRST_METHOD + 1, id) }
@@ -179,6 +190,7 @@ internal object WinRt {
     private const val IXmlDocument = "{f7f3a506-1e87-42d6-bcfb-b8c809fa5494}"
     private const val IXmlDocumentIO = "{6cd0e74e-ee65-4489-9ebf-ca43e87ba637}"
     private const val IToastNotificationFactory = "{04124b20-82c6-4229-b109-fd9ed4662b53}"
+    private const val IToastNotification2 = "{9dfb9fd1-143a-490e-90bf-b9fba7132de7}"
     private const val IToastNotificationManagerStatics = "{50ac103f-d235-4598-bbef-98fe4d1a3ad4}"
     private const val IStartupTaskStatics = "{ee5b60bd-a148-41a7-b26e-e8b88a1e62f8}"
 }

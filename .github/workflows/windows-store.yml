@@ -1,9 +1,25 @@
 name: Windows Store package
 
 # Builds the Microsoft Store package, tries it on a clean Windows, runs Microsoft's certification kit
-# on it and keeps the package to upload to Partner Center. See docs/microsoft-store/README.md.
+# on it and keeps the package. Run by hand, it can also hand the package to the Store: a beta to the
+# "Internal testing" package flight, a release to production (after the owner approves it in the
+# store-production environment). See docs/microsoft-store/README.md.
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Tag or commit to build, e.g. V.2.0.2-1 (empty builds the chosen branch)
+        required: false
+        default: ''
+      publish:
+        description: Where the package goes in the Store
+        type: choice
+        options: [none, flight, production]
+        default: none
+      package_run:
+        description: Publish the store-package of this earlier run (its run ID) instead of building one
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'desktopApp/**'
@@ -11,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: windows-store-${{ github.ref }}
@@ -19,10 +36,13 @@ concurrency:
 jobs:
   package:
     name: Build and certify the Store package
+    if: github.event_name != 'workflow_dispatch' || inputs.package_run == ''
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -107,3 +127,58 @@ jobs:
           name: store-package
           path: desktopApp/build/msix/*.msix
           if-no-files-found: error
+
+  # Uploads the package and submits it to certification through the Store submission API, with the
+  # Partner Center app "KGS Calendar Store publishing" (secrets AZURE_AD_TENANT_ID, SELLER_ID,
+  # AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET).
+  publish:
+    name: Publish to the Microsoft Store (${{ inputs.publish }})
+    needs: package
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.publish != 'none' &&
+      (needs.package.result == 'success' || (needs.package.result == 'skipped' && inputs.package_run != ''))
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Production waits for the owner's approval in this environment; the flight doesn't.
+    environment: ${{ inputs.publish == 'production' && 'store-production' || 'store-flight' }}
+    env:
+      STORE_APP_ID: 9P0NZM3HSQ92
+      # The "Internal testing" package flight, for the group "KGS internal testers".
+      STORE_FLIGHT_ID: 8dd058f0-91a3-4aab-86a1-3d7c36bb5c4b
+    steps:
+      - name: Get the Store package
+        uses: actions/download-artifact@v4
+        with:
+          name: store-package
+          path: store-package
+          run-id: ${{ inputs.package_run || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up the Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      - name: Sign in to Partner Center
+        shell: pwsh
+        run: >
+          msstore reconfigure
+          --tenantId "${{ secrets.AZURE_AD_TENANT_ID }}"
+          --sellerId "${{ secrets.SELLER_ID }}"
+          --clientId "${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}"
+          --clientSecret "${{ secrets.AZURE_AD_APPLICATION_SECRET }}"
+
+      - name: Upload and submit to certification
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem store-package -Filter *.msix | Select-Object -First 1
+          "Publishing $($package.Name) to ${{ inputs.publish }}"
+          # Given the package itself, the CLI doesn't look for a source project; the ~130 MB upload
+          # gets 30 minutes.
+          $common = @($package.FullName, '--appId', $env:STORE_APP_ID, '--uploadTimeout', '1800', '--verbose')
+          Push-Location $package.DirectoryName
+          if ('${{ inputs.publish }}' -eq 'flight') {
+            msstore publish @common --flightId $env:STORE_FLIGHT_ID
+          } else {
+            msstore publish @common
+          }
+          Pop-Location
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
