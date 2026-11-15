@@ -160,6 +160,14 @@ Partner Center > Account settings > User management > Microsoft Entra applicatio
 new key**; it is shown once. Keys expire (the date is on that page), so add a new one and update the
 secret before then. The flight's id is in the workflow (`STORE_FLIGHT_ID`).
 
+The API can't upload to a submission that was started in Partner Center, and it can't delete one
+either. **Don't start a draft in Partner Center** (an update, or a new package for the flight) when the
+workflow should publish; if one is there, the run stops with "Retrieved a submission that was created in
+Partner Center". Delete that draft in Partner Center, then run again. Deleting the only submission of a
+flight that was never published deletes the flight too: create it again with the API (POST
+`applications/9P0NZM3HSQ92/flights` with the name and the group's id) and put its new id in the
+workflow. The flight in the workflow was created that way.
+
 ## How the Store app differs
 
 | | Store app | `.msi` |

@@ -144,7 +144,7 @@ jobs:
     env:
       STORE_APP_ID: 9P0NZM3HSQ92
       # The "Internal testing" package flight, for the group "KGS internal testers".
-      STORE_FLIGHT_ID: 24339dcb-b9b2-41f2-8a29-9bb8d82e6e2d
+      STORE_FLIGHT_ID: 8dd058f0-91a3-4aab-86a1-3d7c36bb5c4b
     steps:
       - name: Get the Store package
         uses: actions/download-artifact@v4
