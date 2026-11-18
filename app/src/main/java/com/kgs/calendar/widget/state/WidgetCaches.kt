@@ -113,6 +113,13 @@ internal fun widgetMonthPageModelNamespace(
     append(WIDGET_MONTH_RENDER_SIGNATURE_VERSION)
     append('|').append(settings.locale.toLanguageTag())
     append('|').append(settings.firstDayOfWeek.name)
+    append('|').append(settings.monthWidgetWeeks.name)
+    if (settings.monthWidgetWeeks.weekCount != null) {
+        val today = runCatching { LocalDate.now(TimeZone.of(zoneId)) }.getOrElse { LocalDate.now() }
+        val daysSinceWeekStart = (today.dayOfWeek.value - settings.firstDayOfWeek.value + 7) % 7
+        append('|').append(YearMonth.from(today))
+        append(':').append(today.minusDays(daysSinceWeekStart.toLong()).toEpochDay())
+    }
     append('|').append(settings.taskColorMode.name)
     append('|').append(settings.showCompletedTasks)
     append('|').append(settings.collectionVisibility.signature())

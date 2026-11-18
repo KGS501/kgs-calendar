@@ -11,6 +11,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.WidgetColorMode
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
@@ -81,9 +82,23 @@ class SettingsActions constructor(
         }
     }
 
+    fun setMonthWidgetWeeks(weeks: WidgetMonthWeeks) {
+        scope.launch {
+            settingsStore.setMonthWidgetWeeks(weeks)
+            widgetRefresher.update(KgsWidgetKind.Month)
+        }
+    }
+
     fun setMultiWidgetMonthPercent(monthPercent: Int) {
         scope.launch {
             settingsStore.setMultiWidgetMonthPercent(monthPercent)
+            widgetRefresher.update(KgsWidgetKind.Multi)
+        }
+    }
+
+    fun setMultiWidgetWeeks(weeks: WidgetMonthWeeks) {
+        scope.launch {
+            settingsStore.setMultiWidgetWeeks(weeks)
             widgetRefresher.update(KgsWidgetKind.Multi)
         }
     }

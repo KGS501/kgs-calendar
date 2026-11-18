@@ -136,6 +136,7 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.data.settings.TaskDefaultDates
+import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
@@ -197,6 +198,7 @@ fun SettingsPage(
     onColorModeSelected: (AppColorMode) -> Unit,
     onMonthWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMonthWidgetColorModeSelected: (WidgetColorMode) -> Unit,
+    onMonthWidgetWeeksSelected: (WidgetMonthWeeks) -> Unit,
     onAgendaWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onAgendaWidgetColorModeSelected: (WidgetColorMode) -> Unit,
     onTasksWidgetThemeSelected: (WidgetThemeMode) -> Unit,
@@ -206,6 +208,7 @@ fun SettingsPage(
     onMultiWidgetThemeSelected: (WidgetThemeMode) -> Unit,
     onMultiWidgetColorModeSelected: (WidgetColorMode) -> Unit,
     onMultiWidgetMonthPercentChanged: (Int) -> Unit,
+    onMultiWidgetWeeksSelected: (WidgetMonthWeeks) -> Unit,
     onTasksWidgetDisplayModeSelected: (WidgetTaskDisplayMode) -> Unit,
     onTasksWidgetIncludeOverdueChanged: (Boolean) -> Unit,
     onTasksWidgetCreateModeSelected: (WidgetTaskCreateMode) -> Unit,
@@ -1384,6 +1387,15 @@ fun SettingsPage(
                     onThemeSelected = onMonthWidgetThemeSelected,
                     onColorModeSelected = onMonthWidgetColorModeSelected,
                 )
+                SettingsGroup(title = stringResource(Res.string.widget_content)) {
+                    SettingsDropdownRow(
+                        title = stringResource(Res.string.widget_month_visible_weeks),
+                        options = listOf(WidgetMonthWeeks.Two, WidgetMonthWeeks.Three, WidgetMonthWeeks.Four, WidgetMonthWeeks.FullMonth),
+                        selected = state.widgetSettings.monthWidgetWeeks,
+                        label = { it.localizedLabel() },
+                        onSelected = onMonthWidgetWeeksSelected,
+                    )
+                }
             }
             SettingsDestination.WidgetTasks -> {
                 WidgetLookGroup(
@@ -1476,6 +1488,13 @@ fun SettingsPage(
                         range = SettingsStore.MIN_MULTI_WIDGET_MONTH_PERCENT..SettingsStore.MAX_MULTI_WIDGET_MONTH_PERCENT,
                         step = 5,
                         onValueChanged = onMultiWidgetMonthPercentChanged,
+                    )
+                    SettingsDropdownRow(
+                        title = stringResource(Res.string.widget_month_visible_weeks),
+                        options = listOf(WidgetMonthWeeks.Two, WidgetMonthWeeks.Three, WidgetMonthWeeks.Four, WidgetMonthWeeks.FullMonth),
+                        selected = state.widgetSettings.multiWidgetWeeks,
+                        label = { it.localizedLabel() },
+                        onSelected = onMultiWidgetWeeksSelected,
                     )
                 }
             }

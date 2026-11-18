@@ -97,7 +97,7 @@ internal enum class WidgetSizeBucket(
         fun from(size: WidgetSize): WidgetSizeBucket = from(size, rowCount = 5)
 
         fun from(size: WidgetSize, rowCount: Int): WidgetSizeBucket {
-            val rows = rowCount.coerceIn(5, 6)
+            val rows = rowCount.coerceIn(2, 6)
             val availableHeight = (size.heightDp - WIDGET_MONTH_VERTICAL_CHROME_DP).coerceAtLeast(0)
             val weekCellHeight = availableHeight / rows
             val dayWidth = size.widthDp / 7
@@ -193,7 +193,7 @@ internal data class WidgetMonthRenderSpec(
         }
 
         fun weekCellHeightDp(size: WidgetSize, rowCount: Int): Int {
-            val rows = rowCount.coerceIn(5, 6)
+            val rows = rowCount.coerceIn(2, 6)
             return (size.heightDp - WIDGET_MONTH_VERTICAL_CHROME_DP).coerceAtLeast(0) / rows
         }
 
