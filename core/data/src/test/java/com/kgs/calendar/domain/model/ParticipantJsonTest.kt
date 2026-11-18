@@ -1,6 +1,6 @@
 package com.kgs.calendar.domain.model
 
-import org.json.JSONArray
+import com.kgs.calendar.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

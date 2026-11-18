@@ -1,12 +1,15 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.ui.time.weekdayDayFormatter
 import com.kgs.calendar.widget.WIDGET_DAY_END_HOUR
 import com.kgs.calendar.widget.WIDGET_DAY_MAX_PRIORITY_MOTION_ROWS
 import com.kgs.calendar.widget.WIDGET_DAY_START_HOUR
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.min
 
@@ -64,7 +67,7 @@ internal fun widgetDayGridRows(
         day = nextTimeline.day,
         hour = null,
         hourRowHeightDp = hourRowHeightDp,
-        daySwitchLabel = nextTimeline.day.format(DateTimeFormatter.ofPattern("EEE d.", settings.locale)),
+        daySwitchLabel = nextTimeline.day.format(weekdayDayFormatter(settings.locale)),
         priorityAnimationsEnabled = false,
     )
     return primaryRows + boundaryRow + nextRows

@@ -1,12 +1,12 @@
 package com.kgs.calendar.ui.timeline
 
-import androidx.compose.foundation.layout.fillMaxSize
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -24,8 +24,8 @@ import com.kgs.calendar.ui.CalendarUiState
 import com.kgs.calendar.ui.DayHeaderHeight
 import com.kgs.calendar.ui.TimelineView
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import org.junit.Assert.assertEquals

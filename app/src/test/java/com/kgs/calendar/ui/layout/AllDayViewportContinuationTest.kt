@@ -253,7 +253,7 @@ class AllDayViewportContinuationTest {
     }
 
     @Test
-    fun collapsedSegmentCompactionPreservesPriorityLaneOrder() {
+    fun aCardReturningFromAnOverflowContinuesInItsRowAndOthersStayWhole() {
         val priorityItem = AllDayOverlayItem(
             id = "priority",
             title = "Long priority event",
@@ -290,10 +290,12 @@ class AllDayViewportContinuationTest {
         )
 
         val prioritySegment = layout.segments.single { it.item.id == priorityItem.id }
-        val secondSegments = layout.segments.filter { it.item.id == secondItem.id }
-        assertEquals(0, prioritySegment.lane)
-        assertEquals(0, secondSegments.single { it.startPage == 25 }.lane)
-        assertEquals(1, secondSegments.single { it.startPage == 26 }.lane)
+        val secondSegment = layout.segments.single { it.item.id == secondItem.id }
+        // Day 25's overflow sits in row 1; the card hidden in it comes out of that row.
+        assertEquals(1, prioritySegment.lane)
+        assertEquals(26, prioritySegment.startPage)
+        assertEquals(0, secondSegment.lane)
+        assertEquals(25..26, secondSegment.startPage..secondSegment.endPage)
     }
 
     @Test

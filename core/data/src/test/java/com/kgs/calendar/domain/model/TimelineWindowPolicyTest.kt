@@ -1,7 +1,9 @@
 package com.kgs.calendar.domain.model
 
-import java.time.DayOfWeek
-import java.time.LocalDate
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

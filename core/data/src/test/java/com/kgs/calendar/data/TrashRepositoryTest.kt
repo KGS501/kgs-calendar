@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.Manifest
 import android.app.Application
 import android.content.ContentProvider
@@ -32,8 +34,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
@@ -56,7 +58,7 @@ class TrashRepositoryTest {
         val event = harness.eventsIn(LOCAL_COLLECTION).single()
         repository.updateEventManualColor(event.uid, 0xFF336699.toInt())
         val rawIcs = harness.resource(event.resourceHref)!!.rawIcs
-        val before = System.currentTimeMillis()
+        val before = nowMillis()
 
         repository.deleteEvent(event.uid)
 
@@ -173,7 +175,7 @@ class TrashRepositoryTest {
 
     @Test
     fun purgeRemovesOnlyItemsOlderThanThirtyDays() = runTest {
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         val dao = harness.database.trashDao()
         val old = dao.insert(trashedItem("Old", deletedAtMillis = now - TimeUnit.DAYS.toMillis(31)))
         val borderline = dao.insert(trashedItem("Borderline", deletedAtMillis = now - TimeUnit.DAYS.toMillis(29)))
@@ -194,8 +196,8 @@ class TrashRepositoryTest {
     @Test
     fun syncPurgesExpiredItems() = runTest {
         val dao = harness.database.trashDao()
-        dao.insert(trashedItem("Old", deletedAtMillis = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(40)))
-        val fresh = dao.insert(trashedItem("Fresh", deletedAtMillis = System.currentTimeMillis()))
+        dao.insert(trashedItem("Old", deletedAtMillis = nowMillis() - TimeUnit.DAYS.toMillis(40)))
+        val fresh = dao.insert(trashedItem("Fresh", deletedAtMillis = nowMillis()))
 
         repository.syncNow()
 

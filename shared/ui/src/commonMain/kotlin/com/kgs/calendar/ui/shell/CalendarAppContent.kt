@@ -1,0 +1,404 @@
+package com.kgs.calendar.ui
+
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.toArgb
+import com.kgs.calendar.ui.platform.LocalPlatformContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.kgs.calendar.ui.platform.openUrl
+import com.kgs.calendar.data.local.entity.EventEntity
+import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.model.CalendarViewMode
+import com.kgs.calendar.domain.model.MutationAction
+import com.kgs.calendar.navigation.SharedEventDraft
+import com.kgs.calendar.ui.layout.SheetOrigin
+import com.kgs.calendar.ui.model.occurrenceStartForEdit
+import com.kgs.calendar.ui.shell.eventDraftColor
+import com.kgs.calendar.ui.shell.newEventSchedule
+import com.kgs.calendar.ui.shell.newTaskSchedule
+import com.kgs.calendar.ui.shell.rememberCalendarShellUiState
+import com.kgs.calendar.ui.shell.taskDraftColor
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import com.kgs.calendar.ui.desktop.steppedDate
+import com.kgs.calendar.ui.CalendarUiState
+import com.kgs.calendar.ui.SettingsDestination
+import com.kgs.calendar.domain.model.coerceMultiDayCount
+import com.kgs.calendar.ui.platform.ProvideCalendarShortcuts
+import com.kgs.calendar.ui.platform.CalendarShortcuts
+
+/**
+ * The themed app body: derives the render state, owns the shell navigation state and composes
+ * the calendar scaffold, sheets and overlays in their drawing order.
+ */
+@Composable
+fun CalendarAppContent(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    today: LocalDate,
+) {
+    // Cards anywhere below open their right-click menu here (see itemContextMenu). Only the desktop has
+    // one: on a touch screen it would only add a position callback and a pointer handler to every card.
+    val itemMenu = remember { ItemContextMenuState() }
+    val desktop = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
+    val readOnlyHrefs = remember(state.collections) { state.collections.readOnlyHrefs() }
+    CompositionLocalProvider(
+        LocalItemContextMenu provides itemMenu.takeIf { desktop },
+        LocalReadOnlyCollectionHrefs provides readOnlyHrefs,
+    ) {
+        CalendarAppBody(viewModel, state, today, itemMenu)
+    }
+}
+
+@Composable
+private fun CalendarAppBody(
+    viewModel: CalendarViewModel,
+    state: CalendarUiState,
+    today: LocalDate,
+    itemMenu: ItemContextMenuState,
+) {
+    val defaultWireframeColor = WarmBrown.toArgb()
+    val context = LocalPlatformContext.current
+    val shell = rememberCalendarShellUiState(
+        state = state,
+        today = today,
+        defaultWireframeColor = defaultWireframeColor,
+        editorDrafts = viewModel.editorDrafts,
+    )
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        viewModel.editorDrafts.flush()
+    }
+    val searchScope = rememberCoroutineScope()
+    var foregroundRecenterRequest by rememberSaveable { mutableStateOf(0) }
+    val deleteFadeResourceHrefs = remember { mutableStateMapOf<String, Unit>() }
+    val pendingDeleteHrefs = remember(state.pendingMutationItems) {
+        state.pendingMutationItems
+            .filter { it.action == MutationAction.Delete }
+            .map { it.resourceHref }
+            .toSet()
+    }
+    LaunchedEffect(pendingDeleteHrefs) {
+        pendingDeleteHrefs.forEach { href ->
+            deleteFadeResourceHrefs[href] = Unit
+            launch {
+                delay(30 * 60 * 1000L)
+                deleteFadeResourceHrefs.remove(href)
+            }
+        }
+    }
+    val retainedDeleteHrefs = deleteFadeResourceHrefs.keys.toSet() + pendingDeleteHrefs
+    val smoothEvents = rememberSmoothRemoval(
+        state.events,
+        EventEntity::smoothRemovalKey,
+        EventEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothSearchEvents = rememberSmoothRemoval(
+        state.searchResults,
+        { "${it.resourceHref}:${it.occurrenceStartForEdit()}" },
+        EventEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothDatedTasks = rememberSmoothRemoval(
+        state.datedTasks,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothInboxTasks = rememberSmoothRemoval(
+        state.inboxTasks,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothScheduledOpenTasks = rememberSmoothRemoval(
+        state.scheduledOpenTasks,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothMissedTaskOccurrences = rememberSmoothRemoval(
+        state.missedTaskOccurrences,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothCompletedTasks = rememberSmoothRemoval(
+        state.completedTasks,
+        TaskEntity::smoothRemovalKey,
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val smoothSearchTasks = rememberSmoothRemoval(
+        state.searchTaskResults,
+        { "${it.resourceHref}:${it.occurrenceStartForEdit()}" },
+        TaskEntity::resourceHref,
+        retainedDeleteHrefs,
+    )
+    val renderState = state.copy(
+        events = smoothEvents.items,
+        searchResults = smoothSearchEvents.items,
+        searchTaskResults = smoothSearchTasks.items,
+        datedTasks = smoothDatedTasks.items,
+        inboxTasks = smoothInboxTasks.items,
+        scheduledOpenTasks = smoothScheduledOpenTasks.items,
+        missedTaskOccurrences = smoothMissedTaskOccurrences.items,
+        completedTasks = smoothCompletedTasks.items,
+    )
+    val exitingResourceHrefs = smoothEvents.exitingResourceHrefs +
+        smoothSearchEvents.exitingResourceHrefs +
+        smoothDatedTasks.exitingResourceHrefs +
+        smoothInboxTasks.exitingResourceHrefs +
+        smoothScheduledOpenTasks.exitingResourceHrefs +
+        smoothMissedTaskOccurrences.exitingResourceHrefs +
+        smoothCompletedTasks.exitingResourceHrefs +
+        smoothSearchTasks.exitingResourceHrefs
+    val problemItems = state.problemItems()
+    // Hand the local functions that read `state` to children as lambdas, never as `::` references:
+    // a reference to a local function equals every earlier one, so Compose would keep the first
+    // instance and its state from the first composition.
+    fun showHiddenSaveNotice(collectionHref: String?, kind: HiddenSaveKind) {
+        shell.showHiddenSaveNotice(collectionHref, kind, state)
+    }
+
+    // Android back navigation: close the topmost open overlay, otherwise step back
+    // through the view history (e.g. Day -> Month -> Multiple days), and only let the system
+    // close the app when there is nothing left to go back to.
+    fun selectCalendarView(viewMode: CalendarViewMode) {
+        if (viewMode != state.selectedView) {
+            shell.recordViewChange(state.selectedView)
+            viewModel.selectView(viewMode)
+        }
+    }
+    fun closeSearch() {
+        shell.closeSearch()
+        searchScope.launch {
+            delay(MotionMedium.toLong())
+            if (!shell.searchOpen) viewModel.search.setSearchQuery("")
+        }
+    }
+    BackHandler(enabled = shell.canNavigateBack) {
+        shell.navigateBack(closeSearch = ::closeSearch, selectView = viewModel::selectView)
+    }
+
+    LaunchedEffect(state.externalLoginUrl) {
+        val url = state.externalLoginUrl ?: return@LaunchedEffect
+        context.openUrl(url)
+        viewModel.sources.externalLoginUrlConsumed()
+    }
+    LaunchedEffect(shell.creationSheet) {
+        shell.onCreationSheetClosed()
+    }
+    LaunchedEffect(shell.detailSheet) {
+        shell.onDetailSheetClosed()
+    }
+
+    fun openEventCreation(date: LocalDate) {
+        shell.openEventCreation(
+            schedule = newEventSchedule(date, LocalTime.now(), state.defaultEventDurationMinutes),
+            wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+        )
+    }
+
+    /** Like "New event" from the create button, with the shared text as title and description. */
+    fun openSharedEventCreation(shared: SharedEventDraft) {
+        shell.openEventCreation(
+            schedule = shared.editorSchedule(state.defaultFabCreationDate(), LocalTime.now(), state.defaultEventDurationMinutes),
+            wireframeColor = state.collections.eventDraftColor(state.defaultEventCollectionHref, defaultWireframeColor),
+            prefill = EditorTransferDraft(
+                title = shared.title,
+                notes = shared.notes,
+                location = shared.location,
+                reminderMinutes = state.defaultEventReminderMinutes,
+                sourceDefaultReminderMinutes = state.defaultEventReminderMinutes,
+            ),
+        )
+    }
+
+    val currentOpenSharedEventCreation by rememberUpdatedState<(SharedEventDraft) -> Unit> { openSharedEventCreation(it) }
+    val shareScope = rememberCoroutineScope()
+
+    /**
+     * After process death the shell reopens its saved sheets only once the data has loaded; a share
+     * that arrives meanwhile waits for that, so the restore does not replace its editor.
+     */
+    fun openSharedEventCreationAfterRestore(shared: SharedEventDraft) {
+        if (!shell.hasPendingRestore) {
+            openSharedEventCreation(shared)
+            return
+        }
+        shareScope.launch {
+            snapshotFlow { shell.hasPendingRestore }.first { !it }
+            currentOpenSharedEventCreation(shared)
+        }
+    }
+
+    fun openTaskCreation(
+        date: LocalDate,
+        scheduledForDay: Boolean,
+        useTaskDefaults: Boolean = false,
+        origin: SheetOrigin = SheetOrigin.Calendar,
+    ) {
+        shell.openTaskCreation(
+            schedule = newTaskSchedule(
+                date = date,
+                now = LocalTime.now(),
+                scheduledForDay = scheduledForDay,
+                useTaskDefaults = useTaskDefaults,
+                defaultTaskDates = state.defaultTaskDates,
+                defaultTaskHasTime = state.defaultTaskHasTime,
+                defaultEventDurationMinutes = state.defaultEventDurationMinutes,
+            ),
+            wireframeColor = state.collections.taskDraftColor(state.defaultTaskCollectionHref, defaultWireframeColor),
+            origin = origin,
+        )
+    }
+
+    LaunchedEffect(shell.settingsOpen) {
+        if (shell.settingsOpen) {
+            viewModel.sources.refreshAndroidProviderDiagnostics()
+        } else {
+            viewModel.holdSharedEvent(false)
+        }
+    }
+    CalendarLaunchEventsEffect(
+        events = viewModel.uiEvents,
+        onCreateEvent = { openEventCreation(it) },
+        onCreateSharedEvent = { openSharedEventCreationAfterRestore(it) },
+        onCreateTask = { date, scheduledForDay -> openTaskCreation(date, scheduledForDay) },
+        onOpenDetail = shell::openLaunchedDetail,
+        onForegroundRecentered = { foregroundRecenterRequest += 1 },
+    )
+    val paneLayout = com.kgs.calendar.ui.desktop.LocalPaneLayout.current
+    fun showDate(date: LocalDate) {
+        viewModel.selectDate(date)
+        shell.requestDate(date)
+    }
+    ProvideCalendarShortcuts(
+        shortcuts = CalendarShortcuts(
+            newEvent = { openEventCreation(state.defaultFabCreationDate()) },
+            newTask = { openTaskCreation(state.defaultFabCreationDate(), scheduledForDay = true) },
+            search = shell::openSearch,
+            tasks = { if (paneLayout.tasksPanePinned) paneLayout.pinTasksPane(false) else shell.openTaskDrawer() },
+            menu = shell::openMenuDrawer,
+            settings = { shell.openSettings(SettingsDestination.Main) },
+            today = {
+                viewModel.today()
+                shell.requestDate(LocalDate.now())
+            },
+            step = { direction -> showDate(state.steppedDate(direction, shell.yearViewOpen)) },
+            nudge = { direction ->
+                // The multi-day view moves by a day; a week view keeps its weeks and other views their pages.
+                if (!shell.yearViewOpen && state.selectedView == CalendarViewMode.ThreeDay && !state.weekViewEnabled) {
+                    showDate(state.selectedDate.plusDays(direction.toLong()))
+                } else {
+                    showDate(state.steppedDate(direction, shell.yearViewOpen))
+                }
+            },
+            nudgeVertical = { direction ->
+                when {
+                    shell.yearViewOpen -> shell.requestScrollStep(direction)
+                    state.selectedView == CalendarViewMode.Month -> showDate(state.steppedDate(direction))
+                }
+            },
+            selectView = { view ->
+                shell.yearViewOpen = false
+                viewModel.selectView(view)
+            },
+            yearView = { shell.yearViewOpen = true },
+            changeDayCount = { delta ->
+                if (state.selectedView == CalendarViewMode.ThreeDay && !shell.yearViewOpen) {
+                    viewModel.settings.setMultiDayCount((state.multiDayCount + delta).coerceMultiDayCount())
+                }
+            },
+            refresh = viewModel.sources::syncNow,
+        ),
+        // Only while nothing covers the calendar; a view switch (which back can undo) keeps them on.
+        enabled = !shell.anyOverlayOpen,
+    )
+
+    CompositionLocalProvider(
+        LocalPendingMutations provides state.pendingMutationItems,
+        LocalExitingResourceHrefs provides exitingResourceHrefs,
+    ) {
+        CalendarAppScaffold(
+            viewModel = viewModel,
+            state = state,
+            renderState = renderState,
+            shell = shell,
+            problemItems = problemItems,
+            today = today,
+            defaultWireframeColor = defaultWireframeColor,
+            foregroundRecenterRequest = foregroundRecenterRequest,
+            onViewSelected = { selectCalendarView(it) },
+            onCreateEvent = { openEventCreation(it) },
+            onCreateTask = { date, useTaskDefaults, origin ->
+                openTaskCreation(date, scheduledForDay = false, useTaskDefaults = useTaskDefaults, origin = origin)
+            },
+            onCloseSearch = ::closeSearch,
+        )
+    }
+
+    ProblemsOverlay(viewModel = viewModel, shell = shell, problemItems = problemItems)
+    CreationSheetHost(
+        viewModel = viewModel,
+        state = state,
+        shell = shell,
+        today = today,
+        showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
+    )
+    HiddenSaveNoticeDialog(viewModel = viewModel, state = state, shell = shell)
+    CompletedTasksOverlay(viewModel = viewModel, renderState = renderState, shell = shell)
+    RecentlyDeletedOverlay(viewModel = viewModel, state = state, shell = shell)
+    DetailSheetHost(
+        viewModel = viewModel,
+        state = state,
+        renderState = renderState,
+        shell = shell,
+        today = today,
+    )
+    ItemContextMenuHost(menu = itemMenu, viewModel = viewModel, state = state, shell = shell, today = today)
+    SettingsOverlay(viewModel = viewModel, state = state, shell = shell, problemCount = problemItems.size)
+    WelcomeOverlay(
+        viewModel = viewModel,
+        welcomeCompleted = state.welcomeCompleted,
+        onConnectCalendars = {
+            // A share that waited for the welcome screen opens once the new calendars are set up.
+            viewModel.holdSharedEvent(true)
+            shell.openAddCalendarSources()
+        },
+    )
+    CollectionSettingsHost(viewModel = viewModel, state = state, shell = shell)
+    CalendarGroupDialogHost(viewModel = viewModel, state = state, shell = shell)
+    RecurringSaveDialogHost(
+        viewModel = viewModel,
+        shell = shell,
+        showHiddenSaveNotice = { href, kind -> showHiddenSaveNotice(href, kind) },
+    )
+    val desktop = com.kgs.calendar.ui.desktop.LocalCalendarChrome.current == com.kgs.calendar.ui.desktop.CalendarChrome.Desktop
+    var startupDone by remember { mutableStateOf(false) }
+    if (desktop) {
+        IdleWarmUp(
+            active = startupDone,
+            views = com.kgs.calendar.ui.desktop.desktopWarmUpViews(viewModel, state, today),
+        )
+    }
+    StartupOverlay(ready = state.initialDataLoaded, alwaysShow = desktop, onGone = { startupDone = true })
+}

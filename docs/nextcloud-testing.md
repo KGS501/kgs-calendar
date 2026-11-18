@@ -1,6 +1,6 @@
 # Nextcloud integration testing
 
-Run from the repository root on this development machine:
+Run from the repository root with Docker available:
 
 ```sh
 python3 tools/test_nextcloud.py
@@ -8,10 +8,9 @@ python3 tools/test_nextcloud.py
 python3 tools/test_nextcloud.py --all-tests
 ```
 
-The runner uses a disposable `nextcloud:34.0.0-apache` container, matching the server
-version used for this investigation. `--image nextcloud:<version>-apache` selects
-another explicit server version when testing upgrades. Docker must be available;
-on this machine the runner can use the existing non-interactive sudo access.
+The runner uses a disposable `nextcloud:34.0.0-apache` container.
+`--image nextcloud:<version>-apache` selects another server version when testing upgrades.
+Docker must be available to the current user, directly or through non-interactive sudo.
 Do not run another Gradle invocation concurrently.
 The runner forces test execution for each new server instead of accepting cached
 test results; compilation caches remain enabled.
@@ -41,9 +40,7 @@ web app. The server provides the DAV/trash endpoints; Calendar 6.5.2's browser U
 not installed or claimed as covered. TLS, Android Private DNS, Wi-Fi changes and
 background scheduling on physical phones remain separate device-test concerns.
 
-A local disposable server is the default for deterministic regression checks. An
-always-on VM (including a VM on Proxmox) is useful if physical devices need a stable
-shared test URL, HTTPS, reverse proxy and realistic background/network scenarios.
-It can supplement this runner; it is not required for the automated protocol tests.
+A disposable server keeps protocol regression checks deterministic. Physical-device
+networking and background behavior require separate device tests.
 
 Container configuration reference: https://github.com/nextcloud/docker

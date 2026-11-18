@@ -1,15 +1,19 @@
 package com.kgs.calendar.reminder
 
+import com.kgs.calendar.navigation.writeTo
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import com.kgs.calendar.MainActivity
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchTarget
-import java.time.Instant
-import java.time.ZoneId
+import kotlin.time.Instant
+import com.kgs.calendar.time.ZoneId
 
 object ReminderIntents {
     fun contentIntent(
@@ -54,27 +58,75 @@ object ReminderIntents {
         )
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ReminderReceiver.ACTION_MARK_TASK_DONE
+            // Extras don't tell PendingIntents apart: without this, every notification's button
+            // would share one intent, holding the task of the latest notification.
+            data = actionIdentity("mark-done", occurrenceId.stableKey)
             putExtra(CalendarLaunchTarget.EXTRA_TARGET, target.encode())
             putExtra(ReminderReceiver.EXTRA_NOTIFICATION_TAG, notificationKey.tag)
             putExtra(ReminderReceiver.EXTRA_NOTIFICATION_ID, notificationKey.id)
         }
         return PendingIntent.getBroadcast(
             context,
-            notificationKey.id xor occurrenceId.stableKey.hashCode(),
+            occurrenceId.stableKey.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private fun alarmIntent(context: Context, plan: ReminderAlarmPlan): Intent {
-        val target = launchTarget(plan, ZoneId.systemDefault())
-        return Intent(context, ReminderReceiver::class.java).apply {
-            putExtra(ReminderReceiver.EXTRA_TITLE, plan.title)
-            plan.body?.let { putExtra(ReminderReceiver.EXTRA_BODY, it) }
-            putExtra(ReminderReceiver.EXTRA_NOTIFICATION_TAG, plan.notificationKey.tag)
-            putExtra(ReminderReceiver.EXTRA_NOTIFICATION_ID, plan.notificationKey.id)
-            putExtra(CalendarLaunchTarget.EXTRA_TARGET, target.encode())
+    /** The Snooze action of a reminder notification; it carries everything to show it again. */
+    fun snoozeActionPendingIntent(
+        context: Context,
+        title: String,
+        body: String?,
+        notificationKey: ReminderNotificationKey,
+        target: CalendarLaunchTarget,
+    ): PendingIntent {
+        val intent = reminderIntent(context, title, body, notificationKey, target.encode()).apply {
+            action = ReminderReceiver.ACTION_SNOOZE
+            data = actionIdentity("snooze", notificationKey.tag)
         }
+        return PendingIntent.getBroadcast(
+            context,
+            "snooze-action:${notificationKey.tag}".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun actionIdentity(action: String, key: String): Uri =
+        Uri.Builder().scheme("kgs-reminder").authority(action).appendPath(key).build()
+
+    fun snoozedRequestCode(notificationKey: ReminderNotificationKey): Int = "snoozed:${notificationKey.tag}".hashCode()
+
+    fun snoozedAlarmPendingIntent(context: Context, record: SnoozedReminder): PendingIntent {
+        val intent = reminderIntent(context, record.title, record.body, record.notificationKey, record.encodedTarget).apply {
+            putExtra(ReminderReceiver.EXTRA_ALARM_REQUEST_CODE, record.alarmRequestCode)
+            putExtra(ReminderReceiver.EXTRA_SNOOZED, true)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            record.alarmRequestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun alarmIntent(context: Context, plan: ReminderAlarmPlan): Intent =
+        reminderIntent(context, plan.title, plan.body, plan.notificationKey, launchTarget(plan, ZoneId.systemDefault()).encode())
+            .apply { putExtra(ReminderReceiver.EXTRA_ALARM_REQUEST_CODE, plan.alarmRequestCode) }
+
+    private fun reminderIntent(
+        context: Context,
+        title: String,
+        body: String?,
+        notificationKey: ReminderNotificationKey,
+        encodedTarget: String,
+    ): Intent = Intent(context, ReminderReceiver::class.java).apply {
+        putExtra(ReminderReceiver.EXTRA_TITLE, title)
+        body?.let { putExtra(ReminderReceiver.EXTRA_BODY, it) }
+        putExtra(ReminderReceiver.EXTRA_NOTIFICATION_TAG, notificationKey.tag)
+        putExtra(ReminderReceiver.EXTRA_NOTIFICATION_ID, notificationKey.id)
+        putExtra(CalendarLaunchTarget.EXTRA_TARGET, encodedTarget)
     }
 
     private fun launchTarget(plan: ReminderAlarmPlan, zoneId: ZoneId): CalendarLaunchTarget =

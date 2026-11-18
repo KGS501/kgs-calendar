@@ -1,7 +1,9 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.widget.KgsWidgetKind
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal data class WidgetListRow(
     val type: WidgetListRowType,
@@ -31,6 +33,8 @@ internal data class WidgetListRow(
     val priorityMotionEnabled: Boolean,
     /** RECURRENCE-ID of the task occurrence this row shows; null for single tasks. */
     val taskOccurrenceMillis: Long? = null,
+    /** Start of the recurring event occurrence this row shows; null for single events. */
+    val eventOccurrenceMillis: Long? = null,
 ) {
     fun appendSignatureTo(builder: StringBuilder) {
         builder
@@ -60,6 +64,7 @@ internal data class WidgetListRow(
             .append('|').append(priority ?: 0)
             .append('|').append(priorityMotionEnabled)
             .append('|').append(taskOccurrenceMillis ?: Long.MIN_VALUE)
+            .append('|').append(eventOccurrenceMillis ?: Long.MIN_VALUE)
     }
 
     companion object {
@@ -164,6 +169,7 @@ internal data class WidgetListRow(
             endMillis: Long = sortMillis,
             spanEndDate: LocalDate? = null,
             taskOccurrenceMillis: Long? = null,
+            eventOccurrenceMillis: Long? = null,
         ): WidgetListRow = WidgetListRow(
             type = WidgetListRowType.Item,
             title = title,
@@ -191,6 +197,7 @@ internal data class WidgetListRow(
             priority = null,
             priorityMotionEnabled = false,
             taskOccurrenceMillis = taskOccurrenceMillis,
+            eventOccurrenceMillis = eventOccurrenceMillis,
         )
 
         fun task(

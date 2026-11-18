@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -25,9 +27,9 @@ import com.kgs.calendar.widget.model.shouldHideWidgetTitle
 import com.kgs.calendar.widget.model.usesDirectCollectionItems
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
 import kotlin.math.roundToInt
 
 internal class MultiWidgetRenderer(

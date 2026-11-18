@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
@@ -9,14 +11,15 @@ import com.kgs.calendar.data.TEST_ZONE
 import com.kgs.calendar.data.eventPayload
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.data.recurrence.occurrenceAt
-import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
+import com.kgs.calendar.data.taskPayload
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.domain.model.CalendarWindowLayout
 import com.kgs.calendar.domain.model.visibleRangeFor
+import com.kgs.calendar.domain.source.CalendarSourceGroupKind
 import com.kgs.calendar.navigation.CalendarLaunchAction
 import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.navigation.CalendarLaunchTarget
@@ -28,9 +31,9 @@ import com.kgs.calendar.ui.model.orderedOverdueTasks
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
 import com.kgs.calendar.widget.KgsWidgetKind
 import java.io.File
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -263,7 +266,7 @@ class CalendarViewModelTest {
         viewModel.selectView(CalendarViewMode.Day)
         viewModel.selectDate(today.minusDays(20))
         viewModel.awaitState { it.selectedDate == today.minusDays(20) }
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         settingsStore.setLastBackgroundedAtMillis(now - 10 * 60_000L)
 
         viewModel.uiEvents.test {
@@ -487,6 +490,57 @@ class CalendarViewModelTest {
             withTimeout(30_000) { reminderReschedules.first(predicate) }
         }
 
+    @Test
+    fun feedsOfOneWebsiteShareASidebarGroupThatCalendarsCanLeave() = runTest {
+        val viewModel = viewModel()
+        viewModel.awaitState { it.initialDataLoaded }
+        listOf("/school/term.ics", "/school/exams.ics").forEach { path ->
+            harness.server.setFeed(path, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:${path.substringAfterLast('/')}\r\nEND:VCALENDAR\r\n")
+            harness.repository.addReadOnlyCalendar(harness.server.url(path))
+        }
+
+        // Each feed's calendar exists as a placeholder before its download names it.
+        val grouped = viewModel.awaitState { state ->
+            state.calendarGroups.any { group -> group.collections.map { it.displayName }.sorted() == listOf("exams.ics", "term.ics") }
+        }
+        val feedGroup = grouped.calendarGroups.single { it.collections.size == 2 }
+        assertEquals(CalendarSourceGroupKind.ReadOnlyUrl, feedGroup.kind)
+        assertEquals(listOf("exams.ics", "term.ics"), feedGroup.collections.map { it.displayName }.sorted())
+
+        val exams = feedGroup.collections.single { it.displayName == "exams.ics" }
+        viewModel.sources.moveCollectionToNewGroup(exams.href, "Exams")
+        val moved = viewModel.awaitState { state -> state.calendarGroups.any { it.kind == CalendarSourceGroupKind.Custom && it.collections.isNotEmpty() } }
+        val custom = moved.calendarGroups.single { it.kind == CalendarSourceGroupKind.Custom }
+        assertEquals("Exams", custom.name)
+        assertEquals(listOf(exams.href), custom.collections.map { it.href })
+
+        viewModel.sources.moveCollectionToGroup(exams.href, null)
+        val back = viewModel.awaitState { state -> state.calendarGroups.single { it.key == feedGroup.key }.collections.size == 2 }
+        // The group stays, empty, until the user deletes it.
+        assertEquals(emptyList<String>(), back.calendarGroups.single { it.kind == CalendarSourceGroupKind.Custom }.collections.map { it.href })
+
+        viewModel.sources.deleteGroup(custom.key)
+        viewModel.awaitState { state -> state.calendarGroups.none { it.kind == CalendarSourceGroupKind.Custom } }
+        assertTrue(settingsStore.calendarGroupSettings.first().names.isEmpty())
+    }
+
+    @Test
+    fun aSourceAndItsSidebarGroupShareOneName() = runTest {
+        // Older versions kept a sidebar name apart from the source's name.
+        settingsStore.setCalendarGroupName("local", "Named in the sidebar")
+        harness.repository.ensureLocalCalendar()
+        val viewModel = viewModel()
+
+        val adopted = viewModel.awaitState { state -> state.accounts.singleOrNull { it.id == "local" }?.displayName == "Named in the sidebar" }
+        assertEquals("Named in the sidebar", adopted.calendarGroups.single { it.key == "local" }.name)
+        withContext(Dispatchers.Default) { withTimeout(30_000) { settingsStore.calendarGroupSettings.first { it.names.isEmpty() } } }
+
+        // Renaming the group from the sidebar renames the source shown in the settings.
+        viewModel.sources.renameGroup("local", "Home")
+        val renamed = viewModel.awaitState { state -> state.accounts.single { it.id == "local" }.displayName == "Home" }
+        assertEquals("Home", renamed.calendarGroups.single { it.key == "local" }.name)
+    }
+
     private fun viewModel(
         widgetTarget: CalendarWidgetLaunchTarget? = null,
         sharedEvent: SharedEventDraft? = null,
@@ -526,7 +580,7 @@ class CalendarViewModelTest {
             reminderRescheduler = ReminderRescheduler { reminderReschedules.update { it + 1 } },
             appLifecycleSignals = lifecycleSignals,
             uiStrings = UiStrings { "string-$it" },
-            zoneId = TEST_ZONE,
+            fixedZoneId = TEST_ZONE,
             initialWidgetLaunchTarget = widgetTarget,
             initialSharedEvent = sharedEvent,
             deliverInitialLaunchEvents = deliverInitialLaunchEvents,

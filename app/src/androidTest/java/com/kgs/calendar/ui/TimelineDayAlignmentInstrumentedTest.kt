@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
@@ -21,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.domain.model.CalendarViewMode
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

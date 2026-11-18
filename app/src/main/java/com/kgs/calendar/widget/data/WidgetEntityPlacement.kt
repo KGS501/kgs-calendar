@@ -1,20 +1,24 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.domain.task.isTimedMultiDayMiddleOn
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
 import com.kgs.calendar.domain.event.isTimedMultiDayMiddleOn
 import com.kgs.calendar.domain.task.effectiveStatus
+import com.kgs.calendar.domain.time.MINUTES_PER_DAY
+import com.kgs.calendar.domain.time.clockMinutesOn
 import com.kgs.calendar.domain.time.toDate
 import com.kgs.calendar.widget.WIDGET_DAY_DEFAULT_TASK_DURATION_MILLIS
 import com.kgs.calendar.widget.WIDGET_DAY_END_HOUR
 import com.kgs.calendar.widget.WIDGET_DAY_START_HOUR
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ChronoUnit
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 internal fun TaskEntity.widgetTaskDate(zoneId: ZoneId = ZoneId.systemDefault()): LocalDate? =
     (startAtMillis ?: dueAtMillis)?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
@@ -43,12 +47,11 @@ internal fun EventEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId =
     val overlapStart = max(startsAtMillis, visibleStart)
     val overlapEnd = min(endsAtMillis, visibleEnd)
     if (overlapEnd <= overlapStart) return null
-    val startMinute = ((overlapStart - visibleStart) / 60_000.0).roundToInt().coerceIn(0, 24 * 60 - 1)
-    val duration = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
-    return startMinute to (startMinute + duration).coerceIn(startMinute + 1, 24 * 60)
+    return widgetClockMinutesOn(day, overlapStart, overlapEnd, zoneId)
 }
 
 internal fun TaskEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Pair<Int, Int>? {
+    if (isTimedMultiDayMiddleOn(day, zoneId)) return null
     val startTimed = startAtMillis?.takeIf { startHasTime }
     val dueTimed = dueAtMillis?.takeIf { dueHasTime }
     if (startTimed == null && dueTimed == null) return null
@@ -63,12 +66,18 @@ internal fun TaskEntity.widgetTimedPlacementOn(day: LocalDate, zoneId: ZoneId = 
     val overlapStart = max(start, visibleStart)
     val overlapEnd = min(max(end, start + WIDGET_DAY_DEFAULT_TASK_DURATION_MILLIS), visibleEnd)
     if (overlapEnd <= overlapStart) return null
-    val startMinute = ((overlapStart - visibleStart) / 60_000.0).roundToInt().coerceIn(0, 24 * 60 - 1)
-    val duration = max(1, ((overlapEnd - overlapStart) / 60_000.0).roundToInt())
-    return startMinute to (startMinute + duration).coerceIn(startMinute + 1, 24 * 60)
+    return widgetClockMinutesOn(day, overlapStart, overlapEnd, zoneId)
+}
+
+/** Clock time, so that items line up with the hour labels on the days the clocks change. */
+private fun widgetClockMinutesOn(day: LocalDate, overlapStart: Long, overlapEnd: Long, zoneId: ZoneId): Pair<Int, Int> {
+    val (start, end) = clockMinutesOn(day, overlapStart, overlapEnd, zoneId)
+    val startMinute = (start - WIDGET_DAY_START_HOUR * 60).coerceIn(0, MINUTES_PER_DAY - 1)
+    return startMinute to (startMinute + (end - start)).coerceIn(startMinute + 1, MINUTES_PER_DAY)
 }
 
 internal fun TaskEntity.isWidgetFullDayTaskOn(day: LocalDate, zoneId: ZoneId = ZoneId.systemDefault()): Boolean {
+    if (isTimedMultiDayMiddleOn(day, zoneId)) return true
     if (startAtMillis == null && dueAtMillis == null) return false
     if ((startAtMillis != null && startHasTime) || (dueAtMillis != null && dueHasTime)) return false
     return day in visibleDates(day, day.plusDays(1), zoneId)

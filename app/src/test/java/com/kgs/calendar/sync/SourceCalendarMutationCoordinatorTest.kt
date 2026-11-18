@@ -18,13 +18,13 @@ class SourceCalendarMutationCoordinatorTest {
             CalendarStructuralMutation.EnableSource,
             CalendarStructuralMutation.DisableSource,
             CalendarStructuralMutation.AddCalendar,
-            CalendarStructuralMutation.EditCalendar,
             CalendarStructuralMutation.RemoveCalendar,
             CalendarStructuralMutation.EnableCalendar,
             CalendarStructuralMutation.DisableCalendar,
         )
 
         structural.forEach { assertTrue("$it should refresh", it.requiresFullRefresh) }
+        assertFalse(CalendarStructuralMutation.EditCalendar.requiresFullRefresh)
         assertFalse(CalendarStructuralMutation.ReorderCalendars.requiresFullRefresh)
         assertFalse(CalendarStructuralMutation.SetVisibleInViews.requiresFullRefresh)
     }
@@ -112,7 +112,7 @@ class SourceCalendarMutationCoordinatorTest {
         )
 
         val first = async {
-            coordinator.run(CalendarStructuralMutation.EditCalendar) {
+            coordinator.run(CalendarStructuralMutation.AddCalendar) {
                 calls += "first-start"
                 firstEntered.complete(Unit)
                 releaseFirst.await()

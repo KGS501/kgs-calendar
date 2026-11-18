@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
 import com.kgs.calendar.data.local.entity.TaskEntity
@@ -10,8 +12,8 @@ import com.kgs.calendar.reminder.TaskNotificationReconciler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 
 class WidgetTaskToggleTest {
     private val zone = ZoneId.of("Europe/Berlin")

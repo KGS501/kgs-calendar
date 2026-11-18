@@ -1,9 +1,12 @@
 package com.kgs.calendar.ui
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.kgs.calendar.R
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.settings.SettingsStore
 import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.source.ReadOnlyFeedStatus
+import com.kgs.calendar.domain.source.readOnlyFeedStatus
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +43,7 @@ class CalendarSourceActionsTest {
     }
 
     @Test
-    fun failedReadOnlySubscriptionIsReportedAsProblemWithoutLeavingASource() = runTest {
+    fun failedReadOnlySubscriptionStaysAsSourceWithoutDataYet() = runTest {
         val feedPath = "/feeds/login.ics"
         harness.server.setFeed(feedPath, "<!DOCTYPE html><html><body>Login</body></html>", contentType = "text/html")
 
@@ -50,20 +54,47 @@ class CalendarSourceActionsTest {
         val message = withContext(Dispatchers.Default) {
             withTimeout(30_000) { transient.message.first { it != null } }
         }!!
-        assertTrue(message, message.startsWith("Adding the read-only calendar failed. Source \""))
-        assertTrue(message, message.endsWith("URL returned a web page instead of an iCalendar feed."))
-        assertTrue(message.isProblemMessage())
-        assertTrue(harness.database.accountDao().getAll().none { it.sourceType == SourceType.ReadOnlyUrl })
+        // The calendar is added anyway; the notice says it has no data yet and Problems has the reason.
+        assertEquals("string-read_only_added_no_data", message)
+        val account = harness.database.accountDao().getAll().single { it.sourceType == SourceType.ReadOnlyUrl }
+        assertTrue(account.syncError!!.endsWith("URL returned a web page instead of an iCalendar feed."))
+        val collection = harness.database.collectionDao().forAccount(account.id).single()
+        assertEquals(ReadOnlyFeedStatus.NoDataYet, readOnlyFeedStatus(account, collection))
+    }
+
+    @Test
+    fun deletedLocalCalendarStaysGoneUntilItIsAddedAgain() = runTest {
+        harness.repository.ensureLocalCalendar()
+        val localHref = harness.database.collectionDao().forAccount(UiLocalAccountId).single().href
+
+        actions(this).deleteLocalCalendar()
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { settingsStore.localCalendarRemoved.first { it } }
+            withTimeout(30_000) { while (harness.database.accountDao().get(UiLocalAccountId) != null) kotlinx.coroutines.delay(20) }
+        }
+        // The calendar and its collection are gone, and the app is told not to create it again on start.
+        assertEquals(null, harness.database.collectionDao().get(localHref))
+
+        actions(this).addLocalCalendar()
+        withContext(Dispatchers.Default) {
+            withTimeout(30_000) { settingsStore.localCalendarRemoved.first { !it } }
+            withTimeout(30_000) { while (harness.database.collectionDao().get(localHref) == null) kotlinx.coroutines.delay(20) }
+        }
+        assertEquals(UiLocalAccountId, harness.database.collectionDao().get(localHref)!!.accountId)
+    }
+
+    private val settingsStore by lazy {
+        SettingsStore(
+            PreferenceDataStoreFactory.create(scope = dataStoreScope) {
+                File(tempFolder.root, "settings.preferences_pb")
+            },
+        )
     }
 
     private fun actions(scope: CoroutineScope) = CalendarSourceActions(
         scope = scope,
         repository = harness.repository,
-        settingsStore = SettingsStore(
-            PreferenceDataStoreFactory.create(scope = dataStoreScope) {
-                File(tempFolder.root, "settings.preferences_pb")
-            },
-        ),
+        settingsStore = settingsStore,
         sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(
             includeDisabledProviderCalendars = { false },
             fullRefresh = {},

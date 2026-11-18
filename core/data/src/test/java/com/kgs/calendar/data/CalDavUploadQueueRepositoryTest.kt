@@ -1,7 +1,10 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.AccountEntity
 import com.kgs.calendar.data.remote.HttpStatusException
+import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.model.ComponentType
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SyncState
@@ -19,9 +22,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 @RunWith(RobolectricTestRunner::class)
 class CalDavUploadQueueRepositoryTest {
@@ -134,15 +137,68 @@ class CalDavUploadQueueRepositoryTest {
         val remoteEtag = server.stored(eventHref)!!.etag
 
         repeat(2) {
-            expectFailure<IllegalStateException> { repository.syncNow() }
+            // The conflict waits on its item for the user; the source itself keeps syncing.
+            repository.syncNow()
             assertEquals(originalEtag, harness.pendingMutations().single().baseEtag)
             assertEquals(remoteEtag, server.stored(eventHref)!!.etag)
             assertTrue(server.stored(eventHref)!!.ics.unfoldedIcs().contains("SUMMARY:Remote edit"))
             assertEquals("Local edit", harness.event(eventHref)!!.title)
-            assertTrue(harness.resource(eventHref)!!.syncError!!.contains("Sync conflict"))
-            assertEquals(SyncState.Error, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
+            assertTrue(harness.resource(eventHref)!!.syncError.isSyncConflictError())
+            assertEquals(SyncState.Idle, harness.account(AccountEntity.PRIMARY_ID)!!.syncState)
         }
         assertEquals(listOf(originalEtag, originalEtag), puts().map { it.header("If-Match") })
+    }
+
+    @Test
+    fun keepingMyVersionOfAConflictReplacesTheServerVersion() = runTest {
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Remote edit", sequence = 1))
+        repository.syncNow()
+
+        repository.resolveConflictKeepingLocal(eventHref)
+
+        assertTrue(server.stored(eventHref)!!.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
+        assertTrue(harness.pendingMutations().isEmpty())
+        assertNull(harness.resource(eventHref)!!.syncError)
+        assertEquals(server.stored(eventHref)!!.etag, harness.resource(eventHref)!!.etag)
+        repository.syncNow()
+        assertEquals("Local edit", harness.event(eventHref)!!.title)
+    }
+
+    @Test
+    fun usingTheServerVersionOfAConflictDropsMyChange() = runTest {
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Remote edit", sequence = 1))
+        repository.syncNow()
+
+        repository.resolveConflictUsingServer(eventHref)
+
+        assertEquals("Remote edit", harness.event(eventHref)!!.title)
+        assertTrue(harness.pendingMutations().isEmpty())
+        assertNull(harness.resource(eventHref)!!.syncError)
+        assertTrue(server.stored(eventHref)!!.ics.unfoldedIcs().contains("SUMMARY:Remote edit"))
+        server.clearRequests()
+        repository.syncNow()
+        assertTrue(puts().isEmpty())
+        assertEquals("Remote edit", harness.event(eventHref)!!.title)
+    }
+
+    @Test
+    fun aConflictWithAnItemDeletedElsewhereCanRestoreOrDropIt() = runTest {
+        repository.updateEvent("remote-event", eventPayload("Local edit", day))
+        repository.setTaskCompleted(taskHref, true)
+        server.putRemote(server.eventsHref, "kickoff.ics", SampleIcs.event("remote-event", "Remote edit", sequence = 1))
+        server.putRemote(server.tasksHref, "todo.ics", SampleIcs.task("remote-task", "Remote task edit"))
+        repository.syncNow()
+        server.deleteRemote(eventHref)
+        server.deleteRemote(taskHref)
+
+        repository.resolveConflictKeepingLocal(eventHref)
+        repository.resolveConflictUsingServer(taskHref)
+
+        assertTrue(server.stored(eventHref)!!.ics.unfoldedIcs().contains("SUMMARY:Local edit"))
+        assertNull(harness.task(taskHref))
+        assertTrue(harness.pendingMutations().isEmpty())
     }
 
     @Test
@@ -150,7 +206,7 @@ class CalDavUploadQueueRepositoryTest {
         repository.setTaskCompleted(taskHref, true)
         server.putRemote(server.tasksHref, "todo.ics", SampleIcs.task("remote-task", "Remote task edit"))
 
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
 
         assertTrue(server.stored(taskHref)!!.ics.unfoldedIcs().contains("SUMMARY:Remote task edit"))
         assertEquals(1, harness.pendingMutations().size)
@@ -395,11 +451,11 @@ class CalDavUploadQueueRepositoryTest {
 
     @Test
     fun pushPendingChangesCreatedSinceOnlyUploadsRecentMutationsWithoutPulling() = runTest {
-        val before = System.currentTimeMillis()
+        val before = nowMillis()
         repository.createEvent(eventPayload("Planning", day, collectionHref = server.eventsHref))
         val event = harness.eventsIn(server.eventsHref).single { it.title == "Planning" }
 
-        repository.pushPendingChangesCreatedSince(System.currentTimeMillis() + 60_000)
+        repository.pushPendingChangesCreatedSince(nowMillis() + 60_000)
 
         assertTrue(puts().isEmpty())
         assertEquals(1, harness.pendingMutations().size)
@@ -465,8 +521,9 @@ class CalDavUploadQueueRepositoryTest {
         server.putRemote(server.eventsHref, href.removePrefix(server.eventsHref), SampleIcs.event(uid, "Other client edit", sequence = 5))
         repository.updateEvent(uid, eventPayload("Local edit", day))
 
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
 
+        assertTrue(harness.resource(href)!!.syncError.isSyncConflictError())
         assertEquals("Local edit", harness.event(href)!!.title)
         assertTrue(server.stored(href)!!.ics.unfoldedIcs().contains("SUMMARY:Other client edit"))
         assertNull(harness.resource(href)!!.etag)

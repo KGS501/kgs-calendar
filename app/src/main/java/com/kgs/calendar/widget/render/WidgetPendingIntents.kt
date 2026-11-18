@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.providerClass
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -19,7 +22,7 @@ import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.KgsWidgetProvider
 import com.kgs.calendar.widget.WIDGET_ACTION_CREATE_EVENT
 import com.kgs.calendar.widget.WIDGET_ACTION_CREATE_TASK
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal class WidgetPendingIntents(private val context: Context) {
     fun collectionAdapterIntent(kind: KgsWidgetKind, appWidgetId: Int): Intent =

@@ -1,5 +1,9 @@
 package com.kgs.calendar.ui.editor
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import java.util.Locale
+import com.kgs.calendar.ui.formatEditorDate
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,8 +32,8 @@ import com.kgs.calendar.data.settings.AppThemeMode
 import com.kgs.calendar.ui.DraftEventWireframe
 import com.kgs.calendar.ui.EventScheduleEditor
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertTrue
@@ -138,10 +142,13 @@ class EditorWireframeInstrumentedTest {
         listOf("editor-start-date", "editor-end-date", "editor-start-time", "editor-end-time").forEach { tag ->
             composeRule.onNodeWithTag(tag).fetchSemanticsNode()
         }
-        val dateCount = if (finalSchedule.startDateText == finalSchedule.endDateText) 2 else 1
-        composeRule.onAllNodesWithText(finalSchedule.startDateText, substring = true, useUnmergedTree = true).assertCountEquals(dateCount)
+        // The fields show the dates in the reader's format, e.g. "Tue, Oct 20, 2026".
+        val startDateLabel = formatEditorDate(finalSchedule.startDateText, Locale.getDefault())
+        val endDateLabel = formatEditorDate(finalSchedule.endDateText, Locale.getDefault())
+        val dateCount = if (startDateLabel == endDateLabel) 2 else 1
+        composeRule.onAllNodesWithText(startDateLabel, substring = true, useUnmergedTree = true).assertCountEquals(dateCount)
         if (dateCount == 1) {
-            composeRule.onAllNodesWithText(finalSchedule.endDateText, substring = true, useUnmergedTree = true).assertCountEquals(1)
+            composeRule.onAllNodesWithText(endDateLabel, substring = true, useUnmergedTree = true).assertCountEquals(1)
         }
         val timeCount = if (finalSchedule.startTimeText == finalSchedule.endTimeText) 2 else 1
         composeRule.onAllNodesWithText(finalSchedule.startTimeText, substring = true, useUnmergedTree = true).assertCountEquals(timeCount)

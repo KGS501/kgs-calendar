@@ -1,8 +1,10 @@
 package com.kgs.calendar.ui
 
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 import androidx.compose.ui.unit.dp
 import com.kgs.calendar.domain.model.CalendarViewMode
 import org.junit.Assert.assertEquals

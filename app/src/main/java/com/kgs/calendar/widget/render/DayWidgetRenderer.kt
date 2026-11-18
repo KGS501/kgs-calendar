@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.os.Build
 import android.util.TypedValue
@@ -23,8 +26,8 @@ import com.kgs.calendar.widget.model.dayGridContentWidthDp
 import com.kgs.calendar.widget.model.shouldHideWidgetTitle
 import com.kgs.calendar.widget.model.usesDirectDayGridItems
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 
 internal class DayWidgetRenderer(
     private val context: Context,
@@ -97,7 +100,7 @@ internal class DayWidgetRenderer(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             views.setViewLayoutMargin(R.id.widget_day_list_viewport, RemoteViews.MARGIN_BOTTOM, 0f, TypedValue.COMPLEX_UNIT_DIP)
         }
-        val dayTitle = day.format(DateTimeFormatter.ofPattern("EEE, d. MMM", settings.locale))
+        val dayTitle = day.format(dayMonthFormatter(settings.locale, weekday = "EEE"))
         val hideDayTitle = shouldHideWidgetTitle(size.widthDp, dayTitle, reservedDp = 174f, textSp = 16f)
         views.setViewVisibility(R.id.widget_header, if (hideDayTitle) View.GONE else View.VISIBLE)
         views.setViewVisibility(R.id.widget_day_header_compact, if (hideDayTitle) View.VISIBLE else View.GONE)

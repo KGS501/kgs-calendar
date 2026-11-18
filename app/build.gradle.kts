@@ -39,8 +39,8 @@ android {
         applicationId = "com.kgs501.kgscalendar"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = 36
-        versionCode = 34
-        versionName = "V.1.4.0-7"
+        versionCode = 51
+        versionName = "V.2.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -112,6 +112,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":shared:ui"))
     implementation(project(":core:data"))
 
     implementation(libs.androidx.core.ktx)

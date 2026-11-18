@@ -1,8 +1,10 @@
 package com.kgs.calendar.widget.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.task.taskPriorityIntensity
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.max
 
 internal data class WidgetDayTimeline(
@@ -43,6 +45,8 @@ internal data class WidgetDayItem(
     val priority: Int? = null,
     /** RECURRENCE-ID of the task occurrence this item shows; null for single tasks and events. */
     val taskOccurrenceMillis: Long? = null,
+    /** Start of the recurring event occurrence this item shows; null for single events. */
+    val eventOccurrenceMillis: Long? = null,
 )
 
 internal data class WidgetDayTimedItem(

@@ -1,10 +1,12 @@
 package com.kgs.calendar.ui.calendar
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 import java.util.Locale
 
 class CalendarPageHelpersTest {

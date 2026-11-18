@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.content.Context
 import android.content.res.Configuration
 import com.kgs.calendar.R
@@ -14,6 +17,7 @@ import com.kgs.calendar.data.settings.WidgetColorMode
 import com.kgs.calendar.data.settings.WidgetMonthWeeks
 import com.kgs.calendar.data.settings.WidgetTaskDisplayMode
 import com.kgs.calendar.data.settings.WidgetThemeMode
+import com.kgs.calendar.domain.event.hasRecurrence
 import com.kgs.calendar.domain.event.displayColor
 import com.kgs.calendar.domain.event.endDateInclusive
 import com.kgs.calendar.domain.event.isAllDayTopItemOn
@@ -43,11 +47,11 @@ import com.kgs.calendar.widget.model.resolveSubtasksExpandedByDefault
 import com.kgs.calendar.widget.state.WidgetTaskExpansionState
 import com.kgs.calendar.widget.toLocale
 import com.kgs.calendar.widget.withWidgetLocale
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -164,6 +168,7 @@ internal class KgsWidgetDataSource(
                             location = event.location,
                             eventStatus = event.status,
                             eventResourceHref = event.resourceHref,
+                            eventOccurrenceMillis = event.startsAtMillis.takeIf { event.hasRecurrence() },
                         ),
                     )
                 }
@@ -201,6 +206,7 @@ internal class KgsWidgetDataSource(
                         location = event.location,
                         eventStatus = event.status,
                         eventResourceHref = event.resourceHref,
+                        eventOccurrenceMillis = event.startsAtMillis.takeIf { event.hasRecurrence() },
                     )
                     add(WidgetDayTimedItem(item, placement.first, placement.second))
                 }
@@ -553,6 +559,7 @@ internal class KgsWidgetDataSource(
             launchKind = launchKind,
             stableKey = "event:$resourceHref",
             eventResourceHref = resourceHref,
+            eventOccurrenceMillis = startsAtMillis.takeIf { hasRecurrence() },
             location = location?.takeIf { it.isNotBlank() },
             eventStatus = status,
             endMillis = endsAtMillis,
@@ -677,6 +684,7 @@ internal class KgsWidgetDataSource(
             launchKind = KgsWidgetKind.Agenda,
             stableKey = "event:$resourceHref:${startDate.toEpochDay()}:${endDate.toEpochDay()}",
             eventResourceHref = resourceHref,
+            eventOccurrenceMillis = startsAtMillis.takeIf { hasRecurrence() },
             location = location?.takeIf { it.isNotBlank() },
             eventStatus = status,
             endMillis = endsAtMillis,
@@ -739,15 +747,15 @@ internal class KgsWidgetDataSource(
         val startDate = startAtMillis?.toDate(zoneId)
         val dueDate = dueAtMillis?.toDate(zoneId)
         val date = dueDate ?: startDate ?: return labels.getString(R.string.inbox)
-        val dateText = date.format(DateTimeFormatter.ofPattern("EEE, d. MMM", locale))
+        val dateText = date.format(dayMonthFormatter(locale, weekday = "EEE"))
         val startTimed = startAtMillis?.takeIf { startHasTime }
         val dueTimed = dueAtMillis?.takeIf { dueHasTime }
         return when {
             startTimed != null && dueTimed != null && startDate == dueDate ->
                 "$dateText, ${startTimed.toTimeText(zoneId)}-${dueTimed.toTimeText(zoneId)}"
             startTimed != null && dueTimed != null ->
-                "${startTimed.toDate(zoneId).format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${startTimed.toTimeText(zoneId)} - " +
-                    "${dueTimed.toDate(zoneId).format(DateTimeFormatter.ofPattern("d. MMM", locale))} ${dueTimed.toTimeText(zoneId)}"
+                "${startTimed.toDate(zoneId).format(dayMonthFormatter(locale))} ${startTimed.toTimeText(zoneId)} - " +
+                    "${dueTimed.toDate(zoneId).format(dayMonthFormatter(locale))} ${dueTimed.toTimeText(zoneId)}"
             startTimed != null ->
                 "$dateText, ${labels.getString(R.string.from_time, startTimed.toTimeText(zoneId))}"
             dueTimed != null ->
@@ -816,13 +824,13 @@ internal class KgsWidgetDataSource(
         val labels = textContext(locale)
         return when (this) {
             today -> labels.getString(R.string.today)
-            else -> format(DateTimeFormatter.ofPattern("EEE, d. MMM", locale))
+            else -> format(dayMonthFormatter(locale, weekday = "EEE"))
         }
     }
 
     private fun LocalDate.widgetSpanDateText(labels: Context): String {
         val locale = labels.resources.configuration.locales[0] ?: Locale.getDefault()
-        return format(DateTimeFormatter.ofPattern("d. MMM", locale))
+        return format(dayMonthFormatter(locale))
     }
 
     private fun LocalTime.timeText(): String =

@@ -71,4 +71,21 @@ class NextcloudLoginFlowClientTest {
         assertEquals("fromb", result!!.loginName)
         assertEquals("secret", result.appPassword)
     }
+
+    @Test
+    fun pollOnceDecodesJsonEscapes() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """{"server":"${server.url("/").toString().replace("/", "\\/")}","loginName":"Jos\u00e9","appPassword":"a\\b\"c"}""",
+                ),
+        )
+
+        val result = client.pollOnce(server.url("/poll").toString(), "abc")!!
+
+        assertEquals("José", result.loginName)
+        assertEquals("a\\b\"c", result.appPassword)
+        assertEquals(server.url("/").toString().trimEnd('/'), result.serverUrl)
+    }
 }

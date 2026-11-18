@@ -26,6 +26,8 @@ import com.kgs.calendar.navigation.CalendarLaunchResolver
 import com.kgs.calendar.sync.SourceCalendarMutationCoordinator
 import com.kgs.calendar.ui.AppLifecycleSignals
 import com.kgs.calendar.ui.ReminderRescheduler
+import com.kgs.calendar.ui.CalendarFileExporter
+import com.kgs.calendar.ui.PickedContentReader
 import com.kgs.calendar.ui.UiStrings
 import com.kgs.calendar.ui.WidgetRefresher
 import com.kgs.calendar.ui.timeline.TimelineOrientationViewportMemory
@@ -34,7 +36,10 @@ import com.kgs.calendar.widget.WidgetDependencies
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class AppGraph(context: Context) {
@@ -66,9 +71,11 @@ class AppGraph(context: Context) {
         androidCalendarProviderClient = androidCalendarProviderClient,
         icalCodec = icalCodec,
         readOnlyHttpClient = okHttpClient,
+        sourceImageDirectory = File(appContext.filesDir, SOURCE_IMAGE_DIRECTORY),
     )
     val calendarQueries: CalendarQueries = calendarData.queries
     val eventMutations: EventMutations = calendarData.eventMutations
+    val eventImports = calendarData.eventImports
     val taskMutations: TaskMutations = calendarData.taskMutations
     val calendarSources: CalendarSourceManager = calendarData.sources
     val syncOrchestrator: SyncOrchestrator = calendarData.syncOrchestrator
@@ -84,6 +91,7 @@ class AppGraph(context: Context) {
         syncOrchestrator = syncOrchestrator,
         repairs = syncRepairs,
         trash = calendarData.trash,
+        conflicts = calendarData.conflicts,
     )
 
     val sourceCalendarMutationCoordinator = SourceCalendarMutationCoordinator(
@@ -144,5 +152,29 @@ class AppGraph(context: Context) {
         }
     }
 
-    val uiStrings = UiStrings { id -> appContext.getString(id) }
+    val uiStrings = UiStrings { id -> id.text(java.util.Locale.getDefault()) }
+
+    val calendarFileExporter = CalendarFileExporter { collectionHrefs, target ->
+        val result = calendarData.export.export(collectionHrefs)
+        withContext(Dispatchers.IO) {
+            val output = appContext.contentResolver.openOutputStream(android.net.Uri.parse(target.value), "wt") ?: error("The file can't be written.")
+            output.use { it.write(result.rawIcs.toByteArray(Charsets.UTF_8)) }
+        }
+        result
+    }
+
+    val pickedContentReader = PickedContentReader { uri ->
+        withContext(Dispatchers.IO) {
+            runCatching {
+                appContext.contentResolver.openInputStream(android.net.Uri.parse(uri.value))?.use { input ->
+                    // Large photos are scaled down anyway; refuse anything unreasonably big.
+                    val bytes = input.readBytes()
+                    bytes.takeIf { it.size <= MAX_PICKED_IMAGE_BYTES }
+                }
+            }.getOrNull()
+        }
+    }
 }
+
+private const val SOURCE_IMAGE_DIRECTORY = "source-images"
+private const val MAX_PICKED_IMAGE_BYTES = 25 * 1024 * 1024

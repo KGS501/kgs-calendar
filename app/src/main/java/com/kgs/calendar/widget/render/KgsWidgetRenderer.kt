@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.os.Bundle
 import android.os.SystemClock
 import android.widget.RemoteViews
@@ -19,7 +21,7 @@ import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.loadingSkeleton
 import com.kgs.calendar.widget.model.preparedWidgetValue
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.ZoneId
+import com.kgs.calendar.time.ZoneId
 
 internal class KgsWidgetRenderer(
     widgets: WidgetDependencies,

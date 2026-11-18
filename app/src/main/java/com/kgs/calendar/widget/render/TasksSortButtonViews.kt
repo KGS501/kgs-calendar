@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -12,7 +14,7 @@ import com.kgs.calendar.data.settings.WidgetTaskCreateMode
 import com.kgs.calendar.data.settings.WidgetTaskSortMode
 import com.kgs.calendar.widget.bitmap.widgetSortIconBitmap
 import com.kgs.calendar.widget.model.widgetLabel
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal fun RemoteViews.bindTasksSortButtonState(
     context: Context,

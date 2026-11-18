@@ -1,5 +1,8 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import com.kgs.calendar.data.remote.isSyncConflictError
 import com.kgs.calendar.domain.model.MutationAction
 import com.kgs.calendar.domain.model.SyncState
 import kotlinx.coroutines.runBlocking
@@ -10,7 +13,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class SyncReliabilityRepositoryTest {
@@ -170,7 +173,8 @@ class SyncReliabilityRepositoryTest {
         val remote = server.stored(href)!!
         // Simulate a cache written by an older app while an unsent edit remained in the outbox.
         harness.database.resourceDao().upsert(harness.resource(href)!!.copy(etag = remote.etag, rawIcs = remote.ics))
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
+        assertTrue(harness.resource(href)!!.syncError.isSyncConflictError())
         assertTrue(harness.pendingMutations().single().payloadIcs!!.contains("Unsent edit"))
         assertEquals(remote.ics, server.stored(href)!!.ics)
     }
@@ -208,7 +212,8 @@ class SyncReliabilityRepositoryTest {
         harness.database.resourceDao().markSynced(href, null)
         repository.deleteEvent("event")
         server.putRemote(server.eventsHref, "event.ics", SampleIcs.event("event", "Other client edit"))
-        expectFailure<IllegalStateException> { repository.syncNow() }
+        repository.syncNow()
+        assertTrue(harness.resource(href)!!.syncError.isSyncConflictError())
         assertTrue(server.stored(href)!!.ics.contains("Other client edit"))
         assertTrue(server.requests("DELETE").isEmpty())
         assertEquals(MutationAction.Delete, harness.pendingMutations().single().action)
@@ -241,7 +246,7 @@ class SyncReliabilityRepositoryTest {
         val href = server.putRemote(server.eventsHref, "event.ics", SampleIcs.event("event", "Authoritative title"))
         harness.addSyncedCalDavAccount()
         harness.database.eventDao().upsert(harness.event(href)!!.copy(title = "Old drift"))
-        val capabilities = org.json.JSONObject(harness.collection(server.eventsHref)!!.capabilitiesJson!!)
+        val capabilities = com.kgs.calendar.json.JSONObject(harness.collection(server.eventsHref)!!.capabilitiesJson!!)
         capabilities.remove("kgsReconciliationVersion")
         harness.database.collectionDao().updateCapabilitiesJson(server.eventsHref, capabilities.toString())
         repository.syncNow()

@@ -1,5 +1,7 @@
 package com.kgs.calendar.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -24,13 +26,14 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import java.io.Closeable
+import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -75,6 +78,8 @@ class RepositoryHarness(
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build(),
+    /** Where source images are stored; null keeps none, like most tests need. */
+    sourceImageDirectory: File? = null,
 ) : Closeable {
     val context: Context = ApplicationProvider.getApplicationContext()
     val database: KgsDatabase = Room.inMemoryDatabaseBuilder(context, KgsDatabase::class.java)
@@ -90,6 +95,7 @@ class RepositoryHarness(
         icalCodec = IcalCodec(zone),
         readOnlyHttpClient = httpClient,
         zoneId = zone,
+        sourceImageDirectory = sourceImageDirectory,
     )
     val repository = CalendarRepository(
         queries = components.queries,
@@ -99,6 +105,7 @@ class RepositoryHarness(
         syncOrchestrator = components.syncOrchestrator,
         repairs = components.repairs,
         trash = components.trash,
+        conflicts = components.conflicts,
     )
 
     private var startedServer: FakeCalDavServer? = null
@@ -477,7 +484,7 @@ class FakeCalDavServer(
     fun stored(href: String): StoredResource? = synchronized(lock) { collectionFor(href)?.resources?.get(href) }
 
     /** Deletes a resource into the trash bin as if another client or the web UI had deleted it. Returns the trash object href. */
-    fun trashRemote(href: String, deletedAtEpochSeconds: Long = System.currentTimeMillis() / 1000): String = synchronized(lock) {
+    fun trashRemote(href: String, deletedAtEpochSeconds: Long = nowMillis() / 1000): String = synchronized(lock) {
         val collection = collectionFor(href) ?: error("No collection for $href")
         moveToTrash(collection, collection.resources.getValue(href), deletedAtEpochSeconds).objectHref
     }
@@ -614,11 +621,13 @@ class FakeCalDavServer(
                     return MockResponse().setResponseCode(if (trashBin.remove(path) != null) 204 else 404)
                 }
                 val collection = collectionFor(path) ?: return MockResponse().setResponseCode(404)
-                val existing = collection.resources[path] ?: return MockResponse().setResponseCode(404)
+                // As Sabre: a precondition on a target that is gone fails before the method runs.
                 val ifMatch = request.header("If-Match")
+                val existing = collection.resources[path]
+                    ?: return MockResponse().setResponseCode(if (ifMatch != null) 412 else 404)
                 if (ifMatch != null && ifMatch != existing.etag) return MockResponse().setResponseCode(412)
                 if (trashBinEnabled) {
-                    moveToTrash(collection, existing, System.currentTimeMillis() / 1000)
+                    moveToTrash(collection, existing, nowMillis() / 1000)
                 } else {
                     collection.resources.remove(path)
                     collection.version++

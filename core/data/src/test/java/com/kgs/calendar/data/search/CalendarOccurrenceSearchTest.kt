@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.search
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
@@ -9,8 +11,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.util.concurrent.CancellationException
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 
 class CalendarOccurrenceSearchTest {
     private val zone = ZoneId.of("Europe/Berlin")
@@ -64,7 +66,7 @@ class CalendarOccurrenceSearchTest {
                 LocalDate.of(2026, 8, 18),
                 LocalDate.of(2026, 8, 19),
             ),
-            results.map { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.startsAtMillis), zone) },
+            results.map { LocalDate.ofInstant(kotlin.time.Instant.ofEpochMilli(it.startsAtMillis), zone) },
         )
     }
 
@@ -90,7 +92,7 @@ class CalendarOccurrenceSearchTest {
                 LocalDate.of(2026, 8, 18),
                 LocalDate.of(2026, 8, 19),
             ),
-            results.map { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.startAtMillis!!), zone) },
+            results.map { LocalDate.ofInstant(kotlin.time.Instant.ofEpochMilli(it.startAtMillis!!), zone) },
         )
     }
 
@@ -215,7 +217,7 @@ class CalendarOccurrenceSearchTest {
 
         assertEquals(
             listOf(LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 19)),
-            results.map { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.startsAtMillis), zone) },
+            results.map { LocalDate.ofInstant(kotlin.time.Instant.ofEpochMilli(it.startsAtMillis), zone) },
         )
     }
 

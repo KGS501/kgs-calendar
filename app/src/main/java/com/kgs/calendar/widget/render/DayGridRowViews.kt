@@ -1,5 +1,8 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.widget.providerClass
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -20,6 +23,7 @@ import com.kgs.calendar.widget.EXTRA_COLLECTION_ACTION
 import com.kgs.calendar.widget.EXTRA_WIDGET_ACTION
 import com.kgs.calendar.widget.EXTRA_WIDGET_DATE
 import com.kgs.calendar.widget.EXTRA_WIDGET_EVENT_UID
+import com.kgs.calendar.widget.EXTRA_WIDGET_OCCURRENCE_MILLIS
 import com.kgs.calendar.widget.EXTRA_WIDGET_KIND
 import com.kgs.calendar.widget.EXTRA_WIDGET_TASK_UID
 import com.kgs.calendar.widget.KgsWidgetActionReceiver
@@ -47,7 +51,7 @@ import com.kgs.calendar.widget.model.priorityMotionFrameIntervalMillis
 import com.kgs.calendar.widget.model.widgetRequestCode
 import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.update.WidgetPerformanceMonitor
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 internal fun WidgetDayGridRow.toRemoteViews(
     context: Context,
@@ -382,9 +386,11 @@ private fun WidgetDayItem.openFillInIntent(date: LocalDate): Intent {
     if (isTask && !taskResourceHref.isNullOrBlank()) {
         intent.putExtra(EXTRA_WIDGET_ACTION, WIDGET_ACTION_OPEN_TASK)
         intent.putExtra(EXTRA_WIDGET_TASK_UID, taskResourceHref)
+        taskOccurrenceMillis?.let { intent.putExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, it) }
     } else if (!eventResourceHref.isNullOrBlank()) {
         intent.putExtra(EXTRA_WIDGET_ACTION, WIDGET_ACTION_OPEN_EVENT)
         intent.putExtra(EXTRA_WIDGET_EVENT_UID, eventResourceHref)
+        eventOccurrenceMillis?.let { intent.putExtra(EXTRA_WIDGET_OCCURRENCE_MILLIS, it) }
     }
     intent.data = Uri.parse("kgs-calendar://widget-day-grid-open/$stableKey")
     return intent

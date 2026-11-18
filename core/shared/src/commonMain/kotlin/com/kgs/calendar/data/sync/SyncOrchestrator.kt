@@ -1,0 +1,108 @@
+package com.kgs.calendar.data.sync
+
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.withContext
+import com.kgs.calendar.data.LOCAL_ACCOUNT_ID
+import com.kgs.calendar.data.describeSyncError
+import com.kgs.calendar.data.local.KgsDatabase
+import com.kgs.calendar.data.trash.TrashBin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.cancellation.CancellationException
+import com.kgs.calendar.domain.model.SourceType
+import com.kgs.calendar.domain.model.SyncState
+
+/**
+ * Runs a full sync: the local repairs, then every account through the first engine that handles
+ * it. Holds the remote-sync lock shared by full syncs and targeted uploads.
+ */
+class SyncOrchestrator(
+    private val database: KgsDatabase,
+    private val repairs: SyncRepairs,
+    private val uploader: PendingMutationUploader,
+    private val engines: List<CalendarSourceSyncEngine>,
+    private val trash: TrashBin? = null,
+    private val remoteSyncLock: RemoteSyncLock = RemoteSyncLock(),
+    /**
+     * Where syncs and uploads run. The desktop moves them off its UI thread, where a sync started from
+     * the window would otherwise read and store everything; empty runs them where they are called.
+     */
+    private val syncContext: CoroutineContext = EmptyCoroutineContext,
+    private val accountBudgetMillis: Long = DEFAULT_ACCOUNT_BUDGET_MILLIS,
+) {
+    suspend fun syncNow(
+        includeDisabledProviderCalendars: Boolean = false,
+        forceFullCalDavRefresh: Boolean = false,
+    ) = onSyncContext {
+        remoteSyncLock.withLock {
+            syncNowLocked(SourceSyncOptions(includeDisabledProviderCalendars, forceFullCalDavRefresh))
+        }
+    }
+
+    private suspend fun syncNowLocked(options: SourceSyncOptions) {
+        trash?.purgeExpired()
+        repairs.repairInvalidTaskSchedules()
+        repairs.repairPendingTaskMutations()
+        repairs.repairDuplicateCalDavResources()
+        var firstError: Throwable? = null
+        database.accountDao().getAll().forEach { account ->
+            try {
+                if (account.id == LOCAL_ACCOUNT_ID) return@forEach
+                val engine = engines.firstOrNull { it.handles(account) } ?: return@forEach
+                // Cancellation reaches the HTTP calls, so a slow server gives way to the next account.
+                // The budget is for real I/O, so it runs on a dispatcher that keeps real time.
+                withContext(Dispatchers.Default) {
+                    withTimeout(accountBudgetMillis) {
+                        if (engine.sync(account, options)) {
+                            // The server trash bin is extra: failing to read it does not fail the sync.
+                            if (account.sourceType == SourceType.CalDav) trash?.refreshAccountLocked(account.id)
+                        }
+                    }
+                }
+            } catch (timeout: TimeoutCancellationException) {
+                val syncError = "Sync took too long and was stopped. It continues with the next sync."
+                database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
+                val failure = IllegalStateException(syncError, timeout)
+                if (firstError == null) firstError = failure else firstError!!.addSuppressed(failure)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                val syncError = account.describeSyncError(error)
+                database.accountDao().updateSyncState(SyncState.Error, syncError, account.lastSyncAtMillis, account.id)
+                val failure = IllegalStateException(syncError, error)
+                if (firstError == null) firstError = failure else firstError!!.addSuppressed(failure)
+            }
+        }
+        firstError?.let { throw it }
+    }
+
+    /** Durable worker recovery drains the entire outbox, including edits from earlier processes. */
+    suspend fun pushAllPendingChanges() = onSyncContext {
+        remoteSyncLock.withLock {
+            repairs.repairPendingTaskMutations()
+            uploader.pushPendingMutations(database.pendingMutationDao().all())
+        }
+    }
+
+    suspend fun pushPendingChangesCreatedSince(startedAtMillis: Long): Unit = onSyncContext {
+        remoteSyncLock.withLock {
+            val threshold = startedAtMillis - TARGETED_SYNC_CLOCK_SKEW_MILLIS
+            val pendingMutations = database.pendingMutationDao().createdSince(threshold)
+            repairs.repairPendingTaskMutations(pendingMutations)
+            uploader.pushPendingMutations(database.pendingMutationDao().createdSince(threshold))
+        }
+    }
+
+    /** Without a [syncContext], right here: no context switch, so failures reach callers exactly as thrown. */
+    private suspend fun <T> onSyncContext(block: suspend () -> T): T =
+        if (syncContext == EmptyCoroutineContext) block() else withContext(syncContext) { block() }
+
+    companion object {
+        private const val TARGETED_SYNC_CLOCK_SKEW_MILLIS = 1000L
+
+        /** Each account's share of a sync. It holds the lock that uploads and other accounts wait for. */
+        const val DEFAULT_ACCOUNT_BUDGET_MILLIS = 10L * 60L * 1000L
+    }
+}

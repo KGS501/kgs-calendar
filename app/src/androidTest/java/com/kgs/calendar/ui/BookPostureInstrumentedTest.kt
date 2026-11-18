@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -23,8 +25,8 @@ import com.kgs.calendar.ui.layout.rememberWindowFoldFeatures
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
-import java.time.LocalDate
-import java.time.LocalTime
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

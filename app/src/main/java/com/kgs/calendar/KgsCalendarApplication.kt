@@ -1,5 +1,7 @@
 package com.kgs.calendar
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.app.Application
 import android.database.ContentObserver
 import android.content.Context
@@ -15,6 +17,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.kgs.calendar.reminder.ReminderScheduler
 import com.kgs.calendar.sync.SyncWorker
 import com.kgs.calendar.sync.reparseCachedIcalIfNeeded
+import com.kgs.calendar.sync.reparseForCurrentZoneIfNeeded
+import com.kgs.calendar.widget.update.WidgetDayRollover
 import com.kgs.calendar.domain.source.isLocalAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +47,7 @@ class KgsCalendarApplication : Application() {
     val processForegroundedAt: SharedFlow<Long> = _processForegroundedAt.asSharedFlow()
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            _processForegroundedAt.tryEmit(System.currentTimeMillis())
+            _processForegroundedAt.tryEmit(nowMillis())
             foregroundSyncJob?.cancel()
             foregroundSyncJob = scope.launch {
                 while (isActive) {
@@ -58,7 +62,7 @@ class KgsCalendarApplication : Application() {
         override fun onStop(owner: LifecycleOwner) {
             foregroundSyncJob?.cancel()
             foregroundSyncJob = null
-            val backgroundedAt = System.currentTimeMillis()
+            val backgroundedAt = nowMillis()
             scope.launch {
                 appGraph.settingsStore.setLastBackgroundedAtMillis(backgroundedAt)
             }
@@ -83,10 +87,17 @@ class KgsCalendarApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Enable with `adb shell setprop log.tag.KgsHaptics DEBUG` to verify haptic cues on an emulator.
+        com.kgs.calendar.ui.haptics.KgsHaptics.debugLog = { tag, message ->
+            if (runCatching { android.util.Log.isLoggable(tag, android.util.Log.DEBUG) }.getOrDefault(false)) {
+                android.util.Log.d(tag, message)
+            }
+        }
         appGraph = AppGraph(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
         ReminderScheduler.ensureChannel(this)
         registerWidgetRefreshHooks()
+        WidgetDayRollover.schedule(this)
         registerAndroidCalendarObserverIfPermitted()
         scope.launch {
             appGraph.settingsStore.syncIntervalMinutes.distinctUntilChanged().collect {
@@ -116,6 +127,9 @@ class KgsCalendarApplication : Application() {
                 reparseAllResources = appGraph.repository::reparseLocalResources,
                 recordVersion = appGraph.settingsStore::setParserReparseVersion,
             )
+            if (appGraph.reparseForCurrentZoneIfNeeded()) {
+                runCatching { ReminderScheduler.reschedule(this@KgsCalendarApplication) }
+            }
         }
     }
 
@@ -165,6 +179,9 @@ class KgsCalendarApplication : Application() {
         scheduleWidgetRefresh()
     }
 
+    // Called from Room's invalidation thread, the main thread and IO collectors: the debounce
+    // job must be swapped under a lock, or two overlapping refreshes can both survive.
+    @Synchronized
     private fun scheduleWidgetRefresh() {
         widgetRefreshJob?.cancel()
         widgetRefreshJob = scope.launch {
@@ -173,6 +190,7 @@ class KgsCalendarApplication : Application() {
         }
     }
 
+    @Synchronized
     private fun scheduleAndroidCalendarRefresh() {
         androidCalendarRefreshJob?.cancel()
         androidCalendarRefreshJob = scope.launch {

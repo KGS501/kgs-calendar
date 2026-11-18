@@ -1,5 +1,7 @@
 package com.kgs.calendar.sync
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.os.Build
 import androidx.work.CoroutineWorker
@@ -40,6 +42,8 @@ class SyncWorker(
             rescheduleReminders = { ReminderScheduler.reschedule(applicationContext) },
             refreshWidgets = { KgsCalendarApplication.graph(applicationContext).widgets.scheduler.updateAllAndAwait() },
         )
+        // An account that needs approval only fails quietly in the background otherwise.
+        runCatching { OriginApprovalNotifier.update(applicationContext, graph.repository.observeAccounts().first()) }
         if (syncError == null) {
             if (!inputData.getBoolean(KEY_UPLOAD_ONLY, false)) markRecentSyncActivity(applicationContext)
             return Result.success()
@@ -83,7 +87,7 @@ class SyncWorker(
 
         fun enqueueForegroundRefreshIfStale(context: Context) {
             val appContext = context.applicationContext
-            val now = System.currentTimeMillis()
+            val now = nowMillis()
             val prefs = appContext.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE)
             val lastSyncActivityAt = prefs.getLong(KEY_LAST_SYNC_ACTIVITY_AT, 0L)
             if (!foregroundRefreshDue(lastSyncActivityAt, now)) return
@@ -113,7 +117,7 @@ class SyncWorker(
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        private fun markRecentSyncActivity(context: Context, now: Long = System.currentTimeMillis()) {
+        private fun markRecentSyncActivity(context: Context, now: Long = nowMillis()) {
             context.applicationContext
                 .getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE)
                 .edit()

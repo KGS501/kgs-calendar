@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.render
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.util.TypedValue
 import android.view.Gravity
@@ -18,8 +20,8 @@ import com.kgs.calendar.widget.model.WidgetRenderSettings
 import com.kgs.calendar.widget.model.shouldHideWidgetTitle
 import com.kgs.calendar.widget.model.widgetRequestCode
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
 
 internal class MonthWidgetRenderer(
     private val context: Context,

@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.sync
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.RepositoryHarness
 import com.kgs.calendar.data.SampleIcs
 import com.kgs.calendar.data.eventPayload
@@ -19,7 +21,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 @RunWith(RobolectricTestRunner::class)
 class PendingMutationUploaderTest {

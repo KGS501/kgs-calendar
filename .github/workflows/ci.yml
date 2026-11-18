@@ -1,0 +1,281 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Builds to run (manual override)
+        type: choice
+        default: all
+        options: [all, android, shared, ios]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Select builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.select.outputs.android }}
+      shared: ${{ steps.select.outputs.shared }}
+      ios: ${{ steps.select.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test CI selection and verification commands
+        run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
+
+      # Fast and offline, so it runs on every change instead of being a build to select.
+      - name: Test Play publishing tools
+        run: python3 -m unittest discover -s tools -p 'test_play_publisher.py' -v
+
+      - name: Select affected builds
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_TARGET: ${{ inputs.target }}
+        run: python3 tools/ci/select_builds.py
+
+  build:
+    name: Android and shared checks
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # One Gradle invocation shares compilation work when both groups are selected.
+      - name: Run selected checks
+        env:
+          CHECK_ANDROID: ${{ needs.changes.outputs.android }}
+          CHECK_SHARED: ${{ needs.changes.outputs.shared }}
+        run: |
+          if [[ "$CHECK_ANDROID" == true && "$CHECK_SHARED" == true ]]; then
+            bash tools/verify-port.sh --console=plain
+          elif [[ "$CHECK_ANDROID" == true ]]; then
+            bash tools/verify-port.sh --android-only --console=plain
+          else
+            bash tools/verify-port.sh --shared-only --console=plain
+          fi
+
+      - name: Upload unit test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+            core/data/build/reports/tests/
+            core/data/build/test-results/
+            core/shared/build/reports/tests/
+            core/shared/build/test-results/
+            shared/ui/build/reports/tests/
+            shared/ui/build/test-results/
+          if-no-files-found: ignore
+
+  release:
+    name: Android release build and lint
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Unsigned: this checks R8, resource shrinking and lint, and needs no release credentials.
+      - name: Build minified release and run lint
+        run: bash tools/verify-port.sh --release-only --console=plain
+
+      - name: Upload lint and shrinker diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/reports/lint-results-*.txt
+            app/build/outputs/mapping/release/
+          if-no-files-found: ignore
+
+  integration:
+    name: Android integration suite
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Bounded to what JVM tests can't show: real SQLite upgrades, and the Android parts of
+      # incoming intents, reminder launches and editor recreation. The UI-heavy suites stay local.
+      - name: Run migration and smoke tests on an emulator
+        timeout-minutes: 40
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            ./gradlew --no-daemon --max-workers=2 --console=plain :core:data:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kgs.calendar.data.local.KgsDatabaseMigrationTest
+            ./gradlew --no-daemon --max-workers=2 --console=plain :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kgs.calendar.MainActivityIntentFilterInstrumentedTest,com.kgs.calendar.reminder.ReminderLaunchInstrumentedTest,com.kgs.calendar.ui.EditorRecreationInstrumentedTest
+
+      - name: Upload integration test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            core/data/build/reports/androidTests/
+            core/data/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+
+  build-ios:
+    name: iOS device archive
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    # Validate the same Release device archive used by TestFlight, without signing secrets.
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # Pin the Xcode generation supported by the current Kotlin/Native toolchain.
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/ios/requirements.txt
+
+      - name: Verify TestFlight tooling
+        run: |
+          python3 -m pip install -r tools/ios/requirements.txt
+          python3 -m unittest discover -s tools/ios -p 'test_*.py' -v
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode26.0.1-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+
+      # Root Gradle configuration still includes Android modules.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # v3 defaults to the retired "tools" package; install only what we need below.
+          packages: ''
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build unsigned iOS device archive
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project iosApp/KgsCalendar.xcodeproj \
+            -scheme KgsCalendar \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/kgs-ios/KgsCalendar.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/kgs-ios" \
+            -jobs 1 \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            archive 2>&1 | tee "$RUNNER_TEMP/kgs-ios-build.log"
+          python3 tools/ios/package_app.py validate "$RUNNER_TEMP/kgs-ios/KgsCalendar.xcarchive"
+
+      - name: Upload Apple build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ${{ runner.temp }}/kgs-ios-build.log
+          if-no-files-found: ignore
+
+  ci:
+    name: CI result
+    if: always()
+    needs: [changes, build, release, integration, build-ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Require this check in branch protection: intentional skips pass, failures do not.
+      - name: Check selected results
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          LINUX_REQUIRED: ${{ needs.changes.outputs.android == 'true' || needs.changes.outputs.shared == 'true' }}
+          IOS_REQUIRED: ${{ needs.changes.outputs.ios }}
+          LINUX_RESULT: ${{ needs.build.result }}
+          RELEASE_REQUIRED: ${{ needs.changes.outputs.android }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          IOS_RESULT: ${{ needs.build-ios.result }}
+        run: |
+          [[ "$SELECTION_RESULT" == success ]] || exit 1
+          expected_linux=skipped
+          expected_ios=skipped
+          if [[ "$LINUX_REQUIRED" == true ]]; then expected_linux=success; fi
+          if [[ "$IOS_REQUIRED" == true ]]; then expected_ios=success; fi
+          expected_release=skipped
+          if [[ "$RELEASE_REQUIRED" == true ]]; then expected_release=success; fi
+          [[ "$LINUX_RESULT" == "$expected_linux" && "$IOS_RESULT" == "$expected_ios" ]]
+          [[ "$RELEASE_RESULT" == "$expected_release" && "$INTEGRATION_RESULT" == "$expected_linux" ]]

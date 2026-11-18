@@ -1,8 +1,10 @@
 package com.kgs.calendar.ui.haptics
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.kgs.calendar.ui.timeline.TimelineDropTarget
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,6 +44,7 @@ class KgsHapticsTest {
         haptics.drop()
         haptics.taskToggled(completed = true)
         haptics.taskToggled(completed = false)
+        haptics.sliderStep()
 
         assertEquals(
             listOf(
@@ -50,6 +53,7 @@ class KgsHapticsTest {
                 KgsHapticCue.Drop,
                 KgsHapticCue.TaskCompleted,
                 KgsHapticCue.TaskReopened,
+                KgsHapticCue.SliderStep,
             ),
             performer.cues,
         )
@@ -85,6 +89,7 @@ class KgsHapticsTest {
         assertEquals(HapticFeedbackType.Confirm, KgsHapticCue.Drop.feedbackType)
         assertEquals(HapticFeedbackType.ToggleOn, KgsHapticCue.TaskCompleted.feedbackType)
         assertEquals(HapticFeedbackType.ToggleOff, KgsHapticCue.TaskReopened.feedbackType)
+        assertEquals(HapticFeedbackType.SegmentFrequentTick, KgsHapticCue.SliderStep.feedbackType)
     }
 
     @Test
@@ -98,6 +103,20 @@ class KgsHapticsTest {
         assertTrue(tracker.onSlot(TimelineDropTarget.Timed(date.plusDays(1), 9 * 60 + 15, 10 * 60 + 15)))
         assertTrue(tracker.onSlot(TimelineDropTarget.AllDay(date.plusDays(1), lane = 0)))
         assertFalse(tracker.onSlot(TimelineDropTarget.AllDay(date.plusDays(1), lane = 0)))
+    }
+
+    @Test
+    fun sliderTrackerTicksOncePerStepTheUserMovesTo() {
+        val tracker = SliderStepTracker(5)
+
+        assertFalse(tracker.onUserValue(5))
+        assertTrue(tracker.onUserValue(6))
+        assertFalse(tracker.onUserValue(6))
+        assertTrue(tracker.onUserValue(4))
+        // The value changed elsewhere: moving to it does not tick.
+        tracker.sync(9)
+        assertFalse(tracker.onUserValue(9))
+        assertTrue(tracker.onUserValue(8))
     }
 
     @Test

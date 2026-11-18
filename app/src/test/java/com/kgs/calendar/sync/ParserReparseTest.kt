@@ -31,7 +31,16 @@ class ParserReparseTest {
     }
 
     @Test
+    fun versionsBeforeTheFullReparseRedoEverything() = runTest {
+        run(storedVersion = FULL_REPARSE_VERSION - 1)
+
+        assertEquals(listOf("all"), calls)
+        assertEquals(PARSER_REPARSE_VERSION, recorded)
+    }
+
+    @Test
     fun versionsFromTheFullReparseOnOnlyRedoTasks() = runTest {
+        if (FULL_REPARSE_VERSION == PARSER_REPARSE_VERSION) return@runTest
         run(storedVersion = FULL_REPARSE_VERSION)
 
         assertEquals(listOf("tasks"), calls)

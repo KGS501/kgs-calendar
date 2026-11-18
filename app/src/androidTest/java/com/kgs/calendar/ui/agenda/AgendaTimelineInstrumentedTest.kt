@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.agenda
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,10 +27,10 @@ import com.kgs.calendar.domain.model.CalendarRange
 import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule

@@ -85,7 +85,7 @@ class SyncOrchestratorTest {
         val error = expectFailure<IllegalStateException> { orchestrator(engine).syncNow() }
 
         assertEquals("Source \"Alpha\": first", error.message)
-        assertSame(firstCause, error.cause)
+        assertEquals(firstCause.message, error.cause?.message)
         assertEquals("Source \"Beta\": second", harness.account("b")!!.syncError)
     }
 

@@ -54,9 +54,8 @@ class DrawerViewSwitchInstrumentedTest {
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 composeRule.onAllNodesWithContentDescription(menu).fetchSemanticsNodes().isNotEmpty()
             }
-            val multipleDays = context.getString(
-                CalendarViewMode.ThreeDay.labelRes(runBlocking { settingsStore.weekViewEnabled.first() }),
-            )
+            val multipleDays = CalendarViewMode.ThreeDay.labelRes(runBlocking { settingsStore.weekViewEnabled.first() })
+                .text(java.util.Locale.getDefault())
             repeat(2) {
                 selectInDrawer(context.getString(R.string.agenda))
                 awaitSelectedView(CalendarViewMode.Agenda)

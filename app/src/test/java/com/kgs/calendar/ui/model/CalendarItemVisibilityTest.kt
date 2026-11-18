@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.model
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.ical.TaskRecurrenceOverride
@@ -14,9 +16,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.TimeZone
 
 class CalendarItemVisibilityTest {
@@ -241,6 +243,26 @@ class CalendarItemVisibilityTest {
             isRecurring = false,
             color = 0xFF336699.toInt(),
         )
+
+    @Test
+    fun anOpenTaskThatBeganEarlierAndRunsOnIsOngoingToday() {
+        val today = LocalDate.of(2026, 10, 23)
+        val running = task(millisAt(today.minusDays(1), 9), millisAt(today.plusDays(3), 17), startHasTime = true, dueHasTime = true)
+        val dueToday = task(millisAt(today.minusDays(2), 0), millisAt(today, 0), startHasTime = false, dueHasTime = false)
+        val dueAtMidnight = task(millisAt(today.minusDays(2), 9), millisAt(today, 0), startHasTime = true, dueHasTime = true)
+        val startsToday = task(millisAt(today, 9), millisAt(today.plusDays(1), 9), startHasTime = true, dueHasTime = true)
+
+        assertTrue(running.isOngoingOn(today))
+        assertTrue(dueToday.isOngoingOn(today))
+        // Due at midnight: it ended yesterday.
+        assertFalse(dueAtMidnight.isOngoingOn(today))
+        // Already listed today by its own start.
+        assertFalse(startsToday.isOngoingOn(today))
+        assertFalse(running.copy(isCompleted = true, status = "COMPLETED").isOngoingOn(today))
+    }
+
+    private fun millisAt(day: LocalDate, hour: Int): Long =
+        day.atTime(hour, 0).atZone(com.kgs.calendar.time.ZoneOffset.UTC).toInstant().toEpochMilli()
 
     private fun task(
         start: Long?,

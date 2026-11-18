@@ -1,11 +1,13 @@
 package com.kgs.calendar.ui.layout
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.settings.TaskColorMode
 import com.kgs.calendar.ui.buildAllDayOverlayItems
 import com.kgs.calendar.ui.calendar.toDayPage
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -110,8 +112,6 @@ class AllDaySceneLayoutTest {
                 overlayItems = items,
                 visibleStartPage = window.layoutStartPage,
                 visibleEndPage = window.layoutEndPage,
-                priorityStartPage = window.layoutStartPage,
-                priorityEndPage = window.layoutEndPage,
                 maxVisibleItems = 5,
             )
         }
@@ -156,24 +156,20 @@ class AllDaySceneLayoutTest {
 
     @Test
     fun july25EventsCannotMoveUntitledEventWhileTheyAreOutsideLayoutWindow() {
-        val beforeEntry = buildAllDayOverlayItems(
-            events = julyFixture(),
-            tasks = emptyList(),
-            taskColorMode = TaskColorMode.Collection,
+        fun visibleItems(endDate: LocalDate) = buildAllDayScene(
+            overlayItems = buildAllDayOverlayItems(
+                events = julyFixture(),
+                tasks = emptyList(),
+                taskColorMode = TaskColorMode.Collection,
+                visibleStartPage = july22.toDayPage(),
+                visibleEndPage = endDate.toDayPage(),
+            ),
             visibleStartPage = july22.toDayPage(),
-            visibleEndPage = july24.toDayPage(),
-            priorityStartPage = july22.toDayPage(),
-            priorityEndPage = july24.toDayPage(),
-        )
-        val afterEntry = buildAllDayOverlayItems(
-            events = julyFixture(),
-            tasks = emptyList(),
-            taskColorMode = TaskColorMode.Collection,
-            visibleStartPage = july22.toDayPage(),
-            visibleEndPage = july25.toDayPage(),
-            priorityStartPage = july22.toDayPage(),
-            priorityEndPage = july24.toDayPage(),
-        )
+            visibleEndPage = endDate.toDayPage(),
+            maxVisibleItems = 5,
+        ).overlayItems
+        val beforeEntry = visibleItems(july24)
+        val afterEntry = visibleItems(july25)
 
         val beforeLane = beforeEntry.single { it.title == "Untitled event" }.lane
         val afterLane = afterEntry.single { it.title == "Untitled event" }.lane
@@ -195,8 +191,6 @@ class AllDaySceneLayoutTest {
             overlayItems = items,
             visibleStartPage = july26.toDayPage(),
             visibleEndPage = july28.toDayPage(),
-            priorityStartPage = july26.toDayPage(),
-            priorityEndPage = july28.toDayPage(),
             maxVisibleItems = 3,
         )
 
@@ -224,8 +218,6 @@ class AllDaySceneLayoutTest {
             overlayItems = listOf(item),
             visibleStartPage = july27.toDayPage(),
             visibleEndPage = july28.toDayPage(),
-            priorityStartPage = july27.toDayPage(),
-            priorityEndPage = july28.toDayPage(),
             maxVisibleItems = 3,
         )
 

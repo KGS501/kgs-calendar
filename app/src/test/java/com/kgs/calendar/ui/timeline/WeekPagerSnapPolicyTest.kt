@@ -1,7 +1,9 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.WEEK_DAY_COUNT
-import java.time.DayOfWeek
+import kotlinx.datetime.DayOfWeek
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue

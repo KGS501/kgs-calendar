@@ -1,5 +1,9 @@
 package com.kgs.calendar.reminder
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import java.util.Locale
+import com.kgs.calendar.ui.time.dayMonthFormatter
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,17 +13,20 @@ import android.os.Build
 import android.text.Html
 import com.kgs.calendar.KgsCalendarApplication
 import com.kgs.calendar.R
+import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
 import com.kgs.calendar.data.local.entity.TaskEntity
+import com.kgs.calendar.domain.event.remindsUser
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.isSupportedReminderOffset
+import com.kgs.calendar.domain.task.isOpen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.DateTimeFormatter
 
 /**
  * Schedules local notifications for event/task reminders via AlarmManager.
@@ -34,7 +41,6 @@ object ReminderScheduler {
     private const val KEY_CODES = "scheduled_codes"
     private const val KEY_ACTIVE_TASK_CODES_PREFIX = "active_task_codes:"
     private const val WINDOW_DAYS = 21L
-    private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yy")
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val rescheduleMutex = Mutex()
 
@@ -66,19 +72,31 @@ object ReminderScheduler {
         val graph = KgsCalendarApplication.graph(context)
         val repository = graph.repository
         // Hidden calendars, and hidden events or tasks of a calendar, never notify.
-        val (events, tasks) = repository.reminderCandidates(graph.settingsStore.collectionVisibility.first())
-        val now = System.currentTimeMillis()
+        val visibility = graph.settingsStore.collectionVisibility.first()
+        val (events, tasks) = repository.reminderCandidates(visibility)
+        // What was finished or removed elsewhere since its notification came up takes it down now.
+        graph.reminderRegistry.dismissEnded { repository.isReminderDeliverable(it, visibility) }
+        val now = nowMillis()
         val windowEnd = now + WINDOW_DAYS * 24 * 60 * 60 * 1000
+        // Recent occurrences are planned too, to catch up reminders whose alarm never went off.
+        val planFrom = now - MissedReminders.GRACE_MILLIS
+        val ownAddresses = repository.ownAddressesByCollection()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         cancelLegacySchedules(context, alarmManager)
         val planner = ReminderPlanner()
         val plans = mutableListOf<ReminderAlarmPlan>()
 
         events.forEach { master ->
-            val offsets = master.remindersCsv.minutes()
-            if (offsets.isEmpty()) return@forEach
-            repository.expandEventReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+            // Any single occurrence can have reminders of its own, or none.
+            val allOffsets = master.remindersCsv.minutes() +
+                RecurrenceOverrideCodec.decodeEvents(master.recurrenceOverridesJson).flatMap { it.remindersCsv.minutes() }
+            if (allOffsets.isEmpty()) return@forEach
+            val addresses = ownAddresses[master.collectionHref].orEmpty()
+            repository.expandEventReminderOccurrences(master, planFrom, windowEnd + allOffsets.leadMillis()).forEach { occurrence ->
                 val event = occurrence.item
+                val offsets = event.remindersCsv.minutes()
+                // Cancelled events and invitations the user declined stay quiet.
+                if (offsets.isEmpty() || !event.remindsUser(addresses)) return@forEach
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
                     startAtMillis = event.startsAtMillis,
@@ -86,6 +104,8 @@ object ReminderScheduler {
                     defaultAnchorAtMillis = event.startsAtMillis,
                     title = event.title,
                     body = null,
+                    notifyUntilMillis = event.endsAtMillis,
+                    repeats = master.repeats(),
                 )
                 plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = eventNotificationBody(event, plan.triggerAtMillis))
@@ -94,8 +114,14 @@ object ReminderScheduler {
         }
 
         tasks.forEach { master ->
-            repository.expandTaskReminderOccurrences(master, now, windowEnd).forEach { occurrence ->
+            val allOffsets = master.remindersCsv.minutes() +
+                RecurrenceOverrideCodec.decodeTasks(master.recurrenceOverridesJson).flatMap { it.remindersCsv.minutes() }
+            if (allOffsets.isEmpty()) return@forEach
+            repository.expandTaskReminderOccurrences(master, planFrom, windowEnd + allOffsets.leadMillis()).forEach { occurrence ->
                 val task = occurrence.item
+                val offsets = task.remindersCsv.minutes()
+                // The list keeps finished occurrences for the calendar; they don't remind anyone.
+                if (offsets.isEmpty() || !task.isOpen()) return@forEach
                 val reminderOccurrence = ReminderOccurrence(
                     occurrenceId = occurrence.occurrenceId,
                     startAtMillis = task.startAtMillis,
@@ -103,33 +129,68 @@ object ReminderScheduler {
                     defaultAnchorAtMillis = task.dueAtMillis ?: task.startAtMillis,
                     title = task.title.takeIf { it.isNotBlank() } ?: context.getString(R.string.untitled_task),
                     body = null,
+                    repeats = master.repeats(),
                 )
-                plans += planner.plan(reminderOccurrence, task.remindersCsv.minutes()).map { plan ->
+                plans += planner.plan(reminderOccurrence, offsets).map { plan ->
                     plan.copy(body = taskNotificationBody(task, plan.triggerAtMillis))
                 }
             }
         }
 
+        val registry = graph.reminderRegistry
+        val delivered = registry.deliveredCodes()
+        val missedPlans = if (delivered == null) {
+            // First run with tracking: what is already due counts as shown, rather than notifying it all again.
+            registry.markDelivered(plans.filter { it.triggerAtMillis < now }.map { it.alarmRequestCode }, now)
+            emptyList()
+        } else {
+            MissedReminders.select(plans, delivered, now).distinctBy { it.alarmRequestCode }
+        }
         val activePlans = plans
             .filter { it.triggerAtMillis in now..windowEnd }
             .distinctBy { it.alarmRequestCode }
-        graph.reminderRegistry.replaceAllScheduled(
-            activePlans.map { ScheduledReminderRecord(it.alarmRequestCode, it.occurrenceId, it.notificationKey) },
+            .filterNot { plan -> missedPlans.any { it.alarmRequestCode == plan.alarmRequestCode } }
+        registry.replaceAllScheduled(
+            (activePlans + missedPlans).map { ScheduledReminderRecord(it.alarmRequestCode, it.occurrenceId, it.notificationKey) },
         )
         activePlans.forEach { plan ->
             scheduleExactCompat(alarmManager, plan.triggerAtMillis, ReminderIntents.alarmPendingIntent(context, plan))
         }
+        // Missed reminders are shown now; the receiver records them as shown.
+        missedPlans.forEach { plan ->
+            scheduleExactCompat(alarmManager, now, ReminderIntents.alarmPendingIntent(context, plan))
+        }
+        // Snoozed reminders are set again, e.g. after a restart cleared their alarms.
+        registry.pendingSnoozed(now).forEach { record ->
+            val occurrence = record.occurrenceId()
+            if (occurrence != null && !repository.isReminderDeliverable(occurrence, visibility)) {
+                registry.cancelSnoozed(record.alarmRequestCode)
+            } else {
+                scheduleExactCompat(alarmManager, maxOf(record.triggerAtMillis, now), ReminderIntents.snoozedAlarmPendingIntent(context, record))
+            }
+        }
+    }
+
+    fun scheduleSnoozed(context: Context, record: SnoozedReminder) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        scheduleExactCompat(alarmManager, record.triggerAtMillis, ReminderIntents.snoozedAlarmPendingIntent(context, record))
     }
 
     /**
-     * Last check before a due alarm posts its notification: false when the item's calendar was
-     * hidden or deactivated after the alarm had been planned. Unresolvable items still notify.
+     * Last check before a due alarm posts its notification: false when the item is gone, finished
+     * or cancelled, or its calendar was hidden or deactivated, since the alarm was planned.
      */
     suspend fun isStillVisible(context: Context, occurrenceId: CalendarOccurrenceId): Boolean {
         val graph = KgsCalendarApplication.graph(context)
         val visibility = graph.settingsStore.collectionVisibility.first()
-        return graph.repository.isReminderStillVisible(occurrenceId, visibility) ?: true
+        return graph.repository.isReminderDeliverable(occurrenceId, visibility)
     }
+
+    /**
+     * How far past the alarm window occurrences must be expanded: a reminder [offset] minutes before
+     * an occurrence after the window can still be due inside it (offsets go up to 30 days).
+     */
+    private fun List<Int>.leadMillis(): Long = (maxOrNull() ?: 0).coerceAtLeast(0) * 60_000L
 
     private fun String?.minutes(): List<Int> =
         this?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.filter { it.isSupportedReminderOffset() }.orEmpty()
@@ -176,16 +237,16 @@ object ReminderScheduler {
     private fun eventNotificationBody(event: EventEntity, triggerAt: Long): String? {
         val start = event.startsAtMillis.localDateTime()
         val end = event.endsAtMillis.localDateTime()
-        val date = start.toLocalDate().takeUnless { triggerAt.isSameLocalDate(it) }?.format(dateFormatter)
+        val date = start.toLocalDate().takeUnless { triggerAt.isSameLocalDate(it) }?.format(dayMonthFormatter(Locale.getDefault(), weekday = "EEE"))
         val time = if (event.allDay) null else "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
-        return notificationBody(listOfNotNull(date, time).joinToString(" | "), event.description.notificationText())
+        return notificationBody(listOfNotNull(date, time).joinToString(" | "), event.description.reminderNotificationText())
     }
 
     private fun taskNotificationBody(task: TaskEntity, triggerAt: Long): String? {
         val start = task.startAtMillis?.localDateTime()
         val due = task.dueAtMillis?.localDateTime()
         val taskDate = start?.toLocalDate() ?: due?.toLocalDate()
-        val date = taskDate?.takeUnless { triggerAt.isSameLocalDate(it) }?.format(dateFormatter)
+        val date = taskDate?.takeUnless { triggerAt.isSameLocalDate(it) }?.format(dayMonthFormatter(Locale.getDefault(), weekday = "EEE"))
         val time = when {
             start != null && task.startHasTime && due != null && task.dueHasTime ->
                 "${start.format(timeFormatter)} - ${due.format(timeFormatter)}"
@@ -193,7 +254,7 @@ object ReminderScheduler {
             due != null && task.dueHasTime -> due.format(timeFormatter)
             else -> null
         }
-        return notificationBody(listOfNotNull(date, time).joinToString(" | "), task.notes.notificationText())
+        return notificationBody(listOfNotNull(date, time).joinToString(" | "), task.notes.reminderNotificationText())
     }
 
     private fun notificationBody(schedule: String, notes: String?): String? =
@@ -207,25 +268,28 @@ object ReminderScheduler {
 
     private fun Long.isSameLocalDate(date: LocalDate): Boolean =
         Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate() == date
+}
 
-    private fun String?.notificationText(): String? {
-        val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val withoutHtmlPayload = when {
-            raw.startsWith("data:text/html", ignoreCase = true) && "," in raw -> raw.substringAfter(',')
-            raw.startsWith("text/html,", ignoreCase = true) -> raw.substringAfter(',')
-            else -> raw
-        }
-        val decoded = runCatching { java.net.URLDecoder.decode(withoutHtmlPayload, Charsets.UTF_8.name()) }
-            .getOrDefault(withoutHtmlPayload)
-        val plain = if ('<' in decoded && '>' in decoded) {
-            Html.fromHtml(decoded, Html.FROM_HTML_MODE_LEGACY).toString()
-        } else {
-            decoded
-        }
-        return plain
-            .replace(Regex("[\\t\\x0B\\f\\r]+"), " ")
-            .replace(Regex("\\n{3,}"), "\n\n")
-            .trim()
-            .takeIf { it.isNotBlank() }
+/** Plain text of event/task notes for a notification; HTML (also as a data URL) is flattened. */
+internal fun String?.reminderNotificationText(): String? {
+    val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val htmlPayload = when {
+        raw.startsWith("data:text/html", ignoreCase = true) && "," in raw -> raw.substringAfter(',')
+        raw.startsWith("text/html,", ignoreCase = true) -> raw.substringAfter(',')
+        else -> null
     }
+    // Only a data-URL payload is percent-encoded; plain notes keep their "+" and "%" characters.
+    val decoded = htmlPayload
+        ?.let { payload -> runCatching { java.net.URLDecoder.decode(payload, Charsets.UTF_8.name()) }.getOrDefault(payload) }
+        ?: raw
+    val plain = if ('<' in decoded && '>' in decoded) {
+        Html.fromHtml(decoded, Html.FROM_HTML_MODE_LEGACY).toString()
+    } else {
+        decoded
+    }
+    return plain
+        .replace(Regex("[\\t\\x0B\\f\\r]+"), " ")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
+        .takeIf { it.isNotBlank() }
 }

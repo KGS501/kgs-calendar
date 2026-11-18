@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Sequential, bounded-memory checks (4 GiB: the shared data and UI modules now hold the whole app). JAVA_HOME must point to JDK 17; Android SDK 36 is required.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+shared_tasks=(
+  :core:shared:jvmTest :shared:ui:testAndroidHostTest
+  :shared:ui:compileCommonMainKotlinMetadata
+  :shared:ui:compileKotlinJvm :desktopApp:compileKotlinJvm
+)
+android_tasks=(:app:assembleDebug :core:data:testDebugUnitTest :app:testDebugUnitTest)
+# No selector keeps the original full local verification command.
+# --release-only runs what only a shipped build goes through: R8, resource shrinking and lint.
+case "${1:-}" in
+  --release-only) tasks=(:app:assembleRelease :app:lintRelease); shift ;;
+  --android-only) tasks=("${android_tasks[@]}"); shift ;;
+  --shared-only) tasks=("${shared_tasks[@]}"); shift ;;
+  *) tasks=("${shared_tasks[@]}" "${android_tasks[@]}") ;;
+esac
+exec bash ./gradlew --no-daemon --max-workers=1 \
+  -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8' \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  "${tasks[@]}" "$@"

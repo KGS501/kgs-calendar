@@ -1,15 +1,17 @@
 package com.kgs.calendar.data.provider
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.provider.CalendarContract
 import com.kgs.calendar.data.recurrence.RecurrenceExpander
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.Duration
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.time.ZoneId
+import com.kgs.calendar.time.ZoneOffset
+import kotlin.time.Duration
 
 class AndroidCalendarProviderMapperTest {
     @Test
@@ -117,9 +119,11 @@ class AndroidCalendarProviderMapperTest {
         assertEquals("FREQ=WEEKLY;COUNT=3", mapped.recurrenceRule)
         assertTrue(mapped.isRecurring)
         assertEquals("10,30", mapped.remindersCsv)
-        assertNull(mapped.status)
-        assertNull(mapped.classification)
-        assertNull(mapped.transparency)
+        // Status, visibility and availability round-trip through the editor.
+        assertEquals("TENTATIVE", mapped.status)
+        assertEquals("PRIVATE", mapped.classification)
+        assertEquals("TRANSPARENT", mapped.transparency)
+        assertNull(mapped.timezoneId)
         assertEquals(LocalDate.of(2026, 6, 15).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli().toString(), mapped.exDatesCsv)
         assertEquals(0xffabcdef.toInt(), mapped.manualColor)
         assertNull(mapped.categories)
@@ -157,6 +161,40 @@ class AndroidCalendarProviderMapperTest {
 
         assertEquals(0xff176b5d.toInt(), mapped.color)
         assertEquals(0xff123456.toInt(), mapped.manualColor)
+    }
+
+    @Test
+    fun timedEventsKeepTheirZoneAndIgnoreDefaultReminders() {
+        val start = LocalDate.of(2026, 6, 8).atTime(9, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        fun map(timezoneId: String?) = androidProviderEventToEntity(
+            event = AndroidProviderEvent(
+                id = 44,
+                calendarId = 7,
+                title = "Call",
+                description = null,
+                location = null,
+                startsAtMillis = start,
+                endsAtMillis = start + 3_600_000,
+                allDay = false,
+                recurrenceRule = null,
+                exDates = null,
+                status = null,
+                accessLevel = null,
+                availability = null,
+                organizer = null,
+                reminderMinutes = listOf(-1, 10),
+                timezoneId = timezoneId,
+            ),
+            collectionHref = "android://calendar/7",
+            color = 0xff176b5d.toInt(),
+            zoneId = ZoneId.of("Europe/Berlin"),
+        )
+
+        assertEquals("America/New_York", map("America/New_York").timezoneId)
+        // Without a stored zone the event was read in the device's zone, not as a floating time.
+        assertEquals("Europe/Berlin", map(null).timezoneId)
+        // The provider's -1 means "calendar default", not "at the end".
+        assertEquals("10", map(null).remindersCsv)
     }
 
     @Test

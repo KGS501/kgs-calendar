@@ -1,0 +1,184 @@
+name: Windows Store package
+
+# Builds the Microsoft Store package, tries it on a clean Windows, runs Microsoft's certification kit
+# on it and keeps the package. Run by hand, it can also hand the package to the Store: a beta to the
+# "Internal testing" package flight, a release to production (after the owner approves it in the
+# store-production environment). See docs/microsoft-store/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Tag or commit to build, e.g. V.2.0.2-1 (empty builds the chosen branch)
+        required: false
+        default: ''
+      publish:
+        description: Where the package goes in the Store
+        type: choice
+        options: [none, flight, production]
+        default: none
+      package_run:
+        description: Publish the store-package of this earlier run (its run ID) instead of building one
+        required: false
+        default: ''
+  pull_request:
+    paths:
+      - 'desktopApp/**'
+      - '.github/workflows/windows-store.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-store-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build and certify the Store package
+    if: github.event_name != 'workflow_dispatch' || inputs.package_run == ''
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build a package to test
+        shell: pwsh
+        run: >
+          ./gradlew.bat --no-daemon --console=plain
+          "-Dorg.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
+          "-Pkotlin.compiler.execution.strategy=in-process"
+          -PmsixTest :desktopApp:packageMsix
+
+      - name: Sign the test package with a test certificate
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory |
+            Where-Object { Test-Path "$($_.FullName)\x64\signtool.exe" } | Sort-Object Name | Select-Object -Last 1
+          $package = (Get-ChildItem desktopApp/build/msix -Filter *.msix | Select-Object -First 1).FullName
+          $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=KGS501 Test' -KeyUsage DigitalSignature `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(2) `
+            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+          & "$($sdk.FullName)\x64\signtool.exe" sign /fd SHA256 /sha1 $cert.Thumbprint /s My $package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Export-Certificate -Cert $cert -FilePath test.cer | Out-Null
+          Import-Certificate -FilePath test.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          "TEST_PACKAGE=$package" | Add-Content $env:GITHUB_ENV
+
+      - name: Install and start it
+        shell: pwsh
+        run: |
+          Add-AppxPackage -Path $env:TEST_PACKAGE -ErrorAction Stop
+          $package = Get-AppxPackage -Name 'KGS501.KGSCalendar.Test'
+          "Installed $($package.PackageFullName)"
+          Start-Process explorer.exe "shell:AppsFolder\$($package.PackageFamilyName)!KGSCalendar"
+          Start-Sleep -Seconds 45
+          $running = Get-Process 'KGS Calendar' -ErrorAction SilentlyContinue
+          if (-not $running) { throw 'The app did not stay running' }
+          "Running from $($running[0].Path)"
+          $running | Stop-Process -Force
+          Remove-AppxPackage -Package $package.PackageFullName
+
+      - name: Run the Windows App Certification Kit
+        shell: pwsh
+        run: |
+          $kit = 'C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appcert.exe'
+          if (-not (Test-Path $kit)) { throw 'The App Certification Kit is not on this runner' }
+          $report = "$PWD\certification-report.xml"
+          & $kit reset
+          & $kit test -appxpackagepath $env:TEST_PACKAGE -reportoutputpath $report
+          [xml]$xml = Get-Content $report
+          "Overall result: $($xml.REPORT.OVERALL_RESULT)"
+          $failed = $xml.SelectNodes("//TEST[RESULT='FAIL']")
+          foreach ($test in $failed) { "FAILED: $($test.NAME)"; $test.MESSAGES.MESSAGE | ForEach-Object { "  $($_.TEXT)" } }
+          if ($xml.REPORT.OVERALL_RESULT -ne 'PASS') { exit 1 }
+
+      - name: Upload the certification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certification-report
+          path: certification-report.xml
+          if-no-files-found: ignore
+
+      # With the identity in desktopApp/msix/store-identity.properties, for Partner Center. The Store signs it.
+      - name: Build the package for the Store
+        shell: pwsh
+        run: >
+          ./gradlew.bat --no-daemon --console=plain
+          "-Dorg.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
+          "-Pkotlin.compiler.execution.strategy=in-process"
+          :desktopApp:packageMsix
+
+      - name: Upload the Store package
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-package
+          path: desktopApp/build/msix/*.msix
+          if-no-files-found: error
+
+  # Uploads the package and submits it to certification through the Store submission API, with the
+  # Partner Center app "KGS Calendar Store publishing" (secrets AZURE_AD_TENANT_ID, SELLER_ID,
+  # AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET).
+  publish:
+    name: Publish to the Microsoft Store (${{ inputs.publish }})
+    needs: package
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.publish != 'none' &&
+      (needs.package.result == 'success' || (needs.package.result == 'skipped' && inputs.package_run != ''))
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Production waits for the owner's approval in this environment; the flight doesn't.
+    environment: ${{ inputs.publish == 'production' && 'store-production' || 'store-flight' }}
+    env:
+      STORE_APP_ID: 9P0NZM3HSQ92
+      # The "Internal testing" package flight, for the group "KGS internal testers".
+      STORE_FLIGHT_ID: 8dd058f0-91a3-4aab-86a1-3d7c36bb5c4b
+    steps:
+      - name: Get the Store package
+        uses: actions/download-artifact@v4
+        with:
+          name: store-package
+          path: store-package
+          run-id: ${{ inputs.package_run || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up the Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      - name: Sign in to Partner Center
+        shell: pwsh
+        run: >
+          msstore reconfigure
+          --tenantId "${{ secrets.AZURE_AD_TENANT_ID }}"
+          --sellerId "${{ secrets.SELLER_ID }}"
+          --clientId "${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}"
+          --clientSecret "${{ secrets.AZURE_AD_APPLICATION_SECRET }}"
+
+      - name: Upload and submit to certification
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem store-package -Filter *.msix | Select-Object -First 1
+          "Publishing $($package.Name) to ${{ inputs.publish }}"
+          # Given the package itself, the CLI doesn't look for a source project; the ~130 MB upload
+          # gets 30 minutes.
+          $common = @($package.FullName, '--appId', $env:STORE_APP_ID, '--uploadTimeout', '1800', '--verbose')
+          Push-Location $package.DirectoryName
+          if ('${{ inputs.publish }}' -eq 'flight') {
+            msstore publish @common --flightId $env:STORE_FLIGHT_ID
+          } else {
+            msstore publish @common
+          }
+          Pop-Location
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

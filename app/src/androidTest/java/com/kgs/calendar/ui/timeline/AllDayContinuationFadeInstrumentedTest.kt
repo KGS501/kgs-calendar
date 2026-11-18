@@ -1,5 +1,7 @@
 package com.kgs.calendar.ui.timeline
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,9 +36,9 @@ import com.kgs.calendar.ui.theme.KgsCalendarTheme
 import com.kgs.calendar.ui.time.CalendarTimeSnapshot
 import com.kgs.calendar.ui.time.LocalCalendarTimeSnapshot
 import java.io.File
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt

@@ -1,6 +1,9 @@
 package com.kgs.calendar.widget
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
+import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -25,9 +28,9 @@ import com.kgs.calendar.widget.render.KgsWidgetCollectionFactory
 import com.kgs.calendar.widget.render.KgsWidgetDayCollectionFactory
 import com.kgs.calendar.widget.update.WidgetTaskToggle
 import java.io.File
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.YearMonth
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.YearMonth
 import java.util.TimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +69,7 @@ class WidgetKindRenderingTest {
     @Before
     fun setUp() {
         // Widget code resolves the system zone; keep it in line with the harness zone.
-        TimeZone.setDefault(TimeZone.getTimeZone(TEST_ZONE))
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(TEST_ZONE.id))
         harness = RepositoryHarness()
         dataStoreScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val settingsStore = SettingsStore(
@@ -128,9 +131,18 @@ class WidgetKindRenderingTest {
     @Test
     fun monthWidgetPlacesItemsOnToday() = runBlocking {
         val renderer = widgets.renderer()
-        val prepared = renderer.prepareMonthUpdate(appWidgetId, Bundle())
+        // The default 320-dp height uses dots in six-row months. This test checks labels,
+        // so provide enough space for text independently of the current month and orientation.
+        val options = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 360)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 360)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 560)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 560)
+        }
+        val prepared = renderer.prepareMonthUpdate(appWidgetId, options)
 
         assertEquals(YearMonth.from(today), prepared.page.month)
+        assertFalse(prepared.renderSpec.usesDotCells)
         assertTrue(prepared.page.rowCount in 4..6)
         assertEquals(3, prepared.itemCount)
         val todayCell = prepared.page.cells.single { it.date == today }

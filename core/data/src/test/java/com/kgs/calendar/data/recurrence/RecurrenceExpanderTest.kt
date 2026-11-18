@@ -1,5 +1,7 @@
 package com.kgs.calendar.data.recurrence
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.data.ical.EventRecurrenceOverride
 import com.kgs.calendar.data.ical.RecurrenceOverrideCodec
 import com.kgs.calendar.data.local.entity.EventEntity
@@ -7,9 +9,9 @@ import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 
 class RecurrenceExpanderTest {
     private val zone = ZoneId.of("Europe/Berlin")
@@ -199,7 +201,7 @@ class RecurrenceExpanderTest {
                 LocalDate.of(2026, 2, 27),
                 LocalDate.of(2026, 3, 31),
             ),
-            out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).toLocalDate() },
+            out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).toLocalDate() },
         )
     }
 
@@ -214,7 +216,7 @@ class RecurrenceExpanderTest {
 
         val out = expander.expand(master, s, e)
 
-        assertEquals(listOf(9, 10, 11, 12), out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
+        assertEquals(listOf(9, 10, 11, 12), out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
     }
 
     @Test
@@ -228,7 +230,7 @@ class RecurrenceExpanderTest {
 
         val out = expander.expand(master, s, e)
 
-        assertEquals(listOf(9, 9, 9), out.map { java.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
+        assertEquals(listOf(9, 9, 9), out.map { kotlin.time.Instant.ofEpochMilli(it.startsAtMillis).atZone(zone).hour })
     }
 
     @Test
@@ -257,4 +259,92 @@ class RecurrenceExpanderTest {
         val moved = occurrences.single { it.item.startsAtMillis == movedStart }
         assertEquals(CalendarOccurrenceId.Event(master.resourceHref, originalSecondStart), moved.occurrenceId)
     }
+    @Test
+    fun weeklyAllDayOccurrenceOnDstStartStaysOneDay() {
+        // 2026-03-22 is a 24h Sunday; 2026-03-29 (DST start in Berlin) only has 23 hours.
+        val start = LocalDate.of(2026, 3, 22).atStartOfDay(zone).toInstant().toEpochMilli()
+        val master = masterEvent(LocalDate.of(2026, 3, 22), LocalTime.MIDNIGHT, rrule = "FREQ=WEEKLY;COUNT=3").copy(
+            allDay = true,
+            timezoneId = null,
+            endsAtMillis = LocalDate.of(2026, 3, 23).atStartOfDay(zone).toInstant().toEpochMilli(),
+        )
+        assertEquals(start, master.startsAtMillis)
+        val (s, e) = rangeMillis(LocalDate.of(2026, 3, 20), LocalDate.of(2026, 4, 10))
+
+        val out = expander.expand(master, s, e)
+
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 3, 22) to LocalDate.of(2026, 3, 23),
+                LocalDate.of(2026, 3, 29) to LocalDate.of(2026, 3, 30),
+                LocalDate.of(2026, 4, 5) to LocalDate.of(2026, 4, 6),
+            ),
+            out.map { it.startsAtMillis.atZoneDate() to it.endsAtMillis.atZoneDate() },
+        )
+        out.forEach { occurrence ->
+            assertEquals(LocalTime.MIDNIGHT, kotlin.time.Instant.ofEpochMilli(occurrence.endsAtMillis).atZone(zone).toLocalTime())
+        }
+    }
+
+    @Test
+    fun allDayOccurrencesFromAShortDstMasterKeepWholeDays() {
+        // A master on the 23h DST day must not shorten later occurrences to end at 23:00.
+        val master = masterEvent(LocalDate.of(2026, 3, 29), LocalTime.MIDNIGHT, rrule = "FREQ=YEARLY;COUNT=2").copy(
+            allDay = true,
+            timezoneId = null,
+            endsAtMillis = LocalDate.of(2026, 3, 30).atStartOfDay(zone).toInstant().toEpochMilli(),
+        )
+        val (s, e) = rangeMillis(LocalDate.of(2027, 3, 1), LocalDate.of(2027, 4, 30))
+
+        val occurrence = expander.expand(master, s, e).single()
+
+        assertEquals(LocalDate.of(2027, 3, 29), occurrence.startsAtMillis.atZoneDate())
+        assertEquals(LocalDate.of(2027, 3, 30).atStartOfDay(zone).toInstant().toEpochMilli(), occurrence.endsAtMillis)
+    }
+
+    @Test
+    fun allDayRDatesKeepWholeDaysAcrossDst() {
+        val master = masterEvent(LocalDate.of(2026, 3, 22), LocalTime.MIDNIGHT, rrule = null).copy(
+            allDay = true,
+            timezoneId = null,
+            endsAtMillis = LocalDate.of(2026, 3, 23).atStartOfDay(zone).toInstant().toEpochMilli(),
+            rDatesCsv = LocalDate.of(2026, 3, 29).atStartOfDay(zone).toInstant().toEpochMilli().toString(),
+            isRecurring = true,
+        )
+        val (s, e) = rangeMillis(LocalDate.of(2026, 3, 20), LocalDate.of(2026, 4, 10))
+
+        val out = expander.expand(master, s, e)
+
+        assertEquals(
+            LocalDate.of(2026, 3, 30).atStartOfDay(zone).toInstant().toEpochMilli(),
+            out.single { it.startsAtMillis.atZoneDate() == LocalDate.of(2026, 3, 29) }.endsAtMillis,
+        )
+    }
+
+    @Test
+    fun anOccurrenceThatStartedBeforeTheRangeButReachesIntoItIsIncluded() {
+        // A night shift, 22:00 to 06:00, viewed on the morning after; the series began a year earlier.
+        // Rule to (series start, the evening the shift begins in 2026).
+        val cases = listOf(
+            "FREQ=DAILY" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            "FREQ=WEEKLY;BYDAY=MO" to (LocalDate.of(2025, 10, 13) to LocalDate.of(2026, 10, 12)),
+            "FREQ=MONTHLY;BYMONTHDAY=12" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            "FREQ=YEARLY" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 12)),
+            // BYSETPOS goes through the standards-based expansion: the second Sunday.
+            "FREQ=MONTHLY;BYDAY=SU;BYSETPOS=2" to (LocalDate.of(2025, 10, 12) to LocalDate.of(2026, 10, 11)),
+        )
+        cases.forEach { (rule, dates) ->
+            val (seriesStart, evening) = dates
+            val master = masterEvent(seriesStart, LocalTime.of(22, 0), durationMinutes = 8 * 60, rrule = rule)
+            // The early morning only: just the shift from the evening before reaches into it.
+            val s = evening.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val e = evening.plusDays(1).atTime(6, 0).atZone(zone).toInstant().toEpochMilli()
+
+            val occurrences = expander.expand(master, s, e)
+
+            assertEquals(rule, listOf(evening), occurrences.map { it.startsAtMillis.atZoneDate() })
+        }
+    }
+
+    private fun Long.atZoneDate(): LocalDate = kotlin.time.Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 }

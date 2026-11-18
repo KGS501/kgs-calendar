@@ -1,5 +1,6 @@
 package com.kgs.calendar.widget.update
 
+import com.kgs.calendar.widget.providerClass
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import com.kgs.calendar.widget.KgsWidgetKind
@@ -8,6 +9,7 @@ import com.kgs.calendar.widget.model.next
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
+import com.kgs.calendar.widget.WidgetLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -82,6 +84,7 @@ internal class KgsWidgetUpdateScheduler(private val widgets: WidgetDependencies)
     private val widgetWorkQueue = LatestPendingSerialQueue<WidgetWorkKey, ScheduledWidgetWork>(
         scope = scope,
         onSuperseded = ScheduledWidgetWork::complete,
+        onFailure = { error -> WidgetLog.d(widgets.appContext, "Widget update failed", error) },
     ) { work ->
         try {
             work.run()

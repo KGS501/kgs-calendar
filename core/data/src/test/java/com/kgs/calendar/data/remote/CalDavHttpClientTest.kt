@@ -37,6 +37,49 @@ class CalDavHttpClientTest {
     }
 
     @Test
+    fun fetchesTheNextcloudAvatarOfTheResolvedUserId() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/ocs/v1.php/cloud/user" -> MockResponse().setBody("<ocs><data><id>anna.b</id></data></ocs>")
+                "/index.php/avatar/anna.b/256" -> MockResponse()
+                    .setHeader("Content-Type", "image/png")
+                    .setHeader("X-NC-IsCustomAvatar", "1")
+                    .setBody(okio.Buffer().write(byteArrayOf(1, 2, 3)))
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+
+        val avatar = client.fetchNextcloudAvatar(server.url("/").toString(), "anna@example.com", "secret")!!
+
+        assertTrue(avatar.isCustom)
+        assertEquals(listOf<Byte>(1, 2, 3), avatar.bytes.toList())
+        val avatarRequest = generateSequence { server.takeRequest(0, TimeUnit.SECONDS) }
+            .first { it.path!!.startsWith("/index.php/avatar/") }
+        assertTrue(avatarRequest.getHeader("Authorization")!!.startsWith("Basic "))
+    }
+
+    @Test
+    fun generatedOrMissingNextcloudAvatarsAreReportedAsSuch() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.path!!.startsWith("/index.php/avatar/") -> MockResponse()
+                    .setHeader("Content-Type", "image/png")
+                    .setHeader("X-NC-IsCustomAvatar", "0")
+                    .setBody(okio.Buffer().write(byteArrayOf(9)))
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+
+        assertFalse(client.fetchNextcloudAvatar(server.url("/").toString(), "anna", "secret")!!.isCustom)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                MockResponse().setHeader("Content-Type", "text/html").setBody("<html>Login</html>")
+        }
+        assertEquals(null, client.fetchNextcloudAvatar(server.url("/").toString(), "anna", "secret"))
+    }
+
+    @Test
     fun discoversPrincipalHomeSchedulingAndCollectionCapabilities() = runTest {
         serveDiscovery(collectionResponse())
 
@@ -117,17 +160,23 @@ class CalDavHttpClientTest {
     }
 
     @Test
-    fun discoversScheduleInboxAsReadOnlyTaskCollection() = runTest {
-        serveDiscovery(scheduleInboxCollectionResponse())
+    fun skipsTheSchedulingInboxAndOutbox() = runTest {
+        serveDiscovery(schedulingMailboxesCollectionResponse())
 
         val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
         val collections = client.discoverCollections(discovery, "alice", "secret")
 
-        val inbox = collections.single { it.href == "/calendars/alice/inbox/" }
-        assertTrue(inbox.supportsTasks)
-        assertFalse(inbox.supportsEvents)
-        assertTrue(inbox.readOnly)
-        assertTrue(inbox.capabilities.isScheduleInbox)
+        assertEquals(listOf("/calendars/alice/work/"), collections.map { it.href })
+    }
+
+    @Test
+    fun skipsCalendarsInTheNextcloudTrashBin() = runTest {
+        serveDiscovery(deletedCalendarCollectionResponse())
+
+        val discovery = client.discoverAccount(server.url("/").toString(), "alice", "secret")
+        val collections = client.discoverCollections(discovery, "alice", "secret")
+
+        assertEquals(listOf("/calendars/alice/work/"), collections.map { it.href })
     }
 
     @Test
@@ -252,22 +301,40 @@ class CalDavHttpClientTest {
         </d:multistatus>
     """.trimIndent()
 
-    private fun scheduleInboxCollectionResponse() = """
-        <d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+    // Nextcloud 34 lists a calendar deleted into its trash bin like this, with its components.
+    private fun deletedCalendarCollectionResponse() = collectionResponse().replace(
+        "</d:multistatus>",
+        """
           <d:response>
-            <d:href>/calendars/alice/</d:href>
-            <d:propstat><d:prop><d:resourcetype><d:collection /></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
-          </d:response>
-          <d:response>
-            <d:href>/calendars/alice/inbox/</d:href>
+            <d:href>/calendars/alice/old/</d:href>
             <d:propstat><d:prop>
-              <d:displayname>Schedule Inbox</d:displayname>
-              <d:resourcetype><d:collection /><cal:schedule-inbox /></d:resourcetype>
-              <d:current-user-privilege-set>
-                <d:privilege><d:read /></d:privilege>
-              </d:current-user-privilege-set>
+              <d:displayname>Old</d:displayname>
+              <d:resourcetype><d:collection /><nc:deleted-calendar xmlns:nc="http://nextcloud.com/ns" /></d:resourcetype>
+              <cal:supported-calendar-component-set><cal:comp name="VEVENT" /><cal:comp name="VTODO" /></cal:supported-calendar-component-set>
+              <d:sync-token>token-2</d:sync-token>
             </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
           </d:response>
         </d:multistatus>
-    """.trimIndent()
+        """.trimIndent(),
+    )
+
+    private fun schedulingMailboxesCollectionResponse() = collectionResponse().replace(
+        "</d:multistatus>",
+        """
+          <d:response>
+            <d:href>/calendars/alice/inbox/</d:href>
+            <d:propstat><d:prop>
+              <d:resourcetype><d:collection /><cal:schedule-inbox /></d:resourcetype>
+              <cal:supported-calendar-component-set><cal:comp name="VEVENT" /><cal:comp name="VTODO" /></cal:supported-calendar-component-set>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+          </d:response>
+          <d:response>
+            <d:href>/calendars/alice/outbox/</d:href>
+            <d:propstat><d:prop>
+              <d:resourcetype><d:collection /><cal:schedule-outbox /></d:resourcetype>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+          </d:response>
+        </d:multistatus>
+        """.trimIndent(),
+    )
 }

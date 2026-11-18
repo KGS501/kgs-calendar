@@ -1,14 +1,14 @@
 package com.kgs.calendar.widget.state
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.os.SystemClock
 import com.kgs.calendar.widget.KgsWidgetKind
 import com.kgs.calendar.widget.WIDGET_MONTH_RENDER_SIGNATURE_VERSION
 import com.kgs.calendar.widget.model.WidgetCollectionSnapshot
 import com.kgs.calendar.widget.model.WidgetMonthPage
 import com.kgs.calendar.widget.model.WidgetRenderSettings
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.YearMonth
 
 internal class WidgetInteractionTokens {
     private val tokens = mutableMapOf<String, Long>()
@@ -115,7 +115,7 @@ internal fun widgetMonthPageModelNamespace(
     append('|').append(settings.firstDayOfWeek.name)
     append('|').append(settings.monthWidgetWeeks.name)
     if (settings.monthWidgetWeeks.weekCount != null) {
-        val today = runCatching { LocalDate.now(ZoneId.of(zoneId)) }.getOrElse { LocalDate.now() }
+        val today = runCatching { LocalDate.now(TimeZone.of(zoneId)) }.getOrElse { LocalDate.now() }
         val daysSinceWeekStart = (today.dayOfWeek.value - settings.firstDayOfWeek.value + 7) % 7
         append('|').append(YearMonth.from(today))
         append(':').append(today.minusDays(daysSinceWeekStart.toLong()).toEpochDay())

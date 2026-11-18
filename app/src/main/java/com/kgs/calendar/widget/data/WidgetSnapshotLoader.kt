@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.data
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.os.SystemClock
@@ -30,9 +32,9 @@ import com.kgs.calendar.widget.model.priorityMotionFrameCount
 import com.kgs.calendar.widget.model.usesCollectionList
 import com.kgs.calendar.widget.model.widgetDayGridRows
 import com.kgs.calendar.widget.theme.WidgetPalette
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.YearMonth
+import com.kgs.calendar.time.ZoneId
 import kotlin.math.roundToInt
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

@@ -10,9 +10,9 @@ import org.junit.Test
 class TimelineViewPresentationTest {
     @Test
     fun timelineDestinationLabelFollowsWeekSetting() {
-        assertEquals(R.string.three_days, CalendarViewMode.ThreeDay.labelRes(false))
-        assertEquals(R.string.week, CalendarViewMode.ThreeDay.labelRes(true))
-        assertEquals(R.string.day, CalendarViewMode.Day.labelRes(true))
+        assertEquals(com.kgs.calendar.ui.res.Res.string.three_days, CalendarViewMode.ThreeDay.labelRes(false))
+        assertEquals(com.kgs.calendar.ui.res.Res.string.week, CalendarViewMode.ThreeDay.labelRes(true))
+        assertEquals(com.kgs.calendar.ui.res.Res.string.day, CalendarViewMode.Day.labelRes(true))
     }
 
     @Test

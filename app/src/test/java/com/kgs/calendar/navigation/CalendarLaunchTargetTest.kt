@@ -1,9 +1,11 @@
 package com.kgs.calendar.navigation
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import com.kgs.calendar.domain.model.CalendarOccurrenceId
 import com.kgs.calendar.domain.model.CalendarViewMode
-import java.time.LocalDate
-import org.json.JSONObject
+import kotlinx.datetime.LocalDate
+import com.kgs.calendar.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

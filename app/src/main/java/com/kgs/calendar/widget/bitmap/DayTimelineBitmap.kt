@@ -1,5 +1,7 @@
 package com.kgs.calendar.widget.bitmap
 
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -19,9 +21,9 @@ import com.kgs.calendar.widget.theme.WidgetPalette
 import com.kgs.calendar.widget.theme.blendWith
 import com.kgs.calendar.widget.theme.isDarkColor
 import com.kgs.calendar.widget.theme.withAlpha
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import com.kgs.calendar.time.ZoneId
 import kotlin.math.min
 import kotlin.math.roundToInt
 

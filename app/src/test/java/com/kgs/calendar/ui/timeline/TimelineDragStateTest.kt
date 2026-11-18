@@ -1,6 +1,8 @@
 package com.kgs.calendar.ui.timeline
 
-import java.time.LocalDate
+import com.kgs.calendar.time.*
+import kotlinx.datetime.*
+import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
